@@ -100,6 +100,24 @@ export function hourMarks(
   return marks;
 }
 
+/**
+ * How many samples to step between dots on the underground half of a path.
+ *
+ * The dotted half is notation, and notation only reads as a pattern if the
+ * spacing is even. Taking every other sample makes the spacing depend on how
+ * finely the day happened to be sampled — a summer day and a winter one, or the
+ * sun and the moon, would come out with visibly different dots for no reason a
+ * reader could act on. So the stride is derived from the ring angle a sample
+ * covers rather than from the length of the array.
+ *
+ * `sampleCount` is how many samples span the whole circuit.
+ */
+export function dotStride(sampleCount: number, spacingDeg = 4.5): number {
+  if (!Number.isFinite(sampleCount) || sampleCount < 2) return 1;
+  const degreesPerSample = 360 / sampleCount;
+  return Math.max(1, Math.round(spacingDeg / degreesPerSample));
+}
+
 /** Split a path into the parts above and below the horizon, for separate styling. */
 export function splitAtHorizon(path: DomePoint[]): { above: DomePoint[][]; below: DomePoint[][] } {
   const above: DomePoint[][] = [];
