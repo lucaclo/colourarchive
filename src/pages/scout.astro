@@ -324,9 +324,27 @@ export const prerender = true;
           <p class="slab-note">Drag the slab on the map. Its shadow is the one on this page with no guessing in it.</p>
         </div>
         <p class="layers-head">This view</p>
+        <button class="wide" id="open-month" type="button">The month, hour by hour</button>
         <button class="wide" id="export" type="button">Save as an image</button>
         <button class="wide" id="copy-plan" type="button">Copy the plan</button>
         <button class="wide" id="copy-link" type="button">Copy a link to this spot</button>
+      </div>
+
+      <!-- ── The month, as a grid ─────────────────────────────────────────
+           Rows are days, columns are hours, and the shape of the golden hour
+           across a month is the thing you cannot get by scrubbing a slider
+           thirty times. -->
+      <div class="monthgrid" id="monthgrid" hidden role="dialog" aria-modal="true" aria-label="The month, hour by hour">
+        <div class="mg-head">
+          <button class="chip chip-step" id="mg-back" type="button" aria-label="The month before">−</button>
+          <p class="mg-title" id="mg-title">—</p>
+          <button class="chip chip-step" id="mg-forward" type="button" aria-label="The month after">+</button>
+          <button class="mg-close" id="mg-close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="mg-scroll">
+          <div class="mg-body" id="mg-body"></div>
+        </div>
+        <p class="mg-legend" id="mg-legend"></p>
       </div>
 
       <!-- ── Bottom: place sheet, then the day ───────────────────────────── -->
@@ -848,6 +866,92 @@ export const prerender = true;
     padding: 0.35rem 0;
     min-height: 30px;
   }
+
+  /* ── The month grid ────────────────────────────────────────────────────
+     A whole month of light in one picture. Rows are days and columns are the
+     local clock, so the golden hour reads as a pair of curves bending across
+     the month rather than as a time you look up thirty times. */
+
+  .monthgrid {
+    position: absolute;
+    inset: var(--stage-top) 0.6rem calc(1rem + var(--safe-bottom));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.7rem;
+    border-radius: 14px;
+    background: color-mix(in oklab, var(--bg) 92%, transparent);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .monthgrid[hidden] { display: none; }
+  .mg-head { display: flex; align-items: center; gap: 0.5rem; }
+  .mg-title {
+    margin: 0;
+    flex: 1;
+    text-align: center;
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .mg-close {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.3rem;
+  }
+  .mg-scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
+  /* The rows share whatever height there is: a month is a fixed number of rows,
+     so letting them stretch fills the panel on a laptop without making them
+     unreadably thin on a phone, where the floor takes over and it scrolls. */
+  .mg-body {
+    display: grid;
+    gap: 1px;
+    min-width: 34rem;
+    height: 100%;
+    grid-auto-rows: minmax(12px, 1fr);
+  }
+  .mg-legend { margin: 0; font-size: 0.62rem; color: var(--muted); line-height: 1.4; }
+
+  /* Runtime-built, so scoping cannot reach it — see the notebook above. */
+  .mg-body :global(.mg-row) { display: contents; }
+  .mg-body :global(.mg-day) {
+    font-family: var(--font-label);
+    font-size: 0.5rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding-right: 0.35rem;
+    text-align: right;
+    white-space: nowrap;
+    position: sticky;
+    left: 0;
+    background: var(--bg);
+  }
+  .mg-body :global(.mg-cell) {
+    min-height: 11px;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    /* Every cell is a button, and a focus ring you cannot see is not one. */
+    outline-offset: -2px;
+  }
+  /* An hour the local clock never read. Not black, not white — hatched, so it
+     cannot be mistaken for a dark night or a missing measurement. */
+  .mg-body :global(.mg-gap) {
+    cursor: default;
+    background: repeating-linear-gradient(
+      45deg,
+      transparent 0 2px,
+      color-mix(in oklab, var(--fg) 22%, transparent) 2px 3px
+    );
+  }
+  .mg-body :global(.mg-now) { box-shadow: inset 0 0 0 1.5px var(--fg); }
 
   /* ── Notebook ─────────────────────────────────────────────────────────── */
 
@@ -1724,6 +1828,7 @@ export const prerender = true;
   import {
     MINUTES_PER_DAY,
     PHASE_LABEL,
+    altitudeColour,
     describeLightWindows,
     describeNextChange,
     formatClock,
@@ -1749,6 +1854,14 @@ export const prerender = true;
     moonlightNote,
     type MoonSample,
   } from '../lib/scout/moon';
+  import {
+    formatColumn,
+    goldenRuns,
+    monthGrid,
+    monthOf,
+    shiftIsoMonth,
+    type MonthGrid,
+  } from '../lib/scout/grid';
   import { bracketingSolstices, seasonEvents, seasonName } from '../lib/scout/almanac';
   import { buildSkyline, lightWindows, mergeHorizon, nextChange, type Skyline } from '../lib/scout/skyline';
   import {
@@ -5385,6 +5498,196 @@ export const prerender = true;
       }),
     );
   }
+
+  /* ── The month, hour by hour ────────────────────────────────────────────
+     The slider answers one day at a time, which is the wrong resolution for
+     deciding *which* day to come back on. Same arithmetic, laid out so a month
+     of it can be read at a glance. */
+
+  const GRID_STEP_MINUTES = 30;
+  let gridMonth = '';
+
+  function openMonthGrid() {
+    if (!centre) return;
+    gridMonth = monthOf(isoDate);
+    $<HTMLElement>('monthgrid').hidden = false;
+    renderMonthGrid();
+  }
+
+  function closeMonthGrid() {
+    $<HTMLElement>('monthgrid').hidden = true;
+  }
+
+  /**
+   * How much of the sun the forecast expects to survive, at one instant.
+   *
+   * Null where the forecast does not reach — which is most of a month, since
+   * Open-Meteo gives seven days. Drawing "no forecast" as "clear" would turn a
+   * grid that is honest about three weeks of it into one that quietly promises
+   * sunshine in a fortnight.
+   */
+  function cloudAt(instant: Date | null): number | null {
+    if (!weather || !instant) return null;
+    const hour = hourAt(weather, instant);
+    return hour ? directLightFractionFor(hour) : null;
+  }
+
+  function renderMonthGrid() {
+    if (!centre || $<HTMLElement>('monthgrid').hidden) return;
+
+    const grid: MonthGrid = monthGrid(centre, gridMonth, timeZone, {
+      stepMinutes: GRID_STEP_MINUTES,
+    });
+    $('mg-title').textContent = new Intl.DateTimeFormat('en-GB', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(`${gridMonth}-01T12:00:00Z`));
+
+    const body = $<HTMLElement>('mg-body');
+    body.style.gridTemplateColumns = `2.6rem repeat(${grid.columns.length}, 1fr)`;
+
+    const today = isoDateIn(new Date(), timeZone);
+    let forecastCells = 0;
+    const rows: HTMLElement[] = [];
+
+    // A header of hours, sparse enough to read: every third column at half-hour
+    // resolution is one label every ninety minutes.
+    const head = document.createElement('div');
+    head.className = 'mg-row';
+    head.append(document.createElement('span'));
+    for (const [index, minute] of grid.columns.entries()) {
+      const cell = document.createElement('span');
+      cell.className = 'mg-day';
+      cell.style.textAlign = 'left';
+      cell.style.position = 'static';
+      if (index % 6 === 0) cell.textContent = formatColumn(minute);
+      head.append(cell);
+    }
+    rows.push(head);
+
+    for (const day of grid.days) {
+      const row = document.createElement('div');
+      row.className = 'mg-row';
+
+      const label = document.createElement('span');
+      label.className = 'mg-day';
+      label.textContent = new Intl.DateTimeFormat('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+      }).format(new Date(`${day.isoDate}T12:00:00Z`));
+      row.append(label);
+
+      const golden = goldenRuns(day);
+
+      for (const cell of day.cells) {
+        if (cell.at === null) {
+          const gap = document.createElement('span');
+          gap.className = 'mg-cell mg-gap';
+          gap.title = `${day.isoDate} · the clocks skipped ${formatColumn(cell.minute)}`;
+          row.append(gap);
+          continue;
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mg-cell';
+        button.dataset.date = day.isoDate;
+        button.dataset.minute = String(cell.minute);
+        // The instant, not just the clock reading. The slider counts from solar
+        // midnight and this grid counts from the local one; the instant is the
+        // only thing the two agree about.
+        button.dataset.at = String(cell.at.getTime());
+        button.style.background = altitudeColour(cell.altitude ?? -90);
+
+        // Cloud dims a cell, and only where there is a forecast to dim it with.
+        const light = cloudAt(cell.at);
+        if (light !== null) {
+          forecastCells++;
+          button.style.opacity = String(0.35 + 0.65 * light);
+        }
+        // Compared as instants for the same reason: "the cell you are looking
+        // at" is a moment, and the two scales only meet there.
+        const here = currentInstant();
+        if (here && Math.abs(cell.at.getTime() - here.getTime()) < (GRID_STEP_MINUTES / 2) * 60_000) {
+          button.classList.add('mg-now');
+        }
+
+        const inGolden = golden.some((run) => cell.minute >= run.from && cell.minute < run.to);
+        button.title = [
+          `${day.isoDate} ${formatColumn(cell.minute)}`,
+          `${(cell.altitude ?? 0).toFixed(0)}° ${inGolden ? '· golden' : ''}`.trim(),
+          light === null ? 'no forecast' : `${Math.round(light * 100)}% direct light`,
+        ].join(' · ');
+        row.append(button);
+      }
+      rows.push(row);
+    }
+
+    body.replaceChildren(...rows);
+
+    // The legend says what the picture cannot: which part of it is a forecast
+    // and which part is arithmetic that will not change.
+    const days = grid.days.length;
+    const covered = Math.round((forecastCells / (days * grid.columns.length)) * days);
+    $('mg-legend').textContent = [
+      'Colour is the sun’s altitude; hatching is an hour the local clock never read.',
+      forecastCells
+        ? `Cloud dims about the first ${covered} days — the rest is geometry, with no forecast to qualify it.`
+        : 'No forecast loaded, so nothing here is dimmed by cloud.',
+      // Because clicking 00:30 lands on the previous date, and that looks like
+      // a bug until you know the day here starts when the sun is lowest.
+      'Rows are calendar days; the slider’s day runs from solar midnight, so the small hours belong to the date before.',
+    ].join(' ');
+  }
+
+  on('open-month', 'click', () => {
+    $<HTMLElement>('layers').hidden = true;
+    $<HTMLButtonElement>('layers-button').setAttribute('aria-expanded', 'false');
+    openMonthGrid();
+  });
+  on('mg-close', 'click', closeMonthGrid);
+  on('mg-back', 'click', () => {
+    gridMonth = shiftIsoMonth(gridMonth, -1);
+    renderMonthGrid();
+  });
+  on('mg-forward', 'click', () => {
+    gridMonth = shiftIsoMonth(gridMonth, 1);
+    renderMonthGrid();
+  });
+  /**
+   * Put the page on a given instant.
+   *
+   * Two scales meet here and they do not agree. The grid's columns are the
+   * local clock; the slider counts minutes from **solar** midnight, which at
+   * Edinburgh in August is about 01:19 — so clicking 19:00 and calling
+   * `setMinute(1140)` landed the page on 20:15. Worse, the two scales disagree
+   * about which *day* an instant belongs to: local 00:30 falls in the solar day
+   * that began the previous afternoon. So the date is corrected from the
+   * instant rather than taken from the row, which is why this can step a day.
+   */
+  function goToInstant(instant: Date) {
+    let iso = isoDateIn(instant, timeZone);
+    setDate(iso);
+    for (let pass = 0; pass < 3; pass++) {
+      if (!day) return;
+      const delta = Math.round((instant.getTime() - day.dayStart.getTime()) / 60_000);
+      if (delta >= 0 && delta <= MINUTES_PER_DAY) {
+        setMinute(delta);
+        return;
+      }
+      iso = shiftIsoDate(iso, delta < 0 ? -1 : 1);
+      setDate(iso);
+    }
+  }
+
+  on('mg-body', 'click', (event) => {
+    const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-at]');
+    if (!cell) return;
+    goToInstant(new Date(Number(cell.dataset.at)));
+    closeMonthGrid();
+  });
 
   /* ── The notebook ───────────────────────────────────────────────────────
      Everything you worked out at a spot that the arithmetic cannot: the note,
