@@ -166,6 +166,38 @@ export const prerender = true;
             <div><dt>Photographed</dt><dd id="f-photos">—</dd></div>
             <div><dt>Light</dt><dd id="f-light">—</dd></div>
           </dl>
+
+          <!-- ── The notebook ───────────────────────────────────────────────
+               Only for a kept spot. A place you are passing through does not
+               need a note, and a note with nowhere to live would be lost the
+               moment the pin moved — so the star is what opens this. -->
+          <details class="fold" id="fold-note" hidden>
+            <summary>Notebook</summary>
+            <div class="note">
+              <textarea
+                class="note-text"
+                id="note-text"
+                rows="3"
+                maxlength="600"
+                placeholder="What is worth remembering about this spot?"
+                aria-label="Note about this spot"
+              ></textarea>
+              <p class="note-kept" id="note-kept"></p>
+              <ul class="note-photos" id="note-photos"></ul>
+              <div class="note-add">
+                <input
+                  class="note-url"
+                  id="note-url"
+                  type="url"
+                  inputmode="url"
+                  placeholder="Link a reference photograph"
+                  aria-label="Reference photograph URL"
+                />
+                <button class="ghost" id="note-add" type="button">Add</button>
+              </div>
+              <p class="note-say" id="note-say"></p>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -816,6 +848,84 @@ export const prerender = true;
     padding: 0.35rem 0;
     min-height: 30px;
   }
+
+  /* ── Notebook ─────────────────────────────────────────────────────────── */
+
+  .note { display: grid; gap: 0.45rem; padding: 0.2rem 0 0.5rem; }
+  .note-text {
+    width: 100%;
+    resize: vertical;
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--fg);
+    background: color-mix(in oklab, var(--bg) 78%, var(--fg) 6%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+  }
+  .note-kept, .note-say { font-size: 0.68rem; color: var(--muted); margin: 0; }
+  /* Every row in here is built by the script, and Astro's scoping only reaches
+     elements that were in the markup — without `:global()` these fall back to
+     the browser's own stylesheet, which is how the credits came out as default
+     blue underlined links and the thumbnails had no box at all. */
+  .note-photos { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+  .note-photos :global(li) { display: flex; gap: 0.45rem; align-items: center; }
+  .note-photos :global(img) {
+    width: 44px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--bg) 78%, var(--fg) 6%);
+    flex: none;
+  }
+  /* The credit is the reason these are references rather than copies, so it is
+     never the thing that gets truncated away to nothing. */
+  .note-photos :global(.cr) {
+    font-size: 0.68rem;
+    color: var(--muted);
+    line-height: 1.3;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .note-photos :global(.cr a) { color: inherit; }
+  .note-add { display: flex; gap: 0.35rem; }
+  .note-url {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: 0.72rem;
+    color: var(--fg);
+    background: color-mix(in oklab, var(--bg) 78%, var(--fg) 6%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.35rem 0.5rem;
+  }
+  #note-add {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--fg);
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0 0.7rem;
+    cursor: pointer;
+  }
+  /* Elements built at runtime are outside Astro's scoping, so anything the
+     script creates needs :global() or it falls back to the UA stylesheet. */
+  .note-photos :global(.drop-photo) {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0 0.2rem;
+    cursor: pointer;
+  }
+  .note-photos :global(.drop-photo:hover) { color: #e0603a; }
 
   /* ── Moon ─────────────────────────────────────────────────────────────── */
 
@@ -1584,7 +1694,18 @@ export const prerender = true;
   } from '../lib/scout/basemap';
   import { domePath, domePosition, domeRadiusFor, hourMarks, splitAtHorizon } from '../lib/scout/dome';
   import { decodeScoutLink, encodeScoutLink } from '../lib/scout/share';
-  import { addSpot, indexOfSpot, readSpots, removeSpot, type SavedSpot } from '../lib/scout/spots';
+  import {
+    addSpot,
+    describeFrame,
+    indexOfSpot,
+    readPhoto,
+    readSpots,
+    removeSpot,
+    updateSpot,
+    MAX_PHOTOS,
+    type SavedSpot,
+    type SpotPhoto,
+  } from '../lib/scout/spots';
   import { PHOTO_SEARCH_RADIUS_M } from '../lib/scout/sources/types';
   import { shootPlan } from '../lib/scout/report';
   import {
@@ -3643,8 +3764,11 @@ export const prerender = true;
   /** The parts that only change when the *place* does. */
   function renderPanel() {
     // Every path that changes where you are ends up here, so this is the one
-    // place the star has to be told about it.
+    // place the star and the notebook have to be told about it. The notebook
+    // belongs to a spot, not to the page: moving the pin off a kept place must
+    // take its note off the panel with it.
     renderStar();
+    renderNotebook();
     if (!centre) {
       $<HTMLElement>('panel').hidden = true;
       return;
@@ -4479,9 +4603,26 @@ export const prerender = true;
 
   function offerUndo(text: string) {
     $('toast-text').textContent = text;
+    $<HTMLElement>('toast-undo').hidden = false;
     $<HTMLElement>('toast').hidden = false;
     clearTimeout(toastTimer);
     // Long enough to notice and reach, short enough not to sit over the map.
+    toastTimer = setTimeout(() => ($<HTMLElement>('toast').hidden = true), 6000);
+  }
+
+  /**
+   * The same strip, with nothing to undo.
+   *
+   * For the things that simply did not happen — a save the browser refused.
+   * Offering "Undo" against those would be inviting you to reverse something
+   * that never took place.
+   */
+  function notify(text: string) {
+    undoSpot = null;
+    $('toast-text').textContent = text;
+    $<HTMLElement>('toast-undo').hidden = true;
+    $<HTMLElement>('toast').hidden = false;
+    clearTimeout(toastTimer);
     toastTimer = setTimeout(() => ($<HTMLElement>('toast').hidden = true), 6000);
   }
 
@@ -5166,12 +5307,30 @@ export const prerender = true;
     }
   }
 
-  function storeSpots() {
+  /**
+   * Write the list back, and say whether it landed.
+   *
+   * It used to swallow the failure, which was fine while a spot was five
+   * numbers. A notebook is not: someone who has just typed a paragraph and
+   * linked three photographs has to be told when none of it was kept, or they
+   * will find out by coming back to an empty spot next week. The list in memory
+   * is left as it is either way — refusing the edit as well would lose the work
+   * twice over.
+   */
+  function storeSpots(): boolean {
     try {
       localStorage.setItem(SPOTS_KEY, JSON.stringify(keptSpots));
+      return true;
     } catch {
-      /* out of quota or private mode — the page carries on without it */
+      return false; // out of quota, or private mode, where nothing is ever kept
     }
+  }
+
+  /** Store, and complain in the open if the browser would not have it. */
+  function storeSpotsOrSay(): boolean {
+    if (storeSpots()) return true;
+    notify('No room to keep that — this browser’s storage is full.');
+    return false;
   }
 
   /** Reflect whether *this* spot is one of the kept ones. */
@@ -5213,12 +5372,156 @@ export const prerender = true;
 
         const detail = document.createElement('span');
         detail.className = 'dt';
-        detail.textContent = formatCoords({ lat: spot.lat, lon: spot.lon });
+        // The lens and the note are why you kept it. Reading the coordinate
+        // back tells you nothing you did not know from the name.
+        detail.textContent = [
+          spot.frame ? describeFrame(spot.frame) : formatCoords({ lat: spot.lat, lon: spot.lon }),
+          spot.note?.split('\n')[0],
+        ]
+          .filter(Boolean)
+          .join(' — ');
         li.append(detail);
         return li;
       }),
     );
   }
+
+  /* ── The notebook ───────────────────────────────────────────────────────
+     Everything you worked out at a spot that the arithmetic cannot: the note,
+     the lens it was kept with, and the photographs that sent you there. Only
+     for a kept spot, because there is nowhere else to put it. */
+
+  function keptHere(): SavedSpot | null {
+    if (!centre) return null;
+    const index = indexOfSpot(keptSpots, centre);
+    return index === -1 ? null : keptSpots[index];
+  }
+
+  function renderNotebook() {
+    const fold = $<HTMLDetailsElement>('fold-note');
+    const spot = keptHere();
+    fold.hidden = !spot;
+    if (!spot) return;
+
+    const text = $<HTMLTextAreaElement>('note-text');
+    // Never while it is being typed in: replacing the value under the cursor
+    // moves the caret to the end mid-sentence.
+    if (document.activeElement !== text) text.value = spot.note ?? '';
+
+    $('note-kept').textContent = spot.frame
+      ? `Kept with ${describeFrame(spot.frame)}${spot.slabHeightM ? ` · ${spot.slabHeightM} m monolith` : ''}`
+      : 'No lens kept here yet — press the star again to keep the current frame.';
+
+    const photos = spot.photos ?? [];
+    $('note-photos').replaceChildren(
+      ...photos.map((photo, index) => {
+        const li = document.createElement('li');
+
+        const img = document.createElement('img');
+        img.src = photo.url;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        li.append(img);
+
+        const credit = document.createElement('span');
+        credit.className = 'cr';
+        const link = document.createElement('a');
+        link.href = photo.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        // A photograph with no credit says so. It is still a link you saved,
+        // and calling it "Untitled" would be inventing an attribution.
+        link.textContent = photo.credit ?? 'Uncredited link';
+        credit.append(link);
+        if (photo.licence) credit.append(document.createTextNode(` · ${photo.licence}`));
+        li.append(credit);
+
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'drop-photo';
+        drop.dataset.photo = String(index);
+        drop.textContent = '×';
+        drop.title = 'Remove this reference';
+        li.append(drop);
+        return li;
+      }),
+    );
+
+    $<HTMLInputElement>('note-url').disabled = photos.length >= MAX_PHOTOS;
+    $('note-say').textContent =
+      photos.length >= MAX_PHOTOS ? `That is ${MAX_PHOTOS} references — remove one to add another.` : '';
+  }
+
+  /** Patch the kept spot under the pin, keeping the list's order. */
+  function editSpot(patch: Partial<Omit<SavedSpot, 'lat' | 'lon'>>): boolean {
+    if (!centre || !keptHere()) return false;
+    keptSpots = updateSpot(keptSpots, centre, patch);
+    return storeSpotsOrSay();
+  }
+
+  // Written on a pause rather than on a keystroke: `localStorage` is
+  // synchronous, and serialising two dozen spots on every letter typed is work
+  // done on the main thread between the key and the glyph.
+  let noteTimer = 0;
+  on('note-text', 'input', () => {
+    clearTimeout(noteTimer);
+    noteTimer = window.setTimeout(() => {
+      const note = $<HTMLTextAreaElement>('note-text').value.trim();
+      editSpot({ note: note || undefined });
+      renderKept();
+    }, 400);
+  });
+  on('note-text', 'blur', () => {
+    clearTimeout(noteTimer);
+    const note = $<HTMLTextAreaElement>('note-text').value.trim();
+    editSpot({ note: note || undefined });
+    renderKept();
+  });
+
+  function addReference() {
+    const spot = keptHere();
+    const field = $<HTMLInputElement>('note-url');
+    const raw = field.value.trim();
+    if (!spot || !raw) return;
+
+    // Validated by the same reader that guards the stored list, so a link that
+    // would be dropped on the way back in is refused on the way out — with a
+    // reason, rather than by silently doing nothing.
+    const photo = readPhoto({ url: raw, source: 'manual' });
+    if (!photo) {
+      $('note-say').textContent = 'That needs to be a full http or https link.';
+      return;
+    }
+
+    const photos: SpotPhoto[] = spot.photos ?? [];
+    if (photos.some((existing) => existing.url === photo.url)) {
+      $('note-say').textContent = 'That one is already here.';
+      return;
+    }
+    if (photos.length >= MAX_PHOTOS) return;
+
+    if (editSpot({ photos: [...photos, photo] })) field.value = '';
+    renderNotebook();
+  }
+
+  on('note-add', 'click', addReference);
+  on('note-url', 'keydown', (event) => {
+    if ((event as KeyboardEvent).key === 'Enter') {
+      event.preventDefault();
+      addReference();
+    }
+  });
+
+  on('note-photos', 'click', (event) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-photo]');
+    const spot = keptHere();
+    if (!target || !spot?.photos) return;
+    const index = Number(target.dataset.photo);
+    const photos = spot.photos.filter((_, i) => i !== index);
+    editSpot({ photos: photos.length ? photos : undefined });
+    renderNotebook();
+  });
 
   on('star', 'click', () => {
     if (!centre) return;
@@ -5232,11 +5535,28 @@ export const prerender = true;
         timeZone,
         radiusKm,
         savedAt: Date.now(),
+        // The lens goes in with the place. Half of what you worked out standing
+        // here is where to point the camera, and that half used to be thrown
+        // away the moment the pin moved. `addSpot` keeps an existing note and
+        // photographs across this, so re-keeping a spot updates the aim without
+        // costing the writing.
+        frame: {
+          sensor: lens.sensor,
+          focalLengthMm: lens.focalLengthMm,
+          orientation: lens.orientation,
+          bearing: lens.bearing,
+          tiltDeg: lens.tiltDeg,
+        },
+        // Only when there is a monolith to speak of: a height nobody set is a
+        // default, and storing a default as a measurement is how a guess ends
+        // up looking like a decision.
+        slabHeightM: shown.monolith ? slab.heightM : undefined,
       });
     }
-    storeSpots();
+    storeSpotsOrSay();
     renderStar();
     renderKept();
+    renderNotebook();
   });
 
   on('kept-list', 'click', (event) => {
@@ -5273,7 +5593,47 @@ export const prerender = true;
       { refit: true },
     );
     if (spot.radiusKm) setRadius(spot.radiusKm, { refit: true });
+    restoreNotebook(spot);
   });
+
+  /**
+   * Put the camera back the way it was left.
+   *
+   * A spot restored to the right coordinate with the wrong lens is a worse
+   * answer than one restored with none, because the wedge on the map looks
+   * exactly as authoritative either way. The tilt is clamped to what the slider
+   * can express so the control and the state cannot disagree — a stored +85°
+   * with an input that stops at +80° would draw one frame and report another.
+   */
+  function restoreNotebook(spot: SavedSpot) {
+    if (spot.frame) {
+      const tiltInput = $<HTMLInputElement>('frame-tilt');
+      const limit = { low: Number(tiltInput.min), high: Number(tiltInput.max) };
+      lens.sensor = spot.frame.sensor;
+      lens.focalLengthMm = spot.frame.focalLengthMm;
+      lens.orientation = spot.frame.orientation;
+      lens.bearing = Math.round(spot.frame.bearing);
+      lens.tiltDeg = Math.round(Math.min(limit.high, Math.max(limit.low, spot.frame.tiltDeg)));
+
+      $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
+      $<HTMLSelectElement>('frame-focal').value = String(lens.focalLengthMm);
+      $<HTMLInputElement>('frame-bearing').value = String(lens.bearing);
+      tiltInput.value = String(lens.tiltDeg);
+      for (const button of $('frameorient').querySelectorAll('button')) {
+        button.classList.toggle('on', button.dataset.orient === lens.orientation);
+      }
+      frameChanged();
+    }
+
+    if (spot.slabHeightM) {
+      slab.heightM = spot.slabHeightM;
+      $<HTMLInputElement>('slab-height').value = String(slab.heightM);
+      $('slab-out').textContent = `${slab.heightM} m`;
+      drawSlab();
+    }
+
+    renderNotebook();
+  }
 
   /**
    * The two calls that still need a server, and what to say when there isn't one.
