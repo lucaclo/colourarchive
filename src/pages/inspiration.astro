@@ -1,0 +1,1625 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { readInspManifest } from '../lib/inspiration';
+import { oklchCss } from '../lib/color';
+
+export const prerender = false;
+const manifest = await readInspManifest();
+const hasItems = manifest.count > 0;
+---
+
+<Layout title="Inspiration — Colour Archive">
+  <header class="topbar" id="topbar">
+    <span class="brand">Colour Archive</span>
+    <span class="topbar-right"><a href="/">Archive</a> <a href="/scout">Scout</a></span>
+  </header>
+
+  <main class="insp">
+    <header class="insp-head">
+      <p class="cover-kicker">Inspiration</p>
+      <h1>Reference</h1>
+      <p class="insp-lead">What catches the eye.</p>
+    </header>
+
+    <section class="insp-add">
+      <form id="form">
+        <input id="file" type="file" accept="image/*" multiple hidden />
+        <div class="drop" id="zone" tabindex="0" role="button" aria-label="Drop images or browse">
+          <p class="drop-title">Drop images, or <span class="link">browse</span></p>
+          <p class="drop-sub">JPEG · PNG · WebP · AVIF · HEIC · GIF</p>
+        </div>
+      </form>
+      <div class="urlrow">
+        <input id="source" type="text" placeholder="Source / credit — name or @handle (applies to what you add)" />
+        <span class="or">or</span>
+        <input id="url" type="url" placeholder="Paste an image URL" />
+        <button id="addurl" type="button">Add URL</button>
+      </div>
+      <div id="status" class="status" hidden><div class="bar"><div class="bar-fill" id="bar"></div></div><p id="status-text"></p></div>
+      <ul id="results" class="results"></ul>
+    </section>
+
+    {
+      hasItems ? (
+        <div class="insp-board" id="board">
+          {manifest.chapters.map((ch) => (
+            <section class="insp-chapter">
+              <h2 class="insp-chtitle">
+                <span class="sw" style={`background:${oklchCss(ch.oklch)}`} />
+                {ch.name}<span class="n">{ch.photos.length}</span>
+              </h2>
+              <div class="collage insp-collage">
+                {ch.photos.map((p) => {
+                  const largest = p.derivatives[p.derivatives.length - 1];
+                  return (
+                    <figure class="frame insp-frame" data-id={p.id} data-full={largest.avif}
+                            data-source={p.source ?? ''}
+                            style={`--frame-bg:${oklchCss(p.oklch)};aspect-ratio:${p.width}/${p.height}`}>
+                      <img class="ph" src={p.placeholder} alt="" aria-hidden="true" />
+                      {/* Every derivative is AVIF, so <picture> had no second
+                          format to offer — see the archive for the same fix. */}
+                      <img
+                        class="photo"
+                        srcset={p.derivatives.map((d) => `${d.avif} ${d.width}w`).join(', ')}
+                        sizes="(max-width:980px) 50vw, 33vw"
+                        src={largest.avif}
+                        width={p.width}
+                        height={p.height}
+                        loading="lazy"
+                        decoding="async"
+                        alt={p.source ? `Reference — ${p.source}` : 'Reference image'}
+                      />
+                      <button class="cell-remove" type="button" data-remove={p.id} aria-label="Remove">×</button>
+                      <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">≈ similar</button>
+                      <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">◐ match</button>
+                      {p.source && <figcaption class="src">{p.source}</figcaption>}
+                    </figure>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <p class="insp-empty">Nothing yet.</p>
+      )
+    }
+  </main>
+
+  <!-- Split view: reference pinned left, ranked archive matches right. -->
+  <div class="sim" id="sim" hidden>
+    <button class="lb-close" id="sim-close" aria-label="Close">×</button>
+    <div class="sim-left">
+      <img id="sim-ref" alt="" />
+      <p class="lb-src" id="sim-src"></p>
+      <div class="sim-controls">
+        <div class="sim-slider">
+          <span>Colour</span>
+          <input type="range" id="sim-w" min="0" max="100" value="60" aria-label="Colour to composition" />
+          <span>Composition</span>
+        </div>
+        <p class="sim-hint" id="sim-hint">Your closest photographs, ranked.</p>
+      </div>
+    </div>
+    <div class="sim-right" id="sim-right"></div>
+  </div>
+
+  <!-- Style match: reference + your photo -> measured evidence, Lightroom
+       values, a live preview, and an importable preset. -->
+  <div class="mx" id="mx" hidden>
+    <header class="mx-head">
+      <div>
+        <p class="mx-kicker">Match this look</p>
+        <p class="mx-sub" id="mx-sub">Drop the photo you want to edit.</p>
+      </div>
+      <button class="lb-close mx-close" id="mx-close" aria-label="Close">×</button>
+    </header>
+
+    <div class="mx-body">
+      <section class="mx-start" id="mx-start">
+        <img class="mx-refthumb" id="mx-refthumb" alt="" />
+        <div class="mx-startcol">
+          <div class="drop mx-zone" id="mx-zone" tabindex="0" role="button" aria-label="Drop your photo or browse">
+            <p class="drop-title">Drop your photo, or <span class="link">browse</span></p>
+            <p class="drop-sub">RAW · JPEG · PNG · WebP · AVIF · HEIC</p>
+          </div>
+          <input id="mx-file" type="file" hidden />
+          <div class="mx-working" id="mx-working" hidden>
+            <div class="mx-workbar"><span id="mx-workbar-fill"></span></div>
+            <p class="mx-workline">
+              <span id="mx-stage">Measuring</span>
+              <span class="mx-elapsed" id="mx-elapsed"></span>
+              <button type="button" class="mx-stop" id="mx-stop">Stop waiting</button>
+            </p>
+          </div>
+          <label class="mx-field">
+            <span>Starting point for RAW files</span>
+            <select id="mx-baseline">
+              <option value="macos">Decode on this Mac — no extra steps, ~95% accurate</option>
+              <option value="export">A JPEG I exported from Lightroom with sliders reset — exact</option>
+              <option value="preview">The camera preview inside the RAW — fastest, least accurate</option>
+            </select>
+          </label>
+          <p class="mx-note" id="mx-status"></p>
+        </div>
+
+        <!-- Before you edit anything: the photographs in the archive that
+             already measure like this one. Some evenings the answer is that you
+             took it already, and being shown those frames is worth more than
+             being handed a preset.
+
+             On the *start* screen, spanning both columns, because it is the
+             question you would ask first if it occurred to you to ask it —
+             putting it after the report would make it a footnote to work you
+             might not have needed to do. -->
+        <section class="already" id="already" hidden>
+          <header class="already-head">
+            <p class="already-kicker">Already in the archive</p>
+            <p class="already-sub" id="already-sub"></p>
+          </header>
+          <ul class="already-strip" id="already-strip"></ul>
+          <p class="already-note" id="already-note"></p>
+        </section>
+      </section>
+
+      <section class="mx-result" id="mx-result" hidden>
+        <!-- Stage: collapses as the report scrolls, so the reading area grows
+             instead of the pictures permanently owning half the screen. -->
+        <div class="mx-stage" id="mx-stage">
+          <div class="mx-frames">
+            <figure class="mx-fig">
+              <canvas id="mx-canvas"></canvas>
+              <figcaption><span id="mx-wipehint">Yours, graded</span></figcaption>
+            </figure>
+            <figure class="mx-fig">
+              <img id="mx-refside" alt="" />
+              <figcaption>The reference</figcaption>
+            </figure>
+          </div>
+
+          <div class="mx-bar">
+            <div class="mx-strength">
+              <span class="mx-end">None</span>
+              <input type="range" id="mx-strength" min="0" max="100" value="50" aria-label="Match strength" />
+              <span class="mx-end">Full</span>
+            </div>
+            <p class="mx-strengthlabel" id="mx-strengthlabel"></p>
+            <label class="mx-check">
+              <input type="checkbox" id="mx-wipe" /><span>Wipe against your original</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Tabs mirror Lightroom's own panel order, so what you read here maps
+             onto where you'll type it there. -->
+        <nav class="mx-tabs" id="mx-tabs" role="tablist">
+          <button type="button" role="tab" data-tab="light" class="on">Light</button>
+          <button type="button" role="tab" data-tab="colour">Colour</button>
+          <button type="button" role="tab" data-tab="details">Details</button>
+          <button type="button" role="tab" data-tab="measured">Measured</button>
+          <button type="button" role="tab" data-tab="notes">
+            Notes<span class="count" id="mx-notecount"></span>
+          </button>
+        </nav>
+
+        <div class="mx-scroll" id="mx-scroll">
+          <div class="mx-badges" id="mx-badges"></div>
+          <div class="mx-panel" data-panel="light" id="mx-light"></div>
+          <div class="mx-panel" data-panel="colour" id="mx-colour" hidden></div>
+          <div class="mx-panel" data-panel="details" id="mx-details" hidden></div>
+          <div class="mx-panel" data-panel="measured" id="mx-evidence" hidden></div>
+          <div class="mx-panel" data-panel="notes" id="mx-notes" hidden></div>
+        </div>
+
+        <!-- Always reachable, so the primary action never scrolls away. -->
+        <footer class="mx-actions">
+          <button id="mx-dl" type="button">Download preset</button>
+          <button id="mx-dl-safe" type="button" class="ghost">Without masks</button>
+          <button id="mx-keep" type="button" class="ghost">Keep</button>
+        </footer>
+      </section>
+    </div>
+  </div>
+
+  <div class="insp-lb" id="lb" hidden>
+    <button class="lb-close" id="lb-close" aria-label="Close">×</button>
+    <img id="lb-img" alt="" />
+    <div class="lb-src" id="lb-src"></div>
+  </div>
+</Layout>
+
+<style>
+  .insp { max-width: 68rem; margin: 0 auto; padding: 8rem var(--edge) 12vh; }
+  .insp-head h1 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2.2rem, 6vw, 4rem); margin: 0.3rem 0 0.6rem; line-height: 1; }
+  .insp-lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 40rem; }
+
+  .insp-add { margin-bottom: 3.5rem; }
+  .drop { border: 1px dashed var(--border); border-radius: 2px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 160ms, background 160ms; background: color-mix(in oklab, var(--fg) 2%, transparent); }
+  .drop:hover, .drop:focus-visible, .drop.over { border-color: var(--fg); background: color-mix(in oklab, var(--fg) 5%, transparent); }
+  .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.4rem; margin: 0 0 0.4rem; }
+  .drop-sub { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; margin: 0; }
+  .link { text-decoration: underline; text-underline-offset: 3px; }
+  .urlrow { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.8rem; flex-wrap: wrap; }
+  .urlrow input { flex: 1 1 12rem; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-label); font-size: 0.8rem; padding: 0.6rem 0.8rem; border-radius: 2px; }
+  .urlrow input:focus-visible { outline: none; border-color: var(--fg); }
+  .urlrow .or { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; flex: 0 0 auto; }
+  .urlrow button { flex: 0 0 auto; background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.62rem 1rem; border-radius: 2px; }
+  .status { margin-top: 1rem; } .bar { height: 2px; background: var(--border); overflow: hidden; } .bar-fill { height: 100%; width: 0; background: var(--fg); transition: width 200ms; }
+  .status-text { color: var(--muted); font-size: 0.8rem; margin: 0.5rem 0 0; }
+  /* The result rows are built by the script, so they never carry Astro's
+     scoping attribute — everything below `.results` has to be :global(). */
+  .results { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
+  .results :global(li) { display: flex; align-items: center; gap: 0.7rem; font-size: 0.82rem; border-bottom: 1px solid var(--border); padding: 0.5rem 0; }
+  .results :global(.sw) { width: 1rem; height: 1rem; border-radius: 50%; flex: 0 0 auto; }
+  .results :global(.fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .results :global(.ch) { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
+  .results :global(.err) { color: #e0603a; }
+
+  .insp-chapter { margin-bottom: 3rem; }
+  .insp-chtitle { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.9rem; }
+  .insp-chtitle .sw { width: 0.8rem; height: 0.8rem; border-radius: 50%; }
+  .insp-chtitle .n { color: color-mix(in oklab, var(--muted) 70%, transparent); }
+  .insp-collage { columns: 3; column-gap: 6px; }
+  @media (max-width: 900px) { .insp-collage { columns: 2; } }
+  .insp-frame { margin: 0 0 6px; cursor: zoom-in; }
+  .insp-frame .src {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.04em;
+    color: #fff; padding: 0.5rem 0.6rem; line-height: 1.4;
+    background: linear-gradient(to top, color-mix(in oklab, #000 78%, transparent), transparent);
+    opacity: 0; transition: opacity 160ms var(--ease);
+  }
+  .insp-frame:hover .src { opacity: 1; }
+  .cell-remove { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; background: color-mix(in oklab, #000 55%, transparent); color: #fff; font-size: 15px; line-height: 26px; text-align: center; opacity: 0; transition: opacity 140ms; backdrop-filter: blur(6px); }
+  .insp-frame:hover .cell-remove, .insp-frame:focus-within .cell-remove { opacity: 1; }
+  .cell-remove:hover { background: color-mix(in oklab, #c0392b 82%, transparent); }
+  .cell-remove.armed { background: #c0392b; opacity: 1; }
+  .insp-empty { color: var(--muted); }
+
+  .insp-lb { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; background: color-mix(in oklab, var(--bg) 96%, #000); }
+  .insp-lb[hidden] { display: none; }
+  .insp-lb img { max-width: 92vw; max-height: 82vh; object-fit: contain; }
+  .lb-src { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
+  .lb-src a { color: var(--fg); }
+
+  /* Find-similar button on each reference */
+  .cell-similar {
+    position: absolute; left: 6px; top: 6px; z-index: 3;
+    border: 0; cursor: pointer; border-radius: 999px;
+    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
+    backdrop-filter: blur(6px); opacity: 0; transition: opacity 140ms, background 140ms;
+  }
+  .insp-frame:hover .cell-similar, .insp-frame:focus-within .cell-similar { opacity: 1; }
+  .cell-similar:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
+
+  /* Split view */
+  .sim { position: fixed; inset: 0; z-index: 82; display: grid; grid-template-columns: 42% 58%; background: color-mix(in oklab, var(--bg) 97%, #000); }
+  .sim[hidden] { display: none; }
+  .sim-left { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem; padding: var(--edge); border-right: 1px solid var(--hair); }
+  .sim-left img { max-width: 100%; max-height: 58vh; object-fit: contain; }
+  .sim-controls { width: min(100%, 26rem); }
+  .sim-slider { display: flex; align-items: center; gap: 0.8rem; font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .sim-slider input { flex: 1; accent-color: var(--fg); }
+  .sim-hint { font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.06em; color: var(--muted); text-align: center; margin: 0.8rem 0 0; }
+  .sim-right { overflow: auto; padding: calc(var(--edge) + 1.5rem) var(--edge); }
+  /* The ranked grid is rendered by the script — :global() throughout. */
+  :global(.sim-grid) { columns: 3; column-gap: 8px; }
+  :global(.sim-cell) { position: relative; margin: 0 0 8px; break-inside: avoid; background: var(--border); cursor: zoom-in; }
+  :global(.sim-cell img) { width: 100%; display: block; opacity: 0; transition: opacity 300ms var(--ease); }
+  :global(.sim-cell img.on) { opacity: 1; }
+  :global(.sim-cell .pct) { position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent); padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(4px); }
+  @media (max-width: 1100px) { .sim { grid-template-columns: 1fr; grid-template-rows: 42% 58%; } .sim-left { border-right: 0; border-bottom: 1px solid var(--hair); } :global(.sim-grid) { columns: 4; } }
+  #lb { z-index: 88; } /* enlarge sits above the split view */
+
+  /* --- Style match ---------------------------------------------------- */
+  .cell-match {
+    position: absolute; left: 6px; top: 34px; z-index: 3;
+    border: 0; cursor: pointer; border-radius: 999px;
+    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
+    backdrop-filter: blur(6px); opacity: 0; transition: opacity 140ms, background 140ms;
+  }
+  .insp-frame:hover .cell-match, .insp-frame:focus-within .cell-match { opacity: 1; }
+  .cell-match:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
+
+  /* ── Touch ───────────────────────────────────────────────────────────────
+     Every action on a reference was revealed by :hover, which a finger does
+     not have. `.cell-remove` and `.cell-similar` at least had a fallback in
+     global.css; `.cell-match` had none, so on the iPad — the device this is
+     actually used from — Style Match could not be started at all.
+     The pills stay visually small so they don't bury the photograph; the
+     tappable area is grown to 44px around them instead. */
+  /* `pointer: coarse` as well as `hover: none`: an iPad with a Magic Keyboard
+     reports hover, but it is still a screen you reach out and touch. */
+  @media (hover: none), (pointer: coarse) {
+    .cell-match, .cell-similar, .cell-remove { opacity: 0.9; }
+    .cell-match::after, .cell-similar::after, .cell-remove::after {
+      content: ''; position: absolute; inset: -12px;
+    }
+    /* Held 12px off each edge, not 6: `.insp-frame` clips its overflow, so an
+       expanded hit area hanging past the tile is clipped away with it. */
+    .cell-similar { left: 12px; top: 12px; }
+    .cell-remove { right: 12px; top: 12px; }
+    /* Three corners. Stacked 28px apart, two 44px targets overlap — and a
+       mis-tap here starts a twenty-second measurement. */
+    .cell-match { top: auto; left: auto; bottom: 12px; right: 12px; }
+    /* The credit is hover-revealed too, and on touch that means never. */
+    .insp-frame .src { opacity: 1; padding-right: 5.5rem; }
+  }
+
+  .mx { position: fixed; inset: 0; z-index: 84; display: flex; flex-direction: column; background: color-mix(in oklab, var(--bg) 98%, #000); }
+  .mx[hidden] { display: none; }
+  .mx-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem var(--edge) 0.85rem; border-bottom: 1px solid var(--hair); flex: 0 0 auto; }
+  .mx-kicker { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .mx-sub { font-family: var(--font-label); font-size: 0.76rem; color: var(--fg); margin: 0.28rem 0 0; }
+  .mx-close { position: static; flex: 0 0 auto; }
+  .mx-body { flex: 1 1 auto; overflow: hidden; display: flex; }
+
+  /* An author `display:` rule beats the hidden attribute's UA `display:none`,
+     so every togglable block here needs its own [hidden] guard. */
+  .mx-start[hidden], .mx-result[hidden] { display: none; }
+  /* min-width:0 throughout: the baseline <select> is intrinsically as wide as
+     its longest option ("Decode on this Mac — no extra steps, ~95% accurate"),
+     and as a flex/grid child with the default min-width:auto it dragged the
+     whole start screen out to 522px inside a 390px phone. */
+  .mx-start { display: grid; grid-template-columns: minmax(0, 34%) minmax(0, 1fr); gap: 2rem; align-items: center; padding: var(--edge); width: 100%; min-width: 0; overflow: auto; }
+  .mx-refthumb { width: 100%; max-height: 60vh; object-fit: contain; }
+  .mx-startcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+  .mx-zone { margin: 0; }
+  .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .mx-field select { width: 100%; max-width: 100%; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-label); font-size: 0.78rem; letter-spacing: 0; text-transform: none; padding: 0.6rem 0.7rem; border-radius: 2px; }
+  .mx-note { font-family: var(--font-label); font-size: 0.72rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+  .mx-note :global(.err) { color: #e0603a; }
+
+  /* Working state. The measurement is long and entirely invisible from here,
+     so it names its stage, counts, and offers a way out. */
+  .mx-working[hidden] { display: none; }
+  .mx-working { display: block; }
+  .mx-workbar { height: 2px; background: var(--border); overflow: hidden; }
+  .mx-workbar span {
+    display: block; height: 100%; width: 0; background: var(--fg);
+    transition: width 600ms var(--ease);
+  }
+  .mx-workline {
+    display: flex; align-items: baseline; gap: 0.7rem; margin: 0.6rem 0 0;
+    font-family: var(--font-label); font-size: 0.72rem; color: var(--muted);
+  }
+  .mx-workline #mx-stage { flex: 1 1 auto; color: var(--fg); }
+  .mx-elapsed { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+  .mx-stop {
+    flex: 0 0 auto; appearance: none; background: transparent; border: 0; cursor: pointer;
+    font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--muted); padding: 0;
+    border-bottom: 1px solid transparent; transition: color 180ms, border-color 180ms;
+  }
+  .mx-stop:hover { color: var(--fg); border-bottom-color: currentColor; }
+
+  /* --- Stage ------------------------------------------------------------
+     `--s` runs 1 (expanded) to 0 (collapsed) and is set from the report's
+     scroll position. Every dimension below interpolates on it, so the
+     pictures give their space back to the reading area as you scroll rather
+     than permanently occupying half the screen. */
+  .mx-result { --s: 1; display: flex; flex-direction: column; width: 100%; overflow: hidden; }
+  .mx-stage { flex: 0 0 auto; border-bottom: 1px solid var(--hair); background: var(--bg); }
+  .mx-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); }
+  .mx-fig { margin: 0; position: relative; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 0; }
+  .mx-fig canvas, .mx-fig img {
+    max-width: 100%;
+    max-height: calc(9vh + 30vh * var(--s));
+    object-fit: contain; display: block;
+    transition: max-height 120ms linear;
+  }
+  .mx-fig figcaption {
+    position: absolute; left: 8px; bottom: 8px;
+    font-family: var(--font-label); font-size: 0.54rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #fff; background: color-mix(in oklab, #000 62%, transparent);
+    padding: 2px 8px; border-radius: 999px; backdrop-filter: blur(4px);
+    opacity: var(--s); transition: opacity 120ms linear; pointer-events: none;
+  }
+
+  .mx-bar {
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    gap: 0.6rem 1.6rem;
+    padding: calc(0.45rem + 0.5rem * var(--s)) var(--edge);
+    transition: padding 120ms linear;
+  }
+  .mx-strength { display: flex; align-items: center; gap: 0.8rem; flex: 1 1 22rem; max-width: 30rem; }
+  .mx-strength input { flex: 1; accent-color: var(--fg); }
+  .mx-end { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); flex: 0 0 auto; }
+  .mx-strengthlabel { font-family: var(--font-label); font-size: 0.66rem; color: var(--muted); margin: 0; flex: 0 1 auto; text-align: center; }
+  .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); flex: 0 0 auto; cursor: pointer; }
+
+  /* --- Tabs --------------------------------------------------------------- */
+  .mx-tabs { flex: 0 0 auto; display: flex; gap: 0.2rem; padding: 0 var(--edge); border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
+  .mx-tabs::-webkit-scrollbar { display: none; }
+  .mx-tabs button {
+    position: relative; background: transparent; border: 0; cursor: pointer; color: var(--muted);
+    font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 0.78rem 0.95rem 0.7rem; white-space: nowrap; transition: color 140ms;
+  }
+  .mx-tabs button::after { content: ''; position: absolute; left: 0.95rem; right: 0.95rem; bottom: -1px; height: 1px; background: transparent; transition: background 140ms; }
+  .mx-tabs button:hover { color: var(--fg); }
+  .mx-tabs button.on { color: var(--fg); }
+  .mx-tabs button.on::after { background: var(--fg); }
+  .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.56rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
+  .mx-tabs .count:empty { display: none; }
+
+  /* --- Report ------------------------------------------------------------- */
+  .mx-scroll { flex: 1 1 auto; overflow: auto; padding: 1.4rem var(--edge) 2.5rem; }
+  .mx-panel[hidden] { display: none; }
+  .mx-panel { max-width: 76rem; }
+  /* Cards flow into columns on a wide screen instead of leaving half the
+     panel empty, but never so narrow that a row wraps. */
+  :global(.mx-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 0 0.9rem; align-items: start; }
+  .mx-h { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem; }
+  :global(.mx-lede) { font-size: 0.76rem; color: var(--muted); margin: 0 0 1.1rem; max-width: 46rem; }
+  /* Two columns only where a panel genuinely has two independent halves. */
+  :global(.mx-two) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem; }
+  /* Everything below is built with innerHTML from the module script. Astro's
+     scoped styles work by stamping a data-astro-* attribute onto elements in
+     the TEMPLATE, and nodes created at runtime never receive it — so these
+     rules must be :global() or they simply do not apply. */
+  .mx-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  :global(.mx-badge) { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--border); padding: 0.3rem 0.6rem; border-radius: 999px; }
+  :global(.mx-badge.warn) { border-color: #e0603a; color: #e0603a; }
+
+  .mx-notes { display: grid; gap: 0.5rem; }
+  :global(.mx-noterow) {
+    display: grid; grid-template-columns: 8rem 1fr; gap: 0.2rem 1rem;
+    font-size: 0.79rem; line-height: 1.6; color: var(--muted);
+    border-left: 2px solid var(--border); padding: 0.55rem 0 0.55rem 0.9rem;
+    background: color-mix(in oklab, var(--fg) 3%, transparent);
+  }
+  :global(.mx-noterow.caution) { border-left-color: #e0603a; color: var(--fg); background: color-mix(in oklab, #e0603a 8%, transparent); }
+  :global(.mx-noterow .panel) { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-top: 0.25rem; }
+
+  .mx-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; }
+
+  /* Cards. Grouping the panels visually is what stops a long list of numbers
+     reading as one undifferentiated wall. */
+  :global(.mx-group) {
+    border: 1px solid var(--border); border-radius: 3px;
+    padding: 0.75rem 0.9rem 0.6rem; margin-bottom: 0.8rem;
+    background: color-mix(in oklab, var(--fg) 2%, transparent);
+  }
+  :global(.mx-grouphead) {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem;
+    font-family: var(--font-label); font-size: 0.57rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--fg); margin-bottom: 0.45rem;
+  }
+  :global(.mx-grouphead .tag) { font-size: 0.52rem; letter-spacing: 0.1em; color: var(--muted); text-transform: none; }
+  :global(.mx-row) { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.79rem; padding: 0.2rem 0; font-variant-numeric: tabular-nums; }
+  :global(.mx-row + .mx-row) { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
+  :global(.mx-row .k) { color: var(--muted); }
+  :global(.mx-row .v) { font-family: var(--font-label); white-space: nowrap; }
+  :global(.mx-rowhint) { font-size: 0.7rem; color: var(--muted); line-height: 1.55; margin: 0.1rem 0 0.5rem; }
+
+  /* Colour Mixer: one row per band with three aligned columns beats 24
+     separate key/value rows for scanning. */
+  :global(.mx-mixer) { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 0.1rem 0.7rem; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+  :global(.mx-mixer .hdr) { font-family: var(--font-label); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-bottom: 0.25rem; }
+  :global(.mx-mixer .band) { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); }
+  :global(.mx-mixer .chip) { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: 0 0 auto; }
+  :global(.mx-mixer .n) { text-align: right; font-family: var(--font-label); }
+  :global(.mx-mixer .z) { color: color-mix(in oklab, var(--muted) 45%, transparent); }
+
+  /* Colour Grading, drawn as Lightroom draws it: a hue ring desaturating to
+     the centre, with a dot at the chosen hue and saturation. A pair of
+     numbers is arithmetic; seeing the dot sitting low-saturation
+     in the greens tells you everything. */
+  :global(.mx-wheelrow) { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 1.1rem; }
+  :global(.mx-cw) { text-align: center; }
+  :global(.mx-cw .disc) {
+    position: relative; width: 100%; max-width: 8rem; aspect-ratio: 1; margin: 0 auto 0.55rem;
+    border-radius: 50%; border: 1px solid var(--border);
+    /* Desaturating toward a NEUTRAL grey, not toward the page background —
+       the centre of the wheel means "no colour", which has to look like grey
+       rather than like a hole. Saturation then reads as distance from centre,
+       exactly as it does in Lightroom. */
+    background:
+      radial-gradient(circle at 50% 50%,
+        #8a8a8a 0%,
+        color-mix(in oklab, #8a8a8a 82%, transparent) 22%,
+        color-mix(in oklab, #8a8a8a 34%, transparent) 55%,
+        transparent 80%),
+      conic-gradient(hsl(0 90% 58%), hsl(60 90% 58%), hsl(120 90% 58%), hsl(180 90% 58%),
+                     hsl(240 90% 58%), hsl(300 90% 58%), hsl(360 90% 58%));
+  }
+  :global(.mx-cw .dot) {
+    position: absolute; width: 0.6rem; height: 0.6rem; border-radius: 50%;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px color-mix(in oklab, #000 70%, transparent);
+    transform: translate(-50%, -50%);
+  }
+  :global(.mx-cw .nm) { font-family: var(--font-label); font-size: 0.55rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: block; }
+  :global(.mx-cw .v) { font-family: var(--font-label); font-size: 0.7rem; color: var(--fg); font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
+  :global(.mx-cw.off .disc) { filter: grayscale(1); opacity: 0.28; }
+  :global(.mx-cw.off .v) { color: var(--muted); }
+
+  /* Tone curve, drawn. "0,0 28,26 56,50 …" is data, not a curve. */
+  :global(.mx-curvebox) { display: flex; align-items: center; gap: 1rem; }
+  :global(.mx-curvebox svg) { flex: 0 0 auto; background: color-mix(in oklab, var(--fg) 4%, transparent); border-radius: 2px; }
+  :global(.mx-curvebox .legend) { font-size: 0.72rem; color: var(--muted); line-height: 1.6; }
+
+  /* Evidence deltas, with a bar so direction and size read at a glance. */
+  :global(.mx-ev) { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 1rem; align-items: center; font-size: 0.79rem; }
+  :global(.mx-ev .lbl) { color: var(--muted); }
+  :global(.mx-ev .val) { font-family: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.72rem; }
+  :global(.mx-bars) { grid-column: 1 / -1; display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.5rem; align-items: center; margin: 0.1rem 0 0.45rem; }
+  :global(.mx-bars .cap) { font-family: var(--font-label); font-size: 0.52rem; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--muted) 70%, transparent); }
+  :global(.mx-track) { position: relative; height: 3px; background: color-mix(in oklab, var(--fg) 8%, transparent); border-radius: 2px; }
+  :global(.mx-track i) { position: absolute; top: 0; bottom: 0; background: var(--fg); border-radius: 2px; }
+  :global(.mx-track::after) { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: color-mix(in oklab, var(--fg) 22%, transparent); }
+  :global(.mx-ev .none) { color: color-mix(in oklab, var(--muted) 60%, transparent); font-style: italic; }
+
+  .mx-actions {
+    flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 0.6rem;
+    padding: 0.85rem var(--edge); border-top: 1px solid var(--hair);
+    background: color-mix(in oklab, var(--bg) 96%, #000);
+  }
+  .mx-actions button { background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.66rem 1.1rem; border-radius: 2px; }
+  .mx-actions button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+  .mx-actions button:disabled { opacity: 0.4; cursor: default; }
+  .mx-actions button:not(:disabled):hover { opacity: 0.85; }
+
+  /* ── Already in the archive ─────────────────────────────────────────────
+     Spans both columns of the start grid and scrolls sideways rather than
+     wrapping: this is a shortlist read left to right, and a strip that reflowed
+     into a block would compete with the reference for the eye. */
+  .already[hidden] { display: none; }
+  .already {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--hair);
+    padding-top: 1.2rem;
+    min-width: 0;
+  }
+  .already-head { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
+  .already-kicker {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .already-sub { margin: 0; font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); }
+  .already-strip {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0.5rem;
+    display: flex;
+    gap: 0.7rem;
+    overflow-x: auto;
+    /* Each card is a decision point, so the strip stops on one rather than
+       drifting between two. */
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* The cards are built at runtime, so every selector inside the strip has to be
+     :global — Astro stamps its scoping attribute onto the template's elements,
+     and anything created later never gets one. Same reason `.sim-grid` and
+     `.mx-noterow` are global. Without it the whole strip falls back to inline
+     anchors and unsized images, which then never load at all. */
+  :global(.already-strip li) { flex: 0 0 auto; scroll-snap-align: start; width: 150px; }
+  :global(.already-card) {
+    display: block;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    text-decoration: none;
+  }
+  :global(.already-card img) {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    object-fit: cover;
+    background: var(--hair);
+  }
+  :global(.already-dist) {
+    display: block;
+    margin-top: 0.35rem;
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    color: var(--fg);
+  }
+  :global(.already-parts) {
+    display: block;
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .already-note {
+    margin: 0.3rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+  .already-note:empty { display: none; }
+
+  @media (max-width: 900px) {
+    .mx-start { grid-template-columns: 1fr; }
+    .mx-frames { grid-template-columns: 1fr 1fr; }
+    .mx-fig canvas, .mx-fig img { max-height: calc(7vh + 18vh * var(--s)); }
+    .mx-cols { grid-template-columns: 1fr; gap: 1.8rem; }
+    .mx-bar { gap: 0.5rem 1rem; }
+    .mx-strengthlabel { flex-basis: 100%; }
+    :global(.mx-noterow) { grid-template-columns: 1fr; }
+  }
+
+  /* ── Phone ───────────────────────────────────────────────────────────────
+     The whole feature is meant to be used from the iPad over the LAN, and a
+     phone is the same client one size down. Nothing here changes what the
+     match does — only whether you can reach it with a thumb. */
+  @media (max-width: 640px) {
+    .insp { padding: 5.5rem 1.1rem 12vh; }
+    .insp-head h1 { margin-bottom: 0.4rem; }
+    .insp-lead { margin-bottom: 1.8rem; }
+    .drop { padding: 2.2rem 1rem; }
+
+    /* Credit / URL row: full-width fields stack rather than squeeze. */
+    .urlrow { gap: 0.5rem; }
+    .urlrow input { flex: 1 1 100%; }
+    .urlrow .or { display: none; }
+    .urlrow button { flex: 1 1 100%; padding: 0.8rem 1rem; }
+
+    /* Reference tiles stay two-up — one-up would mean scrolling past four
+       screens of board to reach the fifth reference. */
+    .insp-collage { columns: 2; column-gap: 4px; }
+    .insp-frame { margin-bottom: 4px; }
+    .insp-frame .src { font-size: 0.54rem; padding: 0.4rem 0.45rem; }
+
+    /* Match panel */
+    .mx-head { padding: 0.8rem 1.1rem 0.7rem; }
+    .mx-sub { font-size: 0.68rem; }
+    .mx-start { gap: 1.2rem; padding: 1.1rem; align-content: start; }
+    .mx-refthumb { max-height: 26vh; }
+    .mx-zone { padding: 1.8rem 1rem; }
+    .mx-workline { flex-wrap: wrap; row-gap: 0.3rem; }
+
+    /* Already in the archive. Cards narrow but the strip still scrolls sideways,
+       which on a phone is the *better* gesture — the alternative is a grid that
+       pushes the drop zone off the screen it was the reason for opening. The
+       edge fade is what says there is more to the right; without it a strip cut
+       flush at the bezel reads as the end of the list. */
+    .already { padding-top: 1rem; }
+    .already-strip {
+      margin: 0 -1.1rem;
+      padding-left: 1.1rem;
+      padding-right: 1.1rem;
+      scroll-padding-left: 1.1rem;
+    }
+    :global(.already-strip li) { width: 42vw; max-width: 190px; }
+    .already-strip::after {
+      content: '';
+      position: sticky;
+      right: -1.1rem;
+      flex: 0 0 1.6rem;
+      align-self: stretch;
+      margin-right: -1.1rem;
+      background: linear-gradient(to right, transparent, var(--bg));
+      pointer-events: none;
+    }
+    /* A whole card is the tap target, and its picture is most of it — but the
+       two lines under it must not be so tight that a thumb lands between cards. */
+    :global(.already-card) { padding-bottom: 0.2rem; }
+
+    /* The tab strip scrolls; without an edge fade the last tab (Notes, and its
+       count of the solver's refusals) simply looks like it isn't there. */
+    .mx-tabs { padding: 0 1.1rem; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+    .mx-tabs button { flex: 0 0 auto; min-height: 44px; scroll-snap-align: start; }
+    .mx-tabs::after { content: ''; position: sticky; right: 0; flex: 0 0 1.6rem; align-self: stretch; background: linear-gradient(to right, transparent, var(--bg)); pointer-events: none; }
+
+    .mx-scroll { padding-left: 1.1rem; padding-right: 1.1rem; }
+    .mx-actions { padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px)); gap: 0.45rem; }
+    .mx-actions button { flex: 1 1 8rem; min-height: 44px; padding: 0.7rem 0.8rem; }
+
+    /* Split view: four columns of thumbnails on a phone is a contact sheet you
+       cannot see. Two, and the reference keeps a third of the screen. */
+    .sim { grid-template-rows: 34% 66%; }
+    .sim-left { padding: 1rem; }
+    .sim-right { padding: 3.6rem 1.1rem 1.6rem; }
+    :global(.sim-grid) { columns: 2; column-gap: 5px; }
+    :global(.sim-cell) { margin-bottom: 5px; }
+  }
+</style>
+
+<script is:inline>
+  const form = document.getElementById('form');
+  const zone = document.getElementById('zone');
+  const file = document.getElementById('file');
+  const sourceEl = document.getElementById('source');
+  const urlEl = document.getElementById('url');
+  const statusEl = document.getElementById('status');
+  const bar = document.getElementById('bar');
+  const statusText = document.getElementById('status-text');
+  const results = document.getElementById('results');
+
+  zone.addEventListener('click', () => file.click());
+  zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } });
+  file.addEventListener('change', () => uploadFiles(file.files));
+  ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
+  zone.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files); });
+  document.getElementById('addurl').addEventListener('click', addUrl);
+
+  function begin(msg) { statusEl.hidden = false; bar.style.width = '10%'; statusText.textContent = msg; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function row(r) {
+    const li = document.createElement('li');
+    if (r.status === 'added') li.innerHTML = `<span class="sw" style="background:${r.swatch}"></span><span class="fn">${esc(r.filename)}</span><span class="ch">${esc(r.chapterName)}</span>`;
+    else if (r.status === 'skipped') li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch">already saved</span>`;
+    else li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch err">${esc(r.error || r.status)}</span>`;
+    results.prepend(li);
+  }
+
+  async function uploadFiles(list) {
+    const all = Array.from(list);
+    const files = all.filter((f) => f.type.startsWith('image/') || /\.(heic|heif|gif)$/i.test(f.name));
+    // Anything filtered out is named. Dropping a PDF or a folder of RAWs used
+    // to be indistinguishable from the page ignoring you.
+    for (const f of all.filter((f) => !files.includes(f))) {
+      row({ filename: f.name, status: 'error', error: /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$/i.test(f.name) ? 'Camera RAW — export a JPEG first' : 'Not an image' });
+    }
+    if (!files.length) {
+      if (all.length) { statusEl.hidden = false; bar.style.width = '0%'; statusText.textContent = `Nothing added — ${all.length} file${all.length > 1 ? 's' : ''} can't be read.`; }
+      return;
+    }
+    begin(`Adding ${files.length} image${files.length > 1 ? 's' : ''}…`);
+    const fd = new FormData();
+    fd.append('source', sourceEl.value);
+    files.forEach((f) => fd.append('images', f));
+    try {
+      const res = await fetch('/api/inspiration/add', { method: 'POST', body: fd });
+      const data = await res.json(); bar.style.width = '100%';
+      if (!data.ok) throw new Error(data.error);
+      data.results.forEach(row);
+      statusText.textContent = `${data.added} added.`;
+      file.value = '';
+      if (data.added > 0) reloadKeepingPlace();
+    } catch (err) { statusText.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+  }
+
+  // The board is grouped into colour chapters on the server, so a new reference
+  // can land anywhere in it — a reload is the honest way to show that. What was
+  // not honest was throwing away where you were and what you had typed: the
+  // credit field emptied itself and the page jumped to the top, every time.
+  const RESUME_KEY = 'insp-resume';
+  function reloadKeepingPlace() {
+    try {
+      sessionStorage.setItem(RESUME_KEY, JSON.stringify({ y: window.scrollY, source: sourceEl.value }));
+    } catch (err) { /* private mode — just reload */ }
+    setTimeout(() => location.reload(), 650);
+  }
+  (function resume() {
+    let saved;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(RESUME_KEY) || 'null');
+      sessionStorage.removeItem(RESUME_KEY);
+    } catch (err) { return; }
+    if (!saved) return;
+    if (saved.source) sourceEl.value = saved.source;   // the credit still applies to the next batch
+    if (saved.y > 0) requestAnimationFrame(() => window.scrollTo(0, saved.y));
+  })();
+
+  async function addUrl() {
+    const url = urlEl.value.trim(); if (!url) return;
+    begin('Fetching image…');
+    try {
+      const res = await fetch('/api/inspiration/add', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url, source: sourceEl.value }) });
+      const data = await res.json(); bar.style.width = '100%';
+      if (!data.ok) throw new Error(data.error);
+      data.results.forEach(row);
+      urlEl.value = '';
+      statusText.textContent = `${data.added ?? data.results.length} added.`;
+      reloadKeepingPlace();
+    } catch (err) { statusText.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+  }
+  // Enter in the URL field submits it. The inputs sit outside a <form>, so
+  // pressing Enter did nothing at all and looked like the field was dead.
+  urlEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addUrl(); } });
+  sourceEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); urlEl.focus(); } });
+
+  // --- Fade references in on load ----------------------------------------
+  // `.frame img` is opacity:0 in global.css and waits for `.loaded`. The
+  // archive marks its own; the board has to mark its own too, or every
+  // reference stays invisible and the wall reads as blocks of flat colour.
+  document.querySelectorAll('.insp-frame img.photo').forEach((img) => {
+    if (img.complete) img.classList.add('loaded');
+    else img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+  });
+
+  // Remove (two-step confirm)
+  let armed = null;
+  document.querySelectorAll('.cell-remove').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (armed !== btn) { if (armed) { armed.textContent = '×'; armed.classList.remove('armed'); } armed = btn; btn.textContent = '✓'; btn.classList.add('armed'); setTimeout(() => { if (armed === btn) { btn.textContent = '×'; btn.classList.remove('armed'); armed = null; } }, 2600); return; }
+      armed = null; btn.textContent = '…';
+      try { const res = await fetch('/api/inspiration/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: btn.dataset.remove }) }); const d = await res.json(); if (!d.ok) throw new Error(d.error); btn.closest('.insp-frame').remove(); } catch (err) { btn.textContent = '×'; }
+    });
+  });
+
+  // --- Enlarge (shared by references and match cells) --------------------
+  // These overlays cover the page, but the board behind them still scrolled —
+  // a touch drag or a stray wheel moved it, so closing dropped you somewhere
+  // you never chose. Counted, because the enlarge view opens on top of the
+  // split view and the two must not fight over the lock.
+  let overlayDepth = 0;
+  const lockBoard = () => { if (overlayDepth++ === 0) document.body.style.overflow = 'hidden'; };
+  const unlockBoard = () => { overlayDepth = Math.max(0, overlayDepth - 1); if (!overlayDepth) document.body.style.overflow = ''; };
+
+  const lb = document.getElementById('lb'), lbImg = document.getElementById('lb-img'), lbSrc = document.getElementById('lb-src');
+  const srcHtml = (s) => s ? (/^https?:\/\//i.test(s) ? `<a href="${esc(s)}" target="_blank" rel="noopener noreferrer">${esc(s)} ↗</a>` : esc(s)) : '';
+  const openLb = (full, source) => {
+    if (!lb.hidden) return;
+    lbImg.src = full; lbSrc.innerHTML = srcHtml(source); lb.hidden = false; lockBoard();
+  };
+  const closeLb = () => { if (lb.hidden) return; lb.hidden = true; lbImg.src = ''; unlockBoard(); };
+  document.getElementById('lb-close').addEventListener('click', closeLb);
+  lb.addEventListener('click', (e) => { if (e.target === lb) closeLb(); });
+
+  // --- Find similar → split view ----------------------------------------
+  const sim = document.getElementById('sim');
+  const simRef = document.getElementById('sim-ref');
+  const simSrc = document.getElementById('sim-src');
+  const simRight = document.getElementById('sim-right');
+  const simW = document.getElementById('sim-w');
+  const simHint = document.getElementById('sim-hint');
+  let simMatches = [];
+
+  async function findSimilar(id, full, source) {
+    simRef.src = full;
+    simSrc.innerHTML = srcHtml(source);
+    simRight.innerHTML = '<p style="color:var(--muted);font-size:0.8rem;font-family:var(--font-label)">Ranking…</p>';
+    if (sim.hidden) { sim.hidden = false; lockBoard(); }
+    try {
+      const res = await fetch('/api/similar?ref=' + encodeURIComponent(id));
+      const d = await res.json();
+      if (!d.ok) throw new Error(d.error || 'failed');
+      simMatches = d.matches || [];
+      simHint.textContent = d.ready
+        ? 'Your closest photographs. Drag to weigh colour against composition.'
+        : 'Composition needs analysing — run  npm run reanalyze  once.';
+      renderSim();
+    } catch (err) {
+      simRight.innerHTML = '<p style="color:#e0603a">' + esc(err.message) + '</p>';
+    }
+  }
+  function renderSim() {
+    const v = +simW.value / 100; // 0 = pure colour, 1 = pure composition
+    const scored = simMatches
+      .map((m) => ({ ...m, score: v * m.comp + (1 - v) * m.col }))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 30);
+    simRight.innerHTML = '<div class="sim-grid">' + scored.map((m) =>
+      `<figure class="sim-cell" data-full="${m.avif}" style="aspect-ratio:${m.w}/${m.h}"><img loading="lazy" src="${m.avif}" alt=""><span class="pct">${Math.round((1 - m.score) * 100)}</span></figure>`
+    ).join('') + '</div>';
+    simRight.querySelectorAll('img').forEach((img) => {
+      if (img.complete) img.classList.add('on');
+      else img.addEventListener('load', () => img.classList.add('on'), { once: true });
+    });
+  }
+  simW.addEventListener('input', renderSim);
+  const closeSim = () => { if (sim.hidden) return; sim.hidden = true; unlockBoard(); };
+  document.getElementById('sim-close').addEventListener('click', closeSim);
+  sim.addEventListener('click', (e) => { const c = e.target.closest('.sim-cell'); if (c) openLb(c.dataset.full, ''); });
+
+  // --- Board clicks: similar button, remove (handled above), else enlarge -
+  document.getElementById('board')?.addEventListener('click', (e) => {
+    const simBtn = e.target.closest('.cell-similar');
+    if (simBtn) { e.stopPropagation(); findSimilar(simBtn.dataset.similar, simBtn.dataset.full, simBtn.dataset.source); return; }
+    // The match button lives in the processed module script below; ignore it
+    // here so it does not also open the lightbox.
+    if (e.target.closest('.cell-remove') || e.target.closest('.cell-match')) return;
+    const f = e.target.closest('.insp-frame'); if (!f) return;
+    openLb(f.dataset.full, f.dataset.source);
+  });
+
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!lb.hidden) closeLb();
+    else if (!sim.hidden) closeSim();
+  });
+</script>
+
+<script>
+  // Style match. A processed module (not is:inline) because it imports the
+  // solver's own adjustment blending and the WebGL renderer — the preview is
+  // driven by exactly the values shown on screen, never a parallel copy.
+  import { atStrength } from '../lib/match/adjustments';
+  import { MatchPreview, deriveRenderSpec } from '../lib/match/preview-render';
+  import { HSL_BANDS, REGION_LABEL, REGION_ORDER, BASELINE_LABEL } from '../lib/match/types';
+  import { solveMatch } from '../lib/match/solve';
+  import { buildPresetFiles } from '../lib/match/xmp';
+  import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
+  import type { Adjustments } from '../lib/match/adjustments';
+  import type { PhotoAnalysis, RegionKey } from '../lib/match/types';
+
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  const panel = $('mx');
+  const startEl = $('mx-start');
+  const resultEl = $('mx-result');
+  const subEl = $('mx-sub');
+  const statusEl = $('mx-status');
+  const refThumb = $<HTMLImageElement>('mx-refthumb');
+  const refSide = $<HTMLImageElement>('mx-refside');
+  const zoneEl = $('mx-zone');
+  const fileEl = $<HTMLInputElement>('mx-file');
+  const baselineEl = $<HTMLSelectElement>('mx-baseline');
+  const canvas = $<HTMLCanvasElement>('mx-canvas');
+  const strengthEl = $<HTMLInputElement>('mx-strength');
+  const strengthLabel = $('mx-strengthlabel');
+  const wipeEl = $<HTMLInputElement>('mx-wipe');
+  const wipeHint = $('mx-wipehint');
+
+  const esc = (s: unknown) =>
+    String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const sig = (v: number, d = 0) => {
+    const r = Number(v.toFixed(d));
+    return (r > 0 ? '+' : '') + r.toFixed(d);
+  };
+
+  let refId = '';
+  let refUrl = '';
+  let refName = '';
+  let current: any = null;
+  let preview: MatchPreview | null = null;
+
+  // ── Opening ────────────────────────────────────────────────────────────
+  document.getElementById('board')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('.cell-match');
+    if (!btn) return;
+    e.stopPropagation();
+    refId = btn.dataset.match || '';
+    refUrl = btn.dataset.full || '';
+    refName = btn.dataset.name || refId;
+    refThumb.src = btn.dataset.full || '';
+    startEl.hidden = false;
+    resultEl.hidden = true;
+    statusEl.textContent = '';
+    stopWorking();
+    fileEl.value = '';        // so re-dropping the same file still fires `change`
+    subEl.textContent = 'Drop the photo you want to edit.';
+    panel.hidden = false;
+    void loadAlready(refId);
+    // Without this, a scroll that starts outside the report's own scroller
+    // moves the board behind the panel instead — the page shifts under a
+    // supposedly fixed overlay, which reads as the layout breaking.
+    document.body.style.overflow = 'hidden';
+  });
+
+  // ── Already in the archive ─────────────────────────────────────────────
+  //
+  // Ranks the archive against this reference on *grade alone* — the tone curve,
+  // the cast, the saturation, the contrast, the split. It is not the "find
+  // similar" ranking on the board, which is about subject and composition; the
+  // two disagree constantly and that disagreement is the point.
+  //
+  // Fired on open and left to arrive. The first run has to measure every
+  // photograph in the archive, which takes a few seconds; after that they are
+  // cached and it comes back immediately. Either way the drop zone above stays
+  // usable throughout, so nothing waits on this.
+
+  const alreadyEl = $('already');
+  const alreadyStrip = $('already-strip');
+  /** The reference the last request went out for, so a stale reply is dropped. */
+  let alreadyFor = '';
+
+  async function loadAlready(id: string) {
+    alreadyFor = id;
+    alreadyEl.hidden = true;
+    alreadyStrip.replaceChildren();
+    $('already-sub').textContent = 'Measuring…';
+    $('already-note').textContent = '';
+
+    let data: any;
+    try {
+      const response = await fetch(`/api/match/resemble?ref=${encodeURIComponent(id)}`);
+      data = await response.json();
+    } catch {
+      data = { ok: false };
+    }
+    if (alreadyFor !== id) return;
+
+    // A failure here is silence, not an error: this is an aside on the way to
+    // the feature you opened the panel for, and a red line about it would read
+    // as the match itself having gone wrong.
+    if (!data?.ok) return;
+
+    const matches: any[] = data.matches ?? [];
+    alreadyEl.hidden = false;
+    if (!matches.length) {
+      $('already-sub').textContent = 'Nothing in the archive measures like this one.';
+      $('already-note').textContent =
+        `Compared against ${data.considered} of ${data.archiveSize} photographs. That is a statement about the numbers, not about the pictures.`;
+      return;
+    }
+
+    $('already-sub').textContent =
+      matches.length === 1 ? 'One photograph measures like it' : `${matches.length} photographs measure like it`;
+
+    alreadyStrip.replaceChildren(
+      ...matches.map((match) => {
+        const item = document.createElement('li');
+        // Links into the archive's own deep link rather than a lightbox of its
+        // own, and opens in a new tab: the panel behind it is mid-task, and
+        // navigating away from a reference you were about to match would lose it.
+        item.innerHTML = `
+          <a class="already-card" href="/#photo=${esc(match.id)}" target="_blank" rel="noopener" title="${esc(match.note)}">
+            <img src="${esc(match.thumb ?? match.placeholder)}" alt="" />
+            <span class="already-dist">${match.distance <= 0.75 ? 'Same treatment' : 'Same territory'}</span>
+            <span class="already-parts">${esc(match.partsText)}</span>
+          </a>`;
+        return item;
+      }),
+    );
+
+    const short = data.considered < data.archiveSize;
+    $('already-note').textContent = [
+      'Ranked on the grade only — tone curve, cast, saturation, contrast, split toning. Nothing here can see what the photograph is of.',
+      short
+        ? `Compared against ${data.considered} of ${data.archiveSize} photographs; the rest have no derivative to measure.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  const close = () => {
+    panel.hidden = true;
+    document.body.style.overflow = '';
+    // Closing the panel stops the waiting too — otherwise the timer kept
+    // running against a report nobody was going to see.
+    if (abort) abort.abort();
+    stopWorking();
+  };
+  $('mx-close').addEventListener('click', close);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
+
+  // ── Upload ─────────────────────────────────────────────────────────────
+  zoneEl.addEventListener('click', () => fileEl.click());
+  zoneEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileEl.click(); }
+  });
+  fileEl.addEventListener('change', () => { if (fileEl.files?.[0]) analyse(fileEl.files[0]); });
+  ['dragenter', 'dragover'].forEach((ev) =>
+    zoneEl.addEventListener(ev, (e) => { e.preventDefault(); zoneEl.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) =>
+    zoneEl.addEventListener(ev, (e) => { e.preventDefault(); zoneEl.classList.remove('over'); }));
+  zoneEl.addEventListener('drop', (e) => {
+    const f = (e as DragEvent).dataTransfer?.files?.[0];
+    if (f) analyse(f);
+  });
+
+  /**
+   * Analyse, preferring the Mac.
+   *
+   * A `fetch` that REJECTS means the server could not be reached — that is the
+   * fallback case. A fetch that RESOLVES with ok:false is the server saying no
+   * for a real reason (bad file, missing reference), and falling back there
+   * would replace a clear error with a worse measurement.
+   */
+  async function analyse(file: File) {
+    statusEl.innerHTML = '';
+    const fd = new FormData();
+    fd.append('ref', refId);
+    fd.append('photo', file);
+    fd.append('baseline', baselineEl.value);
+    fd.append('stream', '1');
+
+    startWorking();
+    let reachedServer = false;
+    try {
+      const res = await fetch('/api/match/analyse', { method: 'POST', body: fd, signal: abort!.signal });
+      reachedServer = true;
+      const data = (res.headers.get('content-type') || '').includes('ndjson')
+        ? await readStages(res)
+        : await res.json();
+      if (!data?.ok) throw new Error(data?.error || 'Analysis failed.');
+      stopWorking();
+      current = { ...data, local: false };
+      await showResult(current);
+      return;
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        stopWorking();
+        // The Mac does not stop when the browser does — and that is worth
+        // saying, because it means the retry is free rather than another wait.
+        statusEl.textContent = 'Stopped waiting. The Mac finishes the measurement anyway, so dropping the same photo again will be immediate.';
+        return;
+      }
+      if (reachedServer) {
+        stopWorking();
+        statusEl.innerHTML = `<span class="err">${esc((err as Error).message)}</span>`;
+        return;
+      }
+    }
+
+    // Offline path.
+    setStage('Measuring on this device — the Mac is not reachable');
+    statusEl.innerHTML =
+      'Masks are unavailable without the Mac — everything else still applies.';
+    try {
+      current = { ...(await analyseLocally(file)), local: true };
+      stopWorking();
+      await showResult(current);
+    } catch (err) {
+      stopWorking();
+      statusEl.innerHTML = `<span class="err">${esc((err as Error).message)}</span>`;
+    }
+  }
+
+  // ── Working state ──────────────────────────────────────────────────────
+  // Four stages, weighted by how long each actually takes: decoding and
+  // segmenting your photo is the bulk of it, the solve is nearly instant.
+  const STAGE_PROGRESS: Record<string, number> = { reference: 0.12, mine: 0.3, solve: 0.86, preview: 0.92, cached: 0.96 };
+  const workingEl = $('mx-working');
+  const workFill = $('mx-workbar-fill');
+  const stageEl = $('mx-stage');
+  const elapsedEl = $('mx-elapsed');
+  let abort: AbortController | null = null;
+  let tick = 0;
+  let began = 0;
+
+  const setStage = (label: string) => { stageEl.textContent = label; };
+
+  function startWorking() {
+    abort = new AbortController();
+    began = Date.now();
+    workingEl.hidden = false;
+    workFill.style.width = '4%';
+    setStage('Reading the file');
+    elapsedEl.textContent = '';
+    clearInterval(tick);
+    tick = window.setInterval(() => {
+      const s = Math.round((Date.now() - began) / 1000);
+      elapsedEl.textContent = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+      // The very first match of a session also downloads the segmentation
+      // models. Nothing reports that, so a run that has clearly overshot says
+      // why rather than looking hung.
+      if (s === 45) {
+        statusEl.textContent = 'Taking longer than usual — if this is the first match since starting the app, the segmentation models are downloading too. That happens once.';
+      }
+    }, 1000);
+  }
+
+  function stopWorking() {
+    clearInterval(tick);
+    tick = 0;
+    abort = null;
+    workingEl.hidden = true;
+    workFill.style.width = '0';
+  }
+
+  $('mx-stop').addEventListener('click', () => abort?.abort());
+
+  /** Read the newline-delimited stage stream, returning the final result. */
+  async function readStages(res: Response): Promise<any> {
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let result: any = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let msg: any;
+        try { msg = JSON.parse(line); } catch { continue; }
+        if (msg.type === 'stage') {
+          setStage(msg.label);
+          workFill.style.width = `${(STAGE_PROGRESS[msg.stage] ?? 0.5) * 100}%`;
+        } else if (msg.type === 'result') {
+          result = msg;
+          workFill.style.width = '100%';
+        }
+      }
+    }
+    return result ?? { ok: false, error: 'The measurement ended without a result.' };
+  }
+
+  /** Measure both photos here, with no server and no models. */
+  async function analyseLocally(file: File) {
+    const [reference, mine] = await Promise.all([
+      analyseReferenceInBrowser(refUrl, refName),
+      analyseInBrowser(file, file.name, baselineEl.value as any),
+    ]);
+    const solution = solveMatch(reference, mine);
+    return {
+      id: `local-${Date.now()}`,
+      reference,
+      mine,
+      solution,
+      // The photo is already in memory; no need to round-trip it anywhere.
+      preview: { photo: URL.createObjectURL(file), maskTexture: null, maskChannels: [], width: mine.width, height: mine.height },
+      referencePreview: refUrl,
+      maskChannels: [],
+      referenceName: refName,
+      myName: file.name,
+    };
+  }
+
+  // ── Result ─────────────────────────────────────────────────────────────
+  async function showResult(data: any) {
+    subEl.textContent = `${data.myName} · matched to ${data.referenceName}`;
+    refSide.src = data.referencePreview;
+    startEl.hidden = true;
+    resultEl.hidden = false;
+
+    renderBadges(data);
+    renderNotes(data.solution.notes);
+    renderEvidence(data.reference, data.mine);
+    showTab('light');
+
+    try {
+      preview = new MatchPreview(canvas);
+      await preview.setImages(data.preview.photo, data.preview.maskTexture);
+      draw();
+    } catch (err) {
+      // A failed preview must not take the numbers down with it — they are the
+      // part that actually goes into Lightroom.
+      canvas.replaceWith(
+        Object.assign(document.createElement('p'), {
+          className: 'mx-note',
+          textContent: `Live preview unavailable (${(err as Error).message}). The values and preset below are unaffected.`,
+        }),
+      );
+      preview = null;
+      renderValues();
+    }
+  }
+
+  function draw() {
+    const t = Number(strengthEl.value) / 100;
+    const adj = atStrength(current.solution.restrained, current.solution.faithful, t);
+    strengthLabel.textContent =
+      t === 0 ? 'No change' :
+      t < 0.5 ? `${Math.round(t * 200)}% of the restrained grade` :
+      t === 0.5 ? 'Restrained — adopts the reference’s character, protects skin' :
+      t === 1 ? 'Faithful — closes as much of the measured gap as the controls allow' :
+      `${Math.round((t - 0.5) * 200)}% of the way from restrained to faithful`;
+    if (preview) {
+      const spec = deriveRenderSpec(adj, current.maskChannels ?? []);
+      preview.render(spec, wipeEl.checked ? 0.5 : -1);
+    }
+    renderValues(adj);
+  }
+
+  strengthEl.addEventListener('input', draw);
+  wipeEl.addEventListener('change', () => {
+    wipeHint.textContent = wipeEl.checked ? 'Left: original · Right: graded' : 'Yours, graded';
+    draw();
+  });
+
+  // ── Stage collapse ─────────────────────────────────────────────────────
+  // The pictures hand their space back to the report as you scroll. `--s`
+  // reaches 0 over the first COLLAPSE_OVER pixels; everything in the stage
+  // interpolates on it in CSS.
+  const COLLAPSE_OVER = 240;
+  const scroller = $('mx-scroll');
+  scroller.addEventListener(
+    'scroll',
+    () => {
+      const s = Math.max(0, Math.min(1, 1 - scroller.scrollTop / COLLAPSE_OVER));
+      resultEl.style.setProperty('--s', s.toFixed(3));
+    },
+    { passive: true },
+  );
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  const tabs = $('mx-tabs');
+  function showTab(name: string) {
+    tabs.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) =>
+      b.classList.toggle('on', b.dataset.tab === name),
+    );
+    scroller.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => {
+      p.hidden = p.dataset.panel !== name;
+    });
+    // Switching tab should start at the top of the new panel, and give the
+    // stage its full height back rather than leaving it collapsed for content
+    // that may be short.
+    scroller.scrollTop = 0;
+    resultEl.style.setProperty('--s', '1');
+  }
+  tabs.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
+    if (btn?.dataset.tab) showTab(btn.dataset.tab);
+  });
+
+  // ── Badges ─────────────────────────────────────────────────────────────
+  function renderBadges(data: any) {
+    const s = data.solution;
+    const badges: Array<[string, boolean]> = [
+      [`Measurement confidence ${Math.round(s.confidence * 100)}%`, s.confidence < 0.7],
+      [`Gap closable ${Math.round(s.reachability * 100)}%`, s.reachability < 0.55],
+      [`Your photo read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL]}`, data.mine.baseline === 'preview'],
+      ['Slider calibration: estimated', true],
+    ];
+    if (data.local) badges.unshift(['Measured on this device — no masks', true]);
+    $('mx-badges').innerHTML = badges
+      .map(([t, warn]) => `<span class="mx-badge${warn ? ' warn' : ''}">${esc(t)}</span>`)
+      .join('');
+    // Keeping a report writes it to the Mac, which is exactly what is missing.
+    const keep = $<HTMLButtonElement>('mx-keep');
+    keep.disabled = Boolean(data.local);
+    keep.textContent = data.local ? 'Keeping needs the Mac' : 'Keep this comparison';
+  }
+
+  function renderNotes(notes: Array<{ severity: string; panel: string; text: string }>) {
+    const cautions = notes.filter((n) => n.severity === 'caution').length;
+    // Only cautions get a count — a badge on every informational note would
+    // train you to ignore it.
+    $('mx-notecount').textContent = cautions ? String(cautions) : '';
+    $('mx-notes').innerHTML =
+      `<p class="mx-lede">Where the solver declined to act, or held something back, and why.</p>` +
+      (notes.length
+        ? notes
+            .map(
+              (n) =>
+                `<div class="mx-noterow ${n.severity === 'caution' ? 'caution' : ''}">
+                   <span class="panel">${esc(n.panel)}</span><span>${esc(n.text)}</span>
+                 </div>`,
+            )
+            .join('')
+        : '<p class="mx-rowhint">Nothing was held back for this pair.</p>');
+  }
+
+  // ── Values ─────────────────────────────────────────────────────────────
+  function group(title: string, rows: string[], hint?: string, tag?: string) {
+    if (!rows.filter(Boolean).length) return '';
+    return `<div class="mx-group"><div class="mx-grouphead"><span>${esc(title)}</span>${
+      tag ? `<span class="tag">${esc(tag)}</span>` : ''
+    }</div>${hint ? `<p class="mx-rowhint">${esc(hint)}</p>` : ''}${rows.filter(Boolean).join('')}</div>`;
+  }
+  const row = (k: string, v: string) => `<div class="mx-row"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`;
+  const rowIf = (k: string, n: number, d = 0) => (Math.abs(n) < (d ? 0.005 : 0.5) ? '' : row(k, sig(n, d)));
+
+  /** Draw the tone curve. A list of coordinates is data; this is the shape. */
+  function curveSvg(curve: Adjustments['curve']): string {
+    const S = 116;
+    const px = (p: { x: number; y: number }) => `${((p.x / 255) * S).toFixed(1)},${(S - (p.y / 255) * S).toFixed(1)}`;
+    return `<svg width="${S}" height="${S}" viewBox="0 0 ${S} ${S}" aria-hidden="true">
+      <line x1="0" y1="${S}" x2="${S}" y2="0" stroke="currentColor" stroke-opacity="0.16" stroke-dasharray="2 3"/>
+      <polyline points="${curve.map(px).join(' ')}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${curve.map((p) => `<circle cx="${((p.x / 255) * S).toFixed(1)}" cy="${(S - (p.y / 255) * S).toFixed(1)}" r="1.7" fill="currentColor"/>`).join('')}
+    </svg>`;
+  }
+
+  /**
+   * One Colour Grading wheel, drawn the way Lightroom draws it.
+   *
+   * Hue runs clockwise from the top (matching the conic-gradient in CSS) and
+   * saturation runs centre-to-edge, so the dot's position alone tells you what
+   * the grade is doing — which "163° / 15" never does.
+   */
+  function wheel(name: string, g: { hue: number; sat: number }): string {
+    const on = g.sat >= 0.5;
+    const rad = (g.hue * Math.PI) / 180;
+    const r = Math.min(1, g.sat / 100) * 40; // percent of the disc's half-width
+    const left = 50 + r * Math.sin(rad);
+    const top = 50 - r * Math.cos(rad);
+    const dot = on
+      ? `<span class="dot" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%;background:hsl(${Math.round(g.hue)} ${Math.max(22, Math.round(g.sat))}% 55%)"></span>`
+      : '';
+    return `<div class="mx-cw${on ? '' : ' off'}">
+        <div class="disc">${dot}</div>
+        <span class="nm">${esc(name)}</span>
+        <span class="v">${on ? `${Math.round(g.hue)}° · ${Math.round(g.sat)}` : '—'}</span>
+      </div>`;
+  }
+
+  function renderValues(adj?: Adjustments) {
+    if (!adj) adj = atStrength(current.solution.restrained, current.solution.faithful, Number(strengthEl.value) / 100);
+    const a = adj;
+
+    // ── Light ────────────────────────────────────────────────────────────
+    const flat = a.curve.every((p) => Math.abs(p.x - p.y) <= 1);
+    $('mx-light').innerHTML =
+      `<p class="mx-lede">Exposure and the tone curve are the authoritative tone move — the preset carries only these two.</p>` +
+      group(
+        'Light',
+        [
+          rowIf('Exposure', a.exposure, 2),
+          `<div class="mx-curvebox">${curveSvg(a.curve)}<div class="legend">
+             <strong>Tone curve</strong>${flat ? ' — flat at this strength, so no tonal change.' : '. The dashed diagonal is no change.'}
+           </div></div>`,
+        ],
+        undefined,
+        'authoritative',
+      ) +
+      group(
+        'Basic sliders',
+        [rowIf('Contrast', a.contrast), rowIf('Highlights', a.highlights), rowIf('Shadows', a.shadows), rowIf('Whites', a.whites), rowIf('Blacks', a.blacks)],
+        'A description of the curve above, for anyone who prefers sliders. Apply these OR the curve — never both.',
+        'either / or',
+      );
+
+    // ── Colour ───────────────────────────────────────────────────────────
+    const active = HSL_BANDS.filter((b) => {
+      const v = a.hsl[b.key];
+      return Math.abs(v.hue) >= 0.5 || Math.abs(v.sat) >= 0.5 || Math.abs(v.lum) >= 0.5;
+    });
+    const cell = (n: number) => `<span class="n${Math.abs(n) < 0.5 ? ' z' : ''}">${Math.abs(n) < 0.5 ? '·' : sig(n)}</span>`;
+    const mixer = active.length
+      ? group('Colour Mixer', [
+          `<div class="mx-mixer">
+             <span class="hdr"></span><span class="hdr n">Hue</span><span class="hdr n">Sat</span><span class="hdr n">Lum</span>
+             ${active
+               .map((b) => {
+                 const v = a.hsl[b.key];
+                 return `<span class="band"><span class="chip" style="background:oklch(0.66 0.15 ${b.H})"></span>${esc(b.label)}</span>${cell(v.hue)}${cell(v.sat)}${cell(v.lum)}`;
+               })
+               .join('')}
+           </div>`,
+        ])
+      : '';
+
+    const grading = group('Colour Grading', [
+      `<div class="mx-wheelrow">
+         ${wheel('Global', a.grading.global)}
+         ${wheel('Shadows', a.grading.shadows)}
+         ${wheel('Midtones', a.grading.midtones)}
+         ${wheel('Highlights', a.grading.highlights)}
+       </div>`,
+      rowIf('Balance', a.grading.balance),
+      row('Blending', String(Math.round(a.grading.blending))),
+    ]);
+
+    $('mx-colour').innerHTML =
+      grading +
+      `<div class="mx-two">
+         <div>${group('Saturation', [rowIf('Vibrance', a.vibrance), rowIf('Saturation', a.saturation)]) || ''}</div>
+         <div>${group(
+           'White balance',
+           [rowIf('Temp', a.temp), rowIf('Tint', a.tint)],
+           'The preset routes this shift through Colour Grading so it stays relative to your RAW. These are the equivalent manual move.',
+           'either / or',
+         )}</div>
+       </div>` +
+      mixer;
+
+    // ── Details ──────────────────────────────────────────────────────────
+    const effects = group('Effects & Detail', [
+      rowIf('Texture', a.texture),
+      rowIf('Clarity', a.clarity),
+      rowIf('Vignette', a.vignette),
+      a.grainAmount > 0.5 ? row('Grain amount', sig(a.grainAmount)) : '',
+      a.grainAmount > 0.5 ? row('Grain size', String(Math.round(a.grainSize))) : '',
+      rowIf('Noise reduction', a.noiseReduction),
+      a.sharpenAmount > 0.5 ? row('Sharpening', String(Math.round(a.sharpenAmount))) : '',
+    ]);
+    const masks = a.masks
+      .map((m) =>
+        group(
+          m.label,
+          [rowIf('Exposure', m.exposure, 2), rowIf('Temp', m.temp), rowIf('Tint', m.tint), rowIf('Saturation', m.saturation)],
+          m.rationale,
+          m.kind === 'manual' ? 'mask · draw yourself' : `mask · auto (Select ${m.kind})`,
+        ),
+      )
+      .join('');
+    $('mx-details').innerHTML =
+      (effects || '<p class="mx-rowhint">Nothing to change in Effects or Detail for this pair.</p>') +
+      (masks
+        ? `<p class="mx-lede">Masks — Subject, Sky and Background regenerate themselves when the preset is imported. The rest you draw.</p><div class="mx-grid">${masks}</div>`
+        : '');
+  }
+
+  // ── Evidence ───────────────────────────────────────────────────────────
+  /** A bar centred on zero. Direction and rough size read instantly; the exact
+   *  figure sits next to it for anyone who wants it. */
+  function bar(caption: string, value: number, max: number): string {
+    const v = Math.max(-1, Math.min(1, value / max));
+    const half = 50 * Math.abs(v);
+    const left = v >= 0 ? 50 : 50 - half;
+    return `<div class="mx-bars"><span class="cap">${esc(caption)}</span>
+      <div class="mx-track"><i style="left:${left.toFixed(1)}%;width:${half.toFixed(1)}%"></i></div></div>`;
+  }
+
+  function renderEvidence(ref: PhotoAnalysis, mine: PhotoAnalysis) {
+    const rows: string[] = [];
+    for (const key of REGION_ORDER as RegionKey[]) {
+      const r = ref.regions[key];
+      const m = mine.regions[key];
+      if (!r && !m) continue;
+      const label = REGION_LABEL[key];
+      if (!r || !m) {
+        rows.push(
+          `<span class="lbl">${esc(label)}</span><span class="val none">${r ? 'reference only' : 'your photo only'}</span>`,
+        );
+        continue;
+      }
+      const dL = r.L.mean - m.L.mean;
+      const dC = r.C.mean - m.C.mean;
+      const weak = r.hue.strength < 0.3 || m.hue.strength < 0.3;
+      let dH = r.hue.mean - m.hue.mean;
+      while (dH > 180) dH -= 360;
+      while (dH < -180) dH += 360;
+      rows.push(
+        `<span class="lbl">${esc(label)}</span>` +
+          `<span class="val">${sig(dL, 3)} light · ${sig(dC, 3)} colour · ${weak ? 'hue unresolved' : `${sig(dH, 0)}° hue`}</span>` +
+          bar('light', dL, 0.15) +
+          bar('colour', dC, 0.05),
+      );
+    }
+
+    const comparable = ref.texture.usable && mine.texture.usable;
+    $('mx-evidence').innerHTML =
+      `<p class="mx-lede">How far your photo sits from the reference, region by region. Positive means yours has to increase to match.</p>` +
+      group('Region by region', [`<div class="mx-ev">${rows.join('')}</div>`]) +
+      group(
+        'Texture',
+        comparable
+          ? [
+              row('Grain', `${ref.texture.grain.toFixed(4)} ref · ${mine.texture.grain.toFixed(4)} yours`),
+              row('Acutance', `${ref.texture.acutance.toFixed(3)} ref · ${mine.texture.acutance.toFixed(3)} yours`),
+              row('Measured at', `${ref.texture.measuredAt.width}px ref · ${mine.texture.measuredAt.width}px yours`),
+            ]
+          : [row('Grain', 'not comparable')],
+        comparable
+          ? undefined
+          : (!ref.texture.usable ? ref.texture.reason : mine.texture.reason) ??
+            'Measured at different pixel scales, so the two cannot be differenced honestly.',
+      ) +
+      group('Vignette', [
+        row('Reference', `${ref.vignette.falloffStops.toFixed(2)} stops · ${ref.vignette.usable ? 'usable' : 'scene content'}`),
+        row('Yours', `${mine.vignette.falloffStops.toFixed(2)} stops · ${mine.vignette.usable ? 'usable' : 'scene content'}`),
+      ], ref.vignette.usable && mine.vignette.usable ? undefined : 'Corner darkness that is not symmetric around the frame is composition, not the lens, so it does not move the Vignetting slider.');
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────
+  const saveAs = (href: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const download = (variant: 'full' | 'safe') => {
+    const t = Number(strengthEl.value) / 100;
+    if (!current.local) {
+      saveAs(`/api/match/preset?id=${encodeURIComponent(current.id)}&strength=${t}&variant=${variant}`, '');
+      return;
+    }
+    // Offline: build the preset here. xmp.ts is isomorphic, so this is the same
+    // writer the server uses — not a second implementation.
+    const adj = atStrength(current.solution.restrained, current.solution.faithful, t);
+    const clean = (s: string) => s.replace(/\.[^.]+$/, '').replace(/\.[0-9a-f]{8,}$/i, '');
+    const files = buildPresetFiles(adj, {
+      name: `${clean(current.myName)} as ${clean(current.referenceName)}`.slice(0, 60),
+      group: 'Colour Archive',
+      seed: `${current.myName}:${current.referenceName}:${t.toFixed(2)}`,
+    });
+    const chosen = variant === 'safe' ? files[files.length - 1] : files[0];
+    const url = URL.createObjectURL(new Blob([chosen.contents], { type: 'application/rdf+xml' }));
+    saveAs(url, chosen.filename);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+  $('mx-dl').addEventListener('click', () => download('full'));
+  $('mx-dl-safe').addEventListener('click', () => download('safe'));
+
+  $('mx-keep').addEventListener('click', async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/match/keep', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: current.id }),
+      });
+      const d = await res.json();
+      btn.textContent = d.ok ? 'Kept' : 'Could not keep';
+    } catch {
+      btn.textContent = 'Could not keep';
+      btn.disabled = false;
+    }
+  });
+</script>

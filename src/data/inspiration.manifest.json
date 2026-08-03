@@ -1,0 +1,173 @@
+{
+  "generatedAt": "2026-07-29T08:27:47.076Z",
+  "count": 4,
+  "chapters": [
+    {
+      "key": "achromatic",
+      "name": "Ash",
+      "oklch": {
+        "L": 0.61,
+        "C": 0,
+        "H": 0
+      },
+      "photos": [
+        {
+          "id": "b4490759aa4afe19",
+          "filename": "DSC06160.b4490759aa4afe19.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 3500,
+          "bytes": 2397167,
+          "oklch": {
+            "L": 0.61,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAACQBACdASoYACIAPulkpk2pJaOiMAqpIB0JZwDOOB6RpQFf0gZ85vjUHlE90AAA/tJDaXAuAj66I6Ddbw/9zK+GK94eS37odcw9NrujKgYTjAQuUAi0g3Fwp/t9AAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/b4490759aa4afe19-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/b4490759aa4afe19-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/b4490759aa4afe19-2000.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-29T08:27:47.075Z"
+        }
+      ]
+    },
+    {
+      "key": "teal",
+      "name": "Teal",
+      "oklch": {
+        "L": 0.609,
+        "C": 0.044,
+        "H": 96.7
+      },
+      "photos": [
+        {
+          "id": "a7c5e21fa101fcda",
+          "filename": "DSC02179.a7c5e21fa101fcda.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 3500,
+          "bytes": 1519144,
+          "oklch": {
+            "L": 0.779,
+            "C": 0.045,
+            "H": 221.3
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRngAAABXRUJQVlA4IGwAAAAwBQCdASoYACIAPulgqE2pJaQiNVgIASAdCWMAxvQWbM6jNKijVt4B0h8ZGOjK3t2lAAD+rknq2szSMk4sqHNewwiMZOGoDSo9buJOF6JO37gjmT/snBklR3EGB1Ekigl9Ttm52O2SmFn6AAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a7c5e21fa101fcda-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a7c5e21fa101fcda-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/a7c5e21fa101fcda-2000.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-29T08:24:15.842Z"
+        },
+        {
+          "id": "568ab0b23a39eeca",
+          "filename": "DSC00672.568ab0b23a39eeca.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 1667,
+          "bytes": 1456575,
+          "oklch": {
+            "L": 0.59,
+            "C": 0.108,
+            "H": 129.1
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADQBACdASoYABAAPu1kq04ppaQiMAgBMB2JQBWGUI8DBVYZUECIV4pxneKbTnjaAAD+46J9rtknc6WGKTIf4WRIjpC7H/McJ6xxm9EU54f7TCcAF97KpREIAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/568ab0b23a39eeca-640.avif",
+              "webp": "/img/568ab0b23a39eeca-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/568ab0b23a39eeca-1280.avif",
+              "webp": "/img/568ab0b23a39eeca-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/568ab0b23a39eeca-2000.avif",
+              "webp": "/img/568ab0b23a39eeca-2000.webp"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-27T06:31:01.962Z"
+        },
+        {
+          "id": "4dcc897807f397b8",
+          "filename": "DSC00424-2.4dcc897807f397b8.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 1667,
+          "bytes": 748073,
+          "oklch": {
+            "L": 0.458,
+            "C": 0.116,
+            "H": 41.7
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRnAAAABXRUJQVlA4IGQAAAAQBACdASoYABAAPu1mq04ppaQiMAgBMB2JYwC+SB06pGeY056oIN3qHAD+2tb1dZpa08QvIRHuwb87uI17rq0adZovK3CqUB4fWVclIXm7LhN15LEKeUjGf7cF65saJOjkQAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/4dcc897807f397b8-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/4dcc897807f397b8-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/4dcc897807f397b8-2000.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-29T08:19:30.820Z"
+        }
+      ]
+    }
+  ]
+}

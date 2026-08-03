@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Colour Archive">
+  <defs>
+    <linearGradient id="spectrum" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c0453a"/>
+      <stop offset="0.17" stop-color="#c98a4e"/>
+      <stop offset="0.34" stop-color="#d8b24a"/>
+      <stop offset="0.5" stop-color="#7fa05a"/>
+      <stop offset="0.66" stop-color="#4f9a94"/>
+      <stop offset="0.83" stop-color="#4a76b0"/>
+      <stop offset="1" stop-color="#7a5fa6"/>
+    </linearGradient>
+  </defs>
+  <!-- warm archival near-black ground -->
+  <rect width="512" height="512" rx="112" fill="#100f0e"/>
+  <!-- the frontispiece spectrum, as the mark -->
+  <rect x="72" y="168" width="368" height="176" rx="88" fill="url(#spectrum)"/>
+</svg>

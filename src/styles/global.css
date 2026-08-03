@@ -1,0 +1,826 @@
+/* ============================================================================
+   Colour Archive — base + theme presets.
+   The photograph is the only event. One piece of type: chapter titles.
+   Themes are driven by [data-theme] on <html>; each sets font + palette +
+   title treatment tokens. WCAG AA contrast held in every preset.
+   ========================================================================== */
+
+/* ============================================================================
+   Fonts — self-hosted.
+   These used to come from fonts.googleapis.com: a render-blocking stylesheet on
+   a third-party origin (extra DNS + TLS + round trip before any type could
+   paint), and the one part of the archive that did NOT survive going offline —
+   the iPad snapshot fell back to Georgia the moment the Mac was unreachable.
+   Same files, same subsets (latin + latin-ext), served from this origin, so the
+   service worker caches them alongside everything else.
+   Regenerate: see README → Fonts.
+   ========================================================================== */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/fraunces-italic-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/fraunces-italic-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-italic-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-italic-600-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/fraunces-normal-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/fraunces-normal-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-normal-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-normal-600-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-normal-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-normal-400-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-normal-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-normal-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+:root {
+  --bg: #111112;
+  --fg: #ededed;
+  --muted: #7d7d82;
+  --border: #262629;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-label: 'JetBrains Mono', ui-monospace, monospace;
+
+  --title-size: clamp(3rem, 10vw, 9rem);
+  --title-weight: 700;
+  --title-tracking: -0.02em;
+  --title-transform: none;
+  --title-style: normal;
+  --title-leading: 0.95;
+  --title-align: center;      /* flex align: center | flex-start */
+  --title-text-align: center; /* text-align: center | left */
+
+  /* Chapter swatch — dot by default; variants reshape or hide it. */
+  --swatch-display: block;
+  --swatch-w: 2.2rem;
+  --swatch-h: 2.2rem;
+  --swatch-radius: 50%;
+  --swatch-mt: 2rem;
+
+  --gap: 100svh;              /* the held breath between chapters */
+  --fade: 620ms;              /* photo entrance */
+
+  --grain-opacity: 0.11;      /* a little bit of grain; variants can raise it */
+
+  --cols: 3;                  /* collage columns */
+  --gutter: 3px;              /* space between collage tiles */
+
+  /* Refined design tokens (shared) */
+  --edge: clamp(1.4rem, 4vw, 3rem);        /* page inset */
+  --hair: color-mix(in oklab, var(--fg) 12%, transparent);  /* delicate rule */
+  --accent: var(--fg);                      /* per-chapter colour overrides this */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);    /* soft "out-expo" */
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  --label-size: 0.66rem;
+  --label-track: 0.34em;                    /* airy mono labels */
+}
+
+/* ==== Six variations on EXHIBITION ======================================= */
+
+/* 1 — Noir: the baseline. Near-black, Playfair 700, sentence case, centred. */
+[data-theme='ex-noir'] {
+  --bg: #111112; --fg: #ededed; --muted: #7d7d82; --border: #262629;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-label: 'JetBrains Mono', ui-monospace, monospace;
+  --title-weight: 700; --title-tracking: -0.02em; --title-transform: none;
+  --title-size: clamp(3rem, 10vw, 9rem); --title-leading: 0.95;
+}
+
+/* 2 — Plate: inverted to a light museum wall label. Fine Playfair, rule swatch. */
+[data-theme='ex-plate'] {
+  --bg: #f4f3ef; --fg: #16161a; --muted: #6c6a63; --border: #e0ddd4;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-label: 'JetBrains Mono', ui-monospace, monospace;
+  --title-weight: 500; --title-tracking: 0em; --title-transform: none;
+  --title-size: clamp(2.6rem, 7.5vw, 6.5rem); --title-leading: 1;
+  --swatch-w: 3rem; --swatch-h: 1px; --swatch-radius: 0; --swatch-mt: 2.4rem;
+}
+
+/* 3 — Column: asymmetric. Title hard left, Playfair 900 oversized, breaking. */
+[data-theme='ex-column'] {
+  --bg: #0f0f10; --fg: #f0f0ee; --muted: #77777c; --border: #232326;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-label: 'JetBrains Mono', ui-monospace, monospace;
+  --title-weight: 900; --title-tracking: -0.03em; --title-transform: none;
+  --title-size: clamp(3.4rem, 12vw, 11rem); --title-leading: 0.9;
+  --title-align: flex-start; --title-text-align: left;
+  --swatch-w: 1.6rem; --swatch-h: 1.6rem;
+}
+
+/* 4 — Didone: Libre Bodoni, uppercase, stark high contrast. Space Mono. */
+[data-theme='ex-didone'] {
+  --bg: #121213; --fg: #efefef; --muted: #7c7c80; --border: #252528;
+  --font-display: 'Libre Bodoni', Georgia, serif;
+  --font-label: 'Space Mono', ui-monospace, monospace;
+  --title-weight: 700; --title-tracking: 0.02em; --title-transform: uppercase;
+  --title-size: clamp(2.8rem, 9vw, 8rem); --title-leading: 1;
+  --swatch-w: 3rem; --swatch-h: 2px; --swatch-radius: 0; --swatch-mt: 2.2rem;
+}
+
+/* 5 — Fraunces: warm near-black, Fraunces italic, softer modern didone. */
+[data-theme='ex-fraunces'] {
+  --bg: #14110f; --fg: #f0ebe4; --muted: #857b70; --border: #262019;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-label: 'JetBrains Mono', ui-monospace, monospace;
+  --title-weight: 600; --title-tracking: -0.01em; --title-transform: none;
+  --title-style: italic;
+  --title-size: clamp(2.8rem, 8.5vw, 7.5rem); --title-leading: 0.98;
+}
+
+/* 6 — Whisper: ultra-quiet. Fraunces display italic, warm archival ground. */
+[data-theme='ex-whisper'] {
+  /* Warm selenium-toned near-black + a soft paper white — a fine-print feel. */
+  --bg: #100f0e; --fg: #ece9e3; --muted: #83807a; --border: #201f1d;
+  --font-display: 'Fraunces', Georgia, serif;   /* display cut w/ optical sizing */
+  --font-label: 'JetBrains Mono', ui-monospace, monospace;
+  --title-weight: 500; --title-tracking: 0.005em; --title-transform: none;
+  --title-style: italic;
+  --title-size: clamp(2rem, 5vw, 4rem); --title-leading: 1.06;
+  --swatch-display: none;
+  --grain-opacity: 0.12;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-label);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;      /* aligned figures in labels/counts */
+  transition: background-color 900ms var(--ease); /* ambient wash toward chapter colour */
+}
+@media (prefers-reduced-motion: reduce) { body { transition: none; } }
+
+/* Film grain — applied ONLY to the title (cover) and chapter (colour) pages,
+   never over the photographs. Cheap self-contained SVG noise, contrast-stretched
+   so specks swing past mid-grey (overlay treats 50% grey as neutral, which is
+   why raw fractalNoise vanishes). The photos stay clean. */
+.cover, .chapter-gap { position: relative; }
+.cover > *, .chapter-gap > * { position: relative; z-index: 1; }
+.cover::after, .chapter-gap::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity, 0);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncG type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncB type='linear' slope='2.2' intercept='-0.6'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+/* --- The archive scroll --------------------------------------------------- */
+.archive { display: block; }
+
+/* Collage: a full-bleed masonry wall per chapter. Photographs are never
+   cropped — tiles take their natural aspect and flow into balanced columns,
+   like the Aperture cover wall. */
+.collage {
+  columns: var(--cols);
+  column-gap: var(--gutter);
+  width: 100%;
+  margin: 0;
+}
+.frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0 0 var(--gutter);
+  break-inside: avoid;
+  background: var(--frame-bg, var(--bg));
+  line-height: 0;
+  overflow: hidden;
+}
+
+/* Aspect-balanced masonry (JS enhancement over the multicol fallback):
+   each column holds a CONTIGUOUS run of the gradient, split so columns come out
+   equal-height. Contiguity is what lets the merged overview still flatten to the
+   exact gradient order. */
+.collage.balanced { columns: initial; column-gap: initial; display: flex; gap: var(--gutter); align-items: flex-start; }
+.collage.balanced .mcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--gutter); }
+.collage.balanced .frame { margin: 0; }
+.frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+  transform: scale(1.015);
+  transition: opacity var(--fade) var(--ease), transform var(--fade) var(--ease);
+}
+.frame img.loaded { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .frame img { transform: none; transition: opacity 120ms linear; }
+}
+/* Blurred placeholder sits under the image until it fades in. */
+.frame .ph {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: blur(0);
+  opacity: 1;
+  z-index: -1;
+}
+/* (Per-photo remove lives on the Add / Remove page, not in the archive —
+   the archive stays bare: only photographs and chapter titles.) */
+
+/* --- Film grain: film frames carry a whisper of grain + warmth; digital clean */
+.frame[data-medium='film']::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  opacity: 0.09; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncG type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncB type='linear' slope='2.2' intercept='-0.6'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+.frame[data-medium='film']::before {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: #d8a05a; opacity: 0.045; mix-blend-mode: soft-light; /* filmic warmth */
+}
+
+/* --- Zoom out: photos merge into a seamless colour wall / hue-gradient ---- */
+/* Pinch to zoom. As it merges, chapter structure dissolves, gutters close,
+   tiles become uniform and tile edge-to-edge. Cropping happens ONLY here in
+   the merged overview — the reading view keeps photos full and uncropped. */
+.archive { transition: opacity 180ms ease; }
+.archive.overview {
+  display: grid;
+  grid-template-columns: repeat(var(--ocols, 8), 1fr);
+  gap: 0;
+  animation: wallIn 460ms var(--ease); /* photos ease into the wall, not snap */
+}
+@keyframes wallIn { from { opacity: 0.35; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .archive.overview { animation: none; } }
+.archive.overview .chapter-gap { display: none; }
+/* Every photo — across all chapters — flows into one continuous grid, so the
+   wall packs seamlessly with no per-chapter breaks. The .mcol wrappers also
+   flatten, so the contiguous-run columns collapse back to exact gradient order. */
+.archive.overview .collage,
+.archive.overview .collage.balanced,
+.archive.overview .mcol { display: contents; }
+.archive.overview .frame {
+  aspect-ratio: 1 / 1 !important;
+  margin: 0;
+}
+.archive.overview .frame img.photo {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+}
+.archive.overview .frame .ph { object-fit: cover; }
+.archive.overview .frame { cursor: zoom-in; }
+
+/* Chapter gap: a held breath. Background = the chapter being entered. */
+.chapter-gap {
+  min-height: var(--gap);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: var(--title-align);
+  padding: 14vh var(--edge);
+  color: var(--chapter-fg, var(--fg));
+  background: var(--chapter-bg, var(--bg));
+}
+.chapter-title {
+  position: relative;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;  /* Fraunces: hairlines sharpen as the title grows */
+  font-weight: var(--title-weight);
+  font-style: var(--title-style);
+  font-size: var(--title-size);
+  letter-spacing: var(--title-tracking);
+  text-transform: var(--title-transform);
+  line-height: var(--title-leading);
+  margin: 0;
+  max-width: 18ch;
+  text-align: var(--title-text-align);
+}
+/* An editorial contrast-hairline beneath the title. */
+.chapter-title::after {
+  content: '';
+  display: block;
+  width: 2.75rem; height: 1px;
+  margin: 1.6rem 0 0;
+  margin-inline: var(--rule-inline, auto);
+  background: currentColor;
+  opacity: 0.35;
+}
+.chapter-index {
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-track);
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin: 0 0 1.7rem;
+  font-weight: 500;
+}
+.chapter-swatch {
+  display: var(--swatch-display);
+  width: var(--swatch-w); height: var(--swatch-h);
+  border-radius: var(--swatch-radius);
+  margin-top: var(--swatch-mt);
+  border: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+}
+
+/* --- Metadata overlay (press `i`) ---------------------------------------- */
+.meta {
+  position: fixed; inset: auto 1.4rem 1.4rem auto;
+  max-width: min(90vw, 30rem);
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+  padding: 1rem 1.2rem;
+  font-family: var(--font-label);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 180ms, transform 180ms;
+  pointer-events: none;
+  z-index: 40;
+}
+.meta.show { opacity: 1; transform: none; }
+.meta dt { color: var(--muted); font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.meta dd { margin: 0 0 0.6rem; }
+.meta .hint { color: var(--muted); font-size: 0.68rem; margin-top: 0.4rem; }
+
+/* --- Top bar: editorial, hairline-light. Auto-hides on scroll down. ------ */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.1rem var(--edge);
+  font-family: var(--font-label);
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--bg) 78%, transparent), transparent);
+  backdrop-filter: blur(4px);
+  transition: transform 420ms var(--ease), opacity 420ms var(--ease);
+}
+.topbar.hidden { transform: translateY(-115%); opacity: 0; pointer-events: none; }
+.topbar .brand {
+  appearance: none; background: transparent; border: 0; padding: 0; cursor: pointer;
+  font-family: var(--font-label);
+  font-size: var(--label-size); letter-spacing: var(--label-track); text-transform: uppercase;
+  color: var(--muted);
+  transition: color 200ms var(--ease);
+}
+.topbar .brand:hover { color: var(--fg); }   /* it returns you to the cover */
+/* Links & the Insights button read as quiet text with a hairline underline on
+   hover — no heavy pills. */
+.topbar a, .topbar .ghost {
+  appearance: none; background: transparent; border: 0; cursor: pointer;
+  color: var(--fg); text-decoration: none;
+  font-family: var(--font-label); font-size: var(--label-size);
+  letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 0.3rem 0; position: relative;
+  transition: color 200ms var(--ease);
+}
+.topbar a::after, .topbar .ghost::after {
+  content: ''; position: absolute; left: 0; right: 100%; bottom: 0; height: 1px;
+  background: currentColor; transition: right 260ms var(--ease);
+}
+.topbar a:hover::after, .topbar .ghost:hover::after { right: 0; }
+.topbar-right { display: flex; align-items: center; gap: 1.6rem; }
+
+/* Insights overlay */
+.insights {
+  position: fixed; inset: 0; z-index: 90; overflow: auto;
+  display: flex; align-items: flex-start; justify-content: center;
+  background: color-mix(in oklab, var(--bg) 92%, #000);
+  opacity: 0; transition: opacity 320ms var(--ease);
+  overscroll-behavior: contain;   /* don't hand the scroll to the archive behind */
+}
+.insights[hidden] { display: none; }
+.insights.show { opacity: 1; }
+.insights-inner { max-width: 44rem; width: 100%; padding: 9vh 8vw 12vh; }
+.insights-inner h2 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2rem, 5vw, 3rem); margin: 0; }
+.insights-sub { font-family: var(--font-label); color: var(--muted); font-size: 0.8rem; margin: 0.4rem 0 2.4rem; letter-spacing: 0.04em; }
+.insights section { margin-bottom: 2rem; }
+.insights h3 { font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.8rem; }
+.insights h3 .only { border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; margin-left: 6px; font-size: 0.85em; letter-spacing: 0.1em; }
+.insights .stat { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.insights .stat li { display: flex; align-items: center; gap: 0.7rem; font-family: var(--font-label); font-size: 0.82rem; }
+.insights .sw { width: 0.9rem; height: 0.9rem; border-radius: 50%; flex: 0 0 auto; }
+.insights .lbl { flex: 1 1 auto; min-width: 6rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insights .barwrap { flex: 2 1 auto; height: 6px; background: color-mix(in oklab, var(--fg) 8%, transparent); border-radius: 999px; overflow: hidden; }
+.insights .bar { display: block; height: 100%; background: var(--fg); border-radius: 999px; }
+.insights .num { flex: 0 0 auto; color: var(--muted); min-width: 2rem; text-align: right; }
+.insights-close { position: fixed; top: var(--edge); right: var(--edge); width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--hair); background: transparent; color: var(--fg); font-size: 1.2rem; cursor: pointer; opacity: 0.55; transition: opacity 240ms var(--ease), border-color 240ms var(--ease); }
+.insights-close:hover { opacity: 1; border-color: color-mix(in oklab, var(--fg) 40%, transparent); }
+
+/* Film / Digital / All view toggle — a clean text row, active one underlined. */
+.view-toggle { display: flex; align-items: center; gap: 1.3rem; }
+.view-toggle button {
+  appearance: none; border: 0; cursor: pointer; background: transparent; color: var(--muted);
+  font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.18em;
+  text-transform: uppercase; padding: 0.3rem 0; position: relative;
+  transition: color 200ms var(--ease);
+}
+.view-toggle button:hover { color: var(--fg); }
+.view-toggle button[aria-pressed='true'] { color: var(--fg); }
+.view-toggle button[aria-pressed='true']::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: currentColor;
+}
+
+/* Medium filtering: hide non-matching frames; JS hides now-empty chapters. */
+.archive.view-film .frame:not([data-medium='film']),
+.archive.view-digital .frame:not([data-medium='digital']) { display: none; }
+
+/* Genre filtering: hide frames not of the chosen genre (composes with medium). */
+.archive.genre-street .frame:not([data-genre='street']),
+.archive.genre-portrait .frame:not([data-genre='portrait']),
+.archive.genre-landscape .frame:not([data-genre='landscape']),
+.archive.genre-architecture .frame:not([data-genre='architecture']) { display: none; }
+
+/* Genre dropdown — a quiet label that opens a small menu, in the topbar. */
+.genre-drop { position: relative; }
+.genre-btn {
+  appearance: none; border: 0; cursor: pointer; background: transparent; color: var(--muted);
+  font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.18em;
+  text-transform: uppercase; padding: 0.3rem 0; display: inline-flex; align-items: center; gap: 0.5rem;
+  transition: color 200ms var(--ease);
+}
+.genre-btn:hover, .genre-drop.open .genre-btn { color: var(--fg); }
+.genre-caret { transition: transform 220ms var(--ease); opacity: 0.75; }
+.genre-drop.open .genre-caret { transform: rotate(180deg); }
+.genre-menu {
+  position: absolute; top: calc(100% + 0.7rem); left: 50%; transform: translateX(-50%);
+  margin: 0; padding: 0.4rem; list-style: none; z-index: 60;
+  background: rgba(18, 17, 16, 0.96); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); min-width: 9.5rem;
+}
+.genre-menu[hidden] { display: none; }
+.genre-menu li {
+  font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted); cursor: pointer; white-space: nowrap;
+  padding: 0.55rem 0.75rem; border-radius: 7px;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+.genre-menu li:hover { color: var(--fg); background: rgba(255, 255, 255, 0.06); }
+.genre-menu li[aria-selected='true'] { color: var(--fg); }
+
+/* --- Cover: the title page. First thing seen; photos begin below. -------- */
+.cover {
+  min-height: 100svh;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center; padding: 12vh var(--edge); gap: 1.5rem;
+  position: relative;
+}
+/* Kicker with flanking hairlines — a plate/frontispiece feel. */
+.cover-kicker {
+  font-family: var(--font-label);
+  font-size: var(--label-size); letter-spacing: var(--label-track); text-transform: uppercase;
+  color: var(--muted); margin: 0;
+  display: inline-flex; align-items: center; gap: 1.1rem;
+}
+.cover-kicker::before, .cover-kicker::after {
+  content: ''; width: 2.2rem; height: 1px; background: var(--hair);
+}
+.cover h1 {
+  font-family: var(--font-display);            /* same face as chapter titles */
+  font-optical-sizing: auto;
+  font-variation-settings: 'opsz' 144;          /* max display drama at cover size */
+  font-style: var(--title-style);
+  font-weight: 600;                             /* slightly bolder, to stand out */
+  letter-spacing: var(--title-tracking);        /* match the chapters' tracking */
+  font-size: clamp(3rem, 9vw, 7.5rem); line-height: 0.98; margin: 0;
+}
+.cover-sub {
+  font-family: var(--font-label); color: var(--muted);
+  font-size: var(--label-size); letter-spacing: 0.16em; text-transform: uppercase; margin: 0;
+}
+/* Frontispiece spectrum — the archive's real chapter colours, in order. */
+.cover-spectrum {
+  display: flex; width: min(88vw, 30rem); height: 4px; margin: 0.6rem 0 0;
+  border-radius: 999px; overflow: hidden;
+}
+.cover-spectrum .cs-seg {
+  appearance: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  min-width: 2px; transition: transform 260ms var(--ease), filter 200ms var(--ease);
+  transform-origin: center;
+}
+.cover-spectrum .cs-seg:hover { filter: brightness(1.25); transform: scaleY(2.4); }
+/* Elegant scroll cue: a thin travelling line. */
+.scroll-hint {
+  position: absolute; bottom: 4vh; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-label); color: var(--muted);
+  font-size: 0.6rem; letter-spacing: var(--label-track); text-transform: uppercase;
+  display: flex; flex-direction: column; align-items: center; gap: 0.9rem;
+}
+.scroll-hint::after {
+  content: ''; width: 1px; height: 2.4rem;
+  background: linear-gradient(to bottom, var(--fg), transparent);
+  opacity: 0.5; transform-origin: top;
+  animation: scrolldrop 2.6s var(--ease-io) infinite;
+}
+@keyframes scrolldrop { 0% { transform: scaleY(0); opacity: 0; } 40% { opacity: 0.6; } 100% { transform: scaleY(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .scroll-hint::after { animation: none; opacity: 0.4; } }
+
+/* First-load reveal: the frontispiece rises and settles, staggered. */
+@keyframes riseIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.cover > * { animation: riseIn 900ms var(--ease) both; }
+.cover-kicker { animation-delay: 60ms; }
+.cover h1 { animation-delay: 170ms; }
+.cover-sub { animation-delay: 320ms; }
+/* The spectrum draws itself in (rather than rising) — a line being struck. */
+.cover-spectrum { animation-name: drawIn; animation-delay: 440ms; transform-origin: center; }
+@keyframes drawIn { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+.scroll-hint { animation-delay: 640ms; }
+@media (prefers-reduced-motion: reduce) { .cover > * { animation: none; } }
+
+/* --- Colour-spectrum scrubber (right edge) ------------------------------- */
+.spectrum {
+  position: fixed; top: 18vh; bottom: 18vh; right: 0; z-index: 45;
+  width: 8px;
+  display: flex; flex-direction: column;
+  transition: width 160ms ease, opacity 200ms ease;
+}
+.spectrum:hover { width: 16px; }
+.archive.overview ~ .spectrum { opacity: 0; pointer-events: none; }
+.spectrum-seg {
+  position: relative; border: 0; padding: 0; margin: 0; cursor: pointer;
+  width: 100%; min-height: 4px; appearance: none;
+  transition: opacity 300ms var(--ease);
+}
+/* Current chapter marked; the rest recede (unless you're hovering the scrubber). */
+.spectrum:not(:hover) .spectrum-seg { opacity: 0.5; }
+.spectrum:not(:hover) .spectrum-seg.active { opacity: 1; }
+.spectrum-label {
+  position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+  font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.14em;
+  text-transform: uppercase; white-space: nowrap;
+  color: var(--fg); background: color-mix(in oklab, var(--bg) 80%, transparent);
+  padding: 2px 6px; border: 1px solid var(--border);
+  opacity: 0; transition: opacity 140ms; pointer-events: none;
+}
+.spectrum-seg:hover .spectrum-label, .spectrum-seg:focus-visible .spectrum-label { opacity: 1; }
+
+/* --- Immersive single-photo view (lightbox) ------------------------------ */
+.lightbox {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in oklab, var(--bg) 96%, #000);
+  opacity: 0; transition: opacity 320ms var(--ease);
+  /* The stage owns every touch: pinch-zoom the photograph, never scroll the
+     archive underneath (iOS ignores body overflow:hidden for touch drags). */
+  touch-action: none; overscroll-behavior: contain;
+}
+/* Critical: the class sets display:flex, which would otherwise override the
+   `hidden` attribute's display:none and leave an invisible overlay eating every
+   click on the page. Keep it truly gone until opened. */
+.lightbox[hidden] { display: none; }
+.lightbox.show { opacity: 1; }
+.lb-stage { max-width: 94vw; max-height: 88vh; display: flex; }
+.lb-stage img {
+  max-width: 94vw; max-height: 88vh; width: auto; height: auto;
+  object-fit: contain; display: block;
+  transform-origin: center center; will-change: transform;
+  transition: transform 120ms ease; cursor: zoom-in;
+  touch-action: none;
+}
+.lb-stage img.zoomed { cursor: grab; }
+.lb-stage img.grabbing { cursor: grabbing; transition: none; }
+@media (prefers-reduced-motion: reduce) { .lb-stage img { transition: none; } }
+/* `.lb-close` is used on its own by the inspiration board's three overlays
+   (enlarge, split view, match panel), and clustered with `.lb-tool` in the
+   archive's viewer. Both need the same round hairline button; only the
+   positioning differs, below. */
+.lb-tool, .lb-close, .lb-nav {
+  position: relative; z-index: 81; appearance: none; cursor: pointer;
+  background: transparent; color: var(--fg);
+  border: 1px solid var(--hair);
+  font-size: 1.2rem; line-height: 1; width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.55;
+  transition: opacity 240ms var(--ease), border-color 240ms var(--ease), background 240ms var(--ease);
+}
+.lb-nav { position: fixed; }
+/* A standalone close pins itself to the corner; one inside the archive's tool
+   cluster is laid out by that row instead. */
+.lb-close:not(.lb-tool) { position: fixed; top: var(--edge); right: var(--edge); }
+.lb-tool:hover, .lb-close:hover, .lb-nav:hover { opacity: 1; border-color: color-mix(in oklab, var(--fg) 40%, transparent); background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.lb-tool[aria-pressed='true'] { opacity: 1; border-color: color-mix(in oklab, var(--fg) 40%, transparent); }
+/* Info reads as the `i` key it mirrors. */
+#lb-info { font-family: var(--font-display); font-style: italic; font-size: 1.05rem; }
+/* One icon, two states — the slideshow button shows what pressing it does. */
+#lb-play .pause { display: none; }
+.lightbox.playing #lb-play .tri { display: none; }
+.lightbox.playing #lb-play .pause { display: block; }
+.lb-tools {
+  position: fixed; z-index: 81; top: var(--edge); right: var(--edge);
+  display: flex; align-items: center; gap: 0.55rem;
+}
+/* Position in the sequence — the one number worth showing. */
+.lb-count {
+  position: fixed; z-index: 81; top: var(--edge); left: var(--edge);
+  font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.16em;
+  color: var(--muted); line-height: 46px;
+}
+/* Slideshow: a hairline crossing the foot of the screen, one pass per photo,
+   so a running show is visible without a label announcing itself. */
+.lb-progress {
+  position: fixed; left: 0; bottom: 0; height: 1px; width: 100%;
+  background: var(--fg); transform-origin: left center; transform: scaleX(0);
+  opacity: 0.5; z-index: 81; pointer-events: none;
+}
+.lightbox.playing .lb-progress { animation: lbProgress 4s linear infinite; }
+@keyframes lbProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .lightbox.playing .lb-progress { animation: none; transform: scaleX(1); } }
+.lb-prev { left: var(--edge); top: 50%; transform: translateY(-50%); }
+.lb-next { right: var(--edge); top: 50%; transform: translateY(-50%); }
+.lb-caption {
+  position: fixed; left: 50%; bottom: 3.6rem; transform: translateX(-50%);
+  max-width: 90vw; text-align: center;
+  font-family: var(--font-label); font-size: 0.74rem; letter-spacing: 0.04em; line-height: 1.7; color: var(--fg);
+  display: none;
+}
+.lightbox.details .lb-caption { display: block; }
+.lb-caption .k { color: var(--muted); }
+.meta a, .lb-caption a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.lb-hint {
+  position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%);
+  font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--muted); margin: 0; opacity: 0.7;
+}
+@media (prefers-reduced-motion: reduce) { .lightbox { transition: none; } }
+
+/* --- Visible keyboard focus everywhere ----------------------------------- */
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+
+/* While the lightbox or Insights is open, the archive behind must not scroll.
+   Touch drags used to move the page under the overlay, so closing it dropped
+   you somewhere else entirely. Scrollbar width is compensated so the layout
+   doesn't shift on desktop. */
+body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
+
+/* --- Offline status pill -------------------------------------------------- */
+.offline-pill {
+  position: fixed; left: 50%; bottom: 1.4rem; transform: translate(-50%, 8px);
+  z-index: 9999; pointer-events: none;
+  font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.08em;
+  color: var(--fg); background: color-mix(in oklab, var(--bg) 88%, transparent);
+  border: 1px solid var(--hair); border-radius: 999px; padding: 0.6rem 1.05rem;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  opacity: 0; transition: opacity 420ms var(--ease), transform 420ms var(--ease);
+  font-variant-numeric: tabular-nums;    /* the count must not jitter as it climbs */
+}
+.offline-pill.show { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { .offline-pill { transition: opacity 120ms linear; } }
+/* On a phone the pill would sit on top of the chapter strip. */
+@media (max-width: 640px) { .offline-pill { bottom: calc(2.6rem + env(safe-area-inset-bottom, 0px)); } }
+
+/* --- Reduced motion: no fades, hard cuts --------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .frame img { opacity: 1; transition: none; }
+  .meta { transition: none; }
+}
+
+/* --- Responsive collage + the breath scales down ------------------------- */
+@media (max-width: 980px) { :root { --cols: 2; } }
+
+/* ===== Mobile ============================================================= */
+@media (max-width: 640px) {
+  :root { --gap: 66svh; --edge: 1.1rem; --gutter: 2px; }
+
+  /* Top bar: drop the brand, shrink to fit a phone; still auto-hides.
+     Everything here is sized so the five groups (medium, genre, Inspiration,
+     Insights, Add) fit inside 390px without wrapping or running off the edge —
+     the right-hand links are the only way in to the other two pages. */
+  .topbar { padding: 0.85rem 0.7rem; gap: 0.35rem; }
+  .topbar .brand { display: none; }
+  .topbar a, .topbar .ghost, .view-toggle button, .genre-btn {
+    font-size: 0.55rem; letter-spacing: 0.06em; padding-top: 0.2rem; padding-bottom: 0.2rem;
+    white-space: nowrap;   /* a wrapped label was what tipped it over the edge */
+  }
+  .topbar-right { gap: 0.75rem; }
+  .view-toggle { gap: 0.6rem; }
+  .genre-btn { gap: 0.3rem; }
+  .wide-only { display: none; }
+
+  /* Cover: tighter, title fills the width. */
+  .cover { gap: 1.1rem; }
+  .cover h1 { font-size: clamp(2.6rem, 15vw, 4.2rem); }
+  .cover-kicker::before, .cover-kicker::after { width: 1.2rem; }
+  .cover-spectrum { width: 82vw; }
+
+  /* Chapter dividers: a touch less air so they don't feel empty on a phone. */
+  .chapter-gap { padding: 12vh var(--edge); }
+
+  /* Lightbox: smaller controls, touch-friendly. */
+  .lb-tool, .lb-close, .lb-nav { width: 40px; height: 40px; font-size: 1.05rem; }
+  .lb-count { line-height: 40px; font-size: 0.62rem; }
+  .lb-stage, .lb-stage img { max-width: 100vw; max-height: 82vh; }
+  .lb-caption { bottom: 3rem; font-size: 0.68rem; }
+  .lb-hint { font-size: 0.54rem; letter-spacing: 0.1em; }
+  /* Swipe carries navigation on a phone; the arrows only crowd the photograph. */
+  .lb-nav { display: none; }
+
+  /* The side scrubber is too fine to tap on a phone, but dropping it left no
+     way at all to reach a chapter — you had to scroll the whole archive. It
+     lies down along the foot of the screen instead, where a thumb can reach it. */
+  .spectrum {
+    top: auto; bottom: 0; left: 0; right: 0; width: auto;
+    flex-direction: row; height: 34px; align-items: flex-end;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    background: linear-gradient(to top, color-mix(in oklab, var(--bg) 70%, transparent), transparent);
+  }
+  .spectrum:hover { width: auto; }
+  /* Full-height tap target, hairline appearance: the mask shows only the bottom
+     5px, so a thumb gets 34px to aim at without a colour bar dominating. */
+  .spectrum-seg {
+    width: auto; height: 100%; min-height: 0; min-width: 3px;
+    -webkit-mask-image: linear-gradient(to top, #000 5px, transparent 5px);
+    mask-image: linear-gradient(to top, #000 5px, transparent 5px);
+  }
+  .spectrum-label { display: none; }
+
+  /* Insights: full-width, comfortable. */
+  .insights-inner { padding: 6.5rem 1.2rem 10vh; }
+  .insights-inner h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
+  .insights .lbl { min-width: 4.5rem; }
+  .insights .barwrap { flex: 1.2 1 auto; }
+}
+
+/* Touch devices: reveal the hover-only affordances (no hover on touch). */
+@media (hover: none), (pointer: coarse) {
+  .cell-remove, .cell-similar, .frame .remove { opacity: 0.85; }
+  .spectrum { width: 12px; }
+  .lb-hint { display: none; } /* the desktop key hints don't apply on touch */
+}

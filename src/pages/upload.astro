@@ -1,0 +1,498 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { readManifest } from '../lib/manifest';
+import { GENRES, GENRE_LABEL } from '../lib/types';
+
+export const prerender = false;
+const manifest = await readManifest();
+const allPhotos = manifest.chapters.flatMap((c) =>
+  c.photos.map((p) => ({ ...p, chapterName: c.name })),
+);
+---
+
+<Layout title="Add & remove — Colour Archive">
+  <header class="topbar" id="topbar">
+    <span class="brand">Colour Archive</span>
+    <a href="/">View archive</a>
+  </header>
+
+  <main class="ingest">
+    <header class="ingest-head">
+      <p class="kicker">Colour Archive</p>
+      <h1>Add &amp; remove</h1>
+      <p class="lead">Drop them in. Colour does the rest.</p>
+    </header>
+
+    <form id="form" class="drop" aria-label="Upload photographs">
+      <input id="file" name="photos" type="file" accept="image/*" multiple hidden />
+      <div class="drop-inner" id="zone" tabindex="0" role="button"
+           aria-label="Choose photos or drop them here">
+        <p class="drop-title">Drop photos, or <span class="link">browse</span></p>
+        <p class="drop-sub">JPEG · PNG · TIFF · WebP · AVIF · HEIC · GIF</p>
+        <p class="drop-sub drop-note">No camera RAW — export to JPEG first.</p>
+      </div>
+    </form>
+
+    <div id="status" class="status" hidden>
+      <div class="bar"><div class="bar-fill" id="bar"></div></div>
+      <div class="status-row">
+        <p id="status-text" class="status-text"></p>
+        <button type="button" class="cancel" id="cancel" hidden>Cancel</button>
+      </div>
+    </div>
+
+    <ul id="results" class="results" aria-live="polite"></ul>
+
+    {/* Rendered even when empty, so photos added in this session can drop
+        straight into it without a page reload. */}
+    <section class="manage" id="manage" hidden={allPhotos.length === 0}>
+      <h2 class="manage-head">
+        In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
+      </h2>
+      <p class="manage-note">Hover to remove, or flip film / digital.</p>
+      <div class="grid" id="grid">
+        {allPhotos.map((p) => (
+          <figure class="cell" data-id={p.id} data-medium={p.medium} data-genre={p.genre ?? ''}>
+            <img src={p.placeholder} data-src={p.derivatives[0].avif} alt="" loading="lazy" />
+            <button class="cell-remove" type="button" data-remove={p.id} aria-label={`Remove ${p.filename}`}>×</button>
+            <button class="cell-medium" type="button" data-medium-btn={p.id} title="Toggle film / digital">{p.medium}</button>
+            <button class="cell-genre" type="button" data-genre-btn={p.id} title="Change genre">{p.genre ? GENRE_LABEL[p.genre] : '— genre'}</button>
+            <figcaption>{p.chapterName}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .ingest { max-width: 62rem; margin: 0 auto; padding: 8rem 6vw 10vh; }
+  .kicker { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .ingest-head h1 {
+    font-family: var(--font-display); font-weight: var(--title-weight); font-style: var(--title-style);
+    font-size: clamp(2.2rem, 5.5vw, 3.8rem); letter-spacing: var(--title-tracking);
+    margin: 0.3rem 0 0.6rem; line-height: 1;
+  }
+  .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.4rem; max-width: 40rem; }
+
+  .drop { margin: 0; }
+  .drop-inner {
+    border: 1px dashed var(--border); border-radius: 2px;
+    padding: 4.5rem 2rem; text-align: center; cursor: pointer;
+    transition: border-color 160ms, background 160ms;
+    background: color-mix(in oklab, var(--fg) 2%, transparent);
+  }
+  .drop-inner:hover, .drop-inner:focus-visible, .drop-inner.over {
+    border-color: var(--fg); background: color-mix(in oklab, var(--fg) 5%, transparent);
+  }
+  .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.6rem; margin: 0 0 0.5rem; }
+  .drop-sub { color: var(--muted); font-size: 0.82rem; margin: 0; letter-spacing: 0.02em; }
+  .drop-note { font-size: 0.72rem; margin-top: 0.5rem; opacity: 0.7; }
+  .link { text-decoration: underline; text-underline-offset: 3px; }
+
+  .status { margin-top: 1.6rem; }
+  .bar { height: 2px; background: var(--border); overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; background: var(--fg); transition: width 200ms linear; }
+  .status-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .status-text { color: var(--muted); font-size: 0.82rem; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
+  .cancel {
+    appearance: none; background: transparent; border: 0; cursor: pointer; flex: 0 0 auto;
+    font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--muted); padding: 0.3rem 0;
+    border-bottom: 1px solid transparent; transition: color 180ms, border-color 180ms;
+  }
+  .cancel:hover { color: var(--fg); border-bottom-color: currentColor; }
+
+  /* The result rows and the manage cells are built in JS, so they never carry
+     Astro's scope attribute — these rules have to be global or they simply do
+     not apply to them. */
+  .results { list-style: none; margin: 1.4rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+  :global(.results li) { display: flex; align-items: center; gap: 0.8rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.86rem; }
+  :global(.results .sw) { width: 1.1rem; height: 1.1rem; border-radius: 50%; flex: 0 0 auto; border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); }
+  :global(.results .fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.results .ch) { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; }
+  :global(.results .skip) { color: var(--muted); font-style: italic; }
+  :global(.results .err) { color: #e0603a; }
+
+  .manage { margin-top: 4rem; }
+  .manage-head { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.7rem; margin: 0 0 0.3rem; display: flex; align-items: baseline; gap: 0.6rem; }
+  .manage-count { font-family: var(--font-label); font-size: 0.9rem; color: var(--muted); }
+  .manage-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.4rem; }
+  .manage-note code { font-size: 0.92em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+  :global(.cell) { position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: var(--border); }
+  :global(.cell img) { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter 320ms var(--ease); }
+  :global(.cell img[data-src]) { filter: blur(6px); }   /* placeholder until the real thumb lands */
+  /* A photo added in this session announces itself, so you can see where in the
+     grid it went. */
+  :global(.just-added) { animation: cellIn 520ms var(--ease) both; }
+  @keyframes cellIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.just-added) { animation: none; }
+    :global(.cell img) { transition: none; }
+  }
+  :global(.cell figcaption) {
+    position: absolute; left: 0; bottom: 0; right: 0;
+    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #fff; padding: 0.3rem 0.4rem;
+    background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
+  }
+  :global(.cell-remove) {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
+    background: color-mix(in oklab, #000 55%, transparent); color: #fff;
+    font-size: 15px; line-height: 26px; text-align: center;
+    opacity: 0; transition: opacity 140ms; backdrop-filter: blur(6px);
+  }
+  :global(.cell:hover .cell-remove), :global(.cell:focus-within .cell-remove) { opacity: 1; }
+  :global(.cell-remove:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
+  :global(.cell-remove.armed) { background: #c0392b; opacity: 1; }
+  :global(.cell-medium) {
+    position: absolute; left: 6px; bottom: 6px; z-index: 2;
+    border: 0; cursor: pointer; border-radius: 999px;
+    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 0.2rem 0.5rem;
+    background: color-mix(in oklab, #000 55%, transparent); color: #fff;
+    backdrop-filter: blur(6px); transition: background 140ms;
+  }
+  :global(.cell[data-medium='film'] .cell-medium) { background: color-mix(in oklab, #b08968 78%, #000); }
+  :global(.cell[data-medium='digital'] .cell-medium) { background: color-mix(in oklab, #4a6fa5 78%, #000); }
+  :global(.cell-medium:hover) { filter: brightness(1.2); }
+  :global(.cell-genre) {
+    position: absolute; left: 6px; top: 6px; z-index: 2; max-width: calc(100% - 12px);
+    border: 0; cursor: pointer; border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 0.2rem 0.5rem;
+    background: color-mix(in oklab, #000 55%, transparent); color: #fff;
+    backdrop-filter: blur(6px); transition: background 140ms, filter 140ms;
+  }
+  :global(.cell[data-genre=''] .cell-genre) { color: color-mix(in oklab, #fff 60%, transparent); }
+  :global(.cell-genre:hover) { filter: brightness(1.2); }
+
+  /* Touch: the per-cell controls are hover-revealed, which a finger never
+     triggers. */
+  @media (hover: none), (pointer: coarse) {
+    :global(.cell-remove) { opacity: 0.85; }
+  }
+
+  .foot { margin-top: 3rem; }
+</style>
+
+<script is:inline>
+  const form = document.getElementById('form');
+  const input = document.getElementById('file');
+  const zone = document.getElementById('zone');
+  const statusEl = document.getElementById('status');
+  const bar = document.getElementById('bar');
+  const statusText = document.getElementById('status-text');
+  const results = document.getElementById('results');
+  const bartop = document.getElementById('topbar');
+
+  // Top bar auto-hide
+  let lastY = window.scrollY;
+  addEventListener('scroll', () => {
+    const y = window.scrollY;
+    if (y > lastY && y > 90) bartop.classList.add('hidden'); else bartop.classList.remove('hidden');
+    lastY = y;
+  }, { passive: true });
+
+  // Swap manage thumbnails from placeholder to the real derivative as they come
+  // into view. This used to fire `new Image()` for every cell the instant the
+  // page loaded — the whole archive at once, ahead of anything you could see,
+  // competing with the upload you came here to do.
+  const grid = document.getElementById('grid');
+  const manage = document.getElementById('manage');
+  const manageCount = document.getElementById('manage-count');
+  const swapIn = (img) => {
+    const real = img.dataset.src;
+    if (!real) return;
+    delete img.dataset.src;
+    const pre = new Image();
+    pre.onload = () => { img.src = real; img.classList.add('in'); };
+    pre.src = real;
+  };
+  const thumbObserver = 'IntersectionObserver' in window
+    ? new IntersectionObserver((entries, obs) => {
+        for (const e of entries) if (e.isIntersecting) { obs.unobserve(e.target); swapIn(e.target); }
+      }, { rootMargin: '300px' })
+    : null;
+  const watchThumb = (img) => (thumbObserver ? thumbObserver.observe(img) : swapIn(img));
+  document.querySelectorAll('.cell img[data-src]').forEach(watchThumb);
+
+  const pick = () => input.click();
+  zone.addEventListener('click', pick);
+  zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+  input.addEventListener('change', () => upload(input.files));
+
+  ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
+  zone.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) upload(e.dataTransfer.files); });
+  // Dropping onto the page but missing the zone used to make the browser
+  // navigate away and *open the photo*, losing the page you were working on.
+  ['dragover', 'drop'].forEach((ev) => addEventListener(ev, (e) => {
+    if (!zone.contains(e.target)) e.preventDefault();
+  }));
+  // Paste an image straight from the clipboard (⌘V) — screenshots, or a frame
+  // copied out of another app.
+  addEventListener('paste', (e) => {
+    const files = Array.from(e.clipboardData?.files || []);
+    if (files.length) { e.preventDefault(); upload(files); }
+  });
+
+  // Camera RAW can't be decoded by this sharp build. Catching it here rather
+  // than server-side means you're told immediately, instead of after pushing
+  // 50MB per file across the network to be rejected on arrival.
+  const RAW_EXT = /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2|pef|srw|x3f)$/i;
+  const IMAGE_EXT = /\.(jpe?g|png|tiff?|webp|avif|heic|heif|gif)$/i;
+  const CONCURRENCY = 3;   // the Mac processes these in parallel; the store write is serialised server-side
+  const fmtBytes = (n) =>
+    n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB';
+
+  let run = null;   // the upload in flight, so Cancel can stop it
+
+  // One file, one request, with byte-level progress. fetch() cannot report
+  // upload progress, and a whole batch in a single request meant the bar sat
+  // still for minutes and one bad file failed the other seven.
+  function send(file, onProgress) {
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      run.inflight.add(xhr);
+      xhr.open('POST', '/api/upload');
+      xhr.upload.addEventListener('progress', (e) => { if (e.lengthComputable) onProgress(e.loaded); });
+      xhr.addEventListener('load', () => {
+        run.inflight.delete(xhr);
+        onProgress(file.size);
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (!data.ok) return resolve([{ filename: file.name, status: 'error', error: data.error || `HTTP ${xhr.status}` }]);
+          resolve(data.results);
+        } catch {
+          resolve([{ filename: file.name, status: 'error', error: `Server returned ${xhr.status}` }]);
+        }
+      });
+      xhr.addEventListener('error', () => {
+        run.inflight.delete(xhr);
+        resolve([{ filename: file.name, status: 'error', error: 'Connection lost' }]);
+      });
+      xhr.addEventListener('abort', () => { run.inflight.delete(xhr); resolve(null); });
+      const fd = new FormData();
+      fd.append('photos', file);
+      xhr.send(fd);
+    });
+  }
+
+  async function upload(fileList) {
+    if (run) return;   // one run at a time
+    const dropped = Array.from(fileList);
+    const raw = [], other = [], files = [];
+    for (const f of dropped) {
+      if (RAW_EXT.test(f.name)) raw.push(f);
+      else if (f.type.startsWith('image/') || IMAGE_EXT.test(f.name)) files.push(f);
+      else other.push(f);
+    }
+    // Anything we won't send is said out loud. Dropping a folder of ARWs used
+    // to do nothing whatsoever — no upload, no error, no acknowledgement.
+    for (const f of raw) results.prepend(renderRow({ filename: f.name, status: 'unsupported', error: 'Camera RAW — export to JPEG or TIFF first' }));
+    for (const f of other) results.prepend(renderRow({ filename: f.name, status: 'unsupported', error: 'Not an image' }));
+    if (!files.length) {
+      if (raw.length || other.length) {
+        statusEl.hidden = false; bar.style.width = '0%'; cancelBtn.hidden = true;
+        statusText.textContent = `Nothing to add — ${raw.length + other.length} file${raw.length + other.length > 1 ? 's' : ''} can't be read.`;
+      }
+      input.value = '';
+      return;
+    }
+
+    const totalBytes = files.reduce((a, f) => a + f.size, 0);
+    run = { cancelled: false, inflight: new Set() };
+    statusEl.hidden = false; cancelBtn.hidden = false; bar.style.width = '0%';
+    zone.setAttribute('aria-busy', 'true');
+
+    const sent = new Array(files.length).fill(0);
+    let done = 0, added = 0, failed = 0;
+    // Two phases, and the slow one is not always the network: sending is
+    // weighted by BYTES (a 40MB frame beside a 2MB one makes a file count lie),
+    // but the Mac then decodes, derives and fingerprints each photo, which on a
+    // large frame is seconds of work after its last byte arrives. Giving that a
+    // real share of the bar keeps it from reaching 100% and sitting there.
+    const XFER_SHARE = 0.7;
+    const paint = () => {
+      if (!run || run.cancelled) return;
+      const bytes = sent.reduce((a, b) => a + b, 0);
+      const xfer = totalBytes ? bytes / totalBytes : 1;
+      bar.style.width = ((xfer * XFER_SHARE + (done / files.length) * (1 - XFER_SHARE)) * 100).toFixed(1) + '%';
+      const tail = added ? ` · ${added} added` : '';
+      statusText.textContent = bytes >= totalBytes
+        // Everything's across; say plainly that the wait is now this machine
+        // working, not a stalled transfer.
+        ? `Processing on your Mac · ${done} of ${files.length}${tail}`
+        : `Sending ${fmtBytes(bytes)} of ${fmtBytes(totalBytes)} · ${done} of ${files.length}${tail}`;
+    };
+    paint();
+
+    let next = 0;
+    const worker = async () => {
+      while (!run.cancelled) {
+        const i = next++;
+        if (i >= files.length) return;
+        const rows = await send(files[i], (loaded) => { sent[i] = loaded; paint(); });
+        if (rows === null) return;                     // aborted
+        for (const r of rows) {
+          if (r.status === 'added') { added++; addCell(r); }
+          else if (r.status === 'error' || r.status === 'unsupported') failed++;
+          results.prepend(renderRow(r));
+        }
+        done++;
+        paint();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+
+    const cancelled = run.cancelled;
+    run = null;
+    cancelBtn.hidden = true;
+    zone.removeAttribute('aria-busy');
+    input.value = '';
+    if (cancelled) {
+      statusText.textContent = `Stopped. ${added} added, ${files.length - done} not sent.`;
+      return;
+    }
+    bar.style.width = '100%';
+    const parts = [`${added} added`];
+    if (failed) parts.push(`${failed} skipped`);
+    statusText.innerHTML = added
+      ? `${esc(parts.join(' · '))}. <a href="/">View the archive →</a>`
+      : esc(parts.join(' · ') + '.');
+  }
+
+  const cancelBtn = document.getElementById('cancel');
+  cancelBtn.addEventListener('click', () => {
+    if (!run) return;
+    run.cancelled = true;
+    statusText.textContent = 'Stopping…';
+    // Photos already accepted by the Mac are kept; only what's still in flight
+    // is dropped. Anything half-sent was never written to the archive.
+    for (const xhr of run.inflight) xhr.abort();
+  });
+  // A run in progress is worth protecting from an accidental navigation.
+  addEventListener('beforeunload', (e) => { if (run) { e.preventDefault(); e.returnValue = ''; } });
+
+  function renderRow(r) {
+    const li = document.createElement('li');
+    if (r.status === 'skipped') {
+      li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch skip">already added</span>`;
+    } else if (r.status === 'unsupported' || r.status === 'error') {
+      li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch err">${esc(r.error || r.status)}</span>`;
+    } else {
+      li.innerHTML = `<span class="sw" style="background:${r.swatch}"></span><span class="fn">${esc(r.filename)}</span><span class="ch">${esc(r.medium)} · ${esc(r.chapterName)}</span>`;
+    }
+    return li;
+  }
+
+  const GENRE_ORDER = ['street', 'portrait', 'landscape', 'architecture'];
+  const GENRE_LABELS = { street: 'Street', portrait: 'Portrait', landscape: 'Landscape', architecture: 'Architecture' };
+
+  // A photo added in this session joins the grid straight away, fully wired —
+  // relabel or remove it without reloading the page first.
+  function addCell(r) {
+    if (!grid || grid.querySelector(`.cell[data-id="${r.id}"]`)) return;
+    const fig = document.createElement('figure');
+    fig.className = 'cell just-added';
+    fig.dataset.id = r.id;
+    fig.dataset.medium = r.medium || 'digital';
+    fig.dataset.genre = r.genre || '';
+    const img = document.createElement('img');
+    img.alt = ''; img.loading = 'lazy';
+    img.src = r.placeholder || '';
+    if (r.thumb) { img.dataset.src = r.thumb; watchThumb(img); }
+    const btn = (cls, text, attr, val, label) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = cls; b.textContent = text;
+      b.dataset[attr] = val;
+      if (label) b.setAttribute('aria-label', label); else b.title = 'Change';
+      return b;
+    };
+    const cap = document.createElement('figcaption');
+    cap.textContent = r.chapterName || '';
+    fig.append(
+      img,
+      btn('cell-remove', '×', 'remove', r.id, `Remove ${r.filename}`),
+      btn('cell-medium', r.medium || 'digital', 'mediumBtn', r.id),
+      btn('cell-genre', r.genre ? GENRE_LABELS[r.genre] : '— genre', 'genreBtn', r.id),
+      cap,
+    );
+    grid.prepend(fig);
+    if (manage) manage.hidden = false;
+    if (manageCount) manageCount.textContent = String(grid.children.length);
+  }
+
+  // One delegated listener for the whole grid, so cells added after load behave
+  // exactly like the ones rendered on the server.
+  let armed = null;
+  const disarm = () => { if (armed) { armed.textContent = '×'; armed.classList.remove('armed'); armed = null; } };
+
+  grid?.addEventListener('click', async (e) => {
+    const target = e.target.closest('button');
+    if (!target) return;
+    const cell = target.closest('.cell');
+    if (!cell) return;
+
+    // --- medium (film ⇄ digital) ---
+    if (target.classList.contains('cell-medium')) {
+      const prev = cell.dataset.medium;
+      const next = prev === 'film' ? 'digital' : 'film';
+      cell.dataset.medium = next; target.textContent = next;      // optimistic
+      if (!(await post('/api/label', { id: cell.dataset.id, medium: next }))) {
+        cell.dataset.medium = prev; target.textContent = prev;    // revert
+      }
+      return;
+    }
+
+    // --- genre (cycles Street → Portrait → Landscape → Architecture) ---
+    if (target.classList.contains('cell-genre')) {
+      const prev = cell.dataset.genre;
+      const next = GENRE_ORDER[(GENRE_ORDER.indexOf(prev) + 1) % GENRE_ORDER.length];
+      cell.dataset.genre = next; target.textContent = GENRE_LABELS[next];
+      if (!(await post('/api/genre', { id: cell.dataset.id, genre: next }))) {
+        cell.dataset.genre = prev; target.textContent = prev ? GENRE_LABELS[prev] : '— genre';
+      }
+      return;
+    }
+
+    // --- remove (two-step confirm) ---
+    if (target.classList.contains('cell-remove')) {
+      if (armed !== target) {
+        disarm();
+        armed = target; target.textContent = '✓'; target.classList.add('armed');
+        target.title = 'Click again to remove';
+        setTimeout(() => { if (armed === target) disarm(); }, 2600);
+        return;
+      }
+      armed = null; target.textContent = '…';
+      if (await post('/api/remove', { id: cell.dataset.id })) {
+        cell.remove();
+        if (manageCount) manageCount.textContent = String(grid.children.length);
+        if (manage && grid.children.length === 0) manage.hidden = true;
+      } else {
+        target.textContent = '×';
+      }
+    }
+  });
+  // Clicking anywhere else cancels an armed delete, rather than leaving a photo
+  // one stray click from removal for the next two and a half seconds.
+  document.addEventListener('click', (e) => { if (armed && !e.target.closest('.cell-remove')) disarm(); }, true);
+
+  async function post(url, body) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+</script>

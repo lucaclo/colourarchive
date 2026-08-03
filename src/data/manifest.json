@@ -1,0 +1,2984 @@
+{
+  "generatedAt": "2026-07-30T02:45:36.666Z",
+  "count": 69,
+  "chapters": [
+    {
+      "key": "achromatic",
+      "name": "Ash",
+      "oklch": {
+        "L": 0.597,
+        "C": 0,
+        "H": 0
+      },
+      "photos": [
+        {
+          "id": "a5c956335b841643",
+          "filename": "IMG_2859.a5c956335b841643.jpg",
+          "ext": "jpg",
+          "width": 1414,
+          "height": 2004,
+          "bytes": 1161937,
+          "oklch": {
+            "L": 0.492,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRoYAAABXRUJQVlA4IHoAAABQBgCdASoYACIAPuFgo02opaMiNVgMARAcCWcAygAUM7qeC29j2J3e1+3MbC5AzZ/cAooYs0YprbWAAADfssWHVxQ2wEsbiMFeiLNambCO47ffb3+LR8JfEb85C6QpA/bRZHud1uHGT8yGQrcRFNfXoGig/wLGN1AAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a5c956335b841643-640.avif",
+              "webp": "/img/a5c956335b841643-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a5c956335b841643-1280.avif",
+              "webp": "/img/a5c956335b841643-1280.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 5.01.024  (091007)"
+          },
+          "addedAt": "2026-07-26T13:07:29.140Z",
+          "autoGenre": "street",
+          "genre": "architecture"
+        },
+        {
+          "id": "f104248915053a6b",
+          "filename": "IMG_2863.f104248915053a6b.jpeg",
+          "ext": "jpeg",
+          "width": 1313,
+          "height": 1952,
+          "bytes": 925357,
+          "oklch": {
+            "L": 0.503,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRpYAAABXRUJQVlA4IIoAAACQBQCdASoYACQAPt1YpU2opSOiNVv8ARAbiWcAxCRuB/ZleutjIniy6nUp+MSb3XBtT0NBAAD+9HgfS1OxLCCrgnEFEpHtNlXoc6Wr/aLLQVTfHn0Q55uyTThO0KRPpgG54l61LmlopLr34w5Pl9pHgCQoaJ/lhUXtj2EOwDT1WGfka9bGZBIAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/f104248915053a6b-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/f104248915053a6b-1280.avif"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 5.01.024  (091007)"
+          },
+          "addedAt": "2026-07-27T13:21:08.097Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "7b1f1207fb43e10a",
+          "filename": "IMG_3211.7b1f1207fb43e10a.jpeg",
+          "ext": "jpeg",
+          "width": 6774,
+          "height": 4492,
+          "bytes": 30277826,
+          "oklch": {
+            "L": 0.504,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAADQAwCdASoYABAAPu1kqU2ppaQiMAgBMB2JZwCw7BSoIkGIcvNGTgAA/tO0e9v1wmddYR97Tw6mdtO2OmQFZOm+8JPzPEv/V8KUDYGEo89+SefYvEFotIAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/7b1f1207fb43e10a-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/7b1f1207fb43e10a-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/7b1f1207fb43e10a-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-03-31T22:14:43.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-27T13:21:01.635Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "9509a343e3ed2798",
+          "filename": "IMG_4801.9509a343e3ed2798.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 4902309,
+          "oklch": {
+            "L": 0.642,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRloAAABXRUJQVlA4IE4AAADQAwCdASoYABAAPu1Ct1apoqakGAEwHYllAAEd8PTPJqZr99m2VAAA/mYIbn7UBhSx8KLEVzfyiVeh1iXeujptiZQ2xJ6LcL1iYqgAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/9509a343e3ed2798-640.avif",
+              "webp": "/img/9509a343e3ed2798-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/9509a343e3ed2798-1280.avif",
+              "webp": "/img/9509a343e3ed2798-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/9509a343e3ed2798-2000.avif",
+              "webp": "/img/9509a343e3ed2798-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:57.610Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "6bc75e8b9e1e1814",
+          "filename": "IMG_3093-2.6bc75e8b9e1e1814.jpg",
+          "ext": "jpg",
+          "width": 1438,
+          "height": 1880,
+          "bytes": 906760,
+          "oklch": {
+            "L": 0.66,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAACQBACdASoYACAAPuVepk2pJSOiN/VYASAciWcAwcxFX7/aEBohxgExJdcUCKAA/ucLlQFsPqoxx628CYPeq28k7YcHFW4n81mMOsz3ndnHTYqm/J1hFi4A",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/6bc75e8b9e1e1814-640.avif",
+              "webp": "/img/6bc75e8b9e1e1814-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/6bc75e8b9e1e1814-1280.avif",
+              "webp": "/img/6bc75e8b9e1e1814-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-03-22T16:33:01.000Z",
+            "camera": "NORITSU KOKI EZ Controller"
+          },
+          "addedAt": "2026-07-26T13:07:28.873Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "b017f0a25a7e90c7",
+          "filename": "IMG_4797.b017f0a25a7e90c7.jpeg",
+          "ext": "jpeg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 5087502,
+          "oklch": {
+            "L": 0.674,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRl4AAABXRUJQVlA4IFIAAADwAwCdASoYABAALrV2u12jqampiYC0SygF+cI//UvJrlGUzcjuZ2R4AP7XDlRgdoPvrTJcSDeRIK3shU+ejuJq2BFh/wZaJ9BWHhSy+q2yAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/b017f0a25a7e90c7-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/b017f0a25a7e90c7-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/b017f0a25a7e90c7-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-27T13:21:15.649Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "0d70aef098c91c24",
+          "filename": "IMG_3215.0d70aef098c91c24.jpg",
+          "ext": "jpg",
+          "width": 6774,
+          "height": 4492,
+          "bytes": 23700630,
+          "oklch": {
+            "L": 0.707,
+            "C": 0,
+            "H": 0
+          },
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRlAAAABXRUJQVlA4IEQAAABwAwCdASoYABAAPu1qrU8ppiQiMAgBMB2JZwAAW9IvdzssAcAA/mNMWGNGQrp/+Fh6fqnSQz25qJbPFd84fLjvsBAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/0d70aef098c91c24-640.avif",
+              "webp": "/img/0d70aef098c91c24-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/0d70aef098c91c24-1280.avif",
+              "webp": "/img/0d70aef098c91c24-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/0d70aef098c91c24-2000.avif",
+              "webp": "/img/0d70aef098c91c24-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:34.440Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        }
+      ]
+    },
+    {
+      "key": "red",
+      "name": "Red",
+      "oklch": {
+        "L": 0.473,
+        "C": 0.114,
+        "H": 31.3
+      },
+      "photos": [
+        {
+          "id": "e12418f8f98a750a",
+          "filename": "DSC05078.e12418f8f98a750a.jpg",
+          "ext": "jpg",
+          "width": 4502,
+          "height": 2814,
+          "bytes": 4242685,
+          "oklch": {
+            "L": 0.561,
+            "C": 0.209,
+            "H": 27.3
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAADwAwCdASoYAA8APu1iqk2ppaQiMAgBMB2JQBdgAoYih+FXVxX4FKSAAP57g4YMr9NYp2EL1ERrxrHTI+MVN5iNDnjAgOXtTVA0EKby4YBI693dplHS1lxu0MjRRwAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/e12418f8f98a750a-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/e12418f8f98a750a-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/e12418f8f98a750a-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2023-02-17T21:05:18.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/6.3",
+            "shutter": "1/500s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-28T07:18:05.378Z"
+        },
+        {
+          "id": "5a7d7a8e8ddf10eb",
+          "filename": "IMG_2860.5a7d7a8e8ddf10eb.jpeg",
+          "ext": "jpeg",
+          "width": 1414,
+          "height": 2004,
+          "bytes": 1296260,
+          "oklch": {
+            "L": 0.604,
+            "C": 0.123,
+            "H": 36.3
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRpwAAABXRUJQVlA4IJAAAADQBQCdASoYACIAPu1ork8ppiSiKqoBMB2JZQDKADp6OPM3uRA6phP6mjBKOulWbxgDDCEq6ugAAP72DFYCKH3GBd/jvKYbTw9BCWC1jPwS7FJUvsL34k+ruWjzwC566bkD6W77qwexbKQ1yLLCN0m20Prr7GwAIqEPXY3Whtr5uENDGDl7SHZM0dPAXAAAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/5a7d7a8e8ddf10eb-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/5a7d7a8e8ddf10eb-1280.avif"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 5.01.024  (091007)"
+          },
+          "addedAt": "2026-07-27T13:20:59.377Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "1f67632eb2ea95f3",
+          "filename": "IMG_4989.1f67632eb2ea95f3.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 8151611,
+          "oklch": {
+            "L": 0.513,
+            "C": 0.122,
+            "H": 24.6
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAADQAwCdASoYABAALrV2u12jqampiYC0SzAE6ZQAHJNP23sP1sM6IAAA+knRop1dgqXsBuhwXaII+6BqeVE5NqvLRhYo3UOWgcHaLOfHqD2uaOf0hLP0AAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/1f67632eb2ea95f3-640.avif",
+              "webp": "/img/1f67632eb2ea95f3-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/1f67632eb2ea95f3-1280.avif",
+              "webp": "/img/1f67632eb2ea95f3-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/1f67632eb2ea95f3-2000.avif",
+              "webp": "/img/1f67632eb2ea95f3-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-25T21:22:49.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-26T13:07:59.183Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "8056da29cfd38281",
+          "filename": "IMG_4959.8056da29cfd38281.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 7655454,
+          "oklch": {
+            "L": 0.479,
+            "C": 0.123,
+            "H": 34.5
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAwCdASoYABAAPu1kqk2ppaQiMAgBMB2JYwCsAB5eqiPXG5NJ0aEAAMsNXfkSdF3/mW0zaT6v/RZLjOnd7cv3QDzRtXQ+V6+2vdCVGafwTfk0rpIduYr43zc+vID8AAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/8056da29cfd38281-640.avif",
+              "webp": "/img/8056da29cfd38281-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/8056da29cfd38281-1280.avif",
+              "webp": "/img/8056da29cfd38281-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/8056da29cfd38281-2000.avif",
+              "webp": "/img/8056da29cfd38281-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-25T21:22:41.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-26T13:07:59.066Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "b711cd6fdcc470e2",
+          "filename": "IMG_2853.b711cd6fdcc470e2.jpeg",
+          "ext": "jpeg",
+          "width": 1674,
+          "height": 1414,
+          "bytes": 935525,
+          "oklch": {
+            "L": 0.476,
+            "C": 0.102,
+            "H": 38.4
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRpAAAABXRUJQVlA4IIQAAAAwBQCdASoYABQAPuVeo02pJSMiMAwBIByJYgC26SACuzWQgn0ehl3esckuls45Oe4egAD+lIrTp7nRItZkQ5WsCTAWKkJ0tV+XqK+1GsFwCxBINgk42hDx7IbQrHO5DcW+m5AohwjDvJvKIp+qWXxuh4nZH96K0gu4J4KMa6mFgFcAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/b711cd6fdcc470e2-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/b711cd6fdcc470e2-1280.avif"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 5.01.024  (091007)"
+          },
+          "addedAt": "2026-07-27T13:20:59.080Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "0eed7a86bf8d9db1",
+          "filename": "DSC05509.0eed7a86bf8d9db1.jpg",
+          "ext": "jpg",
+          "width": 1616,
+          "height": 1080,
+          "bytes": 619302,
+          "oklch": {
+            "L": 0.426,
+            "C": 0.097,
+            "H": 41.5
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAADwAwCdASoYABAAPu1orU2ppqSiMAgBMB2JQBOmUABpsSU3MADLYyIAAP7uhJh5knwCuX4qR8emWcc8NkbpSliAfSSq/hO1ZaMReRA4WuKK0onG6E2c+AAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/0eed7a86bf8d9db1-640.avif",
+              "webp": "/img/0eed7a86bf8d9db1-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/0eed7a86bf8d9db1-1280.avif",
+              "webp": "/img/0eed7a86bf8d9db1-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2023-03-17T01:11:45.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/2.8",
+            "shutter": "1/13s",
+            "iso": 160,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:08.890Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "3a17441c5bd4cfec",
+          "filename": "IMG_4961.3a17441c5bd4cfec.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 6922891,
+          "oklch": {
+            "L": 0.418,
+            "C": 0.111,
+            "H": 34.3
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADQAwCdASoYABAAPu1kq04ppaQiMAgBMB2JZACdAArDzJVxbiQVBIAA/szORvAtzoLB44yAugC1J2UUbAUmbOjDIgU5hwQUM3SPbnkeYrmwH7R7bjGYpiWEPmP2FFySAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/3a17441c5bd4cfec-640.avif",
+              "webp": "/img/3a17441c5bd4cfec-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/3a17441c5bd4cfec-1280.avif",
+              "webp": "/img/3a17441c5bd4cfec-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/3a17441c5bd4cfec-2000.avif",
+              "webp": "/img/3a17441c5bd4cfec-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-25T21:22:37.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-26T13:07:58.869Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "95c64f9a7668258b",
+          "filename": "IMG_4422.95c64f9a7668258b.jpeg",
+          "ext": "jpeg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 295839,
+          "oklch": {
+            "L": 0.429,
+            "C": 0.065,
+            "H": 17.2
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmAAAABXRUJQVlA4IFQAAADwAwCdASoYABAAPu1kqk2ppaQiMAgBMB2JQBOgA2utqaawc9BzDu0AAP4UVN81FUK5TrAqG4Umaxd0po+zHUA+yKuW9PYjXlW6omv8MUEWH5oAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/95c64f9a7668258b-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/95c64f9a7668258b-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:26:17.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-27T13:21:07.700Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "f8c25c7d2c67bb55",
+          "filename": "IMG_4415.f8c25c7d2c67bb55.jpg",
+          "ext": "jpg",
+          "width": 803,
+          "height": 1251,
+          "bytes": 327651,
+          "oklch": {
+            "L": 0.353,
+            "C": 0.083,
+            "H": 25.6
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRqwAAABXRUJQVlA4IKAAAAAwBgCdASoYACUAPuVao02pJKMiNVgMASAciUAWcALN0rYLf3VNFZDyGEtwCXmJpLLtiV5rQImIDudAAP7ThNLlpCsnN4wXr1dVHYsjrKPej30wdYObAd7nbHn/ELSTGT45XGr4zBeLWZTo1pfMPmaTsHbBkUy6LElJS5pnxHShrlSq2VqDs1AgxKwZdLrt7Y9byHLz7g+l/6hjjTHtoAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/f8c25c7d2c67bb55-640.avif",
+              "webp": "/img/f8c25c7d2c67bb55-640.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:26:38.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:38.385Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        }
+      ]
+    },
+    {
+      "key": "orange",
+      "name": "Camel",
+      "oklch": {
+        "L": 0.553,
+        "C": 0.065,
+        "H": 60.4
+      },
+      "photos": [
+        {
+          "id": "a56f65b2a5c21623",
+          "filename": "IMG_3218.a56f65b2a5c21623.jpeg",
+          "ext": "jpeg",
+          "width": 6774,
+          "height": 4492,
+          "bytes": 26965982,
+          "oklch": {
+            "L": 0.428,
+            "C": 0.055,
+            "H": 60.7
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAABQBACdASoYABAAPu1kq04ppaQiMAgBMB2JYwCdMoADTWVUX8Nl5EMbvmgAAP7ZTlOlX96OwFRwyOHUAy6/NIrkGAVdD/WW7e/VrsDK5c7qdIO2rKkUcmUcGwAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a56f65b2a5c21623-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a56f65b2a5c21623-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/a56f65b2a5c21623-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-27T13:21:01.692Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "02933f839dd4de37",
+          "filename": "IMG_4790.02933f839dd4de37.jpg",
+          "ext": "jpg",
+          "width": 2046,
+          "height": 3087,
+          "bytes": 2997626,
+          "oklch": {
+            "L": 0.463,
+            "C": 0.064,
+            "H": 61.4
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRqIAAABXRUJQVlA4IJYAAACwBQCdASoYACQAPu1krE4ppaSiJW5hMB2JYwCDQAb3D+33G1HDRpSPLD+WAroOlgp4fyPjMAAA/H/+Ad6uUqwHbrAYL2Kduq8feJqv6aEHvELbfG1woleNgXx1c95VDhcF2LVuE2e3119UY3fVepFn8Q7rZtn6T2t9/EeVNbAs/E0QDreCIirOPlkzh9RXICLRgxwAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/02933f839dd4de37-640.avif",
+              "webp": "/img/02933f839dd4de37-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/02933f839dd4de37-1280.avif",
+              "webp": "/img/02933f839dd4de37-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/02933f839dd4de37-2000.avif",
+              "webp": "/img/02933f839dd4de37-2000.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:50.367Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "e84aade9d6949b1b",
+          "filename": "IMG_3213.e84aade9d6949b1b.jpg",
+          "ext": "jpg",
+          "width": 4484,
+          "height": 6766,
+          "bytes": 13999200,
+          "oklch": {
+            "L": 0.496,
+            "C": 0.059,
+            "H": 52.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRoQAAABXRUJQVlA4IHgAAAAwBgCdASoYACQAPu1iqk2ppaQiMBqqqTAdiWUAwrO+Rbcr26Ce3cNVnVLzUF9bpqSl6DCHwu7oKUSAAP7edb0WMRmj4YqiZU19odZIYzeHLI3wdMQ4XvFIH/ieany0m9d5bYmPfjRMQE6jD6aLCqzt994xKc0AAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/e84aade9d6949b1b-640.avif",
+              "webp": "/img/e84aade9d6949b1b-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/e84aade9d6949b1b-1280.avif",
+              "webp": "/img/e84aade9d6949b1b-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/e84aade9d6949b1b-2000.avif",
+              "webp": "/img/e84aade9d6949b1b-2000.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:35.743Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "efa6424fdd6ccf8e",
+          "filename": "IMG_3214.efa6424fdd6ccf8e.jpg",
+          "ext": "jpg",
+          "width": 6774,
+          "height": 4492,
+          "bytes": 25360419,
+          "oklch": {
+            "L": 0.502,
+            "C": 0.066,
+            "H": 59.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAACwAwCdASoYABAAPu1iqU2ppaOiMAgBMB2JQBOmUAA4xZqfPj1mAAD+q/5aGeWUZ02J1NLyWSHhe7UnPbqGvd177RLuFc34PB8JpoY+4ugCe2wxNw5KoAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/efa6424fdd6ccf8e-640.avif",
+              "webp": "/img/efa6424fdd6ccf8e-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/efa6424fdd6ccf8e-1280.avif",
+              "webp": "/img/efa6424fdd6ccf8e-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/efa6424fdd6ccf8e-2000.avif",
+              "webp": "/img/efa6424fdd6ccf8e-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:35.023Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "697e9dd28d1caea2",
+          "filename": "IMG_4472.697e9dd28d1caea2.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 392599,
+          "oklch": {
+            "L": 0.525,
+            "C": 0.084,
+            "H": 60.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAAAQBACdASoYABAAPu1orU6ppiSiMAgBMB2JYgCdACHf49eH38bwdozrQAD+zLAe3RNhHInzz6lIJjQ5+Xhv4MXp7rHBKN3JbQ2mDT9Nl0Bcsf0Tq2D3YrXntQAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/697e9dd28d1caea2-640.avif",
+              "webp": "/img/697e9dd28d1caea2-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/697e9dd28d1caea2-1280.avif",
+              "webp": "/img/697e9dd28d1caea2-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:58.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:40.024Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "f9b35193ab4ee955",
+          "filename": "DSC05406.f9b35193ab4ee955.jpg",
+          "ext": "jpg",
+          "width": 4672,
+          "height": 7008,
+          "bytes": 14982703,
+          "oklch": {
+            "L": 0.561,
+            "C": 0.071,
+            "H": 66.2
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAACQBgCdASoYACQAPu1cqE2ppKOiNVgIATAdiUAXYAJG5l8V0GzS7Y4MuNjTIukWzCr3k6OlPdZClzH7YcYAAP7vWIzlN6jgYwbHmnEvb/FnV7cmRV8yPPacepUa01lsWE96us4vvdWyZqpeRweKnf9ssc20tjzmV67cYNXrnVRPzepDqGT42ixHLNb66WX1eDY9CNbRuzL0ITQBHgAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/f9b35193ab4ee955-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/f9b35193ab4ee955-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/f9b35193ab4ee955-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2023-03-07T21:59:40.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/10",
+            "shutter": "1/80s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-28T07:18:07.261Z"
+        },
+        {
+          "id": "de0a1553f0fabdf6",
+          "filename": "IMG_4475.de0a1553f0fabdf6.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 658372,
+          "oklch": {
+            "L": 0.567,
+            "C": 0.071,
+            "H": 72.4
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAwCdASoYABAAPu1iqU2ppaOiMAgBMB2JQBdmUABAq8jLtZJvSooAAP7o8Rldvt+3/SGlTCM5DQKY+cFtiUy/7iBJwxKkRyu7D6VxfDFphgHrr8IsBNBhl4PupBJjQAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/de0a1553f0fabdf6-640.avif",
+              "webp": "/img/de0a1553f0fabdf6-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/de0a1553f0fabdf6-1280.avif",
+              "webp": "/img/de0a1553f0fabdf6-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:16.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:40.248Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "a1c6ea8fe4d48668",
+          "filename": "IMG_4808.a1c6ea8fe4d48668.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 5373361,
+          "oklch": {
+            "L": 0.561,
+            "C": 0.057,
+            "H": 68.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRkgAAABXRUJQVlA4IDwAAAAwAgCdASoYABAAA4BaJZQAAubMVG3XpHD2AAD+7U3+tHDbA51r2aPwqmAKZ+040wgAxD92xnwDBtgAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a1c6ea8fe4d48668-640.avif",
+              "webp": "/img/a1c6ea8fe4d48668-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a1c6ea8fe4d48668-1280.avif",
+              "webp": "/img/a1c6ea8fe4d48668-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/a1c6ea8fe4d48668-2000.avif",
+              "webp": "/img/a1c6ea8fe4d48668-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:58.463Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "a7ea9949fdda071b",
+          "filename": "IMG_4810.a7ea9949fdda071b.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 5579937,
+          "oklch": {
+            "L": 0.555,
+            "C": 0.052,
+            "H": 50.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAADQAwCdASoYABAAPu1orU2ppqSiMAgBMB2JYwCsACHWK/8INRKA0gAA/nhuGBP/vimDbo3grUAI/0j8H19egSa0HkwYZ9JRikZGtizLH3Fw3GekEAAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a7ea9949fdda071b-640.avif",
+              "webp": "/img/a7ea9949fdda071b-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a7ea9949fdda071b-1280.avif",
+              "webp": "/img/a7ea9949fdda071b-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/a7ea9949fdda071b-2000.avif",
+              "webp": "/img/a7ea9949fdda071b-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:58.647Z",
+          "autoGenre": "portrait",
+          "genre": "landscape"
+        },
+        {
+          "id": "47414d39495e013d",
+          "filename": "IMG_3208.47414d39495e013d.jpg",
+          "ext": "jpg",
+          "width": 4487,
+          "height": 6770,
+          "bytes": 13615238,
+          "oklch": {
+            "L": 0.587,
+            "C": 0.051,
+            "H": 56.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRpQAAABXRUJQVlA4IIgAAACwBQCdASoYACQAPt1Upk2opKOiNVv8ARAbiWUAyQcOijN7DPEtRVQspyDAqpLmcs71pxTibAAA/ppHxotnPrnIF93P4VFqL3r6LDsYhok29jxGy9SFCBNI9aKk4AAxbddbwtDeo+zc2B9Wxqt3LFwysvv7SDLcreuEZVB5yOQdTCAYiRhggAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/47414d39495e013d-640.avif",
+              "webp": "/img/47414d39495e013d-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/47414d39495e013d-1280.avif",
+              "webp": "/img/47414d39495e013d-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/47414d39495e013d-2000.avif",
+              "webp": "/img/47414d39495e013d-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-03-31T22:15:02.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-26T13:07:35.607Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "0996bf2418d080ac",
+          "filename": "IMG_4492.0996bf2418d080ac.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 281915,
+          "oklch": {
+            "L": 0.59,
+            "C": 0.068,
+            "H": 56
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAACwAwCdASoYABAAPu1qrU8ppiQiMAgBMB2JQBYdjMIhKAKNkF2uAAD+/NE1qyWdMIPr53EMtanN7zUfakF4tFFL9bZDsfndVc6kNyN2WMtiPak/ONKpue4wAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/0996bf2418d080ac-640.avif",
+              "webp": "/img/0996bf2418d080ac-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/0996bf2418d080ac-1280.avif",
+              "webp": "/img/0996bf2418d080ac-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:55.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:45.924Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "5244001baec22fdb",
+          "filename": "IMG_3207.5244001baec22fdb.jpg",
+          "ext": "jpg",
+          "width": 6774,
+          "height": 4492,
+          "bytes": 34068049,
+          "oklch": {
+            "L": 0.629,
+            "C": 0.05,
+            "H": 54.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRlwAAABXRUJQVlA4IFAAAAAQBACdASoYABAAPu1krU2ppaSiMAgBMB2JQBdj+ABXMucTgRvB7rXnoAD9OXVQ2SqP0dMGazRKij8prZD7p/n0Y1rqrmsdKWH1kbEAmapgAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/5244001baec22fdb-640.avif",
+              "webp": "/img/5244001baec22fdb-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/5244001baec22fdb-1280.avif",
+              "webp": "/img/5244001baec22fdb-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/5244001baec22fdb-2000.avif",
+              "webp": "/img/5244001baec22fdb-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-03-31T22:15:12.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-26T13:07:37.702Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "59f612f9eac97d61",
+          "filename": "IMG_2683.59f612f9eac97d61.jpg",
+          "ext": "jpg",
+          "width": 1461,
+          "height": 2048,
+          "bytes": 875753,
+          "oklch": {
+            "L": 0.631,
+            "C": 0.078,
+            "H": 77.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRpwAAABXRUJQVlA4IJAAAADwBQCdASoYACIAPulcp02pJKOiOrM4ASAdCWMAzIrrwXCVIN1kzYmjnlx2oxOL3NmOFFDbsOSLgAD+9+MPT5rcsCB/tqAcBnjRIW+OK+k01PgLFuhORiniU+U8tImqQK9XrCpInOBzFrg+WVXvbJ3WhMcgwJu9GlhPwkiIKL61vOpN5mk/68Fvzk6MaTz2qAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/59f612f9eac97d61-640.avif",
+              "webp": "/img/59f612f9eac97d61-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/59f612f9eac97d61-1280.avif",
+              "webp": "/img/59f612f9eac97d61-1280.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-26T13:07:21.742Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "c5f3c71073829f66",
+          "filename": "IMG_4491.c5f3c71073829f66.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 457588,
+          "oklch": {
+            "L": 0.654,
+            "C": 0.101,
+            "H": 48.5
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAAAwBACdASoYABAAPu1kqU2ppaQiMAgBMB2JYwCdMoMh1Eli8+ny+sTAP2gA/ulecHhScYZ2pBf+rGP/xC9TOLopwxgKH8mLaVYqmac741lR3L30xb+Lm0jxJJ10v6AA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c5f3c71073829f66-640.avif",
+              "webp": "/img/c5f3c71073829f66-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c5f3c71073829f66-1280.avif",
+              "webp": "/img/c5f3c71073829f66-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:49.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:46.435Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        }
+      ]
+    },
+    {
+      "key": "yellow-deep",
+      "name": "Deep Yellow",
+      "oklch": {
+        "L": 0.37,
+        "C": 0.049,
+        "H": 98.6
+      },
+      "photos": [
+        {
+          "id": "26a4e6364d2dca3c",
+          "filename": "IMG_4796.26a4e6364d2dca3c.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 5263609,
+          "oklch": {
+            "L": 0.437,
+            "C": 0.065,
+            "H": 89.6
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRlwAAABXRUJQVlA4IFAAAADwAwCdASoYABAALrV2u12jqampiYC0SgC+SEPAvXugobfH1pqUlBCgAP7vyjx5LkVsXdpJ+8P+jaLO8L1PzUXvgGeo711JDTNMtFHdg1EAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/26a4e6364d2dca3c-640.avif",
+              "webp": "/img/26a4e6364d2dca3c-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/26a4e6364d2dca3c-1280.avif",
+              "webp": "/img/26a4e6364d2dca3c-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/26a4e6364d2dca3c-2000.avif",
+              "webp": "/img/26a4e6364d2dca3c-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:58.505Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "ffa4380cf6d846de",
+          "filename": "IMG_2685.ffa4380cf6d846de.jpeg",
+          "ext": "jpeg",
+          "width": 1560,
+          "height": 1459,
+          "bytes": 793978,
+          "oklch": {
+            "L": 0.429,
+            "C": 0.056,
+            "H": 92.5
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnoAAABXRUJQVlA4IG4AAADwBACdASoYABYAPu1oq0+ppiOiKA1RMB2JZQDE2BDMaHYxZ8gFAY22SIO1c6UkcsgA/tekx+QcbZkmWOXlUdIqVeWhCNXAzjUew6dkcnZT6eTiACwBmHBvyqVuHHAWI96kD1FvAr+6cTid9U5QAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/ffa4380cf6d846de-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/ffa4380cf6d846de-1280.avif"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-27T13:20:59.443Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "b7ff65497456fe1a",
+          "filename": "IMG_2686.b7ff65497456fe1a.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1489,
+          "bytes": 673251,
+          "oklch": {
+            "L": 0.42,
+            "C": 0.042,
+            "H": 85.6
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnIAAABXRUJQVlA4IGYAAABQBACdASoYABEAPu1iqk2ppaQiMBgMATAdiWcAACx9SP74eN60V3yIUhEAAP2p++x/dihFrB7i+VT7r5DuhqWR0cslo8lIF3rv1GdVruR3CdxHbGbnT2EH7IuHXPY4CQd7Z/aAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/b7ff65497456fe1a-640.avif",
+              "webp": "/img/b7ff65497456fe1a-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/b7ff65497456fe1a-1280.avif",
+              "webp": "/img/b7ff65497456fe1a-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/b7ff65497456fe1a-2000.avif",
+              "webp": "/img/b7ff65497456fe1a-2000.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-26T13:07:21.801Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "41cf17767465146d",
+          "filename": "IMG_2686-2.41cf17767465146d.jpeg",
+          "ext": "jpeg",
+          "width": 1472,
+          "height": 2048,
+          "bytes": 927021,
+          "oklch": {
+            "L": 0.382,
+            "C": 0.058,
+            "H": 100.2
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRpIAAABXRUJQVlA4IIYAAAAwBQCdASoYACEAPu1ip02ppaOiMBqqqTAdiWUAuwAI7/wDankD1mPjGzQIHENtjG5hgAD+2EfdIYoWTtnj5gL60EuI2ZN398iYt0j7khCrl0CwNFxCO4aHWCOTKjcJO0MjcSmVl9M0qGyJrQIOAnqtd/lEbU2ywPfwWSGWnXzDipT4dKAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/41cf17767465146d-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/41cf17767465146d-1280.avif"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-27T13:20:59.287Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "26f9c24b21acf2ff",
+          "filename": "IMG_2683-2.26f9c24b21acf2ff.jpg",
+          "ext": "jpg",
+          "width": 1398,
+          "height": 2048,
+          "bytes": 900367,
+          "oklch": {
+            "L": 0.34,
+            "C": 0.05,
+            "H": 98.7
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwBQCdASoYACMAPt1eqE2opaQpNVgMASAbiWUAzjgO6UAs85XnMWGTuqPnYAVSo2l/LpzgENwGAAD+wRn/SZA+etcnG1hKW4JGXHiL9X3Ez8ulsrrgNvzVVumOsUeL6LVt8kE/0kViiZy9mQFVjDSr0ueY70BtTZgNuAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/26f9c24b21acf2ff-640.avif",
+              "webp": "/img/26f9c24b21acf2ff-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/26f9c24b21acf2ff-1280.avif",
+              "webp": "/img/26f9c24b21acf2ff-1280.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-26T13:07:20.290Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "a3e67180f60445d4",
+          "filename": "IMG_2690.a3e67180f60445d4.jpg",
+          "ext": "jpg",
+          "width": 1323,
+          "height": 2048,
+          "bytes": 578184,
+          "oklch": {
+            "L": 0.33,
+            "C": 0.042,
+            "H": 109.3
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnIAAABXRUJQVlA4IGYAAACwBACdASoYACUAPtlcpE2oJaOiOrZoAQAbCWcAAP72oW9w/Rr6xQv5+7pzMjkAAP7ynKD/Vtd/YGkpcaH/YG9S7StlBrYfKE2/uInAElmUTZxseQUHBvKZ9egIHiI/0FZedQpAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a3e67180f60445d4-640.avif",
+              "webp": "/img/a3e67180f60445d4-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a3e67180f60445d4-1280.avif",
+              "webp": "/img/a3e67180f60445d4-1280.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-26T13:07:19.941Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "c88ff0854fb48711",
+          "filename": "IMG_4805.c88ff0854fb48711.jpeg",
+          "ext": "jpeg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 5485787,
+          "oklch": {
+            "L": 0.317,
+            "C": 0.038,
+            "H": 107.5
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAAAQBACdASoYABAAPu1iqU2ppaOiMAgBMB2JYwDCgBufFD8PUnLpF0IkgAD+6Om67f4+Tz7C0gkLUuX/Ki2F5liQPg7bueJwtWF+Htm1KrRNG9H3ijyaBNXE1KIB5dAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c88ff0854fb48711-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c88ff0854fb48711-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/c88ff0854fb48711-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-16T22:17:50.000Z",
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "Adobe Photoshop CS3 Windows"
+          },
+          "addedAt": "2026-07-27T13:21:15.584Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "26b553744394494e",
+          "filename": "IMG_2687-2.26b553744394494e.jpg",
+          "ext": "jpg",
+          "width": 1463,
+          "height": 2008,
+          "bytes": 878230,
+          "oklch": {
+            "L": 0.307,
+            "C": 0.048,
+            "H": 110.6
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAADQBACdASoYACEAPuFmpU2opqOiNVgIARAcCWcAzcAVppToJRbFpH4GL8MMA2g+wAD+6rp1KDiozm9MPOSHJ5bJquM/BRvLEQ4Iv3HBOOKhOdEOsyvNMngdBKmhkBlaIwXdg8Ch/jZiFTWK7YxH4gAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/26b553744394494e-640.avif",
+              "webp": "/img/26b553744394494e-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/26b553744394494e-1280.avif",
+              "webp": "/img/26b553744394494e-1280.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-26T13:07:20.245Z",
+          "autoGenre": "street",
+          "genre": "street"
+        }
+      ]
+    },
+    {
+      "key": "yellow",
+      "name": "Yellow",
+      "oklch": {
+        "L": 0.575,
+        "C": 0.069,
+        "H": 98.6
+      },
+      "photos": [
+        {
+          "id": "c3c9da2aecb2dbb0",
+          "filename": "IMG_1012.c3c9da2aecb2dbb0.jpg",
+          "ext": "jpg",
+          "width": 6668,
+          "height": 4445,
+          "bytes": 20239434,
+          "oklch": {
+            "L": 0.477,
+            "C": 0.086,
+            "H": 121.8
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRlwAAABXRUJQVlA4IFAAAADwAwCdASoYABAAPu1iqk4ppaQiMAgBMB2JQBOgA9jV55K7doAq0kwAAPwWcZ0flPY5R15tWFF88xy//fKjqiJKjk2d6T54aSKzhAfmUWOAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c3c9da2aecb2dbb0-640.avif",
+              "webp": "/img/c3c9da2aecb2dbb0-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c3c9da2aecb2dbb0-1280.avif",
+              "webp": "/img/c3c9da2aecb2dbb0-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/c3c9da2aecb2dbb0-2000.avif",
+              "webp": "/img/c3c9da2aecb2dbb0-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-07-25T02:51:33.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/8",
+            "shutter": "1/160s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:17.586Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "21ad52f9a82607c3",
+          "filename": "IMG_4788.21ad52f9a82607c3.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 6044288,
+          "oklch": {
+            "L": 0.487,
+            "C": 0.07,
+            "H": 116.8
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRl4AAABXRUJQVlA4IFIAAACwAwCdASoYABAAPu1mqk4ppaOiMAgBMB2JQBadAwv9BnP8bdmSAAD+5aBXLZkqdvsnaOLsIXc9pH5DXuzfMIgoU9qoGb8IHcrXZTIo5lr4AAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/21ad52f9a82607c3-640.avif",
+              "webp": "/img/21ad52f9a82607c3-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/21ad52f9a82607c3-1280.avif",
+              "webp": "/img/21ad52f9a82607c3-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/21ad52f9a82607c3-2000.avif",
+              "webp": "/img/21ad52f9a82607c3-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.10.011  (130930)"
+          },
+          "addedAt": "2026-07-26T13:07:50.039Z",
+          "autoGenre": "portrait",
+          "genre": "landscape"
+        },
+        {
+          "id": "e6a66cbcfcdb05df",
+          "filename": "DSC06100.e6a66cbcfcdb05df.jpg",
+          "ext": "jpg",
+          "width": 7008,
+          "height": 4672,
+          "bytes": 18297743,
+          "oklch": {
+            "L": 0.509,
+            "C": 0.069,
+            "H": 85
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAAAwBACdASoYABAAPu1iqU2ppaOiMAgBMB2JYgCdMoADTYr/7RZu8VUTtgAA/tkRqfjsuMo1aNMizhDYHDqZeC4kyXhJGXfBrKORa8Oy5zJR1EX7IYnLYEplcyQg4AAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/e6a66cbcfcdb05df-640.avif",
+              "webp": "/img/e6a66cbcfcdb05df-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/e6a66cbcfcdb05df-1280.avif",
+              "webp": "/img/e6a66cbcfcdb05df-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/e6a66cbcfcdb05df-2000.avif",
+              "webp": "/img/e6a66cbcfcdb05df-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-07-12T07:36:29.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/7.1",
+            "shutter": "1/40s",
+            "iso": 125,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:17.317Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "565484189ea49d0a",
+          "filename": "IMG_4477.565484189ea49d0a.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 648276,
+          "oklch": {
+            "L": 0.514,
+            "C": 0.069,
+            "H": 89.6
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRlwAAABXRUJQVlA4IFAAAADwAwCdASoYABAAPu1iqU2ppaQiMAgBMB2JQAALjXRFXgZADQsX0fFAAP7ct82nn+2eAhYXiAMn3rAVdkM7zXSfPa+g6l2zKxbfC6Hbp/sEAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/565484189ea49d0a-640.avif",
+              "webp": "/img/565484189ea49d0a-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/565484189ea49d0a-1280.avif",
+              "webp": "/img/565484189ea49d0a-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:13.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:47.036Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "e3218c87b4f18f3a",
+          "filename": "IMG_2687.e3218c87b4f18f3a.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1447,
+          "bytes": 980804,
+          "oklch": {
+            "L": 0.519,
+            "C": 0.079,
+            "H": 85.4
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRn4AAABXRUJQVlA4IHIAAACwBACdASoYABEAPu1qrlCppiQiqAqpMB2JYwDDNApSa2RhuA5RvBZQtEVmUdQAAPN6gQV4VnL4WcpEteWJuZYNqxtRfx+SKQTdX6fRNz5Kud1r0T5LBk5gAO++NrozfkNdY0+hwTAGmZP3Vs0HFW8gAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/e3218c87b4f18f3a-640.avif",
+              "webp": "/img/e3218c87b4f18f3a-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/e3218c87b4f18f3a-1280.avif",
+              "webp": "/img/e3218c87b4f18f3a-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/e3218c87b4f18f3a-2000.avif",
+              "webp": "/img/e3218c87b4f18f3a-2000.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-26T13:07:21.823Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "54aea1ceb542af21",
+          "filename": "IMG_2688.54aea1ceb542af21.jpeg",
+          "ext": "jpeg",
+          "width": 1908,
+          "height": 1426,
+          "bytes": 723147,
+          "oklch": {
+            "L": 0.542,
+            "C": 0.072,
+            "H": 92.7
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRlYAAABXRUJQVlA4IEoAAABQBACdASoYABIAPu1sqU6ppqOiMBgIATAdiWcAsOwN0FfVJ93wkXpKyvwAAP7Y7myXH/Rl3z7a0iDPyPRKZKz08bfhrmgpw7AAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/54aea1ceb542af21-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/54aea1ceb542af21-1280.avif"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 6.70.007  (170607)"
+          },
+          "addedAt": "2026-07-27T13:20:58.772Z",
+          "autoGenre": "street",
+          "genre": "street"
+        },
+        {
+          "id": "412e1723ef0de162",
+          "filename": "IMG_0483.JPG",
+          "ext": "jpg",
+          "width": 6000,
+          "height": 4000,
+          "bytes": 8772676,
+          "oklch": {
+            "L": 0.632,
+            "C": 0.039,
+            "H": 106.1
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmAAAABXRUJQVlA4IFQAAADwAwCdASoYABAAPu1krU6ppaSiMAgBMB2JQBYdg8/TnmeZgVNpPQVAAP32n5HTWePDhqp+R3ZXfRyjIXDk2xC3PUhKHqt2cVkAPoxgrfM9+fvNgAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/412e1723ef0de162-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/412e1723ef0de162-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/412e1723ef0de162-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-12-29T10:15:28.000Z",
+            "camera": "SONY ILCE-6400",
+            "lens": "Sony E PZ 16-50mm F3.5-5.6 OSS",
+            "focalLength": "16mm",
+            "aperture": "f/22",
+            "shutter": "1/100s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-28T05:45:46.798Z"
+        },
+        {
+          "id": "c7d89fde4b1709ee",
+          "filename": "DSC06036.c7d89fde4b1709ee.jpg",
+          "ext": "jpg",
+          "width": 7008,
+          "height": 3504,
+          "bytes": 9626485,
+          "oklch": {
+            "L": 0.657,
+            "C": 0.042,
+            "H": 85
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRlgAAABXRUJQVlA4IEwAAACwAwCdASoYAAwAPu1kq04ppaQiMAgBMB2JYwCsABKKzsyqd4gdQAD42NIY2qJoZPJrkBMmUnZLoU+47X9jOuef2hu1Ypw/IiauAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c7d89fde4b1709ee-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c7d89fde4b1709ee-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/c7d89fde4b1709ee-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-27T16:17:25.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/250s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-27T08:58:40.183Z",
+          "autoGenre": "portrait",
+          "genre": "portrait"
+        },
+        {
+          "id": "6217b0d6e89dbf50",
+          "filename": "DSC05655.6217b0d6e89dbf50.jpg",
+          "ext": "jpg",
+          "width": 4672,
+          "height": 7008,
+          "bytes": 12798034,
+          "oklch": {
+            "L": 0.695,
+            "C": 0.087,
+            "H": 81.4
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRqYAAABXRUJQVlA4IJoAAADQBQCdASoYACQAPu1krU8ppSQiKrgMATAdiUAVngFlBUeFjwrjfKzTPLU045sdjD+AITC805DgAP6um//24YxvQVVequcE4RPBi2rynlGQZp5Pz+99FjoCpEEc2wrRqnaIbGeZ3HCpSFq48ujX+gWrM74xkDaspZgl0fzazeXfi2FZJuZHG/YqJJ7EowGN1m6Piz/Hf19aAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/6217b0d6e89dbf50-640.avif",
+              "webp": "/img/6217b0d6e89dbf50-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/6217b0d6e89dbf50-1280.avif",
+              "webp": "/img/6217b0d6e89dbf50-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/6217b0d6e89dbf50-2000.avif",
+              "webp": "/img/6217b0d6e89dbf50-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-04-27T09:32:05.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "Viltrox 28mm F4.5 FE",
+            "focalLength": "28mm",
+            "aperture": "f/4.5",
+            "shutter": "1/800s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.2.1 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:16.866Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "8374e2ecc2e0712f",
+          "filename": "_DSC0494.8374e2ecc2e0712f.jpg",
+          "ext": "jpg",
+          "width": 6000,
+          "height": 4000,
+          "bytes": 13592408,
+          "oklch": {
+            "L": 0.717,
+            "C": 0.105,
+            "H": 113.7
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAACwAwCdASoYABAAPu1iqk2ppaQiMAgBMB2JaAAASTW4Gf4U22KfQAD9+YtXkE9hc4dQROI11seZsVBXUv6RLiH8d+wiW46EHoTFD4PHZTNUNMnnhlCsIBBTQM8GceqSITTyMK87pJgAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/8374e2ecc2e0712f-640.avif",
+              "webp": "/img/8374e2ecc2e0712f-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/8374e2ecc2e0712f-1280.avif",
+              "webp": "/img/8374e2ecc2e0712f-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/8374e2ecc2e0712f-2000.avif",
+              "webp": "/img/8374e2ecc2e0712f-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-12-31T13:22:15.000Z",
+            "camera": "SONY ILCE-6400",
+            "lens": "E PZ 16-50mm F3.5-5.6 OSS",
+            "focalLength": "16mm",
+            "aperture": "f/22",
+            "shutter": "1/30s",
+            "iso": 1600,
+            "software": "Adobe Lightroom 11.1.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:14.620Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        }
+      ]
+    },
+    {
+      "key": "green",
+      "name": "Green",
+      "oklch": {
+        "L": 0.434,
+        "C": 0.063,
+        "H": 134.1
+      },
+      "photos": [
+        {
+          "id": "198be59eba923291",
+          "filename": "IMG_0485.198be59eba923291.jpg",
+          "ext": "jpg",
+          "width": 6000,
+          "height": 4000,
+          "bytes": 14082577,
+          "oklch": {
+            "L": 0.561,
+            "C": 0.059,
+            "H": 134.2
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAAAQBACdASoYABAAPu1iqk2ppaQiMAgBMB2JYwC7ABi4Yn0VnFJf3IkKAAD+WaOEcuj0L5JKYF092Q7Ka8HnFR0FYnmyNKQWhbWNGvZOKlyIoOrc1EUo/32pAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/198be59eba923291-640.avif",
+              "webp": "/img/198be59eba923291-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/198be59eba923291-1280.avif",
+              "webp": "/img/198be59eba923291-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/198be59eba923291-2000.avif",
+              "webp": "/img/198be59eba923291-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-12-29T10:18:10.000Z",
+            "camera": "SONY ILCE-6400",
+            "lens": "Sony E PZ 16-50mm F3.5-5.6 OSS",
+            "focalLength": "50mm",
+            "aperture": "f/22",
+            "shutter": "1/125s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:24.293Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "2c3237d4b15d4a2d",
+          "filename": "DSC06046.2c3237d4b15d4a2d.jpg",
+          "ext": "jpg",
+          "width": 7008,
+          "height": 4672,
+          "bytes": 10910907,
+          "oklch": {
+            "L": 0.493,
+            "C": 0.072,
+            "H": 125.1
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADwAwCdASoYABAAPu1kqU2ppaQiMAgBMB2JYwC06BIrAgkx8nZyNwoAAPyL6x8p+EDexJnegzb5t08goLpE5SjArb68eH64JFBhjjxMhrk4TUreURKo0Z8AAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/2c3237d4b15d4a2d-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/2c3237d4b15d4a2d-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/2c3237d4b15d4a2d-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-27T19:40:36.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-27T08:58:40.347Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "d74fdd441009efb3",
+          "filename": "DSC06194.d74fdd441009efb3.jpg",
+          "ext": "jpg",
+          "width": 6334,
+          "height": 3563,
+          "bytes": 11607067,
+          "oklch": {
+            "L": 0.407,
+            "C": 0.076,
+            "H": 132.1
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAACwAwCdASoYAA4APu1iqU2ppaOiMAgBMB2JQBOgAx62Dk5nN3Gc6AD7x9Zzh2qtpcEDJWUayj3jUxF24TPkyuFgk2H9t6K5MwjFMMLWsEUl26DRposyOLihhnISGiO2OgTAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/d74fdd441009efb3-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/d74fdd441009efb3-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/d74fdd441009efb3-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-07-22T11:25:16.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/22",
+            "shutter": "1/50s",
+            "iso": 2000,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-28T07:18:05.693Z"
+        },
+        {
+          "id": "2ab913bca95ec4be",
+          "filename": "DSC06225.2ab913bca95ec4be.jpg",
+          "ext": "jpg",
+          "width": 6350,
+          "height": 3572,
+          "bytes": 11658397,
+          "oklch": {
+            "L": 0.351,
+            "C": 0.069,
+            "H": 136.3
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRlYAAABXRUJQVlA4IEoAAABwAwCdASoYAA0APu1krU6ppaSiMAgBMB2JZQAAW70GEhDjvpAA/tpUWLULec113RAImTqYy6bKbyI10CMND7lcSJXnHdd0E2AAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/2ab913bca95ec4be-640.avif",
+              "webp": "/img/2ab913bca95ec4be-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/2ab913bca95ec4be-1280.avif",
+              "webp": "/img/2ab913bca95ec4be-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/2ab913bca95ec4be-2000.avif",
+              "webp": "/img/2ab913bca95ec4be-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-07-25T02:33:53.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/8",
+            "shutter": "1/50s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:14.180Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "7deb32bbeff9dc62",
+          "filename": "IMG_2848.7deb32bbeff9dc62.jpg",
+          "ext": "jpg",
+          "width": 1414,
+          "height": 2004,
+          "bytes": 1254793,
+          "oklch": {
+            "L": 0.358,
+            "C": 0.04,
+            "H": 149.9
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAADQAwCdASoYACIAPuViqE2pJaQiMAqpIByJZQC+wBoXQD/cLKkC0UAA/psTpKHiVI7OE/yfwO+qkzIBNV9AXL+J/3ZbrHJueA42bn+os6rZDjt4CxMFWTjNT2jYc5lrvwAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/7deb32bbeff9dc62-640.avif",
+              "webp": "/img/7deb32bbeff9dc62-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/7deb32bbeff9dc62-1280.avif",
+              "webp": "/img/7deb32bbeff9dc62-1280.webp"
+            }
+          ],
+          "exif": {
+            "camera": "NORITSU KOKI EZ Controller",
+            "software": "EZ Controller 5.01.024  (091007)"
+          },
+          "addedAt": "2026-07-26T13:07:29.175Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        }
+      ]
+    },
+    {
+      "key": "teal",
+      "name": "Teal",
+      "oklch": {
+        "L": 0.646,
+        "C": 0.068,
+        "H": 213.8
+      },
+      "photos": [
+        {
+          "id": "8d0188018e62ab25",
+          "filename": "IMG_4486.8d0188018e62ab25.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 324275,
+          "oklch": {
+            "L": 0.479,
+            "C": 0.059,
+            "H": 219.1
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmAAAABXRUJQVlA4IFQAAADwAwCdASoYABAAPu1Ct1apoqakGAEwHYlAGFAEUrncn3pGYqvyNftwAPaduxuQjbdB3RFlV6v4y2wEKozsfbpVC7wFetBBU/jvKLraYOm0F/CqAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/8d0188018e62ab25-640.avif",
+              "webp": "/img/8d0188018e62ab25-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/8d0188018e62ab25-1280.avif",
+              "webp": "/img/8d0188018e62ab25-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:01.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:45.934Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "a8569641675d64f9",
+          "filename": "IMG_4467.a8569641675d64f9.jpeg",
+          "ext": "jpeg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 422440,
+          "oklch": {
+            "L": 0.531,
+            "C": 0.084,
+            "H": 209.8
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAABwBACdASoYABAAPu1orU2ppqSiMAgBMB2JbACdHYAArhYA1EXBFbPm2lEIAAD+cWh+HWtV8EMNOIvZStc5D8DiDox0R6B2XW9BmjwiKPhk+GNIkdCtznnQ92/B6/1LmKf31v3rk3P8AA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a8569641675d64f9-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a8569641675d64f9-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:18:19.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-27T13:21:08.027Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "c0f06a2c21adfec4",
+          "filename": "IMG_1006.c0f06a2c21adfec4.jpg",
+          "ext": "jpg",
+          "width": 4672,
+          "height": 7008,
+          "bytes": 23595136,
+          "oklch": {
+            "L": 0.547,
+            "C": 0.088,
+            "H": 223.6
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAAAQBgCdASoYACQAPulepE2pJSMiMAqpIB0JZAC+CY29UAwe7bIhXpvhk7K7ztZv9wZMYMWorcyavCAA/m31sQ8vvSxXNtGuo82XQPqQ0NlE8Lq+Udaw46MfU7DBIh8wBZQLWzBNtRsC0lfOeUYzVxJE2gVAuCgAGpZeScciZeZ3RVVUm8ssK0Djtxm4dVEi9JLBshGfCkxCr3LYrgAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c0f06a2c21adfec4-640.avif",
+              "webp": "/img/c0f06a2c21adfec4-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c0f06a2c21adfec4-1280.avif",
+              "webp": "/img/c0f06a2c21adfec4-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/c0f06a2c21adfec4-2000.avif",
+              "webp": "/img/c0f06a2c21adfec4-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-07-22T11:21:38.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "45mm",
+            "aperture": "f/7.1",
+            "shutter": "1/250s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:26.055Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "257ccae6d0ddc80f",
+          "filename": "IMG_4414.257ccae6d0ddc80f.jpg",
+          "ext": "jpg",
+          "width": 867,
+          "height": 1300,
+          "bytes": 428719,
+          "oklch": {
+            "L": 0.605,
+            "C": 0.098,
+            "H": 224.9
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRqwAAABXRUJQVlA4IKAAAADQBQCdASoYACQAPt1apk2opSOiMA1REBuJZADBD5gIgAN3NyukjeiBFojOZb7X4Gi3muxa/qCAAP3R79WOw/llgdb3Bhd1p21LHEk6OYMmLJX7m7OJjtIUZvF/WpwYSeZ85FhRzWiMd4bK9/DPK0PDB2yPDr4hTvX8sQGacrqlAShI8E991Kpuwj76/9Ir1Lyx9X9gA8SudGtfDgXDiU4A",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/257ccae6d0ddc80f-640.avif",
+              "webp": "/img/257ccae6d0ddc80f-640.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:26:26.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:38.424Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "b90cc1f30ac4fd87",
+          "filename": "IMG_4481.b90cc1f30ac4fd87.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 521792,
+          "oklch": {
+            "L": 0.639,
+            "C": 0.068,
+            "H": 207.9
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmAAAABXRUJQVlA4IFQAAABwAgCdASoYABAAA4BaJYgCsADWfjfONIjwgSLwAMlgPqD0bx58sBaA6m4064FACbXaWe0rleuMrhRbVsuVbNDaSA+6XNGyZqnEpJPiciB6TCceAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/b90cc1f30ac4fd87-640.avif",
+              "webp": "/img/b90cc1f30ac4fd87-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/b90cc1f30ac4fd87-1280.avif",
+              "webp": "/img/b90cc1f30ac4fd87-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:07.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:46.596Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "7fd6b6e228634959",
+          "filename": "DSC06056.7fd6b6e228634959.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1024,
+          "bytes": 1253147,
+          "oklch": {
+            "L": 0.679,
+            "C": 0.079,
+            "H": 213.9
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRmAAAABXRUJQVlA4IFQAAAAwBACdASoYAAwAPu1kqU4ppaOiMAgBMB2JZACdMoADUA/phzJAX7wd3xAA/rOUXW5xtB9QW6wL1J0yplzAnSqnxkAZkahSNIcfhqsJhlz3KE0WAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/7fd6b6e228634959-640.avif",
+              "webp": "/img/7fd6b6e228634959-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/7fd6b6e228634959-1280.avif",
+              "webp": "/img/7fd6b6e228634959-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/7fd6b6e228634959-2000.avif",
+              "webp": "/img/7fd6b6e228634959-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-28T18:14:50.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/50s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:13.928Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "70367a2319ad7d3b",
+          "filename": "_DSC0485.70367a2319ad7d3b.jpg",
+          "ext": "jpg",
+          "width": 1365,
+          "height": 2048,
+          "bytes": 548981,
+          "oklch": {
+            "L": 0.699,
+            "C": 0.052,
+            "H": 206.2
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRnoAAABXRUJQVlA4IG4AAAAwBQCdASoYACQAPu1qrU8ppiQiMBqoATAdiWUAyjOTikaWddZymfgG/se9jaS8P8wCAAD+/Xk1U9ShgWqGzNAss5XSWqaPgHMqefrcw5riEVWNXyyk6t6MnipdNrl7nqKyYSEh2hoaiSLR1UAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/70367a2319ad7d3b-640.avif",
+              "webp": "/img/70367a2319ad7d3b-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/70367a2319ad7d3b-1280.avif",
+              "webp": "/img/70367a2319ad7d3b-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-12-30T21:15:23.000Z",
+            "camera": "SONY ILCE-6400",
+            "lens": "E PZ 16-50mm F3.5-5.6 OSS",
+            "focalLength": "50mm",
+            "aperture": "f/36",
+            "shutter": "1/8s",
+            "iso": 1600,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-26T13:07:11.145Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "344d2ee73c19ef55",
+          "filename": "DSC06034.344d2ee73c19ef55.jpg",
+          "ext": "jpg",
+          "width": 4672,
+          "height": 7008,
+          "bytes": 12354910,
+          "oklch": {
+            "L": 0.705,
+            "C": 0.047,
+            "H": 198.9
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRpIAAABXRUJQVlA4IIYAAAAwBQCdASoYACQAPt1aok2opSMiNUgBEBuJQBXJ7RiLR4BipidXhrLnQoe6QPopTROdAAD+UgUTicH2bCwYMqr749X0bmTgbK8jwX1TF7bwuRrFWLpkSZ7dyGMflxDtjEk7itluwHaLiZnqe6cgDT92+mSz5LRWOxPijSlnTsR71PWZSeAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/344d2ee73c19ef55-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/344d2ee73c19ef55-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/344d2ee73c19ef55-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-27T15:58:00.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/800s",
+            "iso": 100,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-27T08:58:40.292Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "4ecdd23b1bd23556",
+          "filename": "DSC06048.4ecdd23b1bd23556.jpg",
+          "ext": "jpg",
+          "width": 6821,
+          "height": 4547,
+          "bytes": 10053658,
+          "oklch": {
+            "L": 0.717,
+            "C": 0.073,
+            "H": 207.7
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADwAwCdASoYABAAPu1iqk2ppaQiMAgBMB2JQBOkCYhXN/qnBT/ypEAAAP62AzsRJQD+ZlebpatfYx4inoXf5f7VzkUKIrcwfix8TAGH6XbiYgEidJMN9CpNNAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/4ecdd23b1bd23556-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/4ecdd23b1bd23556-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/4ecdd23b1bd23556-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-28T12:51:01.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/800s",
+            "iso": 125,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-27T08:58:40.239Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "703d044c2b9f5626",
+          "filename": "IMG_4473.703d044c2b9f5626.jpg",
+          "ext": "jpg",
+          "width": 867,
+          "height": 1300,
+          "bytes": 402551,
+          "oklch": {
+            "L": 0.861,
+            "C": 0.04,
+            "H": 214.7
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAABwBgCdASoYACQAPu1iqE4ppSOiMAgBMB2JYwC7M7ADTqTWYQGNzjnlQ94hQX7M9FP5ufetUgllPHIrOQAA/t55jN27pA6jHvSfo6s/G5BwuF9qkrnmOs8AEFDBP2jAvqw9gxFg3lHc2V8Vx6u7xa+5R6kXeyKAN2oY/Ci4tnthyIs5V8XbkVVWdOR+vYGIfOhxRAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/703d044c2b9f5626-640.avif",
+              "webp": "/img/703d044c2b9f5626-640.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:16:49.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:38.369Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        }
+      ]
+    },
+    {
+      "key": "blue",
+      "name": "Blue",
+      "oklch": {
+        "L": 0.552,
+        "C": 0.085,
+        "H": 238.8
+      },
+      "photos": [
+        {
+          "id": "57f086e366198377",
+          "filename": "IMG_3372.57f086e366198377.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 7948849,
+          "oklch": {
+            "L": 0.672,
+            "C": 0.054,
+            "H": 243.4
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmAAAABXRUJQVlA4IFQAAADQAwCdASoYABAAPu1iqk2ppaQiMAgBMB2JYwCdAAsNfPdVP7O8S0AArbX7zzPmGKH47vmlXEkLH+MkXcrfmMjfo7cKtQOX5M75iZbwSwjRqwQMAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/57f086e366198377-640.avif",
+              "webp": "/img/57f086e366198377-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/57f086e366198377-1280.avif",
+              "webp": "/img/57f086e366198377-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/57f086e366198377-2000.avif",
+              "webp": "/img/57f086e366198377-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI QSS-32_33",
+            "software": "QSS-32_33 6.00.020 2006.12.27 "
+          },
+          "addedAt": "2026-07-26T13:07:44.098Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "ffd598c8b38675b5",
+          "filename": "IMG_3095.ffd598c8b38675b5.jpeg",
+          "ext": "jpeg",
+          "width": 1363,
+          "height": 1979,
+          "bytes": 1121289,
+          "oklch": {
+            "L": 0.55,
+            "C": 0.036,
+            "H": 233.3
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmoAAABXRUJQVlA4IF4AAAAwBACdASoYACMAPuFipU2opiOiNVv4ARAcCWUAuDArwoImARADPUE8grAA/tnSuTpAa6JcHj8lwI8aq9w5MEKU8t+7ONnkNktNkUrwMqOTlTZJtrZeUHhdUdEY0AAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/ffd598c8b38675b5-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/ffd598c8b38675b5-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-03-22T16:33:03.000Z",
+            "camera": "NORITSU KOKI EZ Controller"
+          },
+          "addedAt": "2026-07-27T13:21:08.162Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "7ab33d66afc379a7",
+          "filename": "IMG_4478.7ab33d66afc379a7.jpg",
+          "ext": "jpg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 376902,
+          "oklch": {
+            "L": 0.522,
+            "C": 0.09,
+            "H": 227.9
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAwCdASoYABAAPu1kqU4ppaOiMAgBMB2JaACdLwAA+PQC+oLece6QAP65u8CTCw1Os/okQiBetGuc3PWMwcyHAH0HuTIlmyhjD/z8K8pEMjan3iyNd+45zDArBpVAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/7ab33d66afc379a7-640.avif",
+              "webp": "/img/7ab33d66afc379a7-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/7ab33d66afc379a7-1280.avif",
+              "webp": "/img/7ab33d66afc379a7-1280.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:37.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-26T13:07:45.945Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "56cc4159dc4c2cf4",
+          "filename": "IMG_4469.56cc4159dc4c2cf4.jpeg",
+          "ext": "jpeg",
+          "width": 1300,
+          "height": 867,
+          "bytes": 411104,
+          "oklch": {
+            "L": 0.485,
+            "C": 0.099,
+            "H": 231.6
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "placeholder": "data:image/webp;base64,UklGRnoAAABXRUJQVlA4IG4AAAAwBACdASoYABAAPu1iqU2ppaOiMAgBMB2JbACdMoR4GCm53j8j8JPALcAA/I97WbEYCpKSzLKhtA4SthWllDjHmddH1Sn362jybTZVNBdcoqP+PSzRFpFT2O9/2QQmUOXz+yRLUhjDIk8atXM4AA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/56cc4159dc4c2cf4-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/56cc4159dc4c2cf4-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2025-07-03T15:17:43.000Z",
+            "camera": "SONY ILCE-7M3",
+            "lens": "FE 90mm F2.8 Macro G OSS",
+            "focalLength": "90mm",
+            "aperture": "f/5.6",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Photoshop Lightroom Classic 13.1 (Windows)"
+          },
+          "addedAt": "2026-07-27T13:21:07.877Z",
+          "autoGenre": "landscape",
+          "genre": "landscape"
+        },
+        {
+          "id": "54ad7a9a4ae5a375",
+          "filename": "IMG_3370.54ad7a9a4ae5a375.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 7963492,
+          "oklch": {
+            "L": 0.536,
+            "C": 0.105,
+            "H": 243
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAADwAwCdASoYABAAPu1kqk2ppaQiMAgBMB2JbACdIExB6LotWQ1rGArAAP6iNtVHRhtYjdj77IfCxJkZ8KrF4nGqZQX10233OLqR526YsUqcgrDI96gFfJb2ASFPQfucZXzB3jd9bnoh4b3gkWsBAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/54ad7a9a4ae5a375-640.avif",
+              "webp": "/img/54ad7a9a4ae5a375-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/54ad7a9a4ae5a375-1280.avif",
+              "webp": "/img/54ad7a9a4ae5a375-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/54ad7a9a4ae5a375-2000.avif",
+              "webp": "/img/54ad7a9a4ae5a375-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI QSS-32_33",
+            "software": "QSS-32_33 6.00.020 2006.12.27 "
+          },
+          "addedAt": "2026-07-26T13:07:44.229Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
+        },
+        {
+          "id": "d62b2154e7fee842",
+          "filename": "DSC06090.d62b2154e7fee842.jpg",
+          "ext": "jpg",
+          "width": 4341,
+          "height": 6511,
+          "bytes": 12556858,
+          "oklch": {
+            "L": 0.548,
+            "C": 0.129,
+            "H": 248.3
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAABwBQCdASoYACQAPtFYp02oJaQmNUwBABoJZACB4Qt6LGpyyME1rdjVmZ2V+ls1u53X3jeAAP7o2Erjl7NdFfkqtB/+SXKzf2GY7/7sU3f3vN4wS2CM3r3FxVzb+iiT/14DlxpgzlVHMmJSpNqypHCOXS4srcY7LFopLVh0aeq6w7sAzIhUctnIH4vSLJjU/DpQAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/d62b2154e7fee842-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/d62b2154e7fee842-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/d62b2154e7fee842-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-30T20:47:38.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "Viltrox 28mm F4.5 FE",
+            "focalLength": "28mm",
+            "aperture": "f/4.5",
+            "shutter": "1/20s",
+            "iso": 800,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-28T07:18:05.964Z"
+        }
+      ]
+    }
+  ]
+}

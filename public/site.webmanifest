@@ -1,0 +1,18 @@
+{
+  "name": "Colour Archive",
+  "short_name": "Colour Archive",
+  "id": "/",
+  "description": "A photographic archive as one continuous scroll — chapters by dominant colour, ordered along the hue.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "_orientation_note": "Deliberately unlocked. Locking to portrait meant the installed iPad app refused to rotate, so every landscape photograph was shown at half the height it could have been.",
+  "orientation": "any",
+  "background_color": "#100f0e",
+  "theme_color": "#100f0e",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

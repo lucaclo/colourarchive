@@ -1,0 +1,164 @@
+---
+import '../styles/global.css';
+import { DEFAULT_THEME } from '../lib/themes';
+
+interface Props {
+  title?: string;
+  description?: string;
+  /**
+   * Third-party origins this page will contact almost immediately.
+   *
+   * Only worth naming for a page that certainly talks to them, and only a
+   * handful: a preconnect opens a socket and holds it, so speculatively opening
+   * several to hosts a page may not use costs more than it saves. Scout is the
+   * case that earns it — the map cannot draw until a style, a sprite and a tile
+   * have all come back from hosts the browser has never seen, and on a phone
+   * that is a DNS lookup plus a TCP handshake plus a TLS negotiation standing
+   * between a blank rectangle and a map.
+   */
+  preconnect?: string[];
+}
+const {
+  title = 'Colour Archive',
+  description = 'A photographic archive as one continuous scroll — grouped into chapters by dominant colour, ordered along the hue.',
+  preconnect = [],
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-theme={DEFAULT_THEME}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <!-- The palette is fixed by the theme; tell the UA so form controls,
+         scrollbars and the pre-paint canvas match instead of flashing white. -->
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#100f0e" />
+    <!-- iOS home-screen app (Add to Home Screen → standalone window) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Colour Archive" />
+    <!-- Fonts are self-hosted (@font-face lives in global.css). Preload the
+         three faces that paint above the fold, so they start downloading with
+         the stylesheet rather than after it: the cover title, the chapter
+         titles, and the mono labels. The rest load on demand.
+         NOTE: only the faces the baked-in theme (Whisper) uses are shipped —
+         Fraunces + JetBrains Mono. Switching DEFAULT_THEME to a preset built on
+         Playfair Display, Libre Bodoni or Space Mono needs those families added
+         to public/fonts (see README → Fonts), or it falls back to Georgia. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/fraunces-italic-600-latin.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/fraunces-italic-500-latin.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/jetbrains-mono-normal-400-latin.woff2" />
+
+    {/* `crossorigin` is not optional here: every one of these is fetched by
+        MapLibre as a CORS request, and a preconnect opened without it warms a
+        different connection pool than the one the real request uses — so the
+        handshake is paid twice and the hint is worse than nothing. */}
+    {preconnect.map((href) => <link rel="preconnect" href={href} crossorigin />)}
+  </head>
+  <body>
+    <slot />
+    <script is:inline>
+      // Offline snapshot: register the service worker, then pre-cache every
+      // image on the page so the archive is fully browsable offline after one
+      // online visit. Only runs on a secure origin (https://…local or
+      // localhost) — iOS refuses service workers otherwise.
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        window.addEventListener('load', async () => {
+          try {
+            const reg = await navigator.serviceWorker.register('/sw.js');
+            const warm = () => {
+              if (!navigator.onLine) return;
+              const urls = new Set([location.pathname]);
+              // srcset lives on <img> now (the <picture>/<source> wrapper was
+              // dropped — every derivative is AVIF), but keep reading <source>
+              // so any page still using one caches too.
+              document.querySelectorAll('img[srcset], source[srcset]').forEach((s) => {
+                (s.getAttribute('srcset') || '').split(',').forEach((part) => {
+                  const u = part.trim().split(/\s+/)[0];
+                  if (u && !u.startsWith('data:')) urls.add(u);
+                });
+              });
+              document.querySelectorAll('img[src], [data-src]').forEach((el) => {
+                const u = el.getAttribute('src') || el.getAttribute('data-src');
+                if (u && !u.startsWith('data:')) urls.add(u);
+              });
+              // Fonts are ours now, so they belong in the snapshot too.
+              document.querySelectorAll('link[rel="preload"][as="font"]').forEach((l) => {
+                if (l.getAttribute('href')) urls.add(l.getAttribute('href'));
+              });
+              const sw = navigator.serviceWorker.controller || reg.active;
+              if (sw) sw.postMessage({ type: 'WARM', urls: Array.from(urls) });
+            };
+            if (navigator.serviceWorker.controller) warm();
+            else navigator.serviceWorker.addEventListener('controllerchange', warm, { once: true });
+            navigator.serviceWorker.addEventListener('message', (e) => {
+              const d = e.data || {};
+              if (d.type === 'WARM_PROGRESS') offlineProgress(d.done, d.total);
+              if (d.type === 'WARM_DONE') offlineDone(d.added);
+            });
+          } catch (err) { console.warn('[offline] service worker failed', err); }
+        });
+
+        // --- Offline status ------------------------------------------------
+        // Caching a 69-photo archive over the LAN is hundreds of files and can
+        // run for a minute or more. It used to happen in total silence and then
+        // announce itself once, at the end — so there was no way to know
+        // whether the iPad had a complete snapshot or you'd walked away too
+        // early. Now it counts up while it works, and says when it's safe to go.
+        let pill = null, pillHide = 0;
+        function showPill(text, sticky) {
+          if (!pill) {
+            pill = document.createElement('div');
+            pill.className = 'offline-pill';
+            pill.setAttribute('role', 'status');
+            pill.setAttribute('aria-live', 'polite');
+            document.body.appendChild(pill);
+            // Force a style flush, then reveal. requestAnimationFrame would be
+            // the usual way to do this, but it does not fire in a background
+            // tab — and caching the archive for offline is precisely the thing
+            // you start and then switch away from. The pill would have been
+            // created, never shown, and quietly removed by its own timer.
+            void pill.offsetWidth;
+            pill.classList.add('show');
+          }
+          pill.textContent = text;
+          clearTimeout(pillHide);
+          if (!sticky) pillHide = setTimeout(hidePill, 2600);
+        }
+        function hidePill() {
+          if (!pill) return;
+          const el = pill; pill = null;
+          el.classList.remove('show');
+          setTimeout(() => el.remove(), 600);
+        }
+        function offlineProgress(done, total) {
+          if (total > 12 && done < total) showPill(`Saving for offline · ${done} / ${total}`, true);
+        }
+        function offlineDone(added) {
+          showPill(added > 0 ? 'Saved for offline' : 'Up to date offline');
+        }
+        // Viewing a cached snapshot with nothing behind it is a different state
+        // from being live, and the archive looks identical either way. Say so.
+        addEventListener('offline', () => showPill('Offline · showing your saved archive', true));
+        // Reuse the pill rather than hiding it first — two overlapping elements
+        // meant the stale "Offline" text sat on top of the new message.
+        addEventListener('online', () => showPill('Back online'));
+
+        if (!navigator.onLine) showPill('Offline · showing your saved archive', true);
+      })();
+    </script>
+  </body>
+</html>

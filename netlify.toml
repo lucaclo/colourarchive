@@ -1,0 +1,26 @@
+# Netlify build config for the Colour Archive public site.
+#
+# The public site MUST be the read-only static snapshot: PUBLIC_STATIC=true
+# hides the server-only chrome (Add/Remove, Inspiration, original-image zoom).
+# Pinning it here means every deploy — CLI, drag-drop, or the auto-deploy
+# watcher — produces the same correct build, regardless of any UI settings.
+[build]
+  command = "PUBLIC_STATIC=true astro build"
+  publish = "dist/client"
+
+[build.environment]
+  PUBLIC_STATIC = "true"
+
+# Scout ships too, and it is nearly all client-side: the sun and moon are
+# arithmetic, the terrain and its shadows are decoded in the browser, the frame
+# and the line of sight are geometry. It reaches Open-Meteo and Wikimedia
+# Commons directly, because both allow it.
+#
+# Nominatim does not — measured: no access-control-allow-origin under any query
+# string — so place search and the dragged pin's name are the two calls that
+# still need a server. These two functions are it. They declare their own paths
+# (`/api/scout/geocode` and `/api/scout/reverse`), which are the same paths the
+# Mac serves, so the page never branches on where it is running.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"

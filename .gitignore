@@ -1,0 +1,22 @@
+node_modules
+dist
+.astro
+public/img/*
+!public/img/.gitkeep
+sequence.json
+
+# Local Netlify folder
+.netlify
+.match-cache/
+src/data/match/
+.scout-cache/
+
+# Local dev TLS certs — contains private keys, never commit
+certs/
+
+# Source imagery — kept out of git, synced separately
+photos/
+inspiration/
+
+# macOS
+.DS_Store
