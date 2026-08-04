@@ -1883,6 +1883,7 @@ export const prerender = true;
     createDomeLayer,
     mergeDomeGeometry,
     type DomeGeometryData,
+    type DomeVertex,
     type RGBA,
   } from '../lib/scout/view/dome-layer';
   import { createTerrainShadows, type TerrainShadows } from '../lib/scout/view/terrain-shadows';
@@ -2240,6 +2241,33 @@ export const prerender = true;
   /** The far end of the sightline. Declared here so the handlers below can see it. */
   const sightMarker = new maplibregl.Marker({ element: markerElement('sightmark'), draggable: true });
 
+  /**
+   * How much of a marker survives being on the far side of something.
+   *
+   * MapLibre uses one setting for two different situations, and they do not
+   * want the same answer. Behind a *hill*, a ghost of the pin is useful — it
+   * says the place is over there, out of sight, which is exactly the kind of
+   * thing this page exists to tell you. Behind the *planet*, a ghost is a lie:
+   * there is nothing to see through, and a faint pin over the Pacific while the
+   * spot is in Scotland reads as a bug.
+   *
+   * So it is switched with the projection. The transition state is the same
+   * number the shaders key off, so the marker and the dome stop being drawn on
+   * the same frame.
+   */
+  let coveredOpacity = '';
+  function applyMarkerOcclusion(instance: MapLibreMap) {
+    const onGlobe = ((instance.style as { projection?: { transitionState?: number } })?.projection
+      ?.transitionState ?? 0) > 0;
+    // MapLibre's own default behind terrain is 0.2, and that is the one to keep.
+    const covered = onGlobe ? '0' : '0.2';
+    if (covered === coveredOpacity) return;
+    coveredOpacity = covered;
+    // Only the second argument: passing neither resets both, and the first is
+    // the marker's ordinary opacity, which nothing here wants to touch.
+    for (const marker of [pin, slabMarker, sightMarker]) marker.setOpacity(undefined, covered);
+  }
+
   pin.on('dragend', () => {
     const position = pin.getLngLat();
     setCentreCoordinates({ lat: position.lat, lon: position.lng });
@@ -2273,8 +2301,37 @@ export const prerender = true;
 
   /* ── Style ───────────────────────────────────────────────────────────── */
 
+  /**
+   * The world as a sphere, flattening on the way in.
+   *
+   * `'globe'` is MapLibre's adaptive projection, not a fixed one: it draws the
+   * vertical perspective of a planet while the whole world is in view and
+   * crosses to mercator around the zoom where a city fills the screen. That
+   * crossing is the point. Scouting happens at street zoom, where mercator is
+   * the honest projection and every existing measurement on this page is
+   * already made in it; a sphere is only the truthful shape when you are far
+   * enough out that a flat map would put a Reykjavík evening and a Nairobi one
+   * side by side at wildly different scales.
+   *
+   * Re-applied on every `style.load` because projection is a property *of the
+   * style*, so `setStyle` — which is how this page switches between the light
+   * and dark basemaps — silently drops it and the globe springs flat.
+   */
+  function applyProjection(instance: MapLibreMap) {
+    try {
+      instance.setProjection({ type: 'globe' });
+    } catch (error) {
+      // Not fatal: the page is entirely usable on a flat map, and it was flat
+      // until this was added. Better a plane than a blank rectangle.
+      console.warn('[scout] globe projection unavailable', error);
+    }
+  }
+
   map?.on('style.load', () => {
     if (!map) return;
+
+    applyProjection(map);
+    applyMarkerOcclusion(map);
 
     // First, before anything is added: every layer below is anchored with it,
     // and computing it afterwards anchored them with the *previous* style's id.
@@ -2293,8 +2350,18 @@ export const prerender = true;
         properties: {},
         geometry: {
           type: 'Polygon',
-          // Web Mercator gives out past ±85.05°; this is the whole drawable world.
-          coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]],
+          // Deliberately past ±85.05°, where web mercator gives out.
+          //
+          // On a flat map the extra latitude is clipped away and costs nothing.
+          // On the globe it is the difference between a washed planet and one
+          // with a bare polar cap: MapLibre extends a fill to the pole only
+          // when its geometry reaches the top edge of the top tile, and a
+          // polygon that stops at ±85 stops just short of it. The Arctic Ocean
+          // then keeps its daylight colour through the night, which reads as a
+          // hole in the drawing rather than as the edge of a projection.
+          coordinates: [
+            [[-180, -89.9], [180, -89.9], [180, 89.9], [-180, 89.9], [-180, -89.9]],
+          ],
         },
       },
     });
@@ -2739,6 +2806,8 @@ export const prerender = true;
   map?.on('rotate', () => {
     document.documentElement.style.setProperty('--bearing', `${-(map?.getBearing() ?? 0)}deg`);
   });
+  // Crossing between globe and flat changes what "covered" means for a marker.
+  map?.on('zoom', () => map && applyMarkerOcclusion(map));
 
   map?.on('error', (e) => {
     const detail = e?.error?.message ?? String(e);
@@ -3196,9 +3265,21 @@ export const prerender = true;
     }
   }
 
-  const projectToMercator = (lon: number, lat: number, altitudeM: number): [number, number, number] => {
-    const m = maplibregl.MercatorCoordinate.fromLngLat({ lng: lon, lat }, altitudeM + domeBaseM);
-    return [m.x, m.y, m.z ?? 0];
+  /**
+   * A dome point in the units both projections need.
+   *
+   * `altitudeM` arrives measured from the ground under the pin, which is what
+   * `dome.ts` deals in; both numbers that come back are measured from sea
+   * level, which is what the map deals in. `domeBaseM` is the difference.
+   *
+   * The metres are not a convenience — the globe projection takes elevation in
+   * metres and the mercator one takes it in mercator units, and a vertex that
+   * states only one of them is wrong under the other. See `dome-layer.ts`.
+   */
+  const projectToMercator = (lon: number, lat: number, altitudeM: number): DomeVertex => {
+    const seaLevelM = altitudeM + domeBaseM;
+    const m = maplibregl.MercatorCoordinate.fromLngLat({ lng: lon, lat }, seaLevelM);
+    return [m.x, m.y, m.z ?? 0, seaLevelM];
   };
 
   /**
