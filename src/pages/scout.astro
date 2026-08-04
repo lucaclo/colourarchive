@@ -2327,6 +2327,65 @@ export const prerender = true;
     }
   }
 
+  /**
+   * Change the basemap, which tears down every source and layer on the map.
+   *
+   * Two things have to happen *before* the swap, and both fail several frames
+   * later and somewhere else, which is why they are gathered here rather than
+   * left to each caller to remember.
+   *
+   * `styleReady` goes down because every draw on this page is guarded by it,
+   * and the sources those draws write to stop existing the moment `setStyle`
+   * is called. Most of them cope — `getSource` returns undefined and the draw
+   * quietly does nothing — but `map.setLight` throws outright, once per frame,
+   * until the new style lands. The basemap buttons already did this; restoring
+   * a saved dark or satellite view did not, so the one path that runs on
+   * *every* return visit was the one that threw.
+   *
+   * Terrain comes off because MapLibre's own depth pass reads
+   * `style.projection.shaderPreludeCode` without checking it exists, and
+   * `style.projection` is undefined between the old style being dropped and
+   * the new one loading. With terrain set — which is to say in 3D — every
+   * frame in that window throws from inside the renderer, where nothing here
+   * can catch it. `style.load` calls `applyView`, which puts terrain back if
+   * the view still wants it.
+   */
+  function swapStyle() {
+    if (!map) return;
+    styleReady = false;
+    try {
+      map.setTerrain(null);
+    } catch {
+      /* no terrain to take off, which is the same as having taken it off */
+    }
+    map.setStyle(STYLES[basemap === 'dark' ? 'dark' : 'light']);
+  }
+
+  /**
+   * Put a custom WebGL layer on the map, replacing one that outlived a swap.
+   *
+   * `setStyle` diffs the two stylesheets rather than rebuilding from nothing
+   * when it can, and a custom layer is not the sort of thing a stylesheet diff
+   * knows how to remove — so after switching basemaps it is *still there*, and
+   * adding it again throws "Layer already exists on this map". That error was
+   * being raised twice on every basemap change: harmless in that the layer kept
+   * drawing, but it is a failure being reported and ignored, which is the state
+   * this page tries not to be in.
+   *
+   * Taken off and put back rather than merely skipped, because the position it
+   * was added at was computed against the *old* style's layer names — the light
+   * style's first symbol layer is not the dark style's — and a sun path drawn
+   * under the wrong labels is the kind of thing nobody notices until it matters.
+   */
+  function addCustomLayer(
+    instance: MapLibreMap,
+    layer: maplibregl.CustomLayerInterface,
+    before?: string,
+  ) {
+    if (instance.getLayer(layer.id)) instance.removeLayer(layer.id);
+    instance.addLayer(layer as never, before);
+  }
+
   map?.on('style.load', () => {
     if (!map) return;
 
@@ -2690,7 +2749,7 @@ export const prerender = true;
     );
     // Sits directly over the fill layer and takes its place the moment it says
     // it can — see `shadow-layer.ts` for what a fill layer cannot do here.
-    map.addLayer(shadowLayer as never, BELOW_LABELS);
+    addCustomLayer(map, shadowLayer, BELOW_LABELS);
 
     // The monolith's own shadow, drawn apart from the buildings' — it is the one
     // shadow here cast from a height that was stated rather than inferred, and
@@ -2741,7 +2800,7 @@ export const prerender = true;
     // Sky is a root style property in MapLibre v5, not a layer — `addLayer`
     // with `type: 'sky'` is accepted and then silently dropped.
     applySky(-90);
-    map.addLayer(domeLayer as never);
+    addCustomLayer(map, domeLayer);
 
     terrainShadows?.destroy();
     terrainShadows = createTerrainShadows(map);
@@ -5291,8 +5350,7 @@ export const prerender = true;
     for (const b of $('baseseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.base === basemap);
     // Swapping the style discards every source and layer, so everything gets
     // rebuilt by the `style.load` handler that fires straight after.
-    styleReady = false;
-    map.setStyle(STYLES[basemap === 'dark' ? 'dark' : 'light']);
+    swapStyle();
     save();
   });
 
@@ -6705,7 +6763,7 @@ export const prerender = true;
     $<HTMLElement>('scout-hint').hidden = true;
     $<HTMLElement>('tools').hidden = false;
 
-    if (map && basemap !== 'light') map.setStyle(STYLES[basemap === 'dark' ? 'dark' : 'light']);
+    if (map && basemap !== 'light') swapStyle();
     rebuildDay({ keepMinute: false });
     // The link's own minute, applied after the day exists to be indexed into.
     // A link that names a time is a request to look at *that* moment, so the
