@@ -1733,7 +1733,16 @@ export const prerender = true;
        one tap away through the archive. */
     .scout-nav a[href='/inspiration'] { display: none; }
     .cards { grid-template-columns: repeat(2, 1fr); }
-    .jumps button { padding: 0.45rem 0.6rem; min-height: 34px; }
+
+    /* The seven jumps want 409px on a phone and have 379, so Dusk — the last of
+       them — wrapped onto a line of its own and sat there looking like a
+       mistake rather than like the end of a day. Thirty pixels is all it is
+       over, so it comes off the padding and the gaps instead of off the row:
+       the letter-spacing these chips are set in is most of their width, and
+       trimming the box around it costs nothing anyone can see. They stay a
+       thumb's height, which is the measurement that matters. */
+    .jumps { gap: 0.18rem; }
+    .jumps button { padding: 0.45rem 0.45rem; min-height: 34px; }
 
     /* The layers panel grew two control blocks. Anchored to the bottom, its own
        70vh could now run off the top of a short phone and put the basemap
@@ -1757,6 +1766,34 @@ export const prerender = true;
     /* Taller on a phone: the profile is read for the shape of one ridge against
        one line, and 84px of that on a narrow screen is a smudge. */
     .sight-chart { height: 104px; }
+  }
+
+  /* ── Where the two chip rows stop fitting on one line ──────────────────────
+     Measured on this markup, not guessed: the date row is 209–215px and the
+     time row 254–327px, the spread depending on how long the phase is called —
+     "Astronomical twilight" is two and a half times "Daylight" — so together
+     they want 491–570px plus margins. A 393px phone has never had that, and
+     the two were overlapping by about 100px: the date chip sat *underneath*
+     Play and Now, which read as a stray letter between two buttons rather than
+     as a date anyone could tap.
+
+     So below 620px they take a row each. The clock keeps the lower one, next to
+     the thumb and directly above the track it drives; the date, which is
+     changed far less often, moves up. */
+  @media (max-width: 620px) {
+    .edge-left { bottom: calc(12.6rem + var(--safe-bottom)); }
+
+    /* One row on its own still needs 355px at the longest phase name, which a
+       320px phone does not have either. The phase is the part that gives: the
+       clock beside it is the number you came to read, and a truncated
+       "Astronomical twi…" still says which twilight it is. */
+    .edge-right { max-width: calc(100vw - 1.8rem); }
+    .edge-right .chip-phase {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   /* iOS zooms the whole page in when a focused control's text is under 16px, and
