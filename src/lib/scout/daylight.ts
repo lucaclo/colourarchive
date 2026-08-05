@@ -457,7 +457,7 @@ export function describeNextChange(
 /* ── Dates, where the place is ─────────────────────────────────────────────── */
 
 /** How far `timeZone` is ahead of UTC at `instant`, in minutes. */
-function zoneOffsetMinutes(instant: Date, timeZone: string): number {
+export function zoneOffsetMinutes(instant: Date, timeZone: string): number {
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone,

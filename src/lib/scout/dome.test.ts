@@ -1,7 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { domePath, domePosition, domeRadiusFor, hourMarks, splitAtHorizon } from './dome.ts';
+import {
+  domePath,
+  domePosition,
+  domeRadiusFor,
+  dotStride,
+  hourMarks,
+  splitAtHorizon,
+} from './dome.ts';
 import { distance, initialBearing, type LatLon } from './geo.ts';
 
 const CENTRE: LatLon = { lat: 35.6595, lon: 139.7005 };
@@ -156,5 +163,26 @@ describe('hourMarks', () => {
   it('marks nothing when the sun never rises', () => {
     const night = day.map((d) => ({ ...d, altitude: -10 }));
     assert.deepEqual(hourMarks(CENTRE, night, R, 'UTC'), []);
+  });
+});
+
+describe('dotStride', () => {
+  it('spaces dots by ring angle, not by array length', () => {
+    // Twice as many samples over the same circuit means stepping twice as far.
+    assert.equal(dotStride(180, 4), dotStride(360, 4) / 2);
+  });
+
+  it('gives the same spacing in degrees whatever the sampling', () => {
+    for (const count of [90, 144, 180, 360, 720, 1440]) {
+      const degrees = dotStride(count, 4.5) * (360 / count);
+      assert.ok(Math.abs(degrees - 4.5) <= 1.2, `${count} samples → ${degrees}°`);
+    }
+  });
+
+  it('never returns a stride that would drop every dot', () => {
+    for (const count of [0, 1, 2, 5, Number.NaN, -10]) {
+      const stride = dotStride(count);
+      assert.ok(Number.isInteger(stride) && stride >= 1, `${count} → ${stride}`);
+    }
   });
 });

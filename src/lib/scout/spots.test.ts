@@ -2,12 +2,18 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  MAX_NOTE,
+  MAX_PHOTOS,
   MAX_SPOTS,
   addSpot,
+  describeFrame,
   indexOfSpot,
+  readFrame,
+  readPhoto,
   readSpot,
   readSpots,
   removeSpot,
+  updateSpot,
   type SavedSpot,
 } from './spots.ts';
 
@@ -122,5 +128,151 @@ describe('removeSpot and indexOfSpot', () => {
     const list = [spot('A', 10, 10)];
     assert.equal(indexOfSpot(list, { lat: 40, lon: 40 }), -1);
     assert.equal(removeSpot(list, { lat: 40, lon: 40 }), list);
+  });
+});
+
+const PLACE = { name: 'Calton Hill', lat: 55.9553, lon: -3.1823, savedAt: 1 };
+const FRAME = {
+  sensor: 'ff',
+  focalLengthMm: 24,
+  orientation: 'landscape' as const,
+  bearing: 270,
+  tiltDeg: 4,
+};
+
+describe('the notebook fields', () => {
+  it('keeps a note, a frame, a monolith height and photographs', () => {
+    const spot = readSpot({
+      ...PLACE,
+      note: 'Arrive before the gate closes.',
+      frame: FRAME,
+      slabHeightM: 42,
+      photos: [{ url: 'https://example.org/a.jpg', credit: 'A. Photographer', source: 'wikimedia' }],
+    });
+    assert.equal(spot?.note, 'Arrive before the gate closes.');
+    assert.deepEqual(spot?.frame, FRAME);
+    assert.equal(spot?.slabHeightM, 42);
+    assert.equal(spot?.photos?.length, 1);
+    assert.equal(spot?.photos?.[0].credit, 'A. Photographer');
+  });
+
+  it('drops a bad notebook field without losing the place', () => {
+    const spot = readSpot({
+      ...PLACE,
+      note: { not: 'a string' },
+      frame: { ...FRAME, bearing: 'north' },
+      slabHeightM: -5,
+      photos: 'not a list',
+    });
+    assert.equal(spot?.name, 'Calton Hill');
+    assert.equal(spot?.note, undefined);
+    assert.equal(spot?.frame, undefined);
+    assert.equal(spot?.slabHeightM, undefined);
+    assert.equal(spot?.photos, undefined);
+  });
+
+  it('truncates a note rather than refusing it', () => {
+    const spot = readSpot({ ...PLACE, note: 'x'.repeat(MAX_NOTE + 500) });
+    assert.equal(spot?.note?.length, MAX_NOTE);
+  });
+
+  it('caps the photographs a spot may carry', () => {
+    const many = Array.from({ length: MAX_PHOTOS + 4 }, (_, i) => ({
+      url: `https://example.org/${i}.jpg`,
+    }));
+    assert.equal(readSpot({ ...PLACE, photos: many })?.photos?.length, MAX_PHOTOS);
+  });
+});
+
+describe('readFrame', () => {
+  it('normalises a bearing past the compass rather than refusing it', () => {
+    assert.equal(readFrame({ ...FRAME, bearing: 370 })?.bearing, 10);
+    assert.equal(readFrame({ ...FRAME, bearing: -90 })?.bearing, 270);
+  });
+
+  it('refuses a frame missing any part of the aim', () => {
+    for (const bad of [
+      { ...FRAME, sensor: '' },
+      { ...FRAME, focalLengthMm: 0 },
+      { ...FRAME, focalLengthMm: 5000 },
+      { ...FRAME, orientation: 'square' },
+      { ...FRAME, tiltDeg: 120 },
+      { ...FRAME, bearing: Number.NaN },
+    ]) {
+      assert.equal(readFrame(bad), null, JSON.stringify(bad));
+    }
+  });
+});
+
+describe('readPhoto', () => {
+  it('accepts only http and https, so a stored URL cannot become script', () => {
+    assert.ok(readPhoto({ url: 'https://example.org/a.jpg' }));
+    assert.ok(readPhoto({ url: 'http://example.org/a.jpg' }));
+    for (const url of [
+      'javascript:alert(1)',
+      'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+      'file:///etc/passwd',
+      '/relative/path.jpg',
+      'example.org/a.jpg',
+    ]) {
+      assert.equal(readPhoto({ url }), null, url);
+    }
+  });
+
+  it('keeps the credit it arrived with', () => {
+    const photo = readPhoto({
+      url: 'https://example.org/a.jpg',
+      credit: 'A. Photographer',
+      licence: 'CC BY-SA 4.0',
+      source: 'wikimedia',
+    });
+    assert.equal(photo?.licence, 'CC BY-SA 4.0');
+    assert.equal(photo?.source, 'wikimedia');
+  });
+});
+
+describe('addSpot and the notebook', () => {
+  it('carries the note and frame across a re-save that says nothing about them', () => {
+    const kept = addSpot([], { ...PLACE, note: 'Gate closes at dusk.', frame: FRAME });
+    const again = addSpot(kept, { ...PLACE, name: 'Calton Hill, Edinburgh', savedAt: 2 });
+    assert.equal(again[0].name, 'Calton Hill, Edinburgh');
+    assert.equal(again[0].note, 'Gate closes at dusk.');
+    assert.deepEqual(again[0].frame, FRAME);
+  });
+
+  it('lets a re-save that does carry a note win', () => {
+    const kept = addSpot([], { ...PLACE, note: 'old' });
+    assert.equal(addSpot(kept, { ...PLACE, note: 'new', savedAt: 2 })[0].note, 'new');
+  });
+});
+
+describe('updateSpot', () => {
+  it('edits in place without reordering the list', () => {
+    const list = [
+      { ...PLACE, savedAt: 3 },
+      { name: 'Arthur’s Seat', lat: 55.944, lon: -3.1618, savedAt: 2 },
+    ];
+    const next = updateSpot(list, { lat: 55.944, lon: -3.1618 }, { note: 'Windy.' });
+    assert.equal(next[1].note, 'Windy.');
+    assert.equal(next[0].name, 'Calton Hill', 'the order moved');
+  });
+
+  it('leaves the list alone when nothing there matches', () => {
+    const list = [PLACE];
+    assert.equal(updateSpot(list, { lat: 0, lon: 0 }, { note: 'nowhere' }), list);
+  });
+});
+
+describe('describeFrame', () => {
+  it('reads as a camera is set', () => {
+    assert.equal(describeFrame(FRAME), '24 mm · 270° · +4° tilt');
+  });
+
+  it('says nothing about a level camera, and calls out portrait', () => {
+    assert.equal(describeFrame({ ...FRAME, tiltDeg: 0 }), '24 mm · 270°');
+    assert.equal(
+      describeFrame({ ...FRAME, orientation: 'portrait', tiltDeg: 0 }),
+      '24 mm · portrait · 270°',
+    );
   });
 });

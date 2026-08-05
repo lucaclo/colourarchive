@@ -30,9 +30,33 @@
  * link, and the only sign is a warning: the program is silently null and
  * everything it drew disappears. `u_halo` did exactly that, which cost the sun,
  * the moon, the hour beads and every sprite giving the arcs their weight.
+ *
+ * ## Two projections, and the seam between them
+ *
+ * The map draws a globe when the world is in view and mercator by the time a
+ * city is, animating between the two. MapLibre hands a custom layer the GLSL to
+ * do the same — `shaderData.vertexShaderPrelude`, which changes with the
+ * projection — so the arc is projected by the same code as the ground under it
+ * rather than by a matrix that only agrees with it at one end.
+ *
+ * **Height is stated twice per vertex, and it has to be.** MapLibre's mercator
+ * projection takes elevation in mercator units and its globe projection takes
+ * it in *metres*; the animated blend between them feeds the same number to
+ * both, which is only right at sea level. So each vertex carries the altitude
+ * in both units and this file blends the two projections itself, with each side
+ * given the units it actually wants. The cost is one float a vertex. The
+ * alternative is an arc that is correct at both ends and drifts underground in
+ * the middle, which reads as an intermittent glitch rather than as a bug.
  */
 
 import type maplibregl from 'maplibre-gl';
+import {
+  GLSL_PROJECT_ELEVATED,
+  PROJECTION_UNIFORMS,
+  readProjection,
+  setProjectionUniforms,
+  type ShaderData,
+} from './projection';
 
 export type RGBA = [number, number, number, number];
 
@@ -48,11 +72,20 @@ interface LineRun {
   count: number;
 }
 
+/**
+ * Where a point sits, in the units both projections need.
+ *
+ * `x`/`y` are mercator 0..1, `mercatorZ` is altitude in mercator units, and
+ * `altitudeM` is the same altitude in metres above the sphere — that is, above
+ * sea level, not above the ground under the pin.
+ */
+export type DomeVertex = [x: number, y: number, mercatorZ: number, altitudeM: number];
+
 export interface DomeGeometryData {
-  /** x,y,z, r,g,b,a — 7 floats a vertex. */
+  /** x,y, mercatorZ, altitudeM, r,g,b,a — 8 floats a vertex. */
   lines: Float32Array;
   runs: LineRun[];
-  /** x,y,z, r,g,b,a, size, glow — 9 floats a vertex. */
+  /** x,y, mercatorZ, altitudeM, r,g,b,a, size, glow — 10 floats a vertex. */
   points: Float32Array;
 }
 
@@ -60,8 +93,8 @@ export interface DomeLayer extends maplibregl.CustomLayerInterface {
   setGeometry(data: DomeGeometryData): void;
 }
 
-const LINE_STRIDE = 7;
-const POINT_STRIDE = 9;
+export const LINE_STRIDE = 8;
+export const POINT_STRIDE = 10;
 
 /**
  * A plain line strip, with colour per vertex.
@@ -78,13 +111,16 @@ const POINT_STRIDE = 9;
  * same path (see `DomeGeometry.push`), which cost the same, look better, and
  * cannot produce a degenerate triangle because a point has no neighbours.
  */
-const LINE_VERTEX = `
-  attribute vec3 a_pos;
+const LINE_VERTEX = (prelude: string, define: string) => `
+  ${prelude}
+  ${define}
+  ${GLSL_PROJECT_ELEVATED}
+  attribute vec2 a_pos;
+  attribute vec2 a_up;
   attribute vec4 a_colour;
-  uniform mat4 u_matrix;
   varying mediump vec4 v_colour;
   void main() {
-    gl_Position = u_matrix * vec4(a_pos, 1.0);
+    gl_Position = scoutProject(a_pos, a_up.x, a_up.y);
     v_colour = a_colour;
   }`;
 
@@ -96,16 +132,19 @@ const LINE_FRAGMENT = `
     gl_FragColor = v_colour;
   }`;
 
-const POINT_VERTEX = `
-  attribute vec3 a_pos;
+const POINT_VERTEX = (prelude: string, define: string) => `
+  ${prelude}
+  ${define}
+  ${GLSL_PROJECT_ELEVATED}
+  attribute vec2 a_pos;
+  attribute vec2 a_up;
   attribute vec4 a_colour;
   attribute float a_size;
   attribute float a_glow;
-  uniform mat4 u_matrix;
   uniform mediump float u_halo;
   varying mediump vec4 v_colour;
   void main() {
-    vec4 c = u_matrix * vec4(a_pos, 1.0);
+    vec4 c = scoutProject(a_pos, a_up.x, a_up.y);
     // Same reasoning as the line shader: a point behind the camera is put
     // outside the clip volume rather than projected through infinity.
     if (c.w <= 0.0) {
@@ -188,9 +227,39 @@ export function createDomeLayer(id: string): DomeLayer {
   let pointProgram: Program | null = null;
   let lineBuffer: WebGLBuffer | null = null;
   let pointBuffer: WebGLBuffer | null = null;
+  /**
+   * Which projection the current pair of programs was compiled for.
+   *
+   * MapLibre changes the prelude under us as the map crosses between globe and
+   * mercator, and hands over a name that changes with it. Compiling once at
+   * `onAdd` would leave the arc projected by whichever projection happened to
+   * be up when the layer was added — correct at that zoom and quietly wrong at
+   * every other.
+   */
+  let variant: string | null = null;
 
   let data: DomeGeometryData = { lines: new Float32Array(0), runs: [], points: new Float32Array(0) };
   let dirty = false;
+
+  /** Compile for `shader`'s projection, discarding whatever was up before. */
+  function compileFor(gl: WebGLRenderingContext, shader: ShaderData): void {
+    for (const p of [lineProgram, pointProgram]) if (p) gl.deleteProgram(p.program);
+    lineProgram = build(
+      gl,
+      LINE_VERTEX(shader.vertexShaderPrelude, shader.define),
+      LINE_FRAGMENT,
+      ['a_pos', 'a_up', 'a_colour'],
+      [...PROJECTION_UNIFORMS],
+    );
+    pointProgram = build(
+      gl,
+      POINT_VERTEX(shader.vertexShaderPrelude, shader.define),
+      POINT_FRAGMENT,
+      ['a_pos', 'a_up', 'a_colour', 'a_size', 'a_glow'],
+      [...PROJECTION_UNIFORMS, 'u_halo'],
+    );
+    variant = shader.variantName;
+  }
 
   return {
     id,
@@ -203,14 +272,8 @@ export function createDomeLayer(id: string): DomeLayer {
     },
 
     onAdd(_map: maplibregl.Map, gl: WebGLRenderingContext) {
-      lineProgram = build(gl, LINE_VERTEX, LINE_FRAGMENT, ['a_pos', 'a_colour'], ['u_matrix']);
-      pointProgram = build(
-        gl,
-        POINT_VERTEX,
-        POINT_FRAGMENT,
-        ['a_pos', 'a_colour', 'a_size', 'a_glow'],
-        ['u_matrix', 'u_halo'],
-      );
+      // Programs are not built here: the projection is not known until a frame
+      // is drawn, and it changes afterwards anyway.
       lineBuffer = gl.createBuffer();
       pointBuffer = gl.createBuffer();
       dirty = true;
@@ -221,20 +284,22 @@ export function createDomeLayer(id: string): DomeLayer {
       for (const b of [lineBuffer, pointBuffer]) if (b) gl.deleteBuffer(b);
       lineProgram = pointProgram = null;
       lineBuffer = pointBuffer = null;
+      variant = null;
     },
 
     render(gl: WebGLRenderingContext, args: unknown) {
-      if (!lineProgram || !pointProgram) return;
-      // MapLibre used to hand custom layers a bare matrix and now hands them a
-      // projection-data object. Accept either, so this survives the next change.
-      const matrix = Array.isArray(args)
-        ? args
-        : ((args as { defaultProjectionData?: { mainMatrix?: number[] } })?.defaultProjectionData
-            ?.mainMatrix ?? null);
-      if (!matrix) return;
+      const read = readProjection(args);
+      if (!read) return;
+      const { projection, shader } = read;
       // A canvas with no size has nothing to draw into, and the ribbon shader
       // divides by half of it. Belt as well as the shader's braces.
       if (!gl.drawingBufferWidth || !gl.drawingBufferHeight) return;
+
+      // Rebuild whenever the map crosses between globe and mercator. The name
+      // is MapLibre's own cache key for exactly this, so comparing it is
+      // cheaper and more honest than inspecting the prelude.
+      if (shader.variantName !== variant) compileFor(gl, shader);
+      if (!lineProgram || !pointProgram) return;
 
       if (dirty) {
         gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer);
@@ -253,7 +318,7 @@ export function createDomeLayer(id: string): DomeLayer {
       if (data.runs.length) {
         const p = lineProgram;
         gl.useProgram(p.program);
-        gl.uniformMatrix4fv(p.uniforms.u_matrix, false, matrix as Float32List);
+        setProjectionUniforms(gl, p.uniforms, projection);
         gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer);
         const stride = LINE_STRIDE * 4;
         const set = (name: string, size: number, offset: number) => {
@@ -262,12 +327,13 @@ export function createDomeLayer(id: string): DomeLayer {
           gl.enableVertexAttribArray(loc);
           gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset * 4);
         };
-        set('a_pos', 3, 0);
-        set('a_colour', 4, 3);
+        set('a_pos', 2, 0);
+        set('a_up', 2, 2);
+        set('a_colour', 4, 4);
         // One strip per run, or the end of each path would be joined to the
         // start of the next by a stray line across the map.
         for (const run of data.runs) gl.drawArrays(gl.LINE_STRIP, run.offset, run.count);
-        for (const name of ['a_pos', 'a_colour']) {
+        for (const name of ['a_pos', 'a_up', 'a_colour']) {
           if (p.attributes[name] >= 0) gl.disableVertexAttribArray(p.attributes[name]);
         }
       }
@@ -275,7 +341,7 @@ export function createDomeLayer(id: string): DomeLayer {
       if (data.points.length) {
         const p = pointProgram;
         gl.useProgram(p.program);
-        gl.uniformMatrix4fv(p.uniforms.u_matrix, false, matrix as Float32List);
+        setProjectionUniforms(gl, p.uniforms, projection);
         gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
         const stride = POINT_STRIDE * 4;
         const set = (name: string, size: number, offset: number) => {
@@ -284,10 +350,11 @@ export function createDomeLayer(id: string): DomeLayer {
           gl.enableVertexAttribArray(loc);
           gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset * 4);
         };
-        set('a_pos', 3, 0);
-        set('a_colour', 4, 3);
-        set('a_size', 1, 7);
-        set('a_glow', 1, 8);
+        set('a_pos', 2, 0);
+        set('a_up', 2, 2);
+        set('a_colour', 4, 4);
+        set('a_size', 1, 8);
+        set('a_glow', 1, 9);
 
         const count = data.points.length / POINT_STRIDE;
         // Halo first and additively, so the core sits *in* its own light rather
@@ -300,7 +367,7 @@ export function createDomeLayer(id: string): DomeLayer {
         gl.uniform1f(p.uniforms.u_halo, 0);
         gl.drawArrays(gl.POINTS, 0, count);
 
-        for (const name of ['a_pos', 'a_colour', 'a_size', 'a_glow']) {
+        for (const name of ['a_pos', 'a_up', 'a_colour', 'a_size', 'a_glow']) {
           if (p.attributes[name] >= 0) gl.disableVertexAttribArray(p.attributes[name]);
         }
       }
@@ -321,8 +388,14 @@ export class DomeGeometry {
   private readonly points: number[] = [];
   readonly runs: LineRun[] = [];
 
+  /**
+   * `project` answers in both height units — see `DomeVertex`. The page owns
+   * that conversion because it is the only thing that knows what the ground
+   * under the pin is doing, and a projector that quietly assumed sea level
+   * would put the whole dome underground on a plateau.
+   */
   constructor(
-    private readonly project: (lon: number, lat: number, altitudeM: number) => [number, number, number],
+    private readonly project: (lon: number, lat: number, altitudeM: number) => DomeVertex,
   ) {}
 
   /**
@@ -343,9 +416,9 @@ export class DomeGeometry {
 
     if (mode === 'points') {
       for (let i = 0; i < points.length; i++) {
-        const [x, y, z] = this.project(points[i].lon, points[i].lat, points[i].altitudeM);
+        const [x, y, z, metres] = this.project(points[i].lon, points[i].lat, points[i].altitudeM);
         const c = at(i);
-        this.points.push(x, y, z, c[0], c[1], c[2], c[3], size, glow);
+        this.points.push(x, y, z, metres, c[0], c[1], c[2], c[3], size, glow);
       }
       return;
     }
@@ -381,13 +454,13 @@ export class DomeGeometry {
     const offset = this.lines.length / LINE_STRIDE;
 
     for (let i = 0; i < projected.length; i++) {
-      const [x, y, z] = projected[i];
+      const [x, y, z, metres] = projected[i];
       const c = at(i);
-      this.lines.push(x, y, z, c[0], c[1], c[2], c[3]);
+      this.lines.push(x, y, z, metres, c[0], c[1], c[2], c[3]);
       // Below about two pixels a sprite adds nothing a hairline has not
       // already said, and the horizon ring and plumb line are meant to be
       // quiet.
-      if (width >= 2) this.points.push(x, y, z, c[0], c[1], c[2], c[3], width, 0);
+      if (width >= 2) this.points.push(x, y, z, metres, c[0], c[1], c[2], c[3], width, 0);
     }
 
     this.runs.push({ offset, count: projected.length });

@@ -40,6 +40,14 @@
 
 import type maplibregl from 'maplibre-gl';
 import { convexHull, type Ring } from '../shadows';
+import {
+  GLSL_PROJECT_GROUND,
+  NO_PRELUDE,
+  PROJECTION_UNIFORMS,
+  readProjection,
+  setProjectionUniforms,
+  type ShaderData,
+} from './projection';
 
 /** Taller than anything that has been built. Sets the depth buffer's scale. */
 const MAX_HEIGHT_M = 1000;
@@ -80,12 +88,25 @@ export interface ShadowLayer extends maplibregl.CustomLayerInterface {
   setBlockers(vertices: Float32Array): void;
 }
 
-const BLOCKER_VERTEX = `
+/**
+ * Everything here stands on the ground, so it is projected by `scoutGround`.
+ *
+ * Z cannot come from the projection: it carries the blocker's height, which is
+ * the whole mechanism by which the tallest thing at a pixel wins. That is also
+ * why the far side of the planet has to be discarded in the fragment shader
+ * rather than clipped — the one number that would have done it is spoken for.
+ */
+const BLOCKER_VERTEX = (prelude: string, define: string) => `
+  ${prelude}
+  ${define}
+  ${GLSL_PROJECT_GROUND}
   attribute vec2 a_pos;
   attribute float a_height;
-  uniform mat4 u_matrix;
+  varying mediump float v_beyond;
   void main() {
-    vec4 p = u_matrix * vec4(a_pos, 0.0, 1.0);
+    float beyond;
+    vec4 p = scoutGround(a_pos, beyond);
+    v_beyond = beyond;
     // Height straight into normalised depth: tall is near, ground is far, so a
     // LESS test keeps the tallest thing standing at each pixel.
     float z = 1.0 - 2.0 * clamp(a_height / ${MAX_HEIGHT_M}.0, 0.0, 1.0);
@@ -94,16 +115,28 @@ const BLOCKER_VERTEX = `
 
 const BLOCKER_FRAGMENT = `
   precision mediump float;
-  void main() { gl_FragColor = vec4(0.0); }`;
+  varying mediump float v_beyond;
+  void main() {
+    // Round the back of the planet. Discarded rather than drawn black, so it
+    // does not write depth either — a building on the far side must not shade
+    // one on the near side.
+    if (v_beyond > 1.0) discard;
+    gl_FragColor = vec4(0.0);
+  }`;
 
-const SHADOW_VERTEX = `
+const SHADOW_VERTEX = (prelude: string, define: string) => `
+  ${prelude}
+  ${define}
+  ${GLSL_PROJECT_GROUND}
   attribute vec2 a_pos;
   attribute float a_ceiling;
   attribute float a_dark;
-  uniform mat4 u_matrix;
-  varying float v_dark;
+  varying mediump float v_dark;
+  varying mediump float v_beyond;
   void main() {
-    vec4 p = u_matrix * vec4(a_pos, 0.0, 1.0);
+    float beyond;
+    vec4 p = scoutGround(a_pos, beyond);
+    v_beyond = beyond;
     float z = 1.0 - 2.0 * clamp(a_ceiling / ${MAX_HEIGHT_M}.0, 0.0, 1.0);
     gl_Position = vec4(p.xy, z * p.w, p.w);
     v_dark = a_dark;
@@ -111,8 +144,12 @@ const SHADOW_VERTEX = `
 
 const SHADOW_FRAGMENT = `
   precision mediump float;
-  varying float v_dark;
-  void main() { gl_FragColor = vec4(v_dark); }`;
+  varying mediump float v_dark;
+  varying mediump float v_beyond;
+  void main() {
+    if (v_beyond > 1.0) discard;
+    gl_FragColor = vec4(v_dark);
+  }`;
 
 const COMPOSITE_VERTEX = `
   attribute vec2 a_pos;
@@ -211,6 +248,36 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
   let ready = false;
   let shadowsDirty = false;
   let blockersDirty = false;
+  /**
+   * Which projection the blocker and shadow programs were compiled for.
+   *
+   * MapLibre swaps the prelude under the layer as the map crosses between globe
+   * and mercator, so a program compiled once would project against a projection
+   * the map has since left — and shadows drawn in the wrong place look like
+   * shadows, which is why this cannot be left to be noticed.
+   */
+  let variant: string | null = null;
+
+  /** (Re)build the two projected programs for `shader`'s projection. */
+  function compileFor(gl: WebGLRenderingContext, shader: ShaderData): boolean {
+    for (const p of [blockerProgram, shadowProgram]) if (p) gl.deleteProgram(p.program);
+    blockerProgram = build(
+      gl,
+      BLOCKER_VERTEX(shader.vertexShaderPrelude, shader.define),
+      BLOCKER_FRAGMENT,
+      ['a_pos', 'a_height'],
+      [...PROJECTION_UNIFORMS],
+    );
+    shadowProgram = build(
+      gl,
+      SHADOW_VERTEX(shader.vertexShaderPrelude, shader.define),
+      SHADOW_FRAGMENT,
+      ['a_pos', 'a_ceiling', 'a_dark'],
+      [...PROJECTION_UNIFORMS],
+    );
+    variant = shader.variantName;
+    return Boolean(blockerProgram && shadowProgram);
+  }
 
   let shadows: Float32Array = new Float32Array(0);
   let blockers: Float32Array = new Float32Array(0);
@@ -291,14 +358,12 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
 
     onAdd(_map: maplibregl.Map, gl: WebGLRenderingContext) {
       maxBlend = maxEquation(gl);
-      blockerProgram = build(gl, BLOCKER_VERTEX, BLOCKER_FRAGMENT, ['a_pos', 'a_height'], ['u_matrix']);
-      shadowProgram = build(
-        gl,
-        SHADOW_VERTEX,
-        SHADOW_FRAGMENT,
-        ['a_pos', 'a_ceiling', 'a_dark'],
-        ['u_matrix'],
-      );
+      // Compiled against the plain mercator prelude, which is enough to prove
+      // the shaders themselves are sound — `ready` has to be answered now, and
+      // which projection is up is not known until a frame is drawn. The first
+      // frame recompiles against whatever MapLibre is really using, because
+      // `variant` is left saying otherwise.
+      const compiled = compileFor(gl, NO_PRELUDE);
       compositeProgram = build(
         gl,
         COMPOSITE_VERTEX,
@@ -320,7 +385,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       shadowsDirty = true;
       blockersDirty = true;
 
-      ready = Boolean(maxBlend && blockerProgram && shadowProgram && compositeProgram);
+      ready = Boolean(maxBlend && compiled && compositeProgram);
       // Said now rather than at first paint, so the caller can put the old fill
       // layer away before a frame is drawn with both of them showing.
       onReady?.(ready);
@@ -335,21 +400,29 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       if (depth) gl.deleteRenderbuffer(depth);
       if (framebuffer) gl.deleteFramebuffer(framebuffer);
       blockerProgram = shadowProgram = compositeProgram = null;
+      variant = null;
       shadowBuffer = blockerBuffer = quadBuffer = framebuffer = texture = depth = null;
       targetWidth = targetHeight = 0;
       ready = false;
     },
 
     render(gl: WebGLRenderingContext, args: unknown) {
-      if (!ready || !shadowCount || !blockerProgram || !shadowProgram || !compositeProgram) return;
+      if (!ready || !shadowCount || !compositeProgram) return;
 
-      // MapLibre used to hand custom layers a bare matrix and now hands them a
-      // projection-data object. Accept either, so this survives the next change.
-      const matrix = Array.isArray(args)
-        ? args
-        : ((args as { defaultProjectionData?: { mainMatrix?: number[] } })?.defaultProjectionData
-            ?.mainMatrix ?? null);
-      if (!matrix) return;
+      const read = readProjection(args);
+      if (!read) return;
+      const { projection, shader } = read;
+
+      // Recompiled on the way between globe and mercator, and stood down for
+      // good if the new projection's prelude will not compile — better the flat
+      // fill layer, which is honest about being worse, than shadows silently
+      // stopping.
+      if (shader.variantName !== variant && !compileFor(gl, shader)) {
+        ready = false;
+        queueMicrotask(() => onReady?.(false));
+        return;
+      }
+      if (!blockerProgram || !shadowProgram) return;
 
       const width = gl.drawingBufferWidth;
       const height = gl.drawingBufferHeight;
@@ -425,7 +498,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
 
       if (blockerCount) {
         gl.useProgram(blockerProgram.program);
-        gl.uniformMatrix4fv(blockerProgram.uniforms.u_matrix, false, matrix as Float32List);
+        setProjectionUniforms(gl, blockerProgram.uniforms, projection);
         gl.bindBuffer(gl.ARRAY_BUFFER, blockerBuffer);
         gl.enableVertexAttribArray(blockerProgram.attributes.a_pos);
         gl.vertexAttribPointer(blockerProgram.attributes.a_pos, 2, gl.FLOAT, false, 12, 0);
@@ -446,7 +519,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       gl.blendFunc(gl.ONE, gl.ONE);
 
       gl.useProgram(shadowProgram.program);
-      gl.uniformMatrix4fv(shadowProgram.uniforms.u_matrix, false, matrix as Float32List);
+      setProjectionUniforms(gl, shadowProgram.uniforms, projection);
       gl.bindBuffer(gl.ARRAY_BUFFER, shadowBuffer);
       gl.enableVertexAttribArray(shadowProgram.attributes.a_pos);
       gl.vertexAttribPointer(shadowProgram.attributes.a_pos, 2, gl.FLOAT, false, 16, 0);
