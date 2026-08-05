@@ -1807,9 +1807,19 @@ export const prerender = true;
 <script>
   // Pinned to maplibre-gl v5, which ships one default export carrying
   // everything (v6 moved to named exports with no default).
-  import maplibregl from 'maplibre-gl';
-  type MapLibreMap = maplibregl.Map;
-  type GeoJSONSource = maplibregl.GeoJSONSource;
+  //
+  // Types only. The library itself is a megabyte of WebGL that this page used to
+  // pull into its own entry chunk — 1,186 kB of scout script, of which about
+  // fifty was scout. It now arrives through a dynamic `import()` below, which
+  // Rollup gives a chunk of its own, leaving this page's script at 145 kB.
+  //
+  // `import type` is what keeps that true: a value import here, or in any module
+  // this one reaches, silently drags the whole library back into the entry.
+  // `view/dome-layer.ts`, `shadow-layer.ts` and `terrain-shadows.ts` all take it
+  // the same way for the same reason.
+  import type MapLibre from 'maplibre-gl';
+  type MapLibreMap = MapLibre.Map;
+  type GeoJSONSource = MapLibre.GeoJSONSource;
 
   import {
     boundingBox,
@@ -2109,6 +2119,26 @@ export const prerender = true;
   // The map is optional. Everything else on this page — the search, the sun
   // times, the slider — is arithmetic, and works perfectly well without a GPU.
   let map: MapLibreMap | null = null;
+
+  /**
+   * The library, fetched as its own chunk rather than as part of this page.
+   *
+   * What the split buys is the chunk boundary, not a change of order. A
+   * top-level `await` in a module script — which is what Astro emits here —
+   * suspends everything written below it, and everything below it is the whole
+   * page, so this still finishes before the search box is wired up. The gains
+   * are that the megabyte is now a separate, content-hashed file that survives
+   * every edit to this page, and that no other route pays for it at all.
+   *
+   * Letting the search and the sun times run *while* it is in flight is a
+   * different change: it needs the map's setup separated from the arithmetic's,
+   * which is what breaking this script into modules is for (#17).
+   *
+   * Named `maplibregl` deliberately. Every `new maplibregl.Map(...)` and
+   * `maplibregl.MercatorCoordinate` below this line is the same call it was
+   * before the split, and a rename would have been seven chances to miss one.
+   */
+  const maplibregl = (await import('maplibre-gl')).default;
 
   if (!webglAvailable()) {
     showMapMessage(
@@ -2416,7 +2446,7 @@ export const prerender = true;
    */
   function addCustomLayer(
     instance: MapLibreMap,
-    layer: maplibregl.CustomLayerInterface,
+    layer: MapLibre.CustomLayerInterface,
     before?: string,
   ) {
     if (instance.getLayer(layer.id)) instance.removeLayer(layer.id);
