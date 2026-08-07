@@ -222,6 +222,7 @@ const LAYERED = {
 const hour = (over: Partial<WeatherHour> = {}): WeatherHour => ({
   time: 0,
   temperatureC: null,
+  dewPointC: null,
   cloudCover: null,
   cloudLow: null,
   cloudMid: null,

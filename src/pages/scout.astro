@@ -176,8 +176,26 @@ export const prerender = true;
             <div><dt>Buildings</dt><dd id="f-buildings">—</dd></div>
             <div><dt>Landform</dt><dd id="f-landform">—</dd></div>
             <div><dt>Photographed</dt><dd id="f-photos">—</dd></div>
-            <div><dt>Light</dt><dd id="f-light">—</dd></div>
+            <div>
+              <dt>Light</dt>
+              <dd id="f-light">
+                <!-- The colour, as a colour. A number in kelvin is a fact about
+                     the light that a photographer has to translate; the swatch
+                     is the same fact, already translated. -->
+                <span class="light-swatch" id="light-swatch" aria-hidden="true"></span>
+                <span id="light-text">—</span>
+              </dd>
+            </div>
           </dl>
+
+          <!-- The day's light as one picture. The row above is the light at
+               one minute, which is what you set a camera by; this is the shape
+               of the whole day, which is what you plan by — and both come out
+               of the same spectral computation, so they cannot disagree. -->
+          <div class="lightday" id="lightday" hidden>
+            <div class="lightday-strip" id="lightday-strip"></div>
+            <p class="lightday-note" id="lightday-note"></p>
+          </div>
 
           <!-- ── The notebook ───────────────────────────────────────────────
                Only for a kept spot. A place you are passing through does not
@@ -1062,6 +1080,36 @@ export const prerender = true;
   }
   .moon-note { margin: 0.25rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); font-style: italic; }
   .moon-note:empty { display: none; }
+
+  /* ── The light's colour ───────────────────────────────────────────────── */
+
+  .light-swatch {
+    display: inline-block;
+    width: 0.66rem;
+    height: 0.66rem;
+    border-radius: 50%;
+    margin-right: 0.35rem;
+    vertical-align: -0.06rem;
+    /* A ring, because a warm swatch on paper and a cool one on the dark style
+       both need an edge or they read as a smudge rather than as a sample. */
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 35%, transparent);
+    background: transparent;
+  }
+  .light-swatch:not([style*='background']) { display: none; }
+
+  .lightday { margin: 0.1rem 0 0.55rem; }
+  .lightday-strip {
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 18%, transparent);
+  }
+  .lightday-note {
+    margin: 0.25rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    color: var(--muted);
+    font-style: italic;
+  }
 
   /* ── Milky Way core ───────────────────────────────────────────────────── */
 

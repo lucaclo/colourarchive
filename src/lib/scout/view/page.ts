@@ -121,6 +121,7 @@ import {
   moonlightNote,
   type MoonSample,
 } from '../moon';
+import { aodAt, type AirReport } from '../air';
 import { coreNight, coreTrack, type CoreSample } from '../galactic';
 import { bracketingSolstices, seasonEvents, seasonName } from '../almanac';
 import { buildSkyline, lightWindows, mergeHorizon, nextChange, type Skyline } from '../skyline';
@@ -130,7 +131,13 @@ import {
   terrainShadowAt,
   type HeightField,
 } from '../terrain';
-import { AEROSOL, coastalAerosol, readLight } from '../atmosphere';
+import {
+  aerosolFor,
+  chromaticityToSrgb,
+  precipitableWater,
+  readLight,
+  spectralLight,
+} from '../atmosphere';
 import {
   DomeGeometry,
   createDomeLayer,
@@ -142,6 +149,7 @@ import {
 import { createTerrainShadows, type TerrainShadows } from './terrain-shadows';
 import {
   cloudStructure,
+  blockingCover,
   directLightFractionFor,
   horizonReading,
   horizonSampleDistanceM,
@@ -165,7 +173,11 @@ import {
   type Orientation,
 } from '../frame';
 import { lineOfSight, profileGeometry, type LineOfSight } from '../profile';
-import { fetchHorizonPairDirect, fetchPhotosDirect } from '../browser/sources';
+import {
+  fetchAirQualityDirect,
+  fetchHorizonPairDirect,
+  fetchPhotosDirect,
+} from '../browser/sources';
 import { $, markerElement, on } from './dom';
 import {
   LAYER_TOGGLES,
@@ -270,6 +282,8 @@ export async function startScout(): Promise<void> {
    */
   let coreSamples: CoreSample[] = [];
   let weather: WeatherReport | null = null;
+  /** The aerosol column over the pin, when the air-quality host answered. */
+  let air: AirReport | null = null;
   /**
    * The forecast where the sunrise or sunset light passes low over the ground —
    * three hundred kilometres away, in the sun's own direction. Kept beside the
@@ -1062,7 +1076,8 @@ export async function startScout(): Promise<void> {
 
     // Sky is a root style property in MapLibre v5, not a layer — `addLayer`
     // with `type: 'sky'` is accepted and then silently dropped.
-    applySky(-90);
+    // No place, no air, and the sun nominally below the horizon: the ramp.
+    applySky(-90, null);
     addCustomLayer(map, domeLayer);
 
     terrainShadows?.destroy();
@@ -1721,10 +1736,23 @@ export async function startScout(): Promise<void> {
       // *when* as well: deep blue before dawn, the orange band at the horizon,
       // pale gold climbing to white at noon. It costs one lookup a vertex and
       // turns a piece of geometry into a timeline you can read at a glance.
+      //
+      // That lookup is now the *spectral* one, the same integral the panel's
+      // swatch and the day strip come out of, rather than the hand-fitted
+      // altitude ramp `sunlightColour` still drives the basemap with. Two
+      // pictures of the same light, computed two different ways, were free to
+      // disagree — and did, because only one of them knew where it was: the
+      // ramp has no idea whether the pin is a coast or a ridge, and this does.
       const aboveHorizon = coarse.filter((s) => s.altitude > -0.5);
+      const arcField = terrainShadows?.state().field ?? null;
+      const arcAir = atmosphereNow(
+        arcField && centre ? elevationAt(arcField, centre.lon, centre.lat) : null,
+        arcField,
+        currentInstant(),
+      );
       const arcColour = (i: number): RGBA => {
         const sample = aboveHorizon[Math.min(i, aboveHorizon.length - 1)];
-        return [...rgbOf(sunlightColour(sample?.altitude ?? 0)), 0.95] as RGBA;
+        return [...rgbOf(beamColour(sample?.altitude ?? 0, arcAir)), 0.95] as RGBA;
       };
       ridePath(coarse, arcColour, [...ink, 0.5] as RGBA, WIDTH.arc, 3.4, liftColour(basemap));
 
@@ -1901,11 +1929,40 @@ export async function startScout(): Promise<void> {
     return 0.25 + 0.75 * directLightFractionFor(hourAt(weather, instant));
   }
 
+  /**
+   * The sun's colour for the map's own paint, from the same integral as the rest.
+   *
+   * Spectral while the sun is up, so the hillshade's highlight and the sky's
+   * horizon are graded by *this place's* air rather than by a ramp that knows
+   * only the altitude — a hazy coast and a clear ridge had been drawn with the
+   * same light at the same hour.
+   *
+   * Below the horizon it falls back to the ramp, and that is not a compromise:
+   * there is no beam to have a colour, and `sunlightColour`'s twilight hues are
+   * a deliberate *look* rather than a measurement of anything. Also the fallback
+   * before a place is chosen, when there is no air to speak of.
+   */
+  function sunPaintColour(altitude: number, air: ReturnType<typeof atmosphereNow> | null): string {
+    return altitude > 0 && air ? beamColour(altitude, air) : sunlightColour(altitude);
+  }
+
   function applySunLight() {
     if (!map || !styleReady) return;
     const now = current();
     const altitude = now?.altitude ?? -90;
     const azimuth = now?.azimuth ?? 0;
+
+    // Computed once and handed on: this runs inside the batched frame, and the
+    // sky wants the same answer the hillshade just got.
+    const field = terrainShadows?.state().field ?? null;
+    const air =
+      centre && altitude > 0
+        ? atmosphereNow(
+            field ? elevationAt(field, centre.lon, centre.lat) : null,
+            field,
+            currentInstant(),
+          )
+        : null;
 
     map.setLight({
       anchor: 'map',
@@ -1930,7 +1987,7 @@ export async function startScout(): Promise<void> {
     set('scout-daylight', 'fill-opacity', wash.opacity);
 
     set('scout-hillshade', 'hillshade-illumination-direction', Math.round(azimuth) % 360);
-    set('scout-hillshade', 'hillshade-highlight-color', sunlightColour(altitude));
+    set('scout-hillshade', 'hillshade-highlight-color', sunPaintColour(altitude, air));
     set('scout-hillshade', 'hillshade-shadow-color', shadowColour(altitude));
     // Deeper relief when the sun is low and raking, flat when it is overhead or
     // gone — the same reason the buildings' side-lighting peaks at dawn.
@@ -1949,15 +2006,15 @@ export async function startScout(): Promise<void> {
     shadowLayer.opacity = cloudScale();
     set('scout-slab-shadow', 'fill-opacity', 0.55 * cloudScale());
     set('scout-buildings', 'fill-extrusion-color', buildingRamp(altitude, themeOf(basemap)));
-    applySky(altitude);
+    applySky(altitude, air);
   }
 
-  function applySky(altitude: number) {
+  function applySky(altitude: number, air: ReturnType<typeof atmosphereNow> | null) {
     if (!map) return;
     try {
       map.setSky({
         'sky-color': skyColour(altitude),
-        'horizon-color': sunlightColour(altitude),
+        'horizon-color': sunPaintColour(altitude, air),
         'fog-color': skyColour(Math.min(altitude, 2)),
         'sky-horizon-blend': 0.55,
         'horizon-fog-blend': 0.55,
@@ -2434,31 +2491,124 @@ export async function startScout(): Promise<void> {
    * That is an inference from real terrain rather than a guess, and it is
    * labelled as an inference.
    */
+  /**
+   * The atmosphere over the pin, as the light model wants it.
+   *
+   * Everything that draws the light's colour goes through here — the panel's
+   * swatch, the day strip and the arc on the dome — so the three can never be
+   * computed from different air. Where a measurement exists it is used and
+   * labelled; where none does, the table is used and labelled.
+   */
+  function atmosphereNow(
+    elevation: number | null,
+    field: HeightField | null | undefined,
+    instant: Date | null,
+  ) {
+    const sea = seaFraction(field);
+    const aerosol = aerosolFor({ aod550: instant ? aodAt(air, instant) : null, seaFraction: sea });
+    // The dew point comes from the forecast that was being fetched anyway.
+    const hour = weather && instant ? hourAt(weather, instant) : null;
+    const dew = hour?.dewPointC ?? null;
+    return {
+      elevationM: elevation ?? 0,
+      aerosol: aerosol.value,
+      waterCm: dew == null ? undefined : precipitableWater(dew),
+      provenance: {
+        aerosol,
+        water:
+          dew == null
+            ? 'water column assumed temperate'
+            : `water column ${precipitableWater(dew).toFixed(1)} cm, from a ${dew.toFixed(0)}° dew point`,
+        elevation:
+          elevation == null
+            ? 'elevation assumed at sea level'
+            : `${Math.round(elevation)} m, from the DEM`,
+      },
+    };
+  }
+
+  /** The beam's colour at an altitude, from the same model as everything else. */
+  function beamColour(altitudeDeg: number, air: ReturnType<typeof atmosphereNow>): string {
+    // Floored rather than allowed to run to the horizon. Below about a quarter
+    // of a degree the air mass runs away, the modelled beam is a rounding error
+    // and its chromaticity stops meaning anything — while the arc still has
+    // vertices there that have to be some colour.
+    return chromaticityToSrgb(
+      spectralLight({
+        altitudeDeg: Math.max(0.25, altitudeDeg),
+        elevationM: air.elevationM,
+        aerosol: air.aerosol,
+      }).sun,
+    );
+  }
+
   function renderLightQuality(elevation: number | null, field: HeightField | null | undefined) {
     const cell = $('f-light');
+    const swatch = $('light-swatch');
+    const text = $('light-text');
     const now = current();
     if (!now || !(now.altitude > 0)) {
-      cell.textContent = now ? 'no direct sun' : '—';
+      text.textContent = now ? 'no direct sun' : '—';
+      swatch.style.removeProperty('background');
       cell.title = '';
+      renderLightDay(elevation, field);
       return;
     }
 
-    const sea = seaFraction(field);
-    const reading = readLight({
-      altitudeDeg: now.altitude,
-      elevationM: elevation ?? 0,
-      aerosol: sea == null ? AEROSOL.continental : coastalAerosol(sea),
-    });
+    const air = atmosphereNow(elevation, field, now.date);
+    const reading = readLight({ altitudeDeg: now.altitude, ...air });
 
-    cell.textContent = `${Math.round(reading.sun.cct / 50) * 50} K · ${reading.contrastStops.toFixed(1)} stops`;
-    // The provenance, where there is room for it: which half was measured.
+    text.textContent = `${Math.round(reading.sun.cct / 50) * 50} K · ${reading.contrastStops.toFixed(1)} stops`;
+    swatch.style.background = chromaticityToSrgb(reading.sun);
+
+    // The provenance, where there is room for it: which parts were measured.
+    // "Clear sky" is not a hedge here, it is the model's actual scope — Bird is
+    // a clear-sky model and cloud is never an input to it.
+    const cover = weather ? blockingCover(hourAt(weather, now.date)) : null;
     cell.title = [
       `EV ${reading.ev100.toFixed(1)} at ISO 100`,
-      elevation == null ? 'elevation assumed at sea level' : `${Math.round(elevation)} m, from the DEM`,
-      sea == null
-        ? 'air assumed continental'
-        : `${Math.round(sea * 100)}% of the surroundings at sea level — sea air inferred`,
+      air.provenance.elevation,
+      air.provenance.aerosol.note,
+      air.provenance.water,
+      cover != null && cover > 25
+        ? `clear-sky model — ${Math.round(cover)}% cloud will change this`
+        : 'clear-sky model',
     ].join(' · ');
+
+    renderLightDay(elevation, field);
+  }
+
+  /**
+   * The day's light as a strip.
+   *
+   * A colour temperature at one minute answers "what do I set the camera to";
+   * it cannot answer "when is this place worth photographing", which is a shape
+   * over a day and is what someone opens this page for. Built from the same
+   * `spectralLight` as the swatch beside it and the arc on the map.
+   */
+  function renderLightDay(elevation: number | null, field: HeightField | null | undefined) {
+    const box = $<HTMLElement>('lightday');
+    if (!day || !centre) {
+      box.hidden = true;
+      return;
+    }
+    const air = atmosphereNow(elevation, field, currentInstant());
+
+    // Every twelfth minute: 120 stops across the day, which is finer than the
+    // strip is wide in pixels and costs one spectral integral each, once a day.
+    const stops: string[] = [];
+    const STEP = 12;
+    for (let i = 0; i < MINUTES_PER_DAY; i += STEP) {
+      const sample = day.samples[i];
+      const percent = ((i / MINUTES_PER_DAY) * 100).toFixed(1);
+      // Night is not a colour of sunlight, it is the absence of one, and
+      // painting the twilight ramp here would invent a beam that is not there.
+      const colour = sample && sample.altitude > 0 ? beamColour(sample.altitude, air) : '#00000000';
+      stops.push(`${colour} ${percent}%`);
+    }
+    box.hidden = false;
+    $<HTMLElement>('lightday-strip').style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+    $('lightday-note').textContent = `The beam's own colour through the day · ${air.provenance.aerosol.basis === 'measured' ? 'aerosol measured' : 'aerosol from a table'}`;
   }
 
   /**
@@ -3606,6 +3756,33 @@ export async function startScout(): Promise<void> {
     // is a reason to repaint them.
     applySunLight();
     paintTerrain();
+    void loadAir();
+  }
+
+  /**
+   * The aerosol column, which is the measured half of the light's colour.
+   *
+   * Fetched after the forecast rather than beside it, and never awaited by
+   * anything: it is one input to one row, its host is not the forecast's, and
+   * the geometry the page exists for needs none of it. A failure leaves
+   * `air` null, `aerosolFor` falls back to the table it used before this
+   * existed, and the provenance line says which it used.
+   */
+  async function loadAir() {
+    if (!centre) return;
+    const at = centre;
+    try {
+      const report = STATIC
+        ? await fetchAirQualityDirect(at.lat, at.lon)
+        : await fetch(`/api/scout/air?lat=${at.lat}&lon=${at.lon}`)
+            .then((response) => response.json())
+            .then((data) => (data.ok ? (data.report as AirReport) : null));
+      if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
+      air = report;
+    } catch {
+      air = null;
+    }
+    renderFacts();
   }
 
   /**
