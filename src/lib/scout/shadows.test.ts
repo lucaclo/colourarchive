@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildingHeight,
   buildingSetSignature,
+  castPrisms,
   castShadow,
   castShadows,
   convexHull,
@@ -535,5 +536,72 @@ describe('fingerprinting a gathered set of buildings', () => {
 
   it('survives a footprint with no vertices rather than throwing', () => {
     assert.doesNotThrow(() => buildingSetSignature([{ ring: [] as Ring, height: 10 }]));
+  });
+});
+
+describe('a precomputed hull is the same answer, not a cheaper one', () => {
+  /** A footprint with plenty of interior and collinear clutter to throw away. */
+  const messy = (): Ring => {
+    const ring: Ring = [];
+    // A rough octagon, plus midpoints on every edge that the hull must drop.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ring.push([-0.09 + 0.0004 * Math.cos(a), 51.51 + 0.00025 * Math.sin(a)]);
+      const b = ((i + 0.5) / 8) * Math.PI * 2;
+      ring.push([-0.09 + 0.00028 * Math.cos(b), 51.51 + 0.000175 * Math.sin(b)]);
+    }
+    ring.push(ring[0]);
+    return ring;
+  };
+
+  it('produces an identical ring and identical ceilings, at every sun', () => {
+    const footprint = messy();
+    const hull = convexHull(footprint);
+    for (const azimuth of [0, 37, 90, 174, 268, 359]) {
+      for (const altitude of [1, 4.5, 20, 55, 80]) {
+        const plain = castShadow(footprint, 24, azimuth, altitude);
+        const fast = castShadow(footprint, 24, azimuth, altitude, { hull });
+        assert.deepEqual(fast, plain, `azimuth ${azimuth}, altitude ${altitude}`);
+      }
+    }
+  });
+
+  it('holds for a degenerate footprint too', () => {
+    // Three points and a closing repeat: the hull is the footprint, and the
+    // fast path must not quietly drop it.
+    const triangle: Ring = [
+      [-0.09, 51.51],
+      [-0.0899, 51.51],
+      [-0.0899, 51.5101],
+      [-0.09, 51.51],
+    ];
+    assert.deepEqual(
+      castShadow(triangle, 12, 200, 30, { hull: convexHull(triangle) }),
+      castShadow(triangle, 12, 200, 30),
+    );
+  });
+
+  it('castPrisms passes each building its own hull', () => {
+    // The guard against the obvious way to break this: one building's hull
+    // reaching another building's cast.
+    const a = messy();
+    const b: Ring = a.map(([lon, lat]) => [lon + 0.002, lat + 0.001]);
+    const withHulls = castPrisms(
+      [
+        { ring: a, height: 30, hull: convexHull(a) },
+        { ring: b, height: 18, hull: convexHull(b) },
+      ],
+      120,
+      25,
+    );
+    const without = castPrisms(
+      [
+        { ring: a, height: 30 },
+        { ring: b, height: 18 },
+      ],
+      120,
+      25,
+    );
+    assert.deepEqual(withHulls, without);
   });
 });

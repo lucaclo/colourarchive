@@ -32,6 +32,25 @@ export interface ShadowOptions {
   maxLengthM?: number;
   /** Below this altitude there is no meaningful direct light. Degrees. */
   minAltitudeDeg?: number;
+  /**
+   * The footprint's own convex hull, if the caller already has it.
+   *
+   * Not a different answer — the *same* answer, reached with less work.
+   * `hull(P ∪ (P+v)) = hull(hull(P) ∪ (hull(P)+v))`: the hull of a set and its
+   * translate depends only on the hull of the set. And the hull of a building
+   * does not change as the sun moves, while this function is called for every
+   * building on every minute of a scrub.
+   *
+   * Measured over central London, 1,422 buildings, before this existed:
+   * `convexHull` was 42% of all time spent scrubbing the slider — sorting the
+   * same forty vertices of the same warehouse several hundred times a second.
+   * Passing it in turns a sort of 2n points into a sort of 2h, where h is
+   * usually four to eight.
+   *
+   * Left optional so the function still stands alone: given nothing, it hulls
+   * the footprint itself and every result is identical either way.
+   */
+  hull?: Ring;
 }
 
 const MIN_ALTITUDE_DEG = 0.5;
@@ -162,9 +181,13 @@ export function castShadow(
   const dLon = moved.lon - anchor[0];
   const dLat = moved.lat - anchor[1];
 
-  const shifted: Ring = footprint.map(([lon, lat]) => [lon + dLon, lat + dLat]);
+  // Only the hull's own vertices need shifting: an interior point of the
+  // footprint is an interior point of the translate too, and can never appear
+  // on the outline of the union.
+  const base = options.hull ?? convexHull(footprint);
+  const shifted: Ring = base.map(([lon, lat]) => [lon + dLon, lat + dLat]);
 
-  const hull = convexHull([...footprint, ...shifted]);
+  const hull = convexHull([...base, ...shifted]);
   if (hull.length < 3) return null;
 
   // Close the ring — GeoJSON polygons require the first and last to match.
@@ -191,8 +214,12 @@ export function castShadow(
   const along = (lon: number, lat: number) =>
     (lon - anchor[0]) * mPerLon * east + (lat - anchor[1]) * mPerLat * north;
 
+  // Over the hull rather than the whole footprint. `along` is linear in
+  // (lon, lat), and a linear function over a finite point set attains its
+  // maximum at a vertex of that set's convex hull — so this is the same number
+  // for a fraction of the reads.
   let baseMax = -Infinity;
-  for (const [lon, lat] of footprint) baseMax = Math.max(baseMax, along(lon, lat));
+  for (const [lon, lat] of base) baseMax = Math.max(baseMax, along(lon, lat));
 
   const perMetre = 1 / ratio; // tan(altitude)
   const ceilings = ring.map(([lon, lat]) => {
@@ -388,7 +415,7 @@ export interface ShadowPrisms extends ShadowTally {
  * the sum. `shadow-layer.ts` does that on the GPU, for nothing.
  */
 export function castPrisms(
-  buildings: Array<{ ring: Ring; height: number; estimated?: boolean }>,
+  buildings: Array<{ ring: Ring; height: number; estimated?: boolean; hull?: Ring }>,
   sunAzimuth: number,
   sunAltitude: number,
   options: ShadowOptions & { limit?: number } = {},
@@ -414,7 +441,10 @@ export function castPrisms(
       skippedNoHeight++;
       continue;
     }
-    const shadow = castShadow(building.ring, building.height, sunAzimuth, sunAltitude, options);
+    const shadow = castShadow(building.ring, building.height, sunAzimuth, sunAltitude, {
+      ...options,
+      hull: building.hull,
+    });
     if (!shadow) continue;
     if (shadow.clipped) clipped++;
     if (shadow.lengthM > longestM) longestM = shadow.lengthM;

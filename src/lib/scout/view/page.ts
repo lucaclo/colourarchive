@@ -84,6 +84,7 @@ import {
   castPrisms,
   castShadow,
   castShadows,
+  convexHull,
   heightIsEstimated,
   maxShadowLength,
   buildingSetSignature,
@@ -2116,7 +2117,7 @@ export async function startScout(): Promise<void> {
     // The same building appears once per tile it touches, so dedupe before
     // casting — otherwise a block on a tile seam gets a doubly dark shadow.
     const seen = new Set<string>();
-    const buildings: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
+    const buildings: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring }> = [];
     const close: typeof buildings = [];
     let estimated = 0;
 
@@ -2171,6 +2172,12 @@ export async function startScout(): Promise<void> {
     const signature = `${buildingSetSignature(buildings)}@${centre.lat},${centre.lon}`;
     if (signature === castableSignature) return;
     castableSignature = signature;
+
+    // Hull each footprint once, here, rather than once per building per minute
+    // inside `castShadow` — see `ShadowOptions.hull`. Deliberately *after* the
+    // signature check: a gather that returns the set we already hold does no
+    // work at all, and at a city zoom `sourcedata` brings dozens a second.
+    for (const building of buildings) building.hull = convexHull(building.ring);
 
     castable = buildings;
     shadowStats = { cast: 0, estimated, longestM: 0, omitted, tooFar: false };
