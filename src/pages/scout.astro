@@ -129,6 +129,18 @@ export const prerender = true;
             </div>
           </details>
 
+          <!-- The core is the one subject here whose answer is usually "no":
+               it has to be above the horizon, the sky has to be astronomically
+               dark and the moon has to be down, all at once. Each line is one
+               of those conditions, so a refusal says which one failed. -->
+          <details class="fold" id="fold-core">
+            <summary>Milky Way core</summary>
+            <p class="core-line" id="core-times">—</p>
+            <p class="core-line" id="core-window">—</p>
+            <p class="core-note" id="core-note"></p>
+            <p class="core-caveat">Light pollution is not modelled.</p>
+          </details>
+
           <!-- The per-spot answer: not where the shade is, but when the light
                gets here. The thing every other readout on the page is for. -->
           <div class="spot" id="spot">
@@ -266,6 +278,7 @@ export const prerender = true;
         <label class="toggle"><input type="checkbox" id="t-sunpath" checked /> <span>Sun path</span></label>
         <label class="toggle"><input type="checkbox" id="t-moonpath" /> <span>Moon path</span></label>
         <label class="toggle"><input type="checkbox" id="t-solstice" /> <span>Solstice paths</span></label>
+        <label class="toggle"><input type="checkbox" id="t-core" /> <span>Milky Way core</span></label>
         <label class="toggle"><input type="checkbox" id="t-monolith" /> <span>Monolith</span></label>
         <label class="toggle"><input type="checkbox" id="t-photos" checked /> <span>Photo hotspots</span></label>
         <label class="toggle"><input type="checkbox" id="t-frame" /> <span>Frame</span></label>
@@ -1049,6 +1062,27 @@ export const prerender = true;
   }
   .moon-note { margin: 0.25rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); font-style: italic; }
   .moon-note:empty { display: none; }
+
+  /* ── Milky Way core ───────────────────────────────────────────────────── */
+
+  .core-line {
+    margin: 0.15rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .core-note { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--fg); }
+  .core-note:empty { display: none; }
+  /* Never hidden and never :empty — it is a standing limit on every answer
+     above it, not a footnote to whichever one is on screen. */
+  .core-caveat {
+    margin: 0.3rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    color: var(--muted);
+    font-style: italic;
+  }
 
   /* ── The spot's own day ───────────────────────────────────────────────── */
 

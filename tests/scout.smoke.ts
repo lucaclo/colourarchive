@@ -155,13 +155,19 @@ async function openPage() {
   return page;
 }
 
-/** Wait until MapLibre says it has nothing left to draw. */
+/**
+ * Wait until MapLibre says it has nothing left to draw.
+ *
+ * One guarded expression rather than "wait for the handle, then wait for the
+ * map". The dev server reloads the page when Vite discovers a dependency it has
+ * not pre-bundled, and a reload between two waits leaves the second one
+ * dereferencing a `window.scout` that existed a moment ago and does not now.
+ * Every step has to tolerate the page having gone away underneath it.
+ */
 async function waitForTheMap(page: Page) {
-  await page.waitForFunction('!!window.scout && !!window.scout.map()', null, {
-    timeout: READY_MS,
-  });
   await page.waitForFunction(
-    'window.scout.map().isStyleLoaded() && window.scout.map().loaded()',
+    `!!(window.scout && window.scout.map()
+        && window.scout.map().isStyleLoaded() && window.scout.map().loaded())`,
     null,
     { timeout: READY_MS },
   );

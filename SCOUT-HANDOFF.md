@@ -45,7 +45,7 @@ as arithmetic. Keep that.
 
 ## What exists and is verified
 
-730 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+749 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
 
 `npm run smoke` (`tests/scout.smoke.ts`) drives the page in a real browser —
 Playwright and Chromium, against `astro dev` because `window.scout` is gated
@@ -65,6 +65,7 @@ so a red smoke against a green build reads as "look at the network".
 | `src/lib/scout/skyline.ts` | 410 | Per-point horizon from buildings, merged with terrain. 30 tests |
 | `src/lib/scout/shadows.ts` | 406 | Building + monolith shadow casting, with ceilings. 41 tests |
 | `src/lib/scout/weather.ts` | 273 | WMO codes, cloud → light quality, forecast parsing. 23 tests |
+| `src/lib/scout/galactic.ts` | 413 | Galactic core position, precession, the moon-free dark window. 19 tests |
 | `src/lib/scout/geo.ts` | 191 | Spherical geodesy, radius ring. 31 tests |
 | `src/lib/scout/almanac.ts` | 175 | Equinoxes and solstices, solved not tabulated. 15 tests |
 | `src/lib/scout/basemap.ts` | 214 | Contrast overrides + sun-driven colour ramps. 16 tests |

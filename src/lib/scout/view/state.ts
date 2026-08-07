@@ -41,6 +41,7 @@ export interface Shown {
   hillshade: boolean;
   sunPath: boolean;
   moonPath: boolean;
+  corePath: boolean;
   solstice: boolean;
   monolith: boolean;
   photos: boolean;
@@ -54,6 +55,7 @@ export const defaultShown = (): Shown => ({
   hillshade: true,
   sunPath: true,
   moonPath: false,
+  corePath: false,
   solstice: false,
   monolith: false,
   photos: true,
@@ -76,6 +78,7 @@ export const LAYER_TOGGLES: ReadonlyArray<readonly [id: string, key: keyof Shown
   ['t-hillshade', 'hillshade'],
   ['t-sunpath', 'sunPath'],
   ['t-moonpath', 'moonPath'],
+  ['t-core', 'corePath'],
   ['t-solstice', 'solstice'],
   ['t-monolith', 'monolith'],
   ['t-photos', 'photos'],

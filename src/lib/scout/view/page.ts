@@ -121,6 +121,7 @@ import {
   moonlightNote,
   type MoonSample,
 } from '../moon';
+import { coreNight, coreTrack, type CoreSample } from '../galactic';
 import { bracketingSolstices, seasonEvents, seasonName } from '../almanac';
 import { buildSkyline, lightWindows, mergeHorizon, nextChange, type Skyline } from '../skyline';
 import {
@@ -259,6 +260,15 @@ export async function startScout(): Promise<void> {
   /** The date being scouted, as `YYYY-MM-DD` where the place is. */
   let isoDate = '';
   let moonSamples: MoonSample[] = [];
+  /**
+   * The core's path across the night that *follows* the chosen date.
+   *
+   * Sampled more coarsely than the sun and the moon because nothing indexes
+   * into it — the slider does not scrub the core, and the arc is a shape rather
+   * than a timeline. Built only while the layer is on: it is off by default and
+   * costs a track nobody asked for on every date change otherwise.
+   */
+  let coreSamples: CoreSample[] = [];
   let weather: WeatherReport | null = null;
   /**
    * The forecast where the sunrise or sunset light passes low over the ground —
@@ -1752,6 +1762,20 @@ export async function startScout(): Promise<void> {
       }
     }
 
+    if (shown.corePath && coreSamples.length) {
+      // A dusty violet, deliberately in neither family: the sun's arc is warm
+      // and the moon's is cool silver, so a third mark in either would read as a
+      // variant of one of them rather than as another object. Quieter than both,
+      // because it is the only one of the three that is often not there at all.
+      const coreLift = liftColour(basemap);
+      ridePath(coreSamples, [0.74, 0.6, 0.95, 0.8], [0.74, 0.6, 0.95, 0.38], WIDTH.moon, 3, [
+        coreLift[0],
+        coreLift[1],
+        coreLift[2],
+        coreLift[3] * 0.5,
+      ]);
+    }
+
     if (shown.moonPath && moonSamples.length) {
       const moonCoarse = moonSamples.filter((_, i) => i % step === 0);
       // Cool silver, so it never competes with the sun's warm arc — but silver
@@ -2630,6 +2654,75 @@ export async function startScout(): Promise<void> {
         : `Rises ${clock(times.rise)} · sets ${clock(times.set)}`;
   }
 
+  /**
+   * The night that *follows* the chosen date, noon to noon.
+   *
+   * Not the solar day the rest of the page runs on. That one starts at solar
+   * midnight, which cuts a night in half — the first hours of tonight would sit
+   * at one end of the slider and the rest at the other, and "the core rises at
+   * 23:40" would be reported against a day that had already ended. Noon to noon
+   * contains exactly one night, which is the thing being asked about.
+   */
+  function nightWindow(): { from: Date; to: Date } | null {
+    if (!day) return null;
+    const noon = day.dayStart.getTime() + 12 * 3_600_000;
+    return { from: new Date(noon), to: new Date(noon + 24 * 3_600_000) };
+  }
+
+  /** The core's arc, built only while the layer is on. */
+  function rebuildCore() {
+    const window = nightWindow();
+    coreSamples =
+      centre && window && shown.corePath
+        ? coreTrack(centre.lat, centre.lon, window.from, window.to, 5)
+        : [];
+  }
+
+  /**
+   * The core's night: three conditions, and which of them failed.
+   *
+   * Reported for the whole night rather than for the slider's minute, because
+   * unlike the sun and the moon this is not a question about a moment. Nobody
+   * scrubs to find the core; they want to know whether tonight is worth driving
+   * out for, and that is a window or it is nothing.
+   */
+  function renderCoreDay() {
+    const window = nightWindow();
+    if (!centre || !window) return;
+
+    const night = coreNight(centre.lat, centre.lon, window.from, window.to);
+    const clock = (date: Date) => formatClock(date, timeZone);
+    const { core } = night;
+
+    $('core-times').textContent = core.alwaysDown
+      ? 'Never rises at this latitude'
+      : [
+          core.rise ? `Rises ${clock(core.rise)}` : 'Already up at dusk',
+          core.transit
+            ? `highest ${clock(core.transit)} at ${core.peakAltitude.toFixed(0)}°`
+            : `peaks at ${core.peakAltitude.toFixed(0)}°`,
+          core.set ? `sets ${clock(core.set)}` : 'still up at dawn',
+        ].join(' · ');
+
+    // Only the windows that satisfy all three conditions are offered as such.
+    // The darkness and the moon-free stretches are on their own no use — the
+    // core has to be in the sky for them to be about anything.
+    $('core-window').textContent = night.visible.length
+      ? night.visible
+          .map(
+            (w) =>
+              `${clock(w.from)} → ${clock(w.to)} (${formatDuration(
+                Math.round((+w.to - +w.from) / 60_000),
+              )})`,
+          )
+          .join(' · ')
+      : '—';
+
+    $('core-note').textContent = night.best
+      ? `Best at ${clock(night.best.at)}, ${night.best.altitude.toFixed(0)}° up.`
+      : night.refusal;
+  }
+
   function renderMoonNow() {
     const instant = currentInstant();
     if (!instant || !centre || !day) return;
@@ -3042,6 +3135,8 @@ export async function startScout(): Promise<void> {
     renderDateChips();
     renderEvents();
     renderMoonDay();
+    rebuildCore();
+    renderCoreDay();
 
     const wanted = keepMinute
       ? minute
@@ -3605,6 +3700,7 @@ export async function startScout(): Promise<void> {
       shown[key] = (event.target as HTMLInputElement).checked;
       applyVisibility();
       if (key === 'moonPath') drawMoon();
+      if (key === 'corePath') rebuildCore();
       if (key === 'solstice' && !solsticeDays) rebuildSolstices();
       if (key === 'monolith') drawSlab();
       if (key === 'buildings') collectBuildings();
