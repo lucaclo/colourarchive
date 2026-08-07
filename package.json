@@ -17,7 +17,7 @@
     "export:print": "tsx scripts/export-print.ts",
     "fonts": "tsx scripts/fetch-fonts.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
-    "check": "tsc --noEmit && tsx scripts/check-astro-scripts.ts"
+    "check": "astro sync && tsc --noEmit && tsx scripts/check-astro-scripts.ts"
   },
   "dependencies": {
     "@astrojs/node": "^9.1.3",

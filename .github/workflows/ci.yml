@@ -1,0 +1,35 @@
+name: CI
+
+# Nothing here was verified anywhere but a developer's Mac until now. The three
+# commands are the same ones run by hand before a commit — kept as three separate
+# steps so a red run says *which* of the three broke without opening a log.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22, not 20: `npm test` hands the runner a glob, and glob expansion in
+      # `node --test` only arrived in Node 21. Measured on 20.19.5 — "Could not find
+      # 'src/**/*.test.ts'", exit 1. Loud, at least, but no tests run.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Build
+        run: npm run build
