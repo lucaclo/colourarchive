@@ -33,3 +33,29 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Separate, because it is a different kind of claim and fails for different
+  # reasons: it drives a real browser against a real map, and the tiles come
+  # from hosts nobody here controls. A red smoke job with a green verify job
+  # means "look at the network", not "the code is broken".
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Chromium only. The page is driven through MapLibre and WebGL, and this
+      # is not a cross-browser suite — it is a guard on one tab that keeps
+      # breaking in ways nothing else here can see.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke test /scout
+        run: npm run smoke

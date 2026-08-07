@@ -45,7 +45,16 @@ as arithmetic. Keep that.
 
 ## What exists and is verified
 
-480 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+730 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+
+`npm run smoke` (`tests/scout.smoke.ts`) drives the page in a real browser —
+Playwright and Chromium, against `astro dev` because `window.scout` is gated
+behind `import.meta.env.DEV`. Four assertions, one per failure this tab has
+actually shipped: no uncaught errors; no height field fetched before a place is
+chosen (the 24,450-tile storm); a link restores a spot and scrubbing moves the
+sun; and turning the sun path off changes the pixels on the map, which is the
+only way to notice a shader that will not link. It runs in CI as its own job,
+so a red smoke against a green build reads as "look at the network".
 
 | File | Lines | What |
 |---|---|---|

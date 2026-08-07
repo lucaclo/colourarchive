@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
-    "export:static": "PUBLIC_STATIC=true astro build && echo '\\nStatic archive ready in dist/client \u2014 drag that folder onto Netlify Drop (app.netlify.com/drop).'",
+    "export:static": "PUBLIC_STATIC=true astro build && echo '\\nStatic archive ready in dist/client — drag that folder onto Netlify Drop (app.netlify.com/drop).'",
     "preview": "node ./dist/server/entry.mjs",
     "manifest": "tsx scripts/build-manifest.ts",
     "reanalyze": "tsx scripts/reanalyze.ts",
@@ -17,6 +17,7 @@
     "export:print": "tsx scripts/export-print.ts",
     "fonts": "tsx scripts/fetch-fonts.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "smoke": "node --import tsx --test tests/scout.smoke.ts",
     "check": "astro sync && tsc --noEmit && tsx scripts/check-astro-scripts.ts"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "netlify-cli": "^27.0.1",
+    "playwright": "^1.62.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   },
