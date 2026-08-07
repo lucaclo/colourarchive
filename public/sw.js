@@ -142,7 +142,9 @@ self.addEventListener('message', (event) => {
     const cache = await caches.open(CACHE);
     const queue = data.urls.slice();
     const total = queue.length;
-    let added = 0, done = 0, lastPost = 0;
+    // `have` is what the snapshot actually holds — already stored plus newly
+    // added — which is the only number that answers "can I walk away now?".
+    let added = 0, have = 0, done = 0, lastPost = 0, full = false;
     const say = async (type, extra) => {
       const clients = await self.clients.matchAll();
       clients.forEach((c) => c.postMessage(Object.assign({ type, total, done, added }, extra)));
@@ -160,7 +162,10 @@ self.addEventListener('message', (event) => {
     const worker = async () => {
       for (let u = queue.shift(); u !== undefined; u = queue.shift()) {
         try {
-          if (!(await cache.match(u))) {
+          // Still counted while full: knowing how much of the archive is on the
+          // device is the whole answer, and it costs one cache lookup.
+          if (await cache.match(u)) have++;
+          else if (!full) {
             // No `cache: 'no-store'`. Every derivative is named by the hash of
             // its own bytes, so a given URL can never point at different pixels
             // — there is nothing to go stale, and bypassing the HTTP cache only
@@ -168,13 +173,29 @@ self.addEventListener('message', (event) => {
             // on disk. On a phone filling a snapshot that is tens of megabytes
             // of someone's data allowance spent to arrive at the same bytes.
             const res = await fetch(u);
-            if (res && (res.ok || res.type === 'opaque')) { await cache.put(u, res.clone()); added++; }
+            if (res && (res.ok || res.type === 'opaque')) {
+              try {
+                await cache.put(u, res.clone());
+                added++; have++;
+              } catch (err) {
+                // iOS gives a site a small fraction of the quota a desktop does
+                // and this archive warms tens of megabytes of photographs into
+                // it, so a full cache is an expected end state on a phone. Since
+                // nothing is evicted to make room (see `activate`), the run
+                // cannot recover: stop fetching what cannot be stored — that is
+                // someone's data allowance — and let the page say it is full.
+                // Safari names the rejection; anything else falls to the outer
+                // catch and is counted as simply missing, as before.
+                if (err && err.name === 'QuotaExceededError') full = true;
+                else throw err;
+              }
+            }
           }
         } catch { /* offline or missing — skip */ }
         tick();   // counts attempted, not succeeded: the bar must always finish
       }
     };
     await Promise.all(Array.from({ length: Math.min(6, total) }, worker));
-    await say('WARM_DONE');
+    await say('WARM_DONE', { full, have });
   })());
 });

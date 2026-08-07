@@ -30,11 +30,22 @@ type Handlers = Record<string, (event: unknown) => void>;
 /** A cache faithful enough for what the worker asks of it. */
 class FakeCache {
   readonly store = new Map<string, Response>();
+  /** How many more entries this cache will accept before it is full. */
+  room = Infinity;
   async match(req: Request | string) {
     return this.store.get(typeof req === 'string' ? req : req.url);
   }
   async put(req: Request | string, res: Response) {
-    this.store.set(typeof req === 'string' ? req : req.url, res);
+    const url = typeof req === 'string' ? req : req.url;
+    // What Safari does when the origin's Cache Storage quota is spent. The name
+    // is the only thing distinguishing it from an ordinary failure.
+    if (!this.store.has(url) && this.room <= 0) {
+      const err = new Error('quota exceeded');
+      err.name = 'QuotaExceededError';
+      throw err;
+    }
+    if (!this.store.has(url)) this.room--;
+    this.store.set(url, res);
   }
   async delete(req: Request | string) {
     return this.store.delete(typeof req === 'string' ? req : req.url);
@@ -53,6 +64,7 @@ function boot(options: {
   const caches = new Map<string, FakeCache>();
   const handlers: Handlers = {};
   const timers: Array<() => void> = [];
+  const messages: Array<Record<string, unknown>> = [];
   let fetches = 0;
 
   const cache = new FakeCache();
@@ -75,7 +87,11 @@ function boot(options: {
         handlers[type] = fn;
       },
       skipWaiting: () => {},
-      clients: { claim: async () => {}, matchAll: async () => [] },
+      clients: {
+        claim: async () => {},
+        // One page listening, which is what the pill on screen is.
+        matchAll: async () => [{ postMessage: (m: Record<string, unknown>) => messages.push(m) }],
+      },
     },
     caches: {
       keys: async () => [...caches.keys()],
@@ -120,9 +136,22 @@ function boot(options: {
     await work;
   };
 
+  /** Hand the worker a warm list, the way the page does on load. */
+  const warm = async (urls: string[]) => {
+    let work: Promise<unknown> | undefined;
+    handlers.message?.({
+      data: { type: 'WARM', urls },
+      waitUntil: (p: Promise<unknown>) => (work = p),
+    });
+    await work;
+    return messages[messages.length - 1] ?? {};
+  };
+
   return {
     request,
     activate,
+    warm,
+    messages,
     cache,
     /**
      * Run the patience timer out.
@@ -212,6 +241,64 @@ describe('the service worker: activation', () => {
     await sw.activate();
     assert.ok(await sw.cache.match(SPRITE), 'the offline copy must survive activation');
     assert.ok(await sw.cache.match(OWN_ASSET));
+  });
+});
+
+describe('the service worker: warming the snapshot', () => {
+  const photos = (n: number) =>
+    Array.from({ length: n }, (_, i) => `${ORIGIN}/img/photo-${i}.avif`);
+
+  it('reports a complete run as complete', async () => {
+    const sw = boot();
+    const done = await sw.warm(photos(5));
+    assert.equal(done.type, 'WARM_DONE');
+    assert.equal(done.full, false);
+    assert.equal(done.have, 5, 'the whole list is on the device');
+    assert.equal(done.added, 5);
+  });
+
+  it('says it ran out of room instead of claiming a snapshot it does not have', async () => {
+    // The iPad is the case this exists for: a far smaller quota than a desktop,
+    // tens of megabytes of photographs, and nothing evicted to make room. The
+    // run used to end on "Saved for offline" whether or not anything landed.
+    const sw = boot();
+    sw.cache.room = 2;
+    const done = await sw.warm(photos(20));
+    assert.equal(done.full, true);
+    assert.equal(done.have, 2, 'and says how much of the archive is really here');
+    assert.equal(done.total, 20);
+  });
+
+  it('stops fetching once there is nowhere to put anything', async () => {
+    // Every byte past this point is someone's data allowance spent on a file
+    // that is thrown away on arrival.
+    const sw = boot();
+    sw.cache.room = 2;
+    await sw.warm(photos(20));
+    assert.ok(sw.fetchCount() < 20, `kept downloading: ${sw.fetchCount()} of 20 fetched`);
+  });
+
+  it('counts what is already stored, so a full cache is not read as an empty one', async () => {
+    const sw = boot({
+      cached: Object.fromEntries(photos(3).map((u) => [u, 'already here'])),
+    });
+    sw.cache.room = 0;
+    const done = await sw.warm(photos(5));
+    assert.equal(done.full, true);
+    assert.equal(done.added, 0);
+    assert.equal(done.have, 3, 'three of five, not none');
+  });
+
+  it('finishes the count even when the network is gone', async () => {
+    const sw = boot({
+      network: async () => {
+        throw new TypeError('Failed to fetch');
+      },
+    });
+    const done = await sw.warm(photos(5));
+    assert.equal(done.done, 5, 'the bar must always reach the end');
+    assert.equal(done.have, 0);
+    assert.equal(done.full, false, 'a dead network is not a full cache');
   });
 });
 

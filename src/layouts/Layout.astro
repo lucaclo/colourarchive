@@ -107,7 +107,7 @@ const {
             navigator.serviceWorker.addEventListener('message', (e) => {
               const d = e.data || {};
               if (d.type === 'WARM_PROGRESS') offlineProgress(d.done, d.total);
-              if (d.type === 'WARM_DONE') offlineDone(d.added);
+              if (d.type === 'WARM_DONE') offlineDone(d);
             });
           } catch (err) { console.warn('[offline] service worker failed', err); }
         });
@@ -147,8 +147,16 @@ const {
         function offlineProgress(done, total) {
           if (total > 12 && done < total) showPill(`Saving for offline · ${done} / ${total}`, true);
         }
-        function offlineDone(added) {
-          showPill(added > 0 ? 'Saved for offline' : 'Up to date offline');
+        function offlineDone(d) {
+          // A full cache is the one ending that "Saved for offline" would be a
+          // lie about, and the device cannot get out of it on its own — nothing
+          // is evicted to make room. So it stays on screen and says how much of
+          // the archive is actually on here, rather than fading out reassuringly.
+          if (d.full) {
+            showPill(`No room left · ${d.have} of ${d.total} saved`, true);
+            return;
+          }
+          showPill(d.added > 0 ? 'Saved for offline' : 'Up to date offline');
         }
         // Viewing a cached snapshot with nothing behind it is a different state
         // from being live, and the archive looks identical either way. Say so.
