@@ -14,6 +14,22 @@
  * instead: search is unavailable, the map still is.
  */
 
+/**
+ * A geocoder result, as `/api/scout/geocode` and `/api/scout/reverse` return it.
+ *
+ * `bounds` is Nominatim's own, and is what a whole-city result is framed by —
+ * a point at the centre of Tokyo says nothing about how far Tokyo reaches.
+ */
+export interface Place {
+  name: string;
+  detail: string;
+  lat: number;
+  lon: number;
+  kind: string;
+  timeZone: string;
+  bounds?: [number, number, number, number];
+}
+
 export class NoSearchServer extends Error {
   constructor() {
     super('Place search needs the server. Drag the pin to choose a spot instead.');
