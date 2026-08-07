@@ -289,6 +289,60 @@ export function ringIntersects(ring: Ring, bounds: Bounds): boolean {
   return !(east < bounds.west || west > bounds.east || north < bounds.south || south > bounds.north);
 }
 
+/**
+ * Eight bytes of scratch, so hashing a float allocates nothing.
+ *
+ * Module-level and reused: this runs once per building per gather, and a
+ * `DataView` per call would be several thousand short-lived objects on every
+ * burst of tiles.
+ */
+const floatBits = new DataView(new ArrayBuffer(8));
+
+/** Mix one double into a running 32-bit hash. */
+function hashFloat(seed: number, value: number): number {
+  floatBits.setFloat64(0, value);
+  let h = seed ^ floatBits.getInt32(0);
+  h = Math.imul(h ^ (h >>> 16), 2246822507);
+  h ^= floatBits.getInt32(4);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * A fingerprint of a gathered set of footprints.
+ *
+ * The page re-gathers buildings on every burst of tiles, which at a city zoom
+ * is dozens of times a second, and almost every one of those gathers returns
+ * exactly what the last did. Comparing counts is not enough to notice that —
+ * a pan that brings one building in as another leaves keeps the count — and
+ * the cost of getting it wrong is either a stale skyline or a needless recast
+ * of four thousand shadows.
+ *
+ * Order-independent, because `querySourceFeatures` walks whichever tiles it
+ * happens to hold and does not promise an order. That is what the sum is for:
+ * addition does not care what order it is done in, where a running hash would
+ * make the same set fingerprint differently depending on tile arrival.
+ *
+ * Hashed on the first vertex and the height, which is what the caller's own
+ * de-duplication already treats as a building's identity.
+ */
+export function buildingSetSignature(
+  buildings: ReadonlyArray<{ ring: Ring; height: number }>,
+): string {
+  let total = 0;
+  for (const building of buildings) {
+    const first = building.ring[0];
+    if (!first) continue;
+    let h = hashFloat(0x9e3779b9, first[0]);
+    h = hashFloat(h, first[1]);
+    h = hashFloat(h, building.height);
+    total = (total + h) >>> 0;
+  }
+  // The count is carried separately so that a set and a copy of it with one
+  // building duplicated cannot collide, however the sum lands.
+  return `${buildings.length}:${total.toString(36)}`;
+}
+
 /** Grow a box by a distance in metres, roughly. Used to catch shadows that fall in from off-screen. */
 export function padBounds(bounds: Bounds, metres: number): Bounds {
   const lat = (bounds.north + bounds.south) / 2;

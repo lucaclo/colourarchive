@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildingHeight,
+  buildingSetSignature,
   castShadow,
   castShadows,
   convexHull,
@@ -481,5 +482,58 @@ describe('the shared shadow offset', () => {
       );
       assert.ok(Math.abs(before - after) < 0.02, `side ${i}: ${before} vs ${after}`);
     }
+  });
+});
+
+describe('fingerprinting a gathered set of buildings', () => {
+  const at = (lon: number, lat: number, height: number) => ({
+    ring: [
+      [lon, lat],
+      [lon + 0.0001, lat],
+      [lon + 0.0001, lat + 0.0001],
+      [lon, lat + 0.0001],
+      [lon, lat],
+    ] as Ring,
+    height,
+  });
+
+  const a = at(-3.19, 55.95, 20);
+  const b = at(-3.191, 55.951, 34);
+  const c = at(-3.192, 55.952, 12);
+
+  it('does not care what order the tiles arrived in', () => {
+    // `querySourceFeatures` walks whichever tiles it holds, in no promised
+    // order, so the same city gathered twice must fingerprint the same.
+    assert.equal(buildingSetSignature([a, b, c]), buildingSetSignature([c, a, b]));
+    assert.equal(buildingSetSignature([a, b, c]), buildingSetSignature([b, c, a]));
+  });
+
+  it('notices a swap that leaves the count alone', () => {
+    // The bug this exists for: panning one building out and another in.
+    assert.notEqual(buildingSetSignature([a, b]), buildingSetSignature([a, c]));
+  });
+
+  it('notices a height changing under a fixed footprint', () => {
+    assert.notEqual(buildingSetSignature([a]), buildingSetSignature([at(-3.19, 55.95, 21)]));
+  });
+
+  it('notices a building being added, removed or duplicated', () => {
+    assert.notEqual(buildingSetSignature([a, b]), buildingSetSignature([a]));
+    assert.notEqual(buildingSetSignature([a, b]), buildingSetSignature([a, b, c]));
+    // Same sum is possible in principle; the count is carried so it cannot pass.
+    assert.notEqual(buildingSetSignature([a, a]), buildingSetSignature([a]));
+  });
+
+  it('is stable across repeated calls, which is the whole point', () => {
+    assert.equal(buildingSetSignature([a, b, c]), buildingSetSignature([a, b, c]));
+  });
+
+  it('answers for an empty set without special-casing it', () => {
+    assert.equal(buildingSetSignature([]), buildingSetSignature([]));
+    assert.notEqual(buildingSetSignature([]), buildingSetSignature([a]));
+  });
+
+  it('survives a footprint with no vertices rather than throwing', () => {
+    assert.doesNotThrow(() => buildingSetSignature([{ ring: [] as Ring, height: 10 }]));
   });
 });

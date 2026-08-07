@@ -86,6 +86,7 @@ import {
   castShadows,
   heightIsEstimated,
   maxShadowLength,
+  buildingSetSignature,
   padBounds,
   ringIntersects,
   squareFootprint,
@@ -192,6 +193,7 @@ import {
 } from './session';
 import { getScoutJson, type Place } from './scout-api';
 import { createSearchBox } from './search-box';
+import { pace } from './pacing';
 import { createMonthGrid } from './month-grid';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
@@ -1061,6 +1063,7 @@ export async function startScout(): Promise<void> {
     // so nothing may be skipped on the grounds that it is already drawn.
     lastCast = null;
     blockerSet = null;
+    castableSignature = '';
     applyView();
     applyVisibility();
     redrawEverything();
@@ -1948,6 +1951,14 @@ export async function startScout(): Promise<void> {
   let nearby: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
   /** Everything in range to cast, gathered once per view rather than per frame. */
   let castable: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
+  /**
+   * What `castable` was last gathered from, so a gather that found the same
+   * buildings can stop rather than reassigning and forcing a recast. Cleared,
+   * not just recomputed, wherever `castable` is emptied or the layers holding
+   * its output are thrown away — a signature that outlived its geometry would
+   * skip the one gather that had to happen.
+   */
+  let castableSignature = '';
 
   /**
    * The widest the length cap ever opens, whatever the sun is doing.
@@ -1970,6 +1981,7 @@ export async function startScout(): Promise<void> {
 
     if (map.getZoom() < BUILDING_MIN_ZOOM || !shown.buildings) {
       castable = [];
+      castableSignature = '';
       nearby = [];
       shadowStats = {
         cast: 0,
@@ -2063,14 +2075,35 @@ export async function startScout(): Promise<void> {
       buildings.length = MAX_SHADOW_BUILDINGS;
     }
 
+    // Almost every gather returns exactly what the last one did.
+    //
+    // `sourcedata` fires per tile, so at a city zoom this runs dozens of times
+    // a second, and once the tiles around a viewport have settled the set stops
+    // changing while the events do not. Assigning `castable` a fresh array
+    // regardless was quietly expensive: the recast guard below holds the set by
+    // *reference*, so a new array for identical buildings looked like new
+    // buildings and bought a full four-thousand-building recast — about 9 ms —
+    // for every one of those bursts.
+    //
+    // The pin is in the signature because `close` is filtered by distance from
+    // it, so the same buildings around a moved pin are not the same answer.
+    const signature = `${buildingSetSignature(buildings)}@${centre.lat},${centre.lon}`;
+    if (signature === castableSignature) return;
+    castableSignature = signature;
+
     castable = buildings;
     shadowStats = { cast: 0, estimated, longestM: 0, omitted, tooFar: false };
 
     // The skyline does not depend on the time at all, so it is rebuilt with the
     // buildings rather than with the sun.
-    const changed = close.length !== nearby.length;
+    //
+    // Compared by content, not by count. A pan that brings one building in as
+    // another leaves keeps the length identical, and this used to read that as
+    // "nothing changed" — leaving the spot's light windows, the basis line
+    // under them and the shade overlay on the slider track describing buildings
+    // that are no longer there.
     nearby = close;
-    if (changed) rebuildSpot();
+    rebuildSpot();
 
     invalidate({ shadows: true });
     renderFacts();
@@ -2766,7 +2799,88 @@ export async function startScout(): Promise<void> {
   let frame = 0;
   /** True from the first slider move until a beat after the last one. */
   let scrubbing = false;
+  /**
+   * True while the day is being played. Declared here rather than with the rest
+   * of the playback state below, because `timeIsMoving` reads it and is called
+   * from `setMinute` — sixteen hundred lines earlier. Every caller is
+   * asynchronous today, so the dead zone is never entered, but a declaration
+   * that far from its use is one reorder away from taking the page down with
+   * "Cannot access 'playing' before initialization".
+   */
+  let playing = false;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Whether the clock is being driven faster than the settled passes can follow.
+   *
+   * `scrubbing` alone was not that. It is set by the slider's own `input`
+   * handler and by nothing else, so playing the day — which calls `setMinute`
+   * on every animation frame — left it false and took the *settled* path
+   * everywhere. That path is a timer that gets cleared and re-armed by the next
+   * call, so at sixty calls a second it never fired: the landform shade froze
+   * for the whole of playback while the building shadows kept swinging, which
+   * reads as the terrain layer having broken. `terrain-shadows.ts` carries a
+   * comment about a debounce that never fires during a continuous drag; this is
+   * the same failure arriving through a different caller.
+   */
+  function timeIsMoving(): boolean {
+    return scrubbing || playing;
+  }
+
+  /**
+   * How often the shadows may be recast while the clock is running.
+   *
+   * A recast is the largest single cost on this page — the geodesic offset, a
+   * convex hull and a ceiling for every one of up to four thousand buildings,
+   * about 9 ms — and the guard inside `castCurrentShadows` cannot help with it:
+   * it holds when the sun has moved less than a tenth of a degree, and one
+   * slider minute moves it between 0.2° and 0.4°. So every minute of a scrub
+   * paid the full cost, against a frame budget of 16.7 ms that MapLibre also
+   * has to draw the map in, and the thumb stuck.
+   *
+   * The same interval the terrain overlay already uses, for the same reason and
+   * so that the two layers step together rather than beating against each
+   * other. Nothing is drawn differently — every building still casts, at full
+   * quality — the picture is only rebuilt about nine times a second instead of
+   * sixty while a gesture is in progress.
+   */
+  const SHADOW_MOVING_INTERVAL_MS = 110;
+  /**
+   * A recast this cheap is not worth throttling.
+   *
+   * Four thousand buildings cost about 9 ms; a quiet village costs a fraction
+   * of one, and capping *that* at nine frames a second would make the common
+   * case worse to fix the expensive one. So the last recast's own duration
+   * decides: the throttle engages only where it is earning something, and a
+   * scene that fits inside a frame keeps running at frame rate.
+   */
+  const SHADOW_CHEAP_MS = 3;
+  let lastShadowCastAt = 0;
+  let lastShadowCastMs = 0;
+  let shadowCatchUp: ReturnType<typeof setTimeout> | undefined;
+
+  function castAndTime() {
+    const started = performance.now();
+    castCurrentShadows();
+    lastShadowCastAt = performance.now();
+    lastShadowCastMs = lastShadowCastAt - started;
+  }
+
+  function recastShadows() {
+    clearTimeout(shadowCatchUp);
+    const answer = pace({
+      moving: timeIsMoving(),
+      lastDurationMs: lastShadowCastMs,
+      sinceLastMs: performance.now() - lastShadowCastAt,
+      intervalMs: SHADOW_MOVING_INTERVAL_MS,
+      cheapMs: SHADOW_CHEAP_MS,
+    });
+    // Trailing as well as leading: the minute a gesture *ends* on almost always
+    // arrives inside the interval, and dropping it would leave the map showing
+    // a moment you had already left.
+    if (answer.run) castAndTime();
+    else shadowCatchUp = setTimeout(castAndTime, answer.waitMs);
+  }
 
   function invalidate(flags: Partial<typeof dirty>) {
     Object.assign(dirty, flags);
@@ -2787,7 +2901,7 @@ export async function startScout(): Promise<void> {
       applySunLight();
     }
     if (todo.dome) updateDome();
-    if (todo.shadows) castCurrentShadows();
+    if (todo.shadows) recastShadows();
     // The framing readout is the one thing here that changes with *both* the
     // time and the lens, so it is rebuilt whenever either flag is up rather
     // than being given a flag of its own.
@@ -2801,6 +2915,8 @@ export async function startScout(): Promise<void> {
   function settle() {
     scrubbing = false;
     paintTerrain(false);
+    // The gesture is over, so anything the throttle deferred is due now.
+    recastShadows();
     renderFacts();
     // Crossing noon changes which horizon the reading is about, and that needs a
     // forecast from the other side of the sky.
@@ -2856,7 +2972,7 @@ export async function startScout(): Promise<void> {
 
     invalidate({ clock: true, live: true, sky: true, dome: true, shadows: true });
     // Coarse and throttled while moving, exact once it settles.
-    paintTerrain(scrubbing);
+    paintTerrain(timeIsMoving());
     scheduleSettle();
   }
 
@@ -4323,7 +4439,6 @@ export async function startScout(): Promise<void> {
   /** Someone who asked for less motion gets the day in steps, not a sweep. */
   const playStepMinutes = () => (reducedMotion?.matches ? 10 : 0);
 
-  let playing = false;
   let playFrame = 0;
   let playLast = 0;
   /** Fractional minutes carried between frames, so slow steps are not lost. */
