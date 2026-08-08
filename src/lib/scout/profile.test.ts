@@ -221,14 +221,14 @@ describe('lineOfSight — a ridge in the way', () => {
     // same 300 m wall. From up there the line passes 190 m over it.
     const hill = (col: number) =>
       col <= 20 ? 900 : col < 40 ? 900 * (1 - (col - 20) / 20) : 0;
-    const field = await landscape((col, row) => Math.max(hill(col), wall(100, 300)(col)));
+    const field = await landscape((col, _row) => Math.max(hill(col), wall(100, 300)(col)));
     const sight = lineOfSight(field, atColumn(field, 20), atColumn(field, 200), EYE);
     assert.equal(sight.clear, true);
     assert.equal(sight.requiredRiseM, 0);
   });
 
   it('picks the worst obstacle when there are two', async () => {
-    const field = await landscape((col, row) => wall(60, 120)(col) + wall(140, 400)(col));
+    const field = await landscape((col, _row) => wall(60, 120)(col) + wall(140, 400)(col));
     const sight = lineOfSight(field, atColumn(field, 20), atColumn(field, 220), EYE);
     assert.equal(sight.clear, false);
     // The taller, further wall is the one that decides the rise.

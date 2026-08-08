@@ -18,7 +18,8 @@
     "fonts": "tsx scripts/fetch-fonts.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "smoke": "node --import tsx --test tests/scout.smoke.ts",
-    "check": "astro sync && tsc --noEmit && tsx scripts/check-astro-scripts.ts"
+    "check": "astro sync && tsc --noEmit && tsx scripts/check-astro-scripts.ts",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@astrojs/node": "^9.1.3",
@@ -30,10 +31,16 @@
     "tz-lookup": "^6.1.25"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "astro-eslint-parser": "^3.0.0",
+    "eslint": "^10.8.1",
+    "eslint-plugin-astro": "^3.1.0",
+    "globals": "^17.9.0",
     "netlify-cli": "^27.0.1",
     "playwright": "^1.62.1",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.66.0"
   },
   "allowScripts": {
     "esbuild@0.27.7": true,
