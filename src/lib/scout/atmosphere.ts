@@ -113,6 +113,88 @@ export function coastalAerosol(seaFraction: number, inland: Aerosol = AEROSOL.co
   };
 }
 
+/**
+ * Where a number came from, carried beside it.
+ *
+ * The whole point of this module is that some of its inputs are measured and
+ * some are assumed, and the difference is not visible in the output — a colour
+ * temperature computed from a satellite's aerosol reading and one computed from
+ * a table look identical on screen. So every input that can be either says
+ * which it was, and the panel prints it.
+ */
+export type Basis = 'measured' | 'inferred' | 'assumed';
+
+export interface Sourced<T> {
+  value: T;
+  basis: Basis;
+  /** One clause, for the provenance line. Never a sentence. */
+  note: string;
+}
+
+/**
+ * Precipitable water from a surface dew point — Reitan (1963).
+ *
+ * `ln w = 0.1102 + 0.0614·Td`, w in centimetres, Td in °C. An empirical fit
+ * between one number anyone can measure at head height and the whole column
+ * above it, and it holds because most of the water in the sky is in the lowest
+ * kilometre or two. Scatter is real — a factor of about 1.3 either way — but
+ * against the fixed 1.5 cm it replaces, a value that moves with the weather is
+ * the improvement. Bird's water term is a weak one: over the whole plausible
+ * range it moves the direct beam by a few percent and the colour temperature by
+ * tens of kelvin, which is why this is worth doing and not worth agonising over.
+ *
+ * Clamped to the range the fit was built over, so a −40 °C polar dew point
+ * cannot drive the column to zero.
+ */
+export function precipitableWater(dewPointC: number): number {
+  if (!Number.isFinite(dewPointC)) return 1.5;
+  const w = Math.exp(0.1102 + 0.0614 * dewPointC);
+  return Math.min(6, Math.max(0.1, w));
+}
+
+/**
+ * The air over a pin: a measured *amount*, an inferred *size*.
+ *
+ * These are two different questions and they have two different answers, which
+ * is why they are labelled separately rather than averaged into one confidence.
+ *
+ * - β, the amount, can be measured: CAMS publishes aerosol optical depth and
+ *   Open-Meteo serves it keylessly. When there is a reading, it is used.
+ * - α, the size, cannot be. Nothing published says whether today's haze over
+ *   this pin is sea salt or dust, and it is the parameter that decides whether
+ *   the light whitens or reddens. It stays inferred from the terrain — the sea
+ *   fraction of the loaded height field — exactly as before.
+ *
+ * So the usual result is honestly half-measured, and says so.
+ */
+export function aerosolFor(input: {
+  /** Aerosol optical depth at 550 nm, if a reading was obtained. */
+  aod550?: number | null;
+  /** Share of the loaded height field at or below sea level, if there is one. */
+  seaFraction?: number | null;
+}): Sourced<Aerosol> {
+  const sea = input.seaFraction;
+  const shape = sea == null ? AEROSOL.continental : coastalAerosol(sea);
+  const sizeNote =
+    sea == null
+      ? 'particle size assumed continental'
+      : `particle size inferred from ${Math.round(sea * 100)}% sea around the pin`;
+
+  if (input.aod550 == null || !Number.isFinite(input.aod550)) {
+    return {
+      value: shape,
+      basis: 'assumed',
+      note: `turbidity from a table, ${sizeNote}`,
+    };
+  }
+
+  return {
+    value: { beta: betaFromAod550(input.aod550, shape.alpha), alpha: shape.alpha },
+    basis: 'measured',
+    note: `aerosol depth ${input.aod550.toFixed(2)} at 550 nm, measured; ${sizeNote}`,
+  };
+}
+
 /* ── Spectral transmittance ────────────────────────────────────────────────── */
 
 /**
@@ -397,6 +479,42 @@ export function readLight(input: BirdInput): LightReading {
   const ev100 = Math.log2(incident / 2.5);
 
   return { ...spectral, ...bird, diffuseLux, ev100, contrastStops };
+}
+
+/**
+ * A chromaticity as a colour you can put on screen.
+ *
+ * Normalised to the brightest channel rather than to its own luminance, because
+ * this is a *swatch of the light's colour*, not a photometric reproduction of
+ * it: a 2000 K sun at the horizon carries a hundredth of the energy of noon,
+ * and rendered honestly against luminance it would be a black square. The hue
+ * is the measured part and is preserved exactly; the brightness is a display
+ * decision and is not claimed to be anything else.
+ *
+ * Out-of-gamut chromaticities — and a deep sunset is one — are clipped at zero
+ * per channel, which desaturates towards the gamut edge rather than hue-shifting.
+ */
+export function chromaticityToSrgb(colour: Chromaticity): string {
+  const y = colour.y > 1e-6 ? colour.y : 1e-6;
+  const X = colour.x / y;
+  const Y = 1;
+  const Z = (1 - colour.x - colour.y) / y;
+
+  // sRGB primaries, D65.
+  const linear = [
+    3.2406 * X - 1.5372 * Y - 0.4986 * Z,
+    -0.9689 * X + 1.8758 * Y + 0.0415 * Z,
+    0.0557 * X - 0.204 * Y + 1.057 * Z,
+  ].map((v) => Math.max(0, v));
+
+  const peak = Math.max(...linear, 1e-6);
+  const encode = (v: number) => {
+    const s = v / peak;
+    const g = s <= 0.0031308 ? 12.92 * s : 1.055 * s ** (1 / 2.4) - 0.055;
+    return Math.round(Math.min(1, Math.max(0, g)) * 255);
+  };
+  const [r, g, b] = linear.map(encode);
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** "5 400 K · 4.6 stops · EV 15" territory, as words. */

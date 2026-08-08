@@ -36,6 +36,9 @@ export const SCOUT_GEOCODE_DIR = path.join(SCOUT_CACHE_DIR, 'geocode');
 // Forecasts, unlike places, go off. Cached only long enough to survive a session
 // of scrubbing the slider back and forth — see WEATHER_TTL_MS.
 export const SCOUT_WEATHER_DIR = path.join(SCOUT_CACHE_DIR, 'weather');
+// The aerosol column, from a different host and on a slower clock than the
+// weather — it is a smooth field that moves over half a day. See AIR_TTL_MS.
+export const SCOUT_AIR_DIR = path.join(SCOUT_CACHE_DIR, 'air');
 
 /** Web path (as served) for a derivative file. */
 export const imgUrl = (name: string): string => `/img/${name}`;

@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 
 import {
   AEROSOL,
+  aerosolFor,
   airMass,
   betaFromAod550,
   birdClearSky,
+  chromaticityToSrgb,
   coastalAerosol,
+  precipitableWater,
   pressureRatio,
   readLight,
   spectralLight,
@@ -184,5 +187,103 @@ describe('the inputs we cannot measure', () => {
   it('clamps a nonsense sea fraction instead of extrapolating', () => {
     assert.deepEqual(coastalAerosol(-3), AEROSOL.continental);
     assert.deepEqual(coastalAerosol(99), AEROSOL.maritime);
+  });
+});
+
+describe('precipitable water from a dew point', () => {
+  it('rises steeply with the dew point, over a plausible range', () => {
+    // Reitan: a temperate 10 °C dew point sits near 2 cm, a dry −10 °C near
+    // half of that, and a tropical 25 °C several times it.
+    assert.ok(precipitableWater(10) > 1.5 && precipitableWater(10) < 2.5);
+    assert.ok(precipitableWater(-10) < precipitableWater(10));
+    assert.ok(precipitableWater(25) > precipitableWater(10));
+    assert.ok(precipitableWater(-10) > 0.4 && precipitableWater(-10) < 0.9);
+  });
+
+  it('is clamped at both ends, so no dew point can empty or flood the column', () => {
+    assert.equal(precipitableWater(-80), 0.1);
+    assert.equal(precipitableWater(60), 6);
+  });
+
+  it('falls back to the temperate default when there is no reading', () => {
+    assert.equal(precipitableWater(NaN), 1.5);
+  });
+
+  it('moves the light a little, not a lot — which is why a rough fit will do', () => {
+    const base = { altitudeDeg: 30, elevationM: 0, aerosol: AEROSOL.continental };
+    const dry = readLight({ ...base, waterCm: precipitableWater(-10) });
+    const wet = readLight({ ...base, waterCm: precipitableWater(25) });
+    // Water absorbs in the near infrared, so it takes energy out without
+    // moving the visible colour much: a large change in beam, a small one in K.
+    assert.ok(dry.directNormal > wet.directNormal, 'dry air passes more energy');
+    assert.ok(Math.abs(dry.sun.cct - wet.sun.cct) < 150, 'but the colour barely moves');
+  });
+});
+
+describe('the air over a pin', () => {
+  it('uses a measured depth when there is one, and says so', () => {
+    const air = aerosolFor({ aod550: 0.35, seaFraction: 0 });
+    assert.equal(air.basis, 'measured');
+    assert.match(air.note, /0\.35 at 550 nm, measured/);
+    // β = τ·λ^α at λ = 0.55 µm.
+    assert.ok(Math.abs(air.value.beta - betaFromAod550(0.35, air.value.alpha)) < 1e-12);
+  });
+
+  it('keeps the particle size inferred even when the amount is measured', () => {
+    // The half nobody publishes. A measured amount must not be allowed to make
+    // the whole reading look measured.
+    const coast = aerosolFor({ aod550: 0.2, seaFraction: 0.8 });
+    const inland = aerosolFor({ aod550: 0.2, seaFraction: 0 });
+    assert.ok(coast.value.alpha < inland.value.alpha, 'sea air is larger-particled');
+    assert.match(coast.note, /inferred from 80% sea/);
+    // Nought per cent sea is a *reading* of the terrain, not the absence of one,
+    // and is labelled as inferred. Only a missing height field is assumed.
+    assert.match(inland.note, /inferred from 0% sea/);
+    assert.match(aerosolFor({ aod550: 0.2 }).note, /assumed continental/);
+  });
+
+  it('falls back to the table with no reading, and labels the whole thing assumed', () => {
+    const air = aerosolFor({ aod550: null, seaFraction: 0.5 });
+    assert.equal(air.basis, 'assumed');
+    assert.match(air.note, /turbidity from a table/);
+    assert.deepEqual(air.value, coastalAerosol(0.5));
+  });
+
+  it('a hazier measurement gives warmer, weaker light than a clear one', () => {
+    const base = { altitudeDeg: 20, elevationM: 0 };
+    const clear = readLight({ ...base, aerosol: aerosolFor({ aod550: 0.05 }).value });
+    const hazy = readLight({ ...base, aerosol: aerosolFor({ aod550: 0.6 }).value });
+    assert.ok(hazy.sun.cct < clear.sun.cct, 'haze reddens the beam');
+    assert.ok(hazy.directNormal < clear.directNormal, 'and weakens it');
+    assert.ok(hazy.diffuseFraction > clear.diffuseFraction, 'and fills the shadows');
+  });
+});
+
+describe('a chromaticity as a swatch', () => {
+  it('renders daylight as something near neutral', () => {
+    const noon = readLight({ altitudeDeg: 60, elevationM: 0, aerosol: AEROSOL.continental });
+    const hex = chromaticityToSrgb(noon.sun);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    assert.ok(Math.abs(r - b) < 60, `midday sun came out ${hex}`);
+    assert.ok(g > 180, 'and bright, since the swatch is normalised to its peak');
+  });
+
+  it('renders a low sun redder than a high one', () => {
+    const high = readLight({ altitudeDeg: 60, elevationM: 0, aerosol: AEROSOL.continental });
+    const low = readLight({ altitudeDeg: 2, elevationM: 0, aerosol: AEROSOL.continental });
+    const blueOf = (hex: string) => parseInt(hex.slice(5, 7), 16);
+    assert.ok(
+      blueOf(chromaticityToSrgb(low.sun)) < blueOf(chromaticityToSrgb(high.sun)),
+      'the horizon sun must lose blue',
+    );
+  });
+
+  it('always produces a valid six-digit hex, including out of gamut', () => {
+    for (const altitude of [0.1, 1, 5, 15, 45, 89]) {
+      const hex = chromaticityToSrgb(
+        readLight({ altitudeDeg: altitude, elevationM: 0, aerosol: AEROSOL.urban }).sun,
+      );
+      assert.match(hex, /^#[0-9a-f]{6}$/);
+    }
   });
 });

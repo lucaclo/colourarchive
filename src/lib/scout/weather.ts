@@ -91,6 +91,14 @@ export interface WeatherHour {
   /** UTC instant, as milliseconds. */
   time: number;
   temperatureC: number | null;
+  /**
+   * Dew point at 2 m, °C — the humidity of the column, as a temperature.
+   *
+   * Here for `precipitableWater`, not for the panel: nothing on screen prints a
+   * dew point, but it is the one published number that says how much water the
+   * light has to come through.
+   */
+  dewPointC: number | null;
   /** Percent, 0–100. Total sky obscured, all decks together. */
   cloudCover: number | null;
   /**
@@ -490,6 +498,7 @@ export function parseForecast(body: unknown, fetchedAt: number): WeatherReport {
     Array.isArray(hourly[name]) ? (hourly[name] as unknown[]) : [];
 
   const temperature = column('temperature_2m');
+  const dewPoint = column('dew_point_2m');
   const cloud = column('cloud_cover');
   const low = column('cloud_cover_low');
   const mid = column('cloud_cover_mid');
@@ -505,6 +514,7 @@ export function parseForecast(body: unknown, fetchedAt: number): WeatherReport {
     hours.push({
       time,
       temperatureC: numberOrNull(temperature[i]),
+      dewPointC: numberOrNull(dewPoint[i]),
       cloudCover: numberOrNull(cloud[i]),
       cloudLow: numberOrNull(low[i]),
       cloudMid: numberOrNull(mid[i]),
@@ -523,6 +533,7 @@ export function parseForecast(body: unknown, fetchedAt: number): WeatherReport {
       : {
           time: currentTime,
           temperatureC: numberOrNull(currentRaw.temperature_2m),
+          dewPointC: numberOrNull(currentRaw.dew_point_2m),
           cloudCover: numberOrNull(currentRaw.cloud_cover),
           cloudLow: numberOrNull(currentRaw.cloud_cover_low),
           cloudMid: numberOrNull(currentRaw.cloud_cover_mid),

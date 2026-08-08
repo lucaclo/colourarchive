@@ -45,7 +45,16 @@ as arithmetic. Keep that.
 
 ## What exists and is verified
 
-480 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+767 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+
+`npm run smoke` (`tests/scout.smoke.ts`) drives the page in a real browser —
+Playwright and Chromium, against `astro dev` because `window.scout` is gated
+behind `import.meta.env.DEV`. Four assertions, one per failure this tab has
+actually shipped: no uncaught errors; no height field fetched before a place is
+chosen (the 24,450-tile storm); a link restores a spot and scrubbing moves the
+sun; and turning the sun path off changes the pixels on the map, which is the
+only way to notice a shader that will not link. It runs in CI as its own job,
+so a red smoke against a green build reads as "look at the network".
 
 | File | Lines | What |
 |---|---|---|
@@ -56,6 +65,8 @@ as arithmetic. Keep that.
 | `src/lib/scout/skyline.ts` | 410 | Per-point horizon from buildings, merged with terrain. 30 tests |
 | `src/lib/scout/shadows.ts` | 406 | Building + monolith shadow casting, with ceilings. 41 tests |
 | `src/lib/scout/weather.ts` | 273 | WMO codes, cloud → light quality, forecast parsing. 23 tests |
+| `src/lib/scout/air.ts` | 128 | Aerosol optical depth: parse, look up by instant. 7 tests |
+| `src/lib/scout/galactic.ts` | 413 | Galactic core position, precession, the moon-free dark window. 19 tests |
 | `src/lib/scout/geo.ts` | 191 | Spherical geodesy, radius ring. 31 tests |
 | `src/lib/scout/almanac.ts` | 175 | Equinoxes and solstices, solved not tabulated. 15 tests |
 | `src/lib/scout/basemap.ts` | 214 | Contrast overrides + sun-driven colour ramps. 16 tests |
@@ -368,10 +379,21 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
   split that *is* key-to-fill. Latitude enters through air mass and nowhere else.
   The coast/mountain difference is the Ångström exponent α: sea salt is large and
   scatters neutrally, so maritime haze whitens and lifts the shadows where continental
-  dust reddens and keeps them. Shown as a "Light" fact row (CCT · stops, with EV and the
-  provenance in the tooltip). Elevation is measured; the *sea fraction* of the loaded
-  height field is measured and used to infer sea air — an inference from real terrain,
-  and labelled as one.
+  dust reddens and keeps them. Shown as a "Light" fact row — a **swatch of the beam's
+  own colour** beside CCT · stops, with EV and the provenance in the tooltip — over a
+  strip of the whole day's beam colour, all three drawn from one `spectralLight` call
+  so they cannot disagree.
+
+  **Two of the four inputs are now measured** (#22). The aerosol *amount* comes from
+  CAMS via Open-Meteo's air-quality host (`air.ts`, verified to send
+  `access-control-allow-origin: *`, cached an hour on disk and in memory — it is a
+  smooth field that moves over half a day). The *water column* comes from Reitan's fit
+  on the forecast's dew point, which rides along on a request already being made,
+  replacing a fixed 1.5 cm everywhere from the Sahara to Bergen. Elevation is measured
+  from the DEM. The Ångström exponent — the particle *size*, which decides whether
+  haze whitens or reddens — is still inferred from the sea fraction, because nothing
+  publishes it; the tooltip names each of the four and which it was. Bird is a
+  clear-sky model, so the row says so, and names the cloud cover that will change it.
 
   Measured, same 45° sun: Zermatt ridge at 1600 m gives 5300 K / 3.27 stops / 10% fill;
   a Maldivian atoll gives 5100 K / 2.52 stops / 17% fill. Across Edinburgh's day the
@@ -395,11 +417,15 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
 
 **Still outstanding:**
 
-0. **The shadow ramp is still hand-fitted.** `basemap.ts` `shadowOpacity` is
-   `0.24 + 0.22·clamp01(altitude/18)` and its own comment argues in air masses. It should
-   be driven by `readLight().diffuseFraction`, and `shadowColour` by the computed sky
-   chromaticity, so the map is graded by place and not just the readout. Keep the ramps
-   as the fallback when no height field has loaded.
+0. **The *shadow* ramp is still hand-fitted** — the light's own colour is not, as of
+   #22. `sunPaintColour` now grades the hillshade's highlight and the sky's horizon
+   from the same spectral integral as the panel swatch and the dome arc, falling back
+   to `sunlightColour`'s ramp below the horizon (where there is no beam to have a
+   colour) and before a place is chosen. What is left is the other half: `basemap.ts`
+   `shadowOpacity` is still `0.24 + 0.22·clamp01(altitude/18)` while its own comment
+   argues in air masses, and it should be driven by `readLight().diffuseFraction`,
+   with `shadowColour` from the computed sky chromaticity. Keep the ramps as the
+   fallback when no height field has loaded.
 1. **`scout.astro` is ~2,650 lines.** Two subsystems were lifted into
    `src/lib/scout/view/`; the map orchestration itself should follow before Parts 5–7
    are added to it.

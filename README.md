@@ -177,6 +177,13 @@ drop requests and left holes in the snapshot) and counts up while it works, so
 you can see when it's safe to walk away. Going offline says so on screen —
 otherwise a live archive and a cached one look identical.
 
+iOS grants a site a small fraction of the quota a desktop does, and nothing is
+ever evicted to make room (that rule is what keeps the map's sprites and DEM
+tiles available offline). So a snapshot can simply not fit. When that happens
+the run stops rather than spending the data allowance on files it must throw
+away, and says **"No room left · 214 of 400 saved"** — the count is of what is
+genuinely on the device. Clear the site's data to start a fresh snapshot.
+
 Requires a **secure origin**: iOS only allows a service worker over HTTPS, which
 is what the certs in `certs/` are for (see `astro.config.mjs`).
 

@@ -24,6 +24,7 @@
 
 import { destination, type LatLon } from '../geo';
 import { parseForecast, type WeatherReport } from '../weather';
+import { airQualityUrl, parseAirQuality, type AirReport } from '../air';
 import { collectCommonsPhotos, toHotspots, type Hotspot } from '../sources/photo-client';
 import { MAX_PHOTOS, PHOTO_SEARCH_RADIUS_M, type SpotSearch } from '../sources/types';
 
@@ -68,7 +69,7 @@ async function getJson(url: string): Promise<unknown> {
 
 /** The same columns the server asks for, so both paths parse the same shape. */
 const HOURLY =
-  'temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,visibility';
+  'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,visibility';
 const CURRENT = 'temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high';
 
 export async function fetchForecastDirect(
@@ -93,6 +94,40 @@ export async function fetchForecastDirect(
   const report = parseForecast(await getJson(url.toString()), Date.now());
   if (!report.hours.length) throw new Error('The forecast came back empty.');
   weatherCache.set(key, { at: Date.now(), report });
+  return report;
+}
+
+/* ── Aerosol ───────────────────────────────────────────────────────────────── */
+
+/**
+ * The aerosol column, straight from Open-Meteo's air-quality host.
+ *
+ * Verified to send `access-control-allow-origin: *`, the same as the forecast
+ * host — which had to be checked rather than assumed, since it is a different
+ * host and the rule that Nominatim cannot be reached this way was learned the
+ * same way.
+ *
+ * Held for an hour rather than the forecast's twenty minutes: the column is a
+ * smooth field that moves over half a day, so a stale reading is not a wrong
+ * one. See `air-client.ts`, which caches to disk on the same reasoning.
+ */
+const AIR_TTL_MS = 60 * 60_000;
+const airCache = new Map<string, { at: number; report: AirReport }>();
+
+export async function fetchAirQualityDirect(
+  latitude: number,
+  longitude: number,
+): Promise<AirReport> {
+  const key = weatherKey(latitude, longitude);
+  const hit = airCache.get(key);
+  if (hit && Date.now() - hit.at < AIR_TTL_MS) return hit.report;
+
+  const report = parseAirQuality(
+    await getJson(airQualityUrl(latitude, longitude).toString()),
+    Date.now(),
+  );
+  if (!report.hours.length) throw new Error('The aerosol forecast came back empty.');
+  airCache.set(key, { at: Date.now(), report });
   return report;
 }
 

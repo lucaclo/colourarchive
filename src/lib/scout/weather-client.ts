@@ -81,7 +81,11 @@ export async function fetchForecast(latitude: number, longitude: number): Promis
   );
   url.searchParams.set(
     'hourly',
-    'temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,visibility',
+    // The dew point rides along on a request that was being made anyway. It is
+    // the only published number that says how much water is in the column above
+    // the pin, which `precipitableWater` turns into Bird's water term — and
+    // that term had been a fixed 1.5 cm everywhere from the Sahara to Bergen.
+    'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,visibility',
   );
   url.searchParams.set('forecast_days', '7');
   // UTC throughout. Scout already knows the place's IANA zone and does its own
