@@ -195,7 +195,7 @@ import {
   type Slab,
   type ViewMode,
 } from './state';
-import { WIDTH, clearInk, frameInk, inkColour, liftColour, rgbOf } from './palette';
+import { WIDTH, inkColour, liftColour, rgbOf } from './palette';
 import { buildingRamp, shadowDarkness, shadowFade } from './shading';
 import { bearingLabel, formatCoords, moonDiscPath, shadowCaveat } from './format';
 import {

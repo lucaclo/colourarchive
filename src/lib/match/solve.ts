@@ -4,7 +4,6 @@ import {
   zeroHsl,
   type Adjustments,
   type CurvePoint,
-  type GradeWheel,
   type MaskAdjustment,
 } from './adjustments';
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
@@ -219,7 +218,7 @@ function oklabDirectionToLightroomHue(da: number, db: number): number {
 }
 
 const circDelta = (from: number, to: number): number => {
-  let d = ((to - from) % 360 + 540) % 360 - 180;
+  const d = ((to - from) % 360 + 540) % 360 - 180;
   return d;
 };
 

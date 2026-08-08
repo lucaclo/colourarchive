@@ -16,7 +16,6 @@ import type { Photo, Exif, Derivative, Medium, Genre } from './types';
 // EXIF is stripped from the output files (it lives in the manifest instead).
 const WIDTHS = [640, 1280, 2000];
 const AVIF_QUALITY = 62; // colour-managed, visually lossless-ish
-const WEBP_QUALITY = 82;
 
 export async function ensureDirs(): Promise<void> {
   await fs.mkdir(PHOTOS_DIR, { recursive: true });

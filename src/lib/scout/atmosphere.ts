@@ -34,7 +34,7 @@
  * and an assumed one can be told apart by the caller and labelled honestly.
  */
 
-import { CIE_1931, CIE_STEP_NM, OZONE_CHAPPUIS, cieWavelength } from './cie';
+import { CIE_1931, OZONE_CHAPPUIS, cieWavelength } from './cie';
 
 /* ── Geometry of the path ──────────────────────────────────────────────────── */
 

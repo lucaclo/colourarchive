@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { readManifest } from '../lib/manifest';
-import { GENRES, GENRE_LABEL } from '../lib/types';
+import { GENRE_LABEL } from '../lib/types';
 
 export const prerender = false;
 const manifest = await readManifest();
@@ -179,7 +179,6 @@ const allPhotos = manifest.chapters.flatMap((c) =>
 </style>
 
 <script is:inline>
-  const form = document.getElementById('form');
   const input = document.getElementById('file');
   const zone = document.getElementById('zone');
   const statusEl = document.getElementById('status');
