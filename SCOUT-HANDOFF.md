@@ -48,7 +48,7 @@ as arithmetic. Keep that.
 
 ## What exists and is verified
 
-874 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+902 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
 
 `npm run smoke` (`tests/scout.smoke.ts`) drives the page in a real browser —
 Playwright and Chromium, against `astro dev` because `window.scout` is gated
@@ -63,6 +63,14 @@ refusing the framing until an aim exists, which is a gate in the page that no
 unit test can see. It runs in CI as its own job, so a red smoke against a green
 build reads as "look at the network".
 
+The alignment finder has its own suite, on its own page, because its cases have
+to *press* things rather than read them and pressing needs the panel open —
+which in an automation tab means killing CSS transitions first, since `max-height`
+never advances there and every click lands on the panel head. Three cases: it
+refuses a bearing nobody chose, a search fills rows that lay out as a grid and a
+row moves the whole page onto that evening, and a moved ring marks the standing
+answer stale instead of emptying a list somebody is reading.
+
 | File | Lines | What |
 |---|---|---|
 | `src/lib/scout/sun.ts` | 543 | Solar position/times engine (Meeus/NOAA). 56 tests |
@@ -71,6 +79,7 @@ build reads as "look at the network".
 | `src/lib/scout/daylight.ts` | 616 | Phase bands, the continuous track, event rows, dates. 56 tests |
 | `src/lib/scout/skyline.ts` | 410 | Per-point horizon from buildings, merged with terrain. 30 tests |
 | `src/lib/scout/lighting.ts` | 245 | The join: front/side/back/rim-lit, the refusals, the order. 30 tests |
+| `src/lib/scout/alignment.ts` | 590 | Behind a target: bearing crossings, passes, the four absences. 23 tests |
 | `src/lib/scout/astrophoto.ts` | 380 | The night join: trailing limits, the core against the frame. 36 tests |
 | `src/lib/scout/shadows.ts` | 406 | Building + monolith shadow casting, with ceilings. 41 tests |
 | `src/lib/scout/weather.ts` | 273 | WMO codes, cloud → light quality, forecast parsing. 23 tests |
@@ -87,6 +96,7 @@ build reads as "look at the network".
 | `src/lib/scout/view/terrain-shadows.ts` | 333 | The landform overlay: tiles, canvas source, throttle |
 | `src/lib/scout/view/dome-layer.ts` | 160 | The custom WebGL layer + a geometry builder |
 | `src/lib/scout/view/shadow-layer.ts` | 564 | Cast shadows as volumes: height buffer, MAX blend. 8 tests |
+| `src/lib/scout/view/alignment-panel.ts` | 305 | The alignment fold: the ring's bearing, the rows, the staleness |
 | `src/pages/scout.astro` | ~2650 | The page: layout, map orchestration, every control |
 | `src/pages/api/scout/{geocode,reverse,weather}.ts` | — | Three thin proxies |
 | `scripts/check-astro-scripts.ts` | 78 | Typechecks page `<script>` blocks — see below |
@@ -346,6 +356,69 @@ against the spherical law of cosines — `tan θ = hypot(tan across, tan up)` �
 sharing no arithmetic with the implementation. The offered tilt is now also **checked
 before it is offered**, because tilting swings the horizontal axis too. One existing test
 changed: a subject 20° off axis and 10° up now reads 10.6°, which is what it is.
+
+### Part 7c — The alignment finder *(built 2026-08-09 — issues #30, #31, #32)*
+
+"On what dates does the sun set **behind that**?" Every other answer on this page
+starts from a moment and asks what the light is doing; this one starts from a
+picture and asks which dates it happens on.
+
+**Why this beats the usual answer.** The planners that offer this match an
+azimuth against a *flat* horizon — "the sun sets at 245° on 12 September", which
+is true and is not the answer, because a summit stands some degrees above the
+horizon and the sun reaches the bearing minutes before it reaches the height.
+Scout already holds the real profile, so `obstructionAt(skyline, bearing)` over
+the merged buildings-and-terrain skyline turns that into "12 September, 19:04,
+the sun meets the ridge 3.1° up".
+
+- **`alignment.ts`** (23 tests). Scans each day for sign changes of the gap
+  between the body's azimuth and the bearing, and bisects each to the second.
+  Measured: `sunPosition` 0.246 µs, `moonPosition` 0.523 µs, so a year at the
+  four-minute default is **38 ms for the sun and 74 ms for the moon** — a button
+  press, not a frame, which buys robustness that a seeded secant walk would not
+  have where this is interesting (a branch that appears in April and vanishes in
+  September).
+- **The answer is a *pass*, not a date.** Passes are the local minima of
+  |clearance| along each branch — "every time it comes closest and then goes away
+  again" — each carrying the run of consecutive dates whose disc still touches the
+  line. A run because that is the truth: the disc has width and the geometry
+  drifts a fraction of a degree a day, so the shot is usually on for two or three
+  evenings, and naming one would throw the others away.
+- **The tolerance is the body's own disc**, per instant, from the model:
+  `moonPosition` already returns `angularRadius` and the sun's follows from
+  `distanceAU`. So a perigee moon really does get a wider window than an apogee
+  one. A hand-picked degree would be the unreproducible constant this project
+  refuses to publish about sunsets.
+- **Four named absences, each carrying the closest approach**: `no-bearing` (it
+  never reaches that compass point — the equator in June never sees the sun due
+  south), `always-above`, `always-below`, `never-quite`. "No alignments" alone is
+  a bug report, not an answer.
+- **Apparent altitude, deliberately.** Refraction lifts the sun by more than its
+  own width at the horizon and this is a question about what a viewfinder sees.
+  Note `isSunlit` in `skyline.ts` compares the *geometric* altitude and is right
+  to — that one is about which surfaces the beam reaches. Same sky, two
+  questions, answered differently on purpose.
+- **The bearing is the sightline ring's**, not a second way to aim. Gated on the
+  *layer*, not on the coordinate: `redrawEverything` parks the ring half a radius
+  due north the moment a place is chosen, so the coordinate is almost never the
+  "never placed" sentinel — and due north is a placeholder, not a thing anyone
+  pointed at.
+- **A moved ring marks the answer stale; it does not clear it.** An arriving
+  terrain tile must not empty a list somebody is reading, and an old bearing must
+  not pass for the current one. `restate()` is a redraw, never a research.
+- **Moon rows carry the lit fraction and phase** (`withMoonPhase`), with a filter
+  that starts at nothing hidden and says how many rows it hid. Which fraction is
+  worth the drive is the reader's call.
+- *Known:* two crossings closer together than the scan step look like none. That
+  only happens at a turning point of the azimuth, where the body grazes the
+  bearing and turns back, and it is reported as `no-bearing` with how close it
+  came — which is the honest description of a graze anyway.
+- *Worth knowing about the moon:* alignments are date-quantised. The moon crosses
+  a bearing once a day and its altitude there swings degrees between nights, so
+  the nearest night is often 0.7° off and the disc never quite touches. That is
+  the real world, not a bug, and it is why the near-miss number is printed rather
+  than swallowed. The move that fixes it — walking a few hundred metres — is not
+  built.
 
 ### Part 8 — Field readiness *(not started)*
 

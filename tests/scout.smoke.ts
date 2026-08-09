@@ -602,6 +602,153 @@ describe('/scout: a spot, from a link', () => {
     assert.equal(after.arc, false, 'the arc was off and the mode left it on');
     assert.deepEqual(trouble, []);
   });
+
+});
+
+/* ── The alignment finder ──────────────────────────────────────────────────
+   Two things no unit test can see. The first is a gate in the page: the bearing
+   comes from the sightline ring, and with no ring placed the answer has to be a
+   refusal that says how to place one — `alignment.ts` never sees that case
+   because it is never called. The second is the layout: every row here is built
+   by script, which is the exact shape of the Astro scoping bug this project has
+   already shipped once, where a runtime-built element misses the scoping
+   attribute and silently falls back to the user agent's defaults.
+
+   Its own page, because these have to *press* things rather than read them, and
+   pressing needs the panel open. */
+describe('/scout: the alignment finder', () => {
+  let page: Page;
+  let trouble: string[];
+
+  before(async () => {
+    page = await openPage();
+    trouble = watchForTrouble(page);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#panel:not([hidden])');
+
+    // The panel body opens by animating `max-height`, and this tab's rAF is
+    // suspended, so the transition never advances and the body stays measured
+    // at zero however open it is. Every click below would land on the head.
+    await page.addStyleTag({ content: '* { transition: none !important }' });
+    await page.click('#panel-head');
+    await page.waitForFunction(
+      `document.getElementById('panel').dataset.open === 'true'
+       && document.getElementById('align-run').getBoundingClientRect().height > 0`,
+      null,
+      { timeout: READY_MS },
+    );
+    await page.evaluate(`document.getElementById('fold-align').open = true`);
+  });
+
+  after(async () => {
+    await page.close();
+  });
+
+  it('refuses to guess a bearing nobody chose', async () => {
+    await page.evaluate(
+      `(() => {
+         const box = document.getElementById('t-sight');
+         if (box.checked) { box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); }
+       })()`,
+    );
+
+    const basis = (await page.textContent('#align-basis')) ?? '';
+    assert.match(
+      basis,
+      /Line of sight/,
+      `with no ring placed the finder must say how to place one: "${basis}"`,
+    );
+    const rows = (await page.evaluate(
+      `document.querySelectorAll('#align-list .align-row').length`,
+    )) as number;
+    assert.equal(rows, 0, 'it answered without being given a bearing');
+    assert.deepEqual(trouble, []);
+  });
+
+  it('finds the dates the sun goes behind the ring, and a row moves the page to one', async () => {
+    // Two kilometres due west of the pin, which is where the sun goes down —
+    // so the year holds the two equinox passes and the answer is not a refusal.
+    await page.evaluate(
+      `(() => {
+         const box = document.getElementById('t-sight');
+         if (!box.checked) { box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); }
+         window.scout.setSightTarget(${EDINBURGH.lat}, ${EDINBURGH.lon - 0.0321});
+       })()`,
+    );
+
+    const basis = (await page.textContent('#align-basis')) ?? '';
+    assert.match(basis, /On 27\d° —/, `the bearing did not come from the ring: "${basis}"`);
+    // What the horizon was is half of what the answer means, so it is stated
+    // whether or not there is anything on that bearing.
+    assert.match(basis, /skyline stands|flat horizon/, basis);
+
+    await page.click('#align-run');
+    await page.waitForFunction(
+      `document.querySelectorAll('#align-list .align-row').length > 0`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const found = (await page.evaluate(
+      `(() => {
+         const row = document.querySelector('#align-list .align-row');
+         return {
+           rows: document.querySelectorAll('#align-list .align-row').length,
+           display: getComputedStyle(row).display,
+           when: row.querySelector('.align-when').textContent.trim(),
+           what: row.querySelector('.align-what').textContent.trim(),
+           note: document.getElementById('align-note').textContent.trim(),
+         };
+       })()`,
+    )) as { rows: number; display: string; when: string; what: string; note: string };
+
+    // `display: block` here is the scoping bug: the rule exists, the element
+    // never matched it, and the row falls back to the UA's button layout.
+    assert.equal(found.display, 'grid', 'the alignment rows lost their stylesheet');
+    assert.match(found.when, /\w{3} \d+ \w{3}.*\d{2}:\d{2}/, `no date and time on the row: "${found.when}"`);
+    assert.match(found.what, /setting|rising/, found.what);
+    assert.match(found.what, /\d+\.\d° off/, `a row must carry the angle it missed by: "${found.what}"`);
+    assert.match(
+      found.note,
+      /pass(es)? where the disc meets/,
+      `due west over a year should meet the horizon: "${found.note}"`,
+    );
+
+    // And the row is the point: pressing it puts the whole page — map, shadows,
+    // dome and all — on that evening.
+    const before = (await page.textContent('#chip-date')) ?? '';
+    await page.click('#align-list .align-row');
+    await page.waitForFunction(
+      `document.getElementById('chip-date').textContent !== ${JSON.stringify(before)}`,
+      null,
+      { timeout: READY_MS },
+    );
+    assert.deepEqual(trouble, []);
+  });
+
+  it('marks an answer stale rather than emptying the list under a reader', async () => {
+    // The ring moved after the search ran. Clearing would take away the thing
+    // being read; saying nothing would let an old bearing pass for the current
+    // one. It says so and leaves the rows standing.
+    const rowsBefore = (await page.evaluate(
+      `document.querySelectorAll('#align-list .align-row').length`,
+    )) as number;
+    assert.ok(rowsBefore > 0, 'nothing to go stale');
+
+    await page.evaluate(
+      `window.scout.setSightTarget(${EDINBURGH.lat + 0.02}, ${EDINBURGH.lon})`,
+    );
+
+    const after = (await page.evaluate(
+      `({ rows: document.querySelectorAll('#align-list .align-row').length,
+          note: document.getElementById('align-note').textContent.trim() })`,
+    )) as { rows: number; note: string };
+
+    assert.equal(after.rows, rowsBefore, 'the list was emptied instead of being marked');
+    assert.match(after.note, /find again/, `a stale answer must say so: "${after.note}"`);
+    assert.deepEqual(trouble, []);
+  });
 });
 
 /* ── On a phone ─────────────────────────────────────────────────────────────

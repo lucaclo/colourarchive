@@ -147,6 +147,7 @@ import {
   lightWindows,
   mergeHorizon,
   nextChange,
+  obstructionAt,
   type LightWindow,
   type Skyline,
 } from '../skyline';
@@ -244,6 +245,7 @@ import {
 import { getScoutJson, type Place } from './scout-api';
 import { createSearchBox } from './search-box';
 import { pace } from './pacing';
+import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createMonthGrid } from './month-grid';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
@@ -550,6 +552,18 @@ export async function startScout(): Promise<void> {
         // the page impossible to measure from an automated browser without it.
         tick: () => runFrame(),
         setMinute: (value: number) => setMinute(value),
+        // The sightline ring, which is also the alignment finder's aim. Placing
+        // it is a drag on the map, and a drag is the gesture an automated
+        // browser reproduces least reliably — so the thing under the drag is
+        // exposed rather than the drag being simulated.
+        setSightTarget: (lat: number, lon: number) => {
+          target.lat = lat;
+          target.lon = lon;
+          solveSight();
+          drawSight();
+          renderSight();
+          alignPanel.restate();
+        },
       },
     });
   }
@@ -720,6 +734,9 @@ export async function startScout(): Promise<void> {
     solveSight();
     drawSight();
     renderSight();
+    // The ring is the alignment finder's aim. Moving it does not rerun the
+    // search — it marks whatever is on screen as answering the old bearing.
+    alignPanel.restate();
     save();
   });
 
@@ -2646,6 +2663,12 @@ export async function startScout(): Promise<void> {
     // the buildings, the place or the date actually moved.
     rebuildPlan();
     renderPlan();
+
+    // The alignment finder measures its target's height off this same profile,
+    // so a profile that just changed may have left a standing answer behind.
+    // Restating is a redraw, not a research: an arriving terrain tile must not
+    // empty a list somebody is reading.
+    alignPanel.restate();
   }
 
   /** The countdown, which is the only part of the spot box that ticks. */
@@ -4577,6 +4600,9 @@ export async function startScout(): Promise<void> {
         solveSight();
         drawSight();
         renderSight();
+        // The alignment finder's bearing *is* this ring, so turning the layer on
+        // is what takes it from having no question to ask to having one.
+        alignPanel.restate();
       }
       if (key === 'photos') {
         // Turned off, the sheet goes with the pins — it is about a hotspot
@@ -4709,6 +4735,7 @@ export async function startScout(): Promise<void> {
     $('sight-out').textContent = `${target.heightM} m`;
     solveSight();
     renderSight();
+    alignPanel.restate();
   });
   on('sight-height', 'change', () => save());
 
@@ -5029,6 +5056,70 @@ export async function startScout(): Promise<void> {
       return hour ? directLightFractionFor(hour) : null;
     },
     currentInstant,
+    goTo: goToInstant,
+  });
+
+  /* ── The alignment finder ───────────────────────────────────────────────
+     "On what dates does the sun go behind that?" — the sightline ring picks
+     the bearing, and the height it has to reach is the same merged profile the
+     pin's own day is built from rather than the flat horizon every other
+     planner matches against. */
+
+  /**
+   * What stands on a bearing, and what that reading rests on.
+   *
+   * The number is `obstructionAt` over the merged skyline, which is the one
+   * thing on this page that owns "what blocks the sun in that direction" — the
+   * spot's own day is computed from the same profile, so the two cannot
+   * disagree about a ridge.
+   *
+   * Where the ring's own target sits at a different height from the profile,
+   * that difference is *reported* rather than resolved. It means something
+   * nearer or taller hides the sun first, which is exactly what the person who
+   * dropped the ring on a summit needs to be told.
+   */
+  function alignHorizon(bearing: number): HorizonReading | null {
+    if (!skyline) return null;
+    const deg = obstructionAt(skyline, bearing);
+    const field = terrainShadows?.state().field;
+    const from = [
+      skyline.considered
+        ? `${skyline.considered} building${skyline.considered === 1 ? '' : 's'}`
+        : 'no buildings',
+      field ? 'the terrain' : 'no terrain loaded',
+    ];
+    const parts = [`the skyline stands ${deg.toFixed(1)}° up, from ${from.join(' and ')}.`];
+
+    const targetDeg = sight?.targetAltitudeDeg;
+    if (targetDeg != null) {
+      if (deg - targetDeg > 0.2) {
+        parts.push(
+          `The ring's own target reads ${targetDeg.toFixed(1)}° up, so something nearer or taller hides it first.`,
+        );
+      } else if (targetDeg - deg > 0.2) {
+        parts.push(
+          `The ring's own target reads ${targetDeg.toFixed(1)}° up — it stands beyond the profile's reach, so this understates what the sun has to clear.`,
+        );
+      }
+    }
+    return { deg, basis: parts.join(' ') };
+  }
+
+  const alignPanel = createAlignmentPanel({
+    centre: () => centre,
+    // Gated on the layer, not merely on the coordinate. `redrawEverything`
+    // parks the ring half a radius due north the moment a place is chosen, so
+    // the coordinate is almost never the sentinel — and due north is a
+    // placeholder, not a thing anyone pointed at. Once the layer is on the ring
+    // is visible on the map and draggable, which is what makes its bearing a
+    // choice rather than a default.
+    target: () =>
+      shown.sight && !(target.lat === 0 && target.lon === 0)
+        ? { lat: target.lat, lon: target.lon }
+        : null,
+    horizon: alignHorizon,
+    timeZone: () => timeZone,
+    from: () => day?.dayStart ?? new Date(),
     goTo: goToInstant,
   });
 

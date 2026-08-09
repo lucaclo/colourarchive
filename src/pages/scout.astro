@@ -196,6 +196,36 @@ export const prerender = true;
             <p class="sight-note" id="sight-detail"></p>
           </div>
 
+          <!-- ── The alignment finder ──────────────────────────────────────
+               The one question this page could answer for a moment but never
+               for a year: not "where is the sun now" but "on what dates does
+               it go behind *that*". The bearing is the sightline ring's, so it
+               is something pointed at rather than a number typed; the height
+               it has to reach is the real skyline on that bearing rather than
+               the flat horizon every other planner matches against. -->
+          <details class="fold" id="fold-align">
+            <summary>Behind a target</summary>
+            <div class="align">
+              <div class="align-controls">
+                <div class="seg" id="align-body">
+                  <button type="button" data-body="sun" class="on">Sun</button>
+                  <button type="button" data-body="moon">Moon</button>
+                </div>
+                <button class="ghost" id="align-run" type="button">Find dates</button>
+              </div>
+              <p class="align-basis" id="align-basis">—</p>
+              <ol class="align-list" id="align-list"></ol>
+              <p class="align-note" id="align-note"></p>
+              <!-- Which fraction of the moon is worth going out for is the
+                   reader's call, so this starts at nothing hidden: the filter
+                   can only ever be something they turned on. -->
+              <label class="align-phase" id="align-phase-row" hidden>
+                <span>Moon at least <output id="align-phase-out">0%</output> lit</span>
+                <input id="align-phase" type="range" min="0" max="100" step="5" value="0" />
+              </label>
+            </div>
+          </details>
+
           <dl class="facts">
             <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
             <div><dt>Radius</dt><dd id="f-radius">—</dd></div>
@@ -993,6 +1023,93 @@ export const prerender = true;
     color: var(--muted);
   }
   .best-note:empty { display: none; }
+
+  /* ── The alignment finder ─────────────────────────────────────────────── */
+
+  .align { display: flex; flex-direction: column; gap: 0.45rem; }
+  .align-controls { display: flex; align-items: stretch; gap: 0.4rem; }
+  .align-controls .seg { flex: 1; }
+  .align-controls .seg button { flex: 1; }
+  .align-basis {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .align-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  /* Every row below is built by the page script, so each selector has to leave
+     this component's scope to reach it — see the note over `.best-list`. */
+  .align-list :global(.align-row) {
+    display: grid;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0.35rem 0.4rem;
+    border: 0;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+    text-align: left;
+    cursor: pointer;
+    min-height: 2.4rem;
+    font: inherit;
+    color: var(--fg);
+  }
+  .align-list :global(.align-row:hover),
+  .align-list :global(.align-row:focus-visible) {
+    background: color-mix(in oklab, var(--border) 40%, transparent);
+    outline: none;
+  }
+  .align-list :global(.align-when) { font-size: 0.7rem; line-height: 1.3; }
+  .align-list :global(.align-what) {
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    color: #f0b866;
+  }
+  .align-list :global(.align-detail) {
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+  .align-list :global(.align-also) {
+    margin: 0.25rem 0 0;
+    padding: 0 0 0 0.4rem;
+    list-style: none;
+  }
+  .align-list :global(.align-alt) {
+    padding: 0.2rem 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.4;
+    color: var(--muted);
+    text-align: left;
+  }
+  .align-list :global(.align-alt:hover) { color: var(--fg); }
+  .align-note {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .align-note:empty { display: none; }
+  .align-phase { display: flex; flex-direction: column; gap: 0.2rem; }
+  .align-phase[hidden] { display: none; }
+  .align-phase span {
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
 
   /* ── The day plan ─────────────────────────────────────────────────────── */
 
@@ -2241,6 +2358,9 @@ export const prerender = true;
     .seg button, .seg a { min-height: 44px; }
     .wx { min-height: 44px; }
     .best-list :global(li) { min-height: 44px; }
+    .align-list :global(.align-row) { min-height: 44px; }
+    .align-list :global(.align-alt) { min-height: 44px; }
+    .align-phase input[type='range'] { min-height: 44px; }
     .scout-nav a { min-height: 44px; display: inline-flex; align-items: center; }
     /* − and + were 28px wide. Tall enough and half the width of a thumb, which
        is the more common way to miss a stepper: you hit the date between them. */
