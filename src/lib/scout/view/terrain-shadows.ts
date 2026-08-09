@@ -47,9 +47,12 @@ const TILE_URL = (t: TileAddress) =>
  * already fetched. Over Hong Kong that came out at 425 m a sample, coarse
  * enough to smooth away the very ridges the feature exists to find.
  *
- * The mask is recomputed every time the sun moves and costs cells times march
- * steps, so this is the real budget: about thirteen million samples, or a few
- * tens of milliseconds.
+ * The mask is recomputed every time the sun moves. It used to cost cells times
+ * march steps — about thirteen million samples — which is what set this number.
+ * The sweep that replaced the march touches each cell once, so the same grid now
+ * costs **2.9 ms exact, 1.2 ms at stride 2** (measured, 470 × 470). The budget
+ * is left where it is: it is now bounded by the DEM tiles it takes to fill the
+ * grid and by how fine a sample is worth drawing, not by the arithmetic.
  */
 const MAX_CELLS = 220_000;
 
@@ -179,8 +182,6 @@ export interface TerrainShadows {
  * position when you let go. A throttle keeps it moving.
  */
 const MOVING_INTERVAL_MS = 110;
-/** Grid stride while moving — a quarter of the work for a sample or two of edge. */
-const MOVING_STRIDE = 2;
 
 /**
  * Attach the overlay to a map.
@@ -331,12 +332,17 @@ export function createTerrainShadows(map: maplibregl.Map): TerrainShadows {
     return loading;
   }
 
-  function paint(
-    azimuth: number,
-    altitude: number,
-    options: TerrainShadowOptions,
-    stride: number,
-  ) {
+  /**
+   * Always exact.
+   *
+   * There used to be a coarse variant at stride 2 for the drag, because the mask
+   * cost tens of milliseconds and could not be run at full resolution inside a
+   * frame. The sweep costs 2.9 ms, so the coarse pass buys 1.7 ms and costs a
+   * visible change in the picture the moment you let go of the slider — the
+   * shadow edge shifting by a sample or two and its extra blur coming off. That
+   * reads as the shadow moving when nothing moved.
+   */
+  function paint(azimuth: number, altitude: number, options: TerrainShadowOptions) {
     if (!field || destroyed) return;
     const context = canvas.getContext('2d');
     if (!context) return;
@@ -353,20 +359,18 @@ export function createTerrainShadows(map: maplibregl.Map): TerrainShadows {
       return;
     }
 
-    const mask = terrainShadowMask(field, azimuth, altitude, {
-      // Far enough for a serious mountain at a low sun: a 2,000 m peak at 3°
-      // reaches 38 km. Beyond that the elevation grid has usually run out anyway.
-      maxDistanceM: 40_000,
-      stride,
-    });
+    // No distance cap any more. It existed to bound a march that started afresh
+    // from every cell; the sweep costs the same whether it looks a kilometre
+    // upwind or across the whole grid, so the loaded field is the only limit —
+    // and a cap could only ever lose a shadow a serious mountain really casts
+    // (a 2,000 m peak at 3° reaches 38 km).
+    const mask = terrainShadowMask(field, azimuth, altitude);
     shadedFraction = mask.shadedCells / (mask.shadedCells + mask.litCells || 1);
 
-    // Softened a little more on a coarse pass, so the blockiness of a strided
-    // edge does not read as the shadow having moved somewhere it has not.
-    const rgba = maskToRGBA(mask, options.colour, options.opacity, stride > 1 ? 2 : 1);
+    const rgba = maskToRGBA(mask, options.colour, options.opacity, 1);
     const image = new ImageData(rgba, mask.width, mask.height);
     context.putImageData(image, 0, 0);
-    stale = stride > 1;
+    stale = false;
     flush();
   }
 
@@ -380,24 +384,27 @@ export function createTerrainShadows(map: maplibregl.Map): TerrainShadows {
 
       if (moving) {
         // Leading edge, then at most one every interval: the shade tracks the
-        // sun while you drag rather than waiting for you to stop.
+        // sun while you drag rather than waiting for you to stop. The throttle
+        // stays even though the mask is now cheap, because the cost that is left
+        // is the canvas source re-uploading a megabyte of texture, not the
+        // arithmetic.
         const since = performance.now() - lastPaintAt;
         if (since >= MOVING_INTERVAL_MS) {
           lastPaintAt = performance.now();
-          paint(azimuth, altitude, options, MOVING_STRIDE);
+          paint(azimuth, altitude, options);
         } else {
           timer = setTimeout(() => {
             lastPaintAt = performance.now();
-            paint(azimuth, altitude, options, MOVING_STRIDE);
+            paint(azimuth, altitude, options);
           }, MOVING_INTERVAL_MS - since);
         }
         return;
       }
 
-      // Settled: one exact pass, after a beat in case more calls are coming.
+      // Settled: one more pass, after a beat in case more calls are coming.
       timer = setTimeout(() => {
         lastPaintAt = performance.now();
-        paint(azimuth, altitude, options, 1);
+        paint(azimuth, altitude, options);
       }, 60);
     },
 

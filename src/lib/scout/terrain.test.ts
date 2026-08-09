@@ -390,10 +390,68 @@ describe('terrainShadowMask', () => {
     // curvature term both would block, and every distant flat coast would cast.
     const near = await landscape(wall(165, 5, 8));
     const far = await landscape(wall(165, 20, 8));
-    const lowRidge = terrainShadowMask(near, 90, 0.02, { maxDistanceM: 20_000 });
-    const highRidge = terrainShadowMask(far, 90, 0.02, { maxDistanceM: 20_000 });
+    const lowRidge = terrainShadowMask(near, 90, 0.02);
+    const highRidge = terrainShadowMask(far, 90, 0.02);
     assert.equal(lowRidge.shadowed[128 * lowRidge.width + 100], 0, 'the 5 m ridge is over the horizon');
     assert.equal(highRidge.shadowed[128 * highRidge.width + 100], 1, 'the 20 m one still blocks');
+  });
+});
+
+describe('terrainShadowMask over a narrow ridge', () => {
+  /**
+   * The regression the sweep exists for.
+   *
+   * The march this replaced grew its step by 3.5% a time, so by a few kilometres
+   * out it was sampling every 200 m and a one-cell crest fell between two
+   * samples. Measured on this exact shape before the rewrite: a single-cell
+   * ridge shaded 26% of the ground behind it, two cells 48%, six cells 84%. The
+   * ray went through the mountain, and which cells it went through changed with
+   * the sun's azimuth, so the holes crawled about as the slider moved.
+   *
+   * A crest is a crest at any distance. Every width must shade all of it.
+   */
+  for (const cells of [1, 2, 6, 20]) {
+    it(`shades the whole throw of a ${cells}-cell ridge`, async () => {
+      const field = await landscape(wall(200, 1000, cells));
+      const mask = terrainShadowMask(field, 90, 10);
+      const reach = Math.floor(1000 / Math.tan(10 * (Math.PI / 180)) / SAMPLE_M);
+
+      let shaded = 0;
+      for (let col = 200 - reach; col < 200; col++) {
+        if (mask.shadowed[128 * mask.width + col]) shaded++;
+      }
+      // Every cell from the foot of the wall out to a sample short of the tip.
+      assert.ok(shaded >= reach - 1, `${shaded} of ${reach} cells shaded`);
+    });
+  }
+
+  it('holds at every azimuth, so the holes cannot crawl with the sun', async () => {
+    // The visible symptom was motion: a shadow that flickered as the time
+    // slider moved. That is this test — the same ridge, swept round, must give
+    // an answer that changes smoothly rather than one that is riddled at some
+    // bearings and solid at others.
+    const field = await landscape(wall(200, 1000, 1));
+    for (let azimuth = 60; azimuth <= 120; azimuth += 5) {
+      const mask = terrainShadowMask(field, azimuth, 10);
+      // Immediately downwind of the wall, on the row through the middle.
+      assert.equal(
+        mask.shadowed[128 * mask.width + 199],
+        1,
+        `azimuth ${azimuth} let the light through the wall`,
+      );
+    }
+  });
+
+  it('costs no more to look across the whole field than a short way', async () => {
+    // The march was bounded by a distance cap because it re-marched from every
+    // cell. The sweep touches each cell once, so the cap is gone — and this is
+    // the claim that made removing it safe.
+    const field = await landscape((col, row) => ((col * 7 + row * 13) % 97) * 8);
+    const started = performance.now();
+    terrainShadowMask(field, 115, 6);
+    const elapsed = performance.now() - started;
+    const cells = field.width * field.height;
+    assert.ok(elapsed < 250, `${cells} cells took ${elapsed.toFixed(0)}ms`);
   });
 });
 
