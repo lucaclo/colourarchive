@@ -255,6 +255,27 @@ export const prerender = true;
               <p class="note-say" id="note-say"></p>
             </div>
           </details>
+
+          <!-- ── The day plan ──────────────────────────────────────────────
+               Every other answer on this page is about one place. A day of
+               shooting is several, and the two constraints pull against each
+               other: each spot's light is fixed by the sun, the travel between
+               them by geography. Pick two to six kept spots and the solver in
+               `itinerary.ts` orders them exhaustively — reporting whatever it
+               could not fit rather than quietly leaving it out. -->
+          <details class="fold" id="fold-plan" hidden>
+            <summary>Day plan</summary>
+            <div class="plan">
+              <p class="plan-help" id="plan-help">Choose two to six kept spots.</p>
+              <ul class="plan-pick" id="plan-pick"></ul>
+              <ol class="plan-stops" id="plan-stops"></ol>
+              <p class="plan-total" id="plan-total"></p>
+              <ul class="plan-trouble" id="plan-trouble"></ul>
+              <p class="plan-assume" id="plan-assume"></p>
+              <button class="ghost" id="plan-copy" type="button" hidden>Copy the day</button>
+              <p class="note-say" id="plan-say"></p>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -953,6 +974,85 @@ export const prerender = true;
   }
   .best-note:empty { display: none; }
 
+  /* ── The day plan ─────────────────────────────────────────────────────── */
+
+  .plan { display: flex; flex-direction: column; gap: 0.45rem; }
+  .plan-help { margin: 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); }
+  .plan-pick,
+  .plan-stops,
+  .plan-trouble { margin: 0; padding: 0; list-style: none; }
+  .plan-pick { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  /* Every row below is built by the page script, so each selector has to leave
+     this component's scope to reach it. See the month grid above. */
+  .plan-pick :global(label) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    /* 44px is the field target on this page; a checkbox row keeps it. */
+    min-height: 2.75rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .plan-pick :global(label:has(input:checked)) {
+    border-color: #f0b866;
+    background: color-mix(in oklab, #f0b866 16%, transparent);
+  }
+  /* A spot already at its ceiling should look unavailable, not broken. */
+  .plan-pick :global(label:has(input:disabled)) { opacity: 0.45; cursor: default; }
+
+  .plan-stops { display: flex; flex-direction: column; gap: 0.3rem; counter-reset: stop; }
+  .plan-stops :global(li) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+  }
+  .plan-stops :global(.plan-when) {
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    color: #f0b866;
+    white-space: nowrap;
+  }
+  .plan-stops :global(.plan-where) { font-size: 0.7rem; line-height: 1.35; color: var(--fg); }
+  .plan-stops :global(.plan-leg) {
+    display: block;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
+  .plan-total {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    color: var(--fg);
+  }
+  .plan-total:empty { display: none; }
+  .plan-trouble { display: flex; flex-direction: column; gap: 0.25rem; }
+  /* What did not fit is not a footnote. It is the other half of the answer, so
+     it is drawn as loudly as the plan itself. */
+  .plan-trouble :global(li) {
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    line-height: 1.45;
+    color: #e8a0a0;
+    padding-left: 0.7rem;
+    text-indent: -0.7rem;
+  }
+  .plan-assume {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .plan-assume:empty { display: none; }
 
   .sight-chart {
     display: block;

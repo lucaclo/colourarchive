@@ -80,7 +80,7 @@ import {
   type SpotPhoto,
 } from '../spots';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
-import { shootPlan } from '../report';
+import { itineraryReport, shootPlan } from '../report';
 import {
   buildingHeight,
   castPrisms,
@@ -156,6 +156,12 @@ import {
   litMinutesAhead,
   type Lighting,
 } from '../lighting';
+import {
+  MAX_ITINERARY_SPOTS,
+  MIN_ITINERARY_SPOTS,
+  planItinerary,
+  type Itinerary,
+} from '../itinerary';
 import {
   elevationAt,
   terrainHorizon,
@@ -264,6 +270,7 @@ export async function startScout(): Promise<void> {
   const TERRAIN_SOURCE = 'scout-terrain';
   const SATELLITE_SOURCE = 'scout-satellite';
   const PHOTO_SOURCE = 'scout-photos-src';
+  const PLAN_SOURCE = 'scout-plan-src';
   const FRAME_SOURCE = 'scout-frame-src';
   const SIGHT_SOURCE = 'scout-sight-src';
 
@@ -1083,6 +1090,50 @@ export async function startScout(): Promise<void> {
       layout: {
         'text-field': ['to-string', ['get', 'count']],
         'text-size': 11,
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': '#08121c' },
+    });
+
+    // --- The day's route ---------------------------------------------------
+    // Straight legs, because a straight line is exactly what the travel
+    // estimate assumes. Drawing a road route over a great-circle number would
+    // show a precision the number underneath does not have. Dashed for the
+    // same reason: it reads as a connection, not as a way to drive.
+    map.addSource(PLAN_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+      id: 'scout-plan-leg',
+      type: 'line',
+      source: PLAN_SOURCE,
+      filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': '#f0b866',
+        'line-width': 2.2,
+        'line-opacity': 0.9,
+        'line-dasharray': [2, 2],
+      },
+    });
+    map.addLayer({
+      id: 'scout-plan-stop',
+      type: 'circle',
+      source: PLAN_SOURCE,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 11,
+        'circle-color': '#f0b866',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': 'rgba(10,14,22,0.8)',
+      },
+    });
+    map.addLayer({
+      id: 'scout-plan-order',
+      type: 'symbol',
+      source: PLAN_SOURCE,
+      filter: ['==', ['geometry-type'], 'Point'],
+      layout: {
+        'text-field': ['to-string', ['get', 'order']],
+        'text-size': 12,
         'text-allow-overlap': true,
       },
       paint: { 'text-color': '#08121c' },
@@ -2568,6 +2619,12 @@ export async function startScout(): Promise<void> {
     renderBest();
     renderSheetLight();
 
+    // The day plan rests on exactly the same three things, and a stop's light
+    // must not go stale while the pin's own timeline is refreshed beside it.
+    // At most six spots, so this is a few milliseconds and it only runs when
+    // the buildings, the place or the date actually moved.
+    rebuildPlan();
+    renderPlan();
   }
 
   /** The countdown, which is the only part of the spot box that ticks. */
@@ -5110,6 +5167,7 @@ export async function startScout(): Promise<void> {
     renderStar();
     renderKept();
     renderNotebook();
+    forgetUnkeptPicks();
   });
 
   on('kept-list', 'click', (event) => {
@@ -5122,6 +5180,7 @@ export async function startScout(): Promise<void> {
         storeSpots();
         renderStar();
         renderKept();
+        forgetUnkeptPicks();
       }
       return;
     }
@@ -5187,6 +5246,219 @@ export async function startScout(): Promise<void> {
 
     renderNotebook();
   }
+
+  /* ── The day plan ──────────────────────────────────────────────────────
+     Issue #21. Every other answer on this page is about one coordinate; a day
+     of shooting is several, and the two constraints come from different places
+     and do not negotiate — the light is fixed by the sun, the travel by
+     geography. `itinerary.ts` holds the solver and is pure; everything here is
+     choosing the spots, feeding it the same windows the panel already draws,
+     and putting the route on the map. */
+
+  /** Which kept spots are in the plan, by their `spotKey`. */
+  const planPicks = new Set<string>();
+  let planned: Itinerary | null = null;
+
+  /** A saved spot's identity, stable across reloads and independent of name. */
+  const spotKey = (spot: { lat: number; lon: number }) =>
+    `${spot.lat.toFixed(5)},${spot.lon.toFixed(5)}`;
+
+  /**
+   * Rebuild the plan from the current picks.
+   *
+   * The per-spot windows come from `dayLightAt` — the same call the hotspots
+   * and the pin's own timeline go through — so a stop's light in the plan is
+   * the light the rest of the page would show for that coordinate.
+   */
+  function rebuildPlan() {
+    if (!day || planPicks.size < MIN_ITINERARY_SPOTS) {
+      planned = null;
+      drawPlanRoute();
+      return;
+    }
+    const samples = day.samples.slice(0, 1440);
+    const chosen = keptSpots.filter((spot) => planPicks.has(spotKey(spot)));
+    planned = planItinerary(
+      chosen.map((spot) => {
+        const light = dayLightAt({ lat: spot.lat, lon: spot.lon }, samples);
+        return {
+          name: spot.name || formatCoords({ lat: spot.lat, lon: spot.lon }),
+          at: { lat: spot.lat, lon: spot.lon },
+          windows: light.windows,
+        };
+      }),
+      samples,
+      { dwellMinutes: PLAN_DWELL_MINUTES, speedKmh: PLAN_SPEED_KMH },
+    );
+    drawPlanRoute();
+  }
+
+  /**
+   * The stops and the legs between them, on the map.
+   *
+   * Straight lines, because straight lines are exactly what the travel estimate
+   * assumes. Drawing a road route over a great-circle estimate would show a
+   * precision the number underneath does not have.
+   */
+  function drawPlanRoute() {
+    const source = map?.getSource(PLAN_SOURCE) as GeoJSONSource | undefined;
+    if (!source) return;
+    const stops = planned?.stops ?? [];
+    if (!stops.length) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+    const line = {
+      type: 'Feature' as const,
+      properties: {},
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: stops.map((stop) => [stop.spot.at.lon, stop.spot.at.lat]),
+      },
+    };
+    source.setData({
+      type: 'FeatureCollection',
+      features: [
+        line,
+        ...stops.map((stop, index) => ({
+          type: 'Feature' as const,
+          properties: { order: index + 1 },
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [stop.spot.at.lon, stop.spot.at.lat],
+          },
+        })),
+      ],
+    });
+  }
+
+  function renderPlan() {
+    const fold = $<HTMLElement>('fold-plan');
+    // Nothing to order with fewer than two places kept. Showing an empty
+    // picker would advertise a feature that cannot yet do anything.
+    fold.hidden = keptSpots.length < MIN_ITINERARY_SPOTS;
+    if (fold.hidden) return;
+
+    const atLimit = planPicks.size >= MAX_ITINERARY_SPOTS;
+    $('plan-pick').replaceChildren(
+      ...keptSpots.map((spot) => {
+        const key = spotKey(spot);
+        const picked = planPicks.has(key);
+        const label = document.createElement('label');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = picked;
+        // At the ceiling the unpicked boxes go dead rather than silently
+        // refusing on click — the cap is stated by the control itself.
+        box.disabled = !picked && atLimit;
+        box.addEventListener('change', () => {
+          if (box.checked) planPicks.add(key);
+          else planPicks.delete(key);
+          rebuildPlan();
+          renderPlan();
+        });
+        label.append(box, document.createTextNode(spot.name || formatCoords(spot)));
+        return label;
+      }),
+    );
+
+    $('plan-help').textContent = atLimit
+      ? `${MAX_ITINERARY_SPOTS} is the most that can be ordered — unpick one to swap it.`
+      : `Choose ${MIN_ITINERARY_SPOTS} to ${MAX_ITINERARY_SPOTS} kept spots.`;
+
+    const stops = planned?.stops ?? [];
+    $('plan-stops').replaceChildren(
+      ...stops.map((stop) => {
+        const li = document.createElement('li');
+        const when = document.createElement('span');
+        when.className = 'plan-when';
+        when.textContent = `${planClock(stop.arriveMinute)}–${planClock(stop.leaveMinute)}`;
+
+        const where = document.createElement('span');
+        where.className = 'plan-where';
+        where.textContent = stop.spot.name;
+        const leg = document.createElement('span');
+        leg.className = 'plan-leg';
+        const parts = [`sun ${Math.round(stop.sunAltitude)}°`];
+        if (stop.travelMinutes) {
+          parts.unshift(`${stop.travelMinutes} min from the last · ${formatDistance(stop.travelM)}`);
+        }
+        // How far off this spot's own best light the visit landed is the cost
+        // of fitting the rest of the day in, and it is the number a
+        // photographer would otherwise have to work out for themselves.
+        if (stop.offBestMinutes > 0) {
+          parts.push(`${formatDuration(stop.offBestMinutes)} off its best light`);
+        } else {
+          parts.push('at its best light');
+        }
+        leg.textContent = parts.join(' · ');
+        where.append(leg);
+
+        li.append(when, where);
+        return li;
+      }),
+    );
+
+    $('plan-total').textContent = stops.length
+      ? `${stops.length} spot${stops.length === 1 ? '' : 's'} · ${formatDuration(planned!.totalTravelMinutes)} travelling · ${formatDistance(planned!.totalTravelM)}`
+      : planPicks.size >= MIN_ITINERARY_SPOTS
+        ? 'Nothing could be planned for this day.'
+        : '';
+
+    // Everything that did not fit, as loud as the plan itself. A day plan that
+    // showed only its successes would be a different answer from the one the
+    // solver gave.
+    const trouble = [
+      ...(planned?.dropped ?? []).map((drop) => drop.note),
+      ...(planned?.conflicts ?? []).map((conflict) => conflict.note),
+    ];
+    $('plan-trouble').replaceChildren(
+      ...trouble.map((note) => {
+        const li = document.createElement('li');
+        li.textContent = `— ${note}`;
+        return li;
+      }),
+    );
+
+    $('plan-assume').textContent = planned?.travelAssumption ?? '';
+    $<HTMLElement>('plan-copy').hidden = !stops.length;
+  }
+
+  /** A day-minute as a clock time in the spot's own zone. */
+  const planClock = (minute: number) =>
+    day ? formatMinute(day.dayStart, minute, timeZone) : String(minute);
+
+  /**
+   * Drop any pick whose spot is no longer kept, then redraw.
+   *
+   * Unkeeping a place has to take it out of the plan as well. Left behind, the
+   * pick would keep a stop in the route for a spot the notebook no longer has —
+   * an itinerary to somewhere you deleted.
+   */
+  function forgetUnkeptPicks() {
+    const alive = new Set(keptSpots.map(spotKey));
+    for (const key of planPicks) if (!alive.has(key)) planPicks.delete(key);
+    rebuildPlan();
+    renderPlan();
+  }
+
+  on('plan-copy', 'click', () => {
+    if (!planned || !day) return;
+    void toClipboard(
+      'plan-copy',
+      itineraryReport({
+        dayLabel: formatDayLabel(isoDate, timeZone),
+        timeZone,
+        itinerary: planned,
+        clock: planClock,
+        caveat: shadowCaveat({
+          showing: shown.buildings,
+          cast: shadowStats.cast,
+          estimated: shadowStats.estimated,
+        }),
+      }),
+    );
+  });
 
   on('radius-button', 'click', () => {
     const box = $<HTMLElement>('radiusbox');
@@ -5533,6 +5805,8 @@ export async function startScout(): Promise<void> {
   // Before restore, so a spot recovered from storage or a link can already tell
   // whether it is one of the kept ones.
   loadSpots();
+  // The picker is built from that list, so it cannot be drawn before it.
+  renderPlan();
 
   (function restore() {
     let saved: SavedView;

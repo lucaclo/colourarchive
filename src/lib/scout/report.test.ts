@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shootPlan } from './report.ts';
+import { itineraryReport, shootPlan } from './report.ts';
+import type { Itinerary } from './itinerary.ts';
 import type { SunEventRow } from './daylight.ts';
 
 const at = (iso: string) => new Date(iso);
@@ -98,5 +99,97 @@ describe('shootPlan', () => {
     assert.match(text, /City of Edinburgh/);
     assert.match(text, /Times are local to/);
     assert.doesNotMatch(text, /\n\n\n/, 'no gaping hole where the table was');
+  });
+});
+
+/* ── The itinerary, pasted ─────────────────────────────────────────────────── */
+
+const clock = (minute: number) =>
+  `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+
+const spotAt = (name: string, lon: number) => ({
+  name,
+  at: { lat: 55.95, lon },
+  windows: [{ lit: true, startMinute: 0, endMinute: 1440 }],
+});
+
+const PLAN: Itinerary = {
+  stops: [
+    {
+      spot: spotAt('Calton Hill', -3.18),
+      arriveMinute: 330,
+      leaveMinute: 360,
+      travelM: 0,
+      travelMinutes: 0,
+      bestMinute: 330,
+      offBestMinutes: 0,
+      sunAltitude: 4.2,
+    },
+    {
+      spot: spotAt('Dean Village', -3.22),
+      arriveMinute: 400,
+      leaveMinute: 430,
+      travelM: 2600,
+      travelMinutes: 6,
+      bestMinute: 380,
+      offBestMinutes: 20,
+      sunAltitude: 11.8,
+    },
+  ],
+  dropped: [
+    {
+      spot: spotAt('Portobello', -3.11),
+      reason: 'no-room',
+      note: 'Portobello could not be reached in time from anywhere else in the day, in any order.',
+    },
+  ],
+  conflicts: [
+    { kind: 'unreachable', note: 'No ordering fits Portobello between the others.' },
+  ],
+  totalTravelM: 2600,
+  totalTravelMinutes: 6,
+  travelAssumption: 'Travel is straight-line distance at 30 km/h, plus 30 minutes at each spot.',
+};
+
+const REPORT = { dayLabel: 'Sat 8 Aug', timeZone: 'Europe/London', itinerary: PLAN, clock };
+
+describe('itineraryReport', () => {
+  it('lists every stop with its times and its sun', () => {
+    const text = itineraryReport(REPORT);
+    assert.match(text, /05:30–06:00/);
+    assert.match(text, /Calton Hill/);
+    assert.match(text, /Dean Village/);
+    assert.match(text, /6 min travel/);
+    assert.match(text, /sun 4°/);
+  });
+
+  it('prints what did not fit — an absent event is listed as absent', () => {
+    const text = itineraryReport(REPORT);
+    assert.match(text, /Left out:/);
+    assert.match(text, /Portobello could not be reached/);
+    assert.match(text, /Clashes:/);
+  });
+
+  it('carries the travel assumption and the same closing lines as a shoot plan', () => {
+    const text = itineraryReport(REPORT);
+    assert.match(text, /straight-line distance at 30 km\/h/);
+    assert.match(text, /Times are local to Europe\/London\./);
+    assert.match(text, /shadows are modelled, not measured\./);
+  });
+
+  it('takes the caveat the same way a shoot plan does', () => {
+    const text = itineraryReport({ ...REPORT, caveat: '12 heights are guesses.' });
+    assert.match(text, /shadows are modelled — 12 heights are guesses\./);
+    assert.doesNotMatch(text, /not measured/);
+  });
+
+  it('says so plainly when nothing could be planned, and still closes properly', () => {
+    const text = itineraryReport({
+      ...REPORT,
+      itinerary: { ...PLAN, stops: [], totalTravelM: 0, totalTravelMinutes: 0 },
+    });
+    assert.match(text, /Nothing could be planned/);
+    assert.match(text, /Times are local to/);
+    assert.doesNotMatch(text, /undefined/);
   });
 });
