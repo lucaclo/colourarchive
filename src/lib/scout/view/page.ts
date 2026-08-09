@@ -398,6 +398,11 @@ export async function startScout(): Promise<void> {
         map: () => map,
         state: () => ({ centre, radiusKm, minute, isoDate, timeZone, view, basemap, shown }),
         terrain: () => terrainShadows?.state(),
+        // What is actually being cast, which is the only honest scale for a
+        // timing run: the count of buildings in the vector tiles says nothing
+        // about how many survived the collection box, and a measurement taken
+        // before the set finished populating reads as a speed-up.
+        shadows: () => ({ castable: castable.length, stats: shadowStats }),
         // Runs one batched frame by hand. Needed because a backgrounded tab
         // suspends requestAnimationFrame entirely, so the scheduler that draws
         // this page never fires there — which is correct behaviour and makes
@@ -2031,8 +2036,15 @@ export async function startScout(): Promise<void> {
   let shadowStats = { cast: 0, estimated: 0, longestM: 0, tooFar: false, omitted: 0 };
   /** The footprints near the centre, kept for the skyline. */
   let nearby: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
-  /** Everything in range to cast, gathered once per view rather than per frame. */
-  let castable: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
+  /**
+   * Everything in range to cast, gathered once per view rather than per frame,
+   * each footprint carrying its own hull.
+   *
+   * The hull is computed once per gather and read by both passes — the cast and
+   * the blocker depth map — because both used to derive it per building per
+   * frame. See `ShadowOptions.hull`.
+   */
+  let castable: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring }> = [];
   /**
    * What `castable` was last gathered from, so a gather that found the same
    * buildings can stop rather than reassigning and forcing a recast. Cleared,
@@ -2301,7 +2313,9 @@ export async function startScout(): Promise<void> {
     blockerSlab = slabKey;
 
     const geometry = new ShadowGeometry(projectFlat);
-    for (const building of castable) geometry.addBlocker(building.ring, building.height);
+    for (const building of castable) {
+      geometry.addBlocker(building.ring, building.height, building.hull);
+    }
     if (slabKey) geometry.addBlocker(monolithFootprint(), slab.heightM);
     shadowLayer.setBlockers(geometry.blockerVertices());
   }
