@@ -138,6 +138,27 @@ function watchDemTiles(page: Page) {
   return asked;
 }
 
+/**
+ * The same page on a phone.
+ *
+ * `isMobile` and `hasTouch` are not decoration: they are what make the coarse
+ * pointer rules apply and what makes `touchscreen.tap` mean anything. 375×667
+ * is the smallest screen in common use, and it is the one the bottom of this
+ * page was broken on — see the mobile suite below.
+ */
+async function openPhone(width = 375, height = 667) {
+  const page = await browser.newPage({
+    viewport: { width, height },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    serviceWorkers: 'block',
+  });
+  page.setDefaultTimeout(READY_MS);
+  return page;
+}
+
 async function openPage() {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 },
@@ -580,5 +601,188 @@ describe('/scout: a spot, from a link', () => {
     assert.equal(after.frame, true, 'the frame was already up and the mode took it away');
     assert.equal(after.arc, false, 'the arc was off and the mode left it on');
     assert.deepEqual(trouble, []);
+  });
+});
+
+/* ── On a phone ─────────────────────────────────────────────────────────────
+   Everything here is a geometry failure that no unit test can see and that the
+   desktop viewport hides completely, because the bottom of this page is four
+   layers deep and each one used to clear the next by a number counted in rem.
+
+   The one that shipped: below about 390px the jump row wraps to two lines, which
+   grows the timebar by 37px, which slides the place sheet — pinned 5.2rem off
+   the bottom — directly on top of the time slider. Measured at 375px, a tap in
+   the middle of the slider landed on the *Keep this spot* star. The control the
+   whole page turns on was not merely covered, it was another button. */
+describe('/scout: on a phone', () => {
+  /** The two sizes it broke at, and the two it did not — so a fix that only
+      works at one width cannot pass. */
+  const SCREENS: Array<[string, number, number]> = [
+    ['iPhone SE', 375, 667],
+    ['iPhone 14 Pro', 393, 852],
+    ['Pixel 7', 412, 915],
+    ['the 320px floor', 320, 568],
+  ];
+
+  for (const [name, width, height] of SCREENS) {
+    it(`lets a thumb reach the time slider on ${name}`, async () => {
+      const page = await openPhone(width, height);
+      const trouble = watchForTrouble(page);
+      await page.goto(`${origin}${SPOT}`);
+      await waitForTheMap(page);
+      await page.waitForSelector('#timebar:not([hidden])');
+
+      // What is actually on top of the slider, which is the whole question.
+      const covering = (await page.evaluate(
+        `(() => {
+           const r = document.getElementById('time').getBoundingClientRect();
+           const el = document.elementFromPoint(
+             Math.round(r.left + r.width * 0.75), Math.round(r.top + r.height / 2));
+           return el ? (el.id || el.className.toString()) : 'nothing';
+         })()`,
+      )) as string;
+      assert.equal(covering, 'time', `the slider is under ${covering} at ${width}px`);
+
+      // And then drive it as a finger would, because being on top is necessary
+      // and not sufficient — a zero-height target is on top of itself.
+      const before = (await page.evaluate(`document.getElementById('chip-clock').textContent`)) as string;
+      const at = (await page.evaluate(
+        `(() => { const r = document.getElementById('time').getBoundingClientRect();
+                  return { x: Math.round(r.left + r.width * 0.75), y: Math.round(r.top + r.height / 2) }; })()`,
+      )) as { x: number; y: number };
+      await page.touchscreen.tap(at.x, at.y);
+      await page.waitForFunction(
+        `document.getElementById('chip-clock').textContent !== ${JSON.stringify(before)}`,
+      );
+
+      assert.deepEqual(trouble, []);
+      await page.close();
+    });
+  }
+
+  it('keeps all seven jumps on one line, and reachable', async () => {
+    // They stopped wrapping and started scrolling. Both halves matter: one line
+    // is what keeps the timebar short enough to clear the sheet, and Dusk being
+    // off the right-hand edge is only acceptable if it can still be got to.
+    const page = await openPhone(375, 667);
+    const trouble = watchForTrouble(page);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#jumps button');
+
+    const lines = (await page.evaluate(
+      `new Set([...document.getElementById('jumps').children]
+         .map((k) => Math.round(k.getBoundingClientRect().top))).size`,
+    )) as number;
+    assert.equal(lines, 1, 'the jump row wrapped, which is what buried the slider');
+
+    // The row says which way it can still be moved; without that, the chips
+    // past the edge are a feature nobody knows is there.
+    assert.equal(
+      await page.evaluate(`document.getElementById('jumps').getAttribute('data-more')`),
+      'end',
+    );
+
+    const before = (await page.evaluate(`document.getElementById('chip-clock').textContent`)) as string;
+    await page.evaluate(
+      `(() => { const r = document.getElementById('jumps'); r.scrollLeft = r.scrollWidth; })()`,
+    );
+    const at = (await page.evaluate(
+      `(() => { const b = document.getElementById('jumps').lastElementChild.getBoundingClientRect();
+                return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2),
+                         inView: b.right <= innerWidth + 0.5 && b.left >= -0.5 }; })()`,
+    )) as { x: number; y: number; inView: boolean };
+    assert.ok(at.inView, 'Dusk cannot be scrolled into view');
+    await page.touchscreen.tap(at.x, at.y);
+    await page.waitForFunction(
+      `document.getElementById('chip-clock').textContent !== ${JSON.stringify(before)}`,
+    );
+
+    assert.deepEqual(trouble, []);
+    await page.close();
+  });
+
+  it('never lays a control on top of another one at the bottom', async () => {
+    // The general form of the bug, guarded generally: these four are stacked up
+    // from the bottom edge and none of them may overlap any other. The heights
+    // are measured and published by the page (`--dock-h` and friends), so this
+    // is really a test that the measuring is wired up.
+    const page = await openPhone(375, 667);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#timebar:not([hidden])');
+
+    const clashes = (await page.evaluate(
+      `(() => {
+         const ids = ['edge-date', 'edge-time', 'sheet', 'timebar'];
+         const box = ids.map((id) => [id, document.getElementById(id).getBoundingClientRect()]);
+         const hits = [];
+         for (let i = 0; i < box.length; i++) for (let j = i + 1; j < box.length; j++) {
+           const [an, a] = box[i], [bn, b] = box[j];
+           const over = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+           const across = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+           if (over > 1 && across > 1) hits.push(an + ' over ' + bn + ' by ' + Math.round(over) + 'px');
+         }
+         return hits;
+       })()`,
+    )) as string[];
+    assert.deepEqual(clashes, []);
+
+    // And the whole stack has to fit on the screen it is pinned to.
+    const offScreen = (await page.evaluate(
+      `(() => { const r = document.getElementById('edge-date').getBoundingClientRect();
+                return r.top < 0 || r.bottom > innerHeight; })()`,
+    )) as boolean;
+    assert.equal(offScreen, false, 'the date row was pushed off the top of the screen');
+    await page.close();
+  });
+
+  it('gives a finger something to hit', async () => {
+    // 44px is the usual floor for a touch target. This asserts the controls the
+    // page is driven by, not every element: the map's own credit is MapLibre's
+    // markup and the pin is a mark whose size states a precision.
+    const page = await openPhone(375, 667);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#timebar:not([hidden])');
+
+    const small = (await page.evaluate(
+      `(() => {
+         const want = ['#time', '#chip-play', '#chip-now', '#chip-today', '#chip-date',
+                       '#day-back', '#day-forward', '#search-button', '#star', '#radius-button',
+                       '#layers-button', '#night-button'];
+         // Half a pixel of slack. A box asked for 44 comes back as 43.99 when the
+         // layout lands off the device grid — Now measures exactly that — and a
+         // test that fails on the hundredth of a pixel is measuring the renderer,
+         // not the thing anyone is trying to tap.
+         const FLOOR = 43.5;
+         const out = [];
+         for (const sel of want) {
+           const el = document.querySelector(sel);
+           if (!el || el.hidden) continue;
+           const r = el.getBoundingClientRect();
+           if (r.height < FLOOR || r.width < FLOOR) out.push(sel + ' ' + r.width.toFixed(1) + '×' + r.height.toFixed(1));
+         }
+         const jump = document.querySelector('#jumps button').getBoundingClientRect();
+         if (jump.height < FLOOR) out.push('#jumps button ' + jump.height.toFixed(1));
+         return out;
+       })()`,
+    )) as string[];
+    assert.deepEqual(small, []);
+    await page.close();
+  });
+
+  it('does not scroll sideways', async () => {
+    // A map that pans and a document that also slides is two gestures fighting.
+    for (const [, width, height] of SCREENS) {
+      const page = await openPhone(width, height);
+      await page.goto(`${origin}${SPOT}`);
+      await waitForTheMap(page);
+      const wide = (await page.evaluate(
+        `document.documentElement.scrollWidth - document.documentElement.clientWidth`,
+      )) as number;
+      assert.equal(wide, 0, `the page scrolls ${wide}px sideways at ${width}px`);
+      await page.close();
+    }
   });
 });

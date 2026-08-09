@@ -485,6 +485,27 @@ export async function startScout(): Promise<void> {
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+    /**
+     * Start the credit folded on a phone, and only on a phone.
+     *
+     * `compact: true` above already asks MapLibre for the ⓘ form, but compact
+     * still *opens* on load, and on a 375px screen that is a 355px bar of source
+     * names lying across the map. The bottom of the screen has no room to put it
+     * — sheet to timebar is an 8px gap — so it sits under the tools instead, and
+     * folded it is a marked button one tap from the same text.
+     *
+     * Not hidden and not removed: this project does not show other people's work
+     * without their name on it, and that applies to whoever surveyed the roads
+     * as much as to whoever made the photographs. On anything wider it stays
+     * open, because there it costs nothing.
+     */
+    if (window.innerWidth <= 820) {
+      map.once('load', () => {
+        document
+          .querySelector('.maplibregl-ctrl-attrib')
+          ?.classList.remove('maplibregl-compact-show');
+      });
+    }
     watchForFirstPaint(map);
   }
 
@@ -5960,6 +5981,76 @@ export async function startScout(): Promise<void> {
     } catch {
       return 'UTC';
     }
+  }
+
+  /* ── What the bottom of the screen is actually doing ──────────────────────
+     The timebar, the place sheet and the time row are stacked up from the
+     bottom edge, and until now each knew how much to clear by a number counted
+     in rem. That is a guess about content, and it was wrong: below ~390px the
+     jump row wraps to two lines, the timebar grows by 37px, and the sheet — 5.2
+     rem off the bottom — comes to rest on top of the time slider. Measured on a
+     375px viewport, a tap in the middle of the slider hit the *Keep this spot*
+     star. The control the page exists to drive was covered by another button.
+
+     So the heights are measured and published as custom properties, and the CSS
+     stacks on those. Nothing here decides layout — it only reports what the
+     browser already laid out, which is the one source that cannot disagree with
+     the screen. Content-box height is deliberate: `getBoundingClientRect` would
+     be the same number here, but a transform on any of these (the sheet has one)
+     would make it lie. */
+  const stage = document.querySelector<HTMLElement>('.scout-stage');
+  if (stage && typeof ResizeObserver !== 'undefined') {
+    const measured: Array<[string, string]> = [
+      ['timebar', '--dock-h'],
+      ['sheet', '--sheet-h'],
+      ['edge-time', '--edge-h'],
+    ];
+    const publish = () => {
+      for (const [id, prop] of measured) {
+        const el = document.getElementById(id);
+        // A hidden bar has no height and must not collapse the stack onto the
+        // map's own controls, so its variable is left at the CSS fallback.
+        if (!el || el.hidden) continue;
+        stage.style.setProperty(prop, `${Math.round(el.offsetHeight)}px`);
+      }
+    };
+    const observer = new ResizeObserver(publish);
+    for (const [id] of measured) {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    }
+    // `hidden` flips on these three once a place is chosen, and that is not a
+    // resize — without this the first measurement is of three hidden bars.
+    new MutationObserver(publish).observe(stage, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+      subtree: true,
+    });
+    publish();
+  }
+
+  /* ── Saying that the row runs on ────────────────────────────────────────
+     The jump row scrolls on a phone rather than wrapping, which fixes the
+     layout but hides Dusk off the right-hand edge — and a control nobody knows
+     is there is not much better than one that is covered up. So the row reports
+     which way it can still move and the CSS fades that edge.
+
+     Measured rather than assumed, because how much overflows depends on the
+     width: 46px on a 412px phone, 138px on a 320px one, and none at all on a
+     tablet, where the fade must not appear. */
+  const jumps = document.getElementById('jumps');
+  if (jumps) {
+    const markOverflow = () => {
+      const more = jumps.scrollWidth - jumps.clientWidth;
+      // A pixel of slack: sub-pixel layout leaves a fraction over constantly.
+      if (more <= 1) return jumps.removeAttribute('data-more');
+      const atStart = jumps.scrollLeft <= 1;
+      const atEnd = jumps.scrollLeft >= more - 1;
+      jumps.setAttribute('data-more', atStart ? 'end' : atEnd ? 'start' : 'both');
+    };
+    jumps.addEventListener('scroll', markOverflow, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(markOverflow).observe(jumps);
+    markOverflow();
   }
 
   if (!centre) {
