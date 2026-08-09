@@ -1849,6 +1849,13 @@ export const prerender = true;
   .photo-grid :global(.acc-featured) { background: #e8b33a; color: #1a1408; }
   .photo-grid :global(.acc-quality) { background: color-mix(in oklab, #6fc3f0 70%, transparent); color: #08121c; }
   .photo-grid :global(.acc-valued) { background: color-mix(in oklab, var(--fg) 18%, transparent); color: var(--fg); }
+  /* Outlined, not filled: a contest entry is not a review, and the chip should
+     not look like the three above it at a glance. */
+  .photo-grid :global(.acc-contest) {
+    background: none;
+    color: color-mix(in oklab, var(--fg) 55%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 25%, transparent);
+  }
   .photo-grid :global(.by) {
     display: block;
     padding: 0.35rem 0.4rem 0;

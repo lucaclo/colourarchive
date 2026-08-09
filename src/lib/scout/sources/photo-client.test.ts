@@ -66,14 +66,27 @@ function recorder(byTier: Partial<Record<string, string[]>>) {
 describe('collectCommonsPhotos', () => {
   it('asks each accolade separately, never as one expression', () => {
     // ORing the categories into one CirrusSearch query returns nothing. That is
-    // not obvious from the API docs and it is the reason for three requests.
+    // not obvious from the API docs and it is the reason for one request a tier.
     const { transport, urls } = recorder({ featured: ['File:A.jpg'] });
     return collectCommonsPhotos(QUERY, transport).then(() => {
       const searches = urls.filter((u) => u.includes('srsearch'));
-      assert.equal(searches.length, 3);
+      assert.equal(searches.length, Object.keys(ACCOLADES).length);
       for (const url of searches) {
         const term = new URL(url).searchParams.get('srsearch') ?? '';
-        assert.equal(term.match(/incategory:/g)?.length, 1, term);
+        // Exactly one category clause, whichever operator the tier needs.
+        assert.equal(term.match(/(incategory|deepcat):/g)?.length, 1, term);
+      }
+    });
+  });
+
+  it('asks for every tier there is, so adding one cannot forget to search it', () => {
+    const { transport, urls } = recorder({});
+    return collectCommonsPhotos(QUERY, transport).then(() => {
+      const terms = urls
+        .filter((u) => u.includes('srsearch'))
+        .map((u) => new URL(u).searchParams.get('srsearch') ?? '');
+      for (const { category } of Object.values(ACCOLADES)) {
+        assert.ok(terms.some((t) => t.includes(category)), `never searched ${category}`);
       }
     });
   });

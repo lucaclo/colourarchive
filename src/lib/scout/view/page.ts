@@ -3896,10 +3896,27 @@ export async function startScout(): Promise<void> {
       licence: { name: string; url?: string };
       originUrl: string;
       thumbUrl: string;
-      accolade?: 'featured' | 'quality' | 'valued';
+      accolade?: 'featured' | 'quality' | 'valued' | 'contest';
       megapixels?: number;
     }>;
   }
+
+  /**
+   * What each standing is called on the picture, and what it actually means.
+   *
+   * The wording is the whole job here. Three of these are judgements other
+   * photographers made; the fourth is a competition entry and is worded so that
+   * nobody can mistake it for the first three.
+   */
+  const ACCOLADE_BADGE: Record<string, { text: string; hint: string }> = {
+    featured: { text: 'Featured', hint: 'Featured picture on Commons — promoted by community vote.' },
+    quality: { text: 'Quality', hint: 'Quality image on Commons — reviewed for technical quality.' },
+    valued: { text: 'Valued', hint: 'Valued image on Commons — the most useful illustration of its subject.' },
+    contest: {
+      text: 'Entered',
+      hint: 'Entered in Wiki Loves Earth. Somebody went there to photograph it; nobody has reviewed it.',
+    },
+  };
 
   let hotspots: Hotspot[] = [];
   let photoToken = 0;
@@ -4315,11 +4332,17 @@ export async function startScout(): Promise<void> {
 
         // What the reviewers said, on the picture. It is the reason this one
         // is here at all and the reason it is above the others.
+        //
+        // `contest` is not that, and must not be allowed to read as if it were:
+        // it means the photograph was entered in Wiki Loves Earth, which says
+        // somebody went there meaning to make a picture and says nothing about
+        // whether it is any good. It gets its own wording and an outlined chip
+        // rather than a filled one — see the styles in `scout.astro`.
         if (photo.accolade) {
           const badge = document.createElement('span');
           badge.className = `acc acc-${photo.accolade}`;
-          badge.textContent =
-            photo.accolade === 'featured' ? 'Featured' : photo.accolade === 'quality' ? 'Quality' : 'Valued';
+          badge.textContent = ACCOLADE_BADGE[photo.accolade].text;
+          badge.title = ACCOLADE_BADGE[photo.accolade].hint;
           link.append(badge);
         }
 

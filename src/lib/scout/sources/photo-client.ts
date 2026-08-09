@@ -107,11 +107,14 @@ export async function collectCommonsPhotos(
   getJson: JsonTransport,
   urlOptions?: UrlOptions,
 ): Promise<RawPhoto[]> {
-  const tiers: Accolade[] = ['featured', 'quality', 'valued'];
+  const tiers: Accolade[] = ['featured', 'quality', 'valued', 'contest'];
 
-  // Three searches, run together. Each is allowed to fail on its own: losing
-  // the valued tier is a thinner answer, not a failed search.
-  const found = await inParallel(tiers, 3, (accolade) =>
+  // One search per tier, run together. Each is allowed to fail on its own:
+  // losing a tier is a thinner answer, not a failed search. Note what that
+  // costs — a tier that returns nothing because it is *broken* looks exactly
+  // like one that returns nothing because the place is unphotographed, which is
+  // how the valued tier stayed empty unnoticed. See `ACCOLADES`.
+  const found = await inParallel(tiers, 4, (accolade) =>
     getJson(assessedSearchUrl(query, accolade, urlOptions)).then(
       (payload) => ({ accolade, titles: parseSearchTitles(payload) }),
       () => ({ accolade, titles: [] as string[] }),

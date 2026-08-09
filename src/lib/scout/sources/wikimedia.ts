@@ -32,16 +32,48 @@ import type { RawPhoto, SpotSearch } from './types';
 export const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
 
 /** What Commons' reviewers said, best first. */
-export type Accolade = 'featured' | 'quality' | 'valued';
+export type Accolade = 'featured' | 'quality' | 'valued' | 'contest';
 
-export const ACCOLADES: Record<Accolade, { category: string; label: string; rank: number }> = {
+export const ACCOLADES: Record<
+  Accolade,
+  { category: string; label: string; rank: number; deep?: boolean }
+> = {
   featured: {
     category: 'Featured pictures on Wikimedia Commons',
     label: 'Featured picture',
-    rank: 3,
+    rank: 4,
   },
-  quality: { category: 'Quality images', label: 'Quality image', rank: 2 },
-  valued: { category: 'Valued images', label: 'Valued image', rank: 1 },
+  quality: { category: 'Quality images', label: 'Quality image', rank: 3 },
+  /**
+   * `deep` because `Category:Valued images` holds **three files**. Everything
+   * that has actually been promoted lives in a subcategory — by country, by
+   * subject, by month of promotion — and `incategory:` matches direct
+   * membership only. So this tier returned nothing, everywhere, for as long as
+   * it has existed: measured 0 at Edinburgh, Glencoe and Skye, at every radius.
+   * With `deepcat:` the same query at Edinburgh returns 14.
+   *
+   * The failure was invisible because `collectCommonsPhotos` lets each tier
+   * fail on its own, which makes an empty tier and a broken one look identical.
+   */
+  valued: { category: 'Valued images', label: 'Valued image', rank: 2, deep: true },
+  /**
+   * Not a review — an *entry*. Wiki Loves Earth photographs were submitted to a
+   * competition about natural heritage, which means somebody went there meaning
+   * to make a picture. That is a weaker claim than the three tiers above and it
+   * is ranked below them and labelled differently, because the distinction
+   * between "reviewed by other photographers" and "deliberately made" is
+   * exactly the sort of thing this archive does not blur.
+   *
+   * Chosen over Wiki Loves Monuments, which is far larger — 3,512 within 5 km
+   * of Edinburgh against WLE's 39 — but is every entry to a contest about
+   * listed buildings, unfiltered, and would swamp the reviewed tiers in a city.
+   */
+  contest: {
+    category: 'Images from Wiki Loves Earth',
+    label: 'Wiki Loves Earth',
+    rank: 1,
+    deep: true,
+  },
 };
 
 /**
@@ -82,12 +114,17 @@ export function assessedSearchUrl(
   options?: UrlOptions,
 ): string {
   const km = Math.min(NEARCOORD_MAX_KM, Math.max(1, Math.round(query.radiusM / 1000)));
+  const { category, deep } = ACCOLADES[accolade];
+  // `incategory:` is direct membership; `deepcat:` walks the subcategory tree.
+  // Which one a tier needs is a property of how Commons files that tier, not a
+  // preference — see `ACCOLADES`, where getting this wrong cost a whole tier.
+  const member = deep ? `deepcat:"${category}"` : `incategory:"${category}"`;
   const params = new URLSearchParams({
     action: 'query',
     format: 'json',
     formatversion: '2',
     list: 'search',
-    srsearch: `incategory:"${ACCOLADES[accolade].category}" nearcoord:${km}km,${query.centre.lat},${query.centre.lon}`,
+    srsearch: `${member} nearcoord:${km}km,${query.centre.lat},${query.centre.lon}`,
     // Namespace 6 is `File:`; nothing else on Commons is a photograph.
     srnamespace: '6',
     srlimit: String(Math.min(100, Math.max(1, query.limit))),
