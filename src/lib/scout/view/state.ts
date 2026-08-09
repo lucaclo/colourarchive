@@ -15,6 +15,7 @@
  * test inherits the first one's monolith.
  */
 
+import { DEFAULT_MEGAPIXELS } from '../astrophoto';
 import type { Orientation } from '../frame';
 
 /** The basemap, which is a style plus — for satellite — imagery underneath it. */
@@ -110,6 +111,16 @@ export interface Lens {
   orientation: Orientation;
   bearing: number;
   tiltDeg: number;
+  /**
+   * How finely the sensor samples the image, in millions of pixels.
+   *
+   * Nothing about the *frame* needs this — the rectangle a lens covers is the
+   * same however finely it is recorded. It lives here because it is a property
+   * of the body, and the body is what this object describes. The one answer that
+   * turns on it is the night's shutter limit, where a 12 MP and a 61 MP camera
+   * differ by a factor of two and the old rules of thumb cannot tell them apart.
+   */
+  megapixels: number;
 }
 
 export const defaultLens = (): Lens => ({
@@ -118,6 +129,7 @@ export const defaultLens = (): Lens => ({
   orientation: 'landscape',
   bearing: 270,
   tiltDeg: 0,
+  megapixels: DEFAULT_MEGAPIXELS,
 });
 
 /** The far end of the sightline. Dragged on the map, like the monolith. */

@@ -402,4 +402,183 @@ describe('/scout: a spot, from a link', () => {
     assert.deepEqual(trouble, []);
   });
 
+  it('answers the core against the lens, and refuses the half that needs an aim', async () => {
+    // Two claims, and the second is the one worth a browser. The shutter limit
+    // needs only the body, so it is always offered; where the core falls in the
+    // picture needs an aim, and an aim nobody chose is exactly the fabrication
+    // this project refuses elsewhere. That gate is a `shown.frame` check in the
+    // page and nothing in `astrophoto.ts` — so no unit test can see it.
+    const readCore = () =>
+      page.evaluate(
+        `({ exposure: document.getElementById('core-exposure').textContent.trim(),
+            frame: document.getElementById('core-frame').textContent.trim(),
+            extent: document.getElementById('core-extent').textContent.trim() })`,
+      ) as Promise<{ exposure: string; frame: string; extent: string }>;
+
+    const withoutAim = await readCore();
+    assert.match(
+      withoutAim.exposure,
+      /trails a single pixel/,
+      `the shutter limit needs no aim and should be stated: "${withoutAim.exposure}"`,
+    );
+    // Edinburgh's default 24mm on a 33 MP full frame. Both inputs have to travel
+    // with the number or nobody can check it.
+    assert.match(withoutAim.exposure, /24mm/);
+    assert.match(withoutAim.exposure, /µm/);
+    assert.equal(withoutAim.frame, '', 'the core was placed in a frame nobody had aimed');
+    assert.equal(withoutAim.extent, '');
+
+    await page.evaluate(
+      `(() => {
+         const box = document.getElementById('t-frame');
+         box.checked = true;
+         box.dispatchEvent(new Event('change', { bubbles: true }));
+       })()`,
+    );
+    await page.waitForFunction(
+      `document.getElementById('core-frame').textContent.trim() !== ''`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    // Point the camera at it. This is the "At the core" button, which aims at
+    // where the core will be at the best moment of the night rather than at the
+    // slider's minute — the sun and moon buttons cannot be asked that.
+    //
+    // Aiming first is also what makes the next two assertions mean anything. On
+    // the default westward aim the core is ninety degrees off, its fifteen
+    // degrees straddle the image plane, and the module correctly refuses to say
+    // how much of it lands in shot.
+    // Dispatched rather than clicked, for the reason the sun-path case gives:
+    // the button lives inside the layers menu, which is closed, and it is the
+    // handler being tested rather than the menu.
+    await page.evaluate(`document.getElementById('aim-core').click()`);
+    await page.waitForFunction(
+      `document.getElementById('core-extent').textContent.includes('bright region')`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const withAim = await readCore();
+    assert.match(withAim.frame, /In frame/i, `aimed straight at it and missed: "${withAim.frame}"`);
+    assert.match(
+      withAim.extent,
+      /whole bright region is in the picture/,
+      `a 15° core should fit a 24mm frame's 53°: "${withAim.extent}"`,
+    );
+
+    // Turning the camera has to move the answer. The lens-dependent half is
+    // recomputed off a cached night rather than by re-running `coreNight`, and
+    // a cache that was never invalidated would pass every assertion above.
+    await page.evaluate(
+      `(() => {
+         const aim = document.getElementById('frame-bearing');
+         aim.value = String((Number(aim.value) + 90) % 360);
+         aim.dispatchEvent(new Event('input', { bubbles: true }));
+       })()`,
+    );
+    const turned = await readCore();
+    assert.notEqual(
+      turned.frame,
+      withAim.frame,
+      'turning the camera ninety degrees left the framing answer unchanged',
+    );
+    assert.deepEqual(trouble, []);
+  });
+
+  it('reaches the whole Milky Way answer from one button', async () => {
+    // The affordance, not the arithmetic. Everything this switches on was
+    // reachable before and none of it was findable — and every part of that is
+    // page wiring, which is precisely what no unit test can see.
+    //
+    // Both layers off first, so the button is being measured rather than
+    // whatever the previous test left behind.
+    await page.evaluate(
+      `(() => {
+         for (const id of ['t-core', 't-frame']) {
+           const box = document.getElementById(id);
+           if (box.checked) {
+             box.checked = false;
+             box.dispatchEvent(new Event('change', { bubbles: true }));
+           }
+         }
+         document.getElementById('fold-core').open = false;
+       })()`,
+    );
+
+    await page.click('#night-button');
+    await page.waitForFunction(
+      `document.getElementById('core-frame').textContent.trim() !== ''`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const on = await page.evaluate(
+      `({ pressed: document.getElementById('night-button').getAttribute('aria-pressed'),
+          fold: document.getElementById('fold-core').open,
+          arc: document.getElementById('t-core').checked,
+          frame: document.getElementById('t-frame').checked,
+          extent: document.getElementById('core-extent').textContent.trim() })`,
+    ) as { pressed: string; fold: boolean; arc: boolean; frame: boolean; extent: string };
+
+    assert.equal(on.pressed, 'true', 'the button does not show as held down');
+    assert.equal(on.fold, true, 'the panel section stayed shut, which is where all the text is');
+    assert.equal(on.arc, true, 'the arc layer was not switched on');
+    assert.equal(on.frame, true, 'the frame layer was not switched on, so the framing stays silent');
+    // Pressing it also aims at the core, so the region must be placed rather
+    // than refused — a refusal here means the aim never happened.
+    assert.match(
+      on.extent,
+      /whole bright region is in the picture/,
+      `pressing the button did not point the camera at it: "${on.extent}"`,
+    );
+
+    // And it has to be leavable. Both layers were off before the press, so both
+    // must be off after the second one.
+    await page.click('#night-button');
+    const off = await page.evaluate(
+      `({ pressed: document.getElementById('night-button').getAttribute('aria-pressed'),
+          fold: document.getElementById('fold-core').open,
+          arc: document.getElementById('t-core').checked,
+          frame: document.getElementById('t-frame').checked })`,
+    ) as { pressed: string; fold: boolean; arc: boolean; frame: boolean };
+
+    assert.equal(off.pressed, 'false');
+    assert.equal(off.fold, false);
+    assert.equal(off.arc, false, 'leaving night mode left the arc behind');
+    assert.equal(off.frame, false, 'leaving night mode left the frame behind');
+    assert.deepEqual(trouble, []);
+  });
+
+  it('gives back only the layers it borrowed', async () => {
+    // The trap in a mode button: someone with the frame already up to compose a
+    // sunset glances at the Milky Way, and leaving takes their frame away with
+    // it. Off must restore what was there, not what the mode assumes was there.
+    await page.evaluate(
+      `(() => {
+         const frame = document.getElementById('t-frame');
+         if (!frame.checked) {
+           frame.checked = true;
+           frame.dispatchEvent(new Event('change', { bubbles: true }));
+         }
+         const arc = document.getElementById('t-core');
+         if (arc.checked) {
+           arc.checked = false;
+           arc.dispatchEvent(new Event('change', { bubbles: true }));
+         }
+       })()`,
+    );
+
+    await page.click('#night-button');
+    await page.click('#night-button');
+
+    const after = await page.evaluate(
+      `({ arc: document.getElementById('t-core').checked,
+          frame: document.getElementById('t-frame').checked })`,
+    ) as { arc: boolean; frame: boolean };
+
+    assert.equal(after.frame, true, 'the frame was already up and the mode took it away');
+    assert.equal(after.arc, false, 'the arc was off and the mode left it on');
+    assert.deepEqual(trouble, []);
+  });
 });

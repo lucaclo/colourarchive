@@ -126,7 +126,20 @@ import {
   type MoonSample,
 } from '../moon';
 import { aodAt, type AirReport } from '../air';
-import { coreNight, coreTrack, type CoreSample } from '../galactic';
+import {
+  coreNight,
+  corePosition,
+  coreTrack,
+  type CoreNight,
+  type CoreSample,
+} from '../galactic';
+import {
+  RESOLUTIONS,
+  frameTheCore,
+  inFrameWindows,
+  pixelPitchMm,
+  trailLimit,
+} from '../astrophoto';
 import { bracketingSolstices, seasonEvents, seasonName } from '../almanac';
 import {
   buildSkyline,
@@ -343,6 +356,26 @@ export async function startScout(): Promise<void> {
    * costs a track nobody asked for on every date change otherwise.
    */
   let coreSamples: CoreSample[] = [];
+  /**
+   * Where the core will be at the best moment of the coming night.
+   *
+   * Kept because the "At the core" button aims at a moment that has not
+   * happened, unlike the sun and moon buttons which aim at the slider's own
+   * minute. Null when the core never clears the horizon, and the button then
+   * has nothing to do — which is the honest answer at Tromsø.
+   */
+  let coreAim: { azimuth: number; altitude: number; declination: number } | null = null;
+  /**
+   * The night the core fold last computed, kept so turning the camera does not
+   * recompute it.
+   *
+   * `coreNight` is three interval sweeps over twenty-four hours plus a peak
+   * scan — well over a thousand trigonometric solves — and it depends on the
+   * place, the date and nothing else. The aim slider fires faster than the
+   * screen refreshes, and putting that behind it would stick the slider for the
+   * sake of an answer that cannot have changed.
+   */
+  let coreNightCache: { night: CoreNight; window: { from: Date; to: Date } } | null = null;
   let weather: WeatherReport | null = null;
   /** The aerosol column over the pin, when the air-quality host answered. */
   let air: AirReport | null = null;
@@ -2997,6 +3030,7 @@ export async function startScout(): Promise<void> {
     if (!centre || !window) return;
 
     const night = coreNight(centre.lat, centre.lon, window.from, window.to);
+    coreNightCache = { night, window };
     const clock = (date: Date) => formatClock(date, timeZone);
     const { core } = night;
 
@@ -3027,6 +3061,82 @@ export async function startScout(): Promise<void> {
     $('core-note').textContent = night.best
       ? `Best at ${clock(night.best.at)}, ${night.best.altitude.toFixed(0)}° up.`
       : night.refusal;
+
+    renderCoreLens(night, window);
+  }
+
+  /**
+   * The core against the lens: where it falls in the picture, and how long an
+   * exposure it will take before it stops being a point.
+   *
+   * Both are answered for **the best moment of the night**, not for the slider's
+   * minute, for the same reason the rest of this fold is: nobody scrubs to find
+   * the core. `coreAim` is remembered here so the "At the core" button can point
+   * the camera at a moment that has not happened yet.
+   */
+  /**
+   * Redo only the half of the core fold that depends on the lens.
+   *
+   * The night itself cannot have moved because the camera did, and recomputing
+   * it would put a thousand trigonometric solves behind a slider that fires
+   * faster than the screen refreshes.
+   */
+  function refreshCoreLens() {
+    if (coreNightCache) renderCoreLens(coreNightCache.night, coreNightCache.window);
+  }
+
+  function renderCoreLens(night: CoreNight, window: { from: Date; to: Date }) {
+    const frameLine = $('core-frame');
+    const extentLine = $('core-extent');
+    const exposureLine = $('core-exposure');
+    if (!centre) return;
+    const clock = (date: Date) => formatClock(date, timeZone);
+
+    const at = night.best?.at ?? night.core.transit;
+    coreAim = at ? corePosition(centre.lat, centre.lon, at) : null;
+
+    // The shutter needs the lens and the target's declination, and no aim at
+    // all, so it is offered whether or not the frame layer is up. It names the
+    // focal length and the pixel it was worked out from, because a shutter
+    // limit nobody can reproduce is worth no more than a sunset score.
+    const sensor = sensorByKey(lens.sensor) ?? SENSORS[0];
+    exposureLine.textContent = coreAim
+      ? trailLimit({
+          focalLengthMm: lens.focalLengthMm,
+          pixelPitchMm: pixelPitchMm(sensor, lens.megapixels),
+          declinationDeg: coreAim.declination,
+        }).note
+      : '';
+
+    // Where it lands in the frame does need an aim, and one nobody chose would
+    // be an invention. Off until the lens is on the map.
+    if (!shown.frame || !coreAim || !at) {
+      frameLine.textContent = '';
+      extentLine.textContent = '';
+      return;
+    }
+
+    const aim = { bearing: lens.bearing, tiltDeg: lens.tiltDeg };
+    const fov = currentFov();
+    const region = frameTheCore(coreAim, aim, fov);
+
+    // How long the composition holds. The sky turns fifteen degrees an hour, so
+    // this is the number that decides how many frames there are to stack — and
+    // on a long lens it is startlingly short.
+    const held = inFrameWindows(
+      window.from,
+      window.to,
+      (t) => corePosition(centre!.lat, centre!.lon, t),
+      aim,
+      fov,
+    );
+    const holding = held
+      .map((w) => `${clock(w.from)} → ${clock(w.to)}`)
+      .join(' · ');
+
+    frameLine.textContent =
+      `At ${clock(at)}: ${region.centre.note}` + (holding ? ` In frame ${holding}.` : '');
+    extentLine.textContent = region.note;
   }
 
   function renderMoonNow() {
@@ -4357,6 +4467,9 @@ export async function startScout(): Promise<void> {
       if (key === 'frame') {
         drawFrame();
         renderFraming();
+        // The core's framing is gated on this toggle, so it appears and
+        // disappears with it.
+        refreshCoreLens();
       }
       if (key === 'sight') {
         placeTarget();
@@ -4398,6 +4511,8 @@ export async function startScout(): Promise<void> {
     }
     const focalSelect = $<HTMLSelectElement>('frame-focal');
     for (const focal of FOCAL_LENGTHS) focalSelect.append(new Option(`${focal}mm`, String(focal)));
+    const pixelSelect = $<HTMLSelectElement>('frame-mp');
+    for (const mp of RESOLUTIONS) pixelSelect.append(new Option(`${mp} MP`, String(mp)));
   }
 
   /** Everything the frame draws and says, after any of its controls moves. */
@@ -4408,6 +4523,9 @@ export async function startScout(): Promise<void> {
     $('frame-lens').textContent = describeLens(sensor, lens.focalLengthMm, currentFov());
     drawFrame();
     renderFraming();
+    // The core fold prints two answers about this lens, and both go stale the
+    // moment it is turned or changed.
+    refreshCoreLens();
     if (persist) save();
   }
 
@@ -4417,6 +4535,10 @@ export async function startScout(): Promise<void> {
   });
   on('frame-focal', 'change', (event) => {
     lens.focalLengthMm = Number((event.target as HTMLSelectElement).value);
+    frameChanged();
+  });
+  on('frame-mp', 'change', (event) => {
+    lens.megapixels = Number((event.target as HTMLSelectElement).value);
     frameChanged();
   });
   on('frameorient', 'click', (event) => {
@@ -4460,6 +4582,10 @@ export async function startScout(): Promise<void> {
   on('aim-moon', 'click', () =>
     aimAt(moonSamples[Math.min(moonSamples.length - 1, Math.max(0, minute))] ?? null),
   );
+  // Not at the core *now* — at where it will be when the night is at its best.
+  // The other two aim at the slider's minute because the sun and the moon are
+  // what the slider is for; the core is a question about the whole night.
+  on('aim-core', 'click', () => aimAt(coreAim));
 
   /* ── The sightline's controls ──────────────────────────────────────────── */
 
@@ -4490,6 +4616,73 @@ export async function startScout(): Promise<void> {
     const open = panel.hidden;
     panel.hidden = !open;
     $('layers-button').setAttribute('aria-expanded', String(open));
+  });
+
+  /**
+   * Which of the night's layers this button switched on, so that switching it
+   * off puts back what was there rather than what it assumes was there.
+   *
+   * Somebody who already had the frame up to compose a sunset should not lose
+   * it because they glanced at the Milky Way. A mode that cannot be left
+   * cleanly is worse than one that is fiddly to enter.
+   */
+  let nightTurnedOn: Array<keyof typeof shown> = [];
+
+  /**
+   * The whole Milky Way answer, in one press.
+   *
+   * It sets four things that had to be found separately before: the arc on the
+   * sky dome, the frame layer (which is what the *framing* half of the answer is
+   * gated on), the panel section opened, and the camera pointed at where the
+   * core will be at its best.
+   *
+   * What it deliberately does **not** do is move the time slider. The obvious
+   * next step — jump to the best moment — crosses a date boundary whenever that
+   * moment is after midnight, because the night runs noon to noon while the
+   * slider runs over the solar day. The fold prints the times; the slider is
+   * left where the user put it.
+   */
+  function setNightMode(on: boolean) {
+    const button = $('night-button');
+    button.setAttribute('aria-pressed', String(on));
+
+    if (on) {
+      nightTurnedOn = (['corePath', 'frame'] as const).filter((key) => !shown[key]);
+      for (const key of nightTurnedOn) {
+        shown[key] = true;
+        const box = $<HTMLInputElement>(key === 'corePath' ? 't-core' : 't-frame');
+        box.checked = true;
+      }
+    } else {
+      for (const key of nightTurnedOn) {
+        shown[key] = false;
+        $<HTMLInputElement>(key === 'corePath' ? 't-core' : 't-frame').checked = false;
+      }
+      nightTurnedOn = [];
+    }
+
+    applyVisibility();
+    rebuildCore();
+    drawFrame();
+    renderFraming();
+    invalidate({ dome: true });
+
+    const fold = $<HTMLDetailsElement>('fold-core');
+    fold.open = on;
+    if (on) {
+      // Aim before the fold is read, so the framing lines are already the
+      // answer for a camera pointed at the core rather than for whatever the
+      // lens happened to be doing.
+      aimAt(coreAim);
+      fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      refreshCoreLens();
+    }
+    save();
+  }
+
+  on('night-button', 'click', () => {
+    setNightMode($('night-button').getAttribute('aria-pressed') !== 'true');
   });
 
   on('compass', 'click', () => {
@@ -5354,6 +5547,11 @@ export async function startScout(): Promise<void> {
     if (saved.shown) Object.assign(shown, saved.shown);
     if (saved.slab) Object.assign(slab, saved.slab);
     if (saved.lens) Object.assign(lens, saved.lens);
+    // Storage is the one input written by an older build of this page, so the
+    // pixel count is checked rather than trusted: `pixelPitchMm` throws on a
+    // number that is not one, and a session with `megapixels: 0` in it would
+    // take the whole panel down on restore.
+    if (!(lens.megapixels > 0)) lens.megapixels = defaultLens().megapixels;
     if (saved.target) Object.assign(target, saved.target);
     view = saved.view;
     basemap = saved.basemap;
@@ -5368,6 +5566,7 @@ export async function startScout(): Promise<void> {
 
     $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
     $<HTMLSelectElement>('frame-focal').value = String(lens.focalLengthMm);
+    $<HTMLSelectElement>('frame-mp').value = String(lens.megapixels);
     $<HTMLInputElement>('frame-bearing').value = String(lens.bearing);
     $<HTMLInputElement>('frame-tilt').value = String(lens.tiltDeg);
     for (const b of $('frameorient').querySelectorAll('button')) {
