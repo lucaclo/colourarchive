@@ -154,8 +154,26 @@ export const prerender = true;
           <div class="framing" id="framing" hidden>
             <p class="framing-head" id="framing-lens">—</p>
             <p class="framing-line" id="framing-sun">—</p>
+            <!-- The join, for the pin: the aim above crossed with whether the
+                 light actually gets here. Only meaningful once an aim exists,
+                 which is why it lives with the lens and not with the spot. -->
+            <p class="framing-line framing-light" id="framing-light"></p>
             <p class="framing-line framing-moon" id="framing-moon"></p>
             <p class="framing-note" id="framing-width"></p>
+          </div>
+
+          <!-- ── Best right now ────────────────────────────────────────────
+               Every hotspot near the pin, ordered by what the light is doing
+               at the minute on the slider. The order is four stated criteria
+               in a stated priority — lit, then light remaining, then how many
+               people photographed it, then how far — and never a score: a
+               number nobody can reproduce is exactly what this project
+               refuses to publish about sunsets, and it would be no better
+               here. Each row prints the facts it was ordered by. -->
+          <div class="best" id="best" hidden>
+            <p class="best-head">Best right now</p>
+            <ol class="best-list" id="best-list"></ol>
+            <p class="best-note" id="best-note"></p>
           </div>
 
           <!-- The ground between here and there, and whether it is in the way. -->
@@ -471,6 +489,9 @@ export const prerender = true;
           <div>
             <p class="photos-title" id="photos-title">Photographs</p>
             <p class="photos-sub" id="photos-sub"></p>
+            <!-- What the light does here, on the date and minute on the
+                 slider. Tracks the slider while the sheet is open. -->
+            <p class="photos-light" id="photos-light"></p>
           </div>
           <button class="chip" id="photos-close" type="button">Close</button>
         </div>
@@ -803,6 +824,97 @@ export const prerender = true;
     color: var(--muted);
   }
   .framing-note:empty { display: none; }
+  /* The verdict is the answer the lens row exists to produce, so it carries the
+     sun's own colour rather than the body colour of the lines above it. */
+  .framing-light { color: #f0b866; }
+
+  /* ── Best right now ───────────────────────────────────────────────────── */
+
+  .best {
+    margin: 0.7rem 0 0;
+    padding-top: 0.6rem;
+    border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  }
+  .best[hidden] { display: none; }
+  .best-head {
+    margin: 0 0 0.4rem;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .best-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  /* Every row below is built by the page script, so each selector has to leave
+     this component's scope to reach it — an unscoped rule here matches nothing
+     and the rows fall back to the user agent's defaults. */
+  .best-list :global(li) {
+    display: grid;
+    grid-template-columns: 0.55rem 1fr auto;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.3rem 0.35rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+    /* 44px targets are the field standard on this page; these are rows in a
+       list rather than controls, so they take the smaller of the two. */
+    min-height: 2rem;
+    cursor: pointer;
+  }
+  .best-list :global(li:hover),
+  .best-list :global(li:focus-visible) {
+    background: color-mix(in oklab, var(--border) 40%, transparent);
+    outline: none;
+  }
+  .best-list :global(.best-rank) {
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    color: var(--muted);
+  }
+  .best-list :global(.best-name) {
+    font-size: 0.7rem;
+    line-height: 1.35;
+    color: var(--fg);
+    /* Commons titles run long and a wrapped one pushes the light off the row. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .best-list :global(.best-where) {
+    display: block;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
+  .best-list :global(.best-light) {
+    justify-self: end;
+    text-align: right;
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  /* The same three states the pins take, so the list and the map agree without
+     the reader having to learn two vocabularies. */
+  .best-list :global(.best-light.is-lit) { color: #f0b866; }
+  .best-list :global(.best-light.is-shaded) { color: #7fa8c4; }
+  .best-list :global(.best-light.is-down) { color: var(--muted); }
+  .best-note {
+    margin: 0.4rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .best-note:empty { display: none; }
+
 
   .sight-chart {
     display: block;
@@ -1550,6 +1662,8 @@ export const prerender = true;
   .photos-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
   .photos-title { margin: 0; font-family: var(--font-label); font-size: 0.82rem; color: var(--fg); }
   .photos-sub { margin: 0.15rem 0 0; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); }
+  .photos-light { margin: 0.2rem 0 0; font-family: var(--font-label); font-size: 0.62rem; line-height: 1.45; color: #f0b866; }
+  .photos-light:empty { display: none; }
   .photo-grid {
     flex: 1 1 auto;
     overflow-y: auto;

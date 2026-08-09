@@ -343,4 +343,63 @@ describe('/scout: a spot, from a link', () => {
     );
     assert.deepEqual(trouble, []);
   });
+
+  it('works out the light at every photographed spot, not just at the pin', async () => {
+    // The join. Every part of it is invisible to `tsc` and to the unit tests:
+    // the windows are computed against buildings that only exist once vector
+    // tiles have arrived, and the list rows are built by script — which is the
+    // exact shape of a bug this project has shipped, where a runtime-built
+    // element matched no scoped rule and silently fell back to a UA default.
+    await page.waitForFunction(`window.scout.spots().length > 0`, null, { timeout: READY_MS });
+
+    const spots = (await page.evaluate(`window.scout.spots()`)) as Array<{
+      windows: number;
+      lit: boolean | null;
+    }>;
+    const computed = spots.filter((spot) => spot.windows > 0).length;
+    assert.ok(
+      computed === spots.length,
+      `${computed} of ${spots.length} hotspots had their day computed; ` +
+        'a spot with no windows is drawn as though nothing were known about it',
+    );
+
+    // Midnight is the one answer that needs no buildings, no terrain and no
+    // agreement about a threshold to check: nowhere on earth is in direct sun
+    // with the sun below the horizon. A pipeline that reported light here would
+    // be wrong in a way no amount of geometry could excuse.
+    await page.evaluate(`window.scout.setMinute(0)`);
+    await page.waitForFunction(
+      `window.scout.spots().every((spot) => spot.lit !== true)`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    // And it has to *change*: a set of windows that never moves would pass the
+    // test above by being uniformly dark.
+    await page.evaluate(`window.scout.setMinute(${NOON})`);
+    await page.waitForFunction(`window.scout.spots().some((spot) => spot.lit === true)`, null, {
+      timeout: READY_MS,
+    });
+
+    const rows: { hidden: boolean; count: number; display: string | null } = await page.evaluate(
+      `(() => {
+         const first = document.querySelector('#best-list li');
+         return {
+           hidden: document.getElementById('best').hidden,
+           count: document.querySelectorAll('#best-list li').length,
+           // A row that matched no rule lays out as a list-item, not a grid.
+           display: first ? getComputedStyle(first).display : null,
+         };
+       })()`,
+    );
+    assert.equal(rows.hidden, false, 'the ranked list is hidden with spots to rank');
+    assert.ok(rows.count > 0, 'the ranked list has no rows');
+    assert.equal(
+      rows.display,
+      'grid',
+      'a list row fell back to the user agent default, so its scoped styles never reached it',
+    );
+    assert.deepEqual(trouble, []);
+  });
+
 });
