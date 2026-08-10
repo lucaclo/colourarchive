@@ -26,7 +26,9 @@ export const prerender = true;
     <div class="scout-stage">
       <div class="scout-map" id="map"></div>
 
-      <p class="scout-hint" id="scout-hint">Type a place to begin.</p>
+      <!-- Both ways in, because on a published build without functions the
+           first one is not available and the second is the only one there is. -->
+      <p class="scout-hint" id="scout-hint">Type a place to begin — or zoom in and tap the map.</p>
 
       <!-- ── Top left: the way back ──────────────────────────────────────────
            Scout is a full-bleed map with no topbar, so the two links every

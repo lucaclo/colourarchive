@@ -52,8 +52,8 @@ as arithmetic. Keep that.
 
 `npm run smoke` (`tests/scout.smoke.ts`) drives the page in a real browser —
 Playwright and Chromium, against `astro dev` because `window.scout` is gated
-behind `import.meta.env.DEV`. Eight assertions, one per failure this tab has
-actually shipped: no uncaught errors; no height field fetched before a place is
+behind `import.meta.env.DEV`. Twenty-one assertions across four suites, each one
+per failure this tab has actually shipped: no uncaught errors; no height field fetched before a place is
 chosen (the 24,450-tile storm); a link restores a spot and scrubbing moves the
 sun; turning the sun path off changes the pixels on the map, which is the
 only way to notice a shader that will not link; every photographed spot has
@@ -654,6 +654,22 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
    this kind of use; if Scout ever goes public, check the terms again.
 
 **Traps already hit — do not repeat:**
+
+- **There was no way into the page on a phone without a server.** Place search needs
+  Nominatim, Nominatim needs a proxy, and a published build without functions has none —
+  so the search box refused and pointed at the pin. But the pin *arrives with the first
+  spot*: with nowhere chosen there was nothing on the map to drag, and `map.on('click')`
+  returned early on `!centre` by design ("the first spot is picked by name, not by
+  guessing at a point on a world map"). Right about the world map, wrong about everything
+  else, and on a phone the two rules closed the last door between them. A tap now places
+  the first spot, gated on **zoom ≥ `TAP_TO_PLACE_ZOOM` (10)** rather than on the server —
+  at the world view a fingertip is several hundred kilometres and the page says so rather
+  than doing nothing, because a dead gesture reads as a broken map. The zone falls back to
+  `browserTimeZone()`, since a spot with no zone puts the whole day in UTC.
+- **`#sheet` is on screen from the first paint.** It carries "Nowhere yet", and
+  `setCentre`'s `hidden = false` on it is a no-op. So its visibility is *not* a test for
+  whether a place has been chosen — `#tools` is, or `window.scout.state().centre`. A smoke
+  assertion written the obvious way passes at the world view and proves nothing.
 
 - **`tsc --noEmit` does not look inside `.astro` files.** Every line of client code in a
   page was going unchecked, which hid `day.dayEnd` on a type that only has

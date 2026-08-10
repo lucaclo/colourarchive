@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-30T02:45:36.666Z",
-  "count": 69,
+  "generatedAt": "2026-08-09T22:21:38.881Z",
+  "count": 78,
   "chapters": [
     {
       "key": "achromatic",
@@ -669,9 +669,9 @@
       "key": "orange",
       "name": "Camel",
       "oklch": {
-        "L": 0.553,
-        "C": 0.065,
-        "H": 60.4
+        "L": 0.56,
+        "C": 0.066,
+        "H": 61.3
       },
       "photos": [
         {
@@ -1225,6 +1225,51 @@
           "genre": "landscape"
         },
         {
+          "id": "4f44f97e01bbbeac",
+          "filename": "DSC06489.4f44f97e01bbbeac.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1152,
+          "bytes": 990780,
+          "oklch": {
+            "L": 0.654,
+            "C": 0.071,
+            "H": 72.9
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAAAQBACdASoYAA4APu1mqk2ppaQiMAgBMB2JQBOkFThgbKR8YMRfDOxLmAD+7HNU5DEzjNceusOhTEv4SCMdnmT+WFjYDASHdzxf7VjSbfGOhaoOVsTrIJMtkY2SrrXcAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/4f44f97e01bbbeac-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/4f44f97e01bbbeac-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/4f44f97e01bbbeac-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-06T20:30:53.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "49mm",
+            "aperture": "f/2.8",
+            "shutter": "1/50s",
+            "iso": 3200,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:33.744Z"
+        },
+        {
           "id": "c5f3c71073829f66",
           "filename": "IMG_4491.c5f3c71073829f66.jpg",
           "ext": "jpg",
@@ -1590,11 +1635,48 @@
       "key": "yellow",
       "name": "Yellow",
       "oklch": {
-        "L": 0.575,
+        "L": 0.565,
         "C": 0.069,
-        "H": 98.6
+        "H": 99.7
       },
       "photos": [
+        {
+          "id": "a62a16fd87f51388",
+          "filename": "DSC06497.a62a16fd87f51388.jpg",
+          "ext": "jpg",
+          "width": 1246,
+          "height": 2048,
+          "bytes": 1364104,
+          "oklch": {
+            "L": 0.465,
+            "C": 0.07,
+            "H": 110.1
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRqYAAABXRUJQVlA4IJoAAADQBgCdASoYACgAPuFYpU2opSOiOrZoARAcCUAYG4HvnhbPHd8nJL9pEUSzVoxMYuI4nt1vLROJ92MtSwfJiAAA/tzTVw8qKliw5LFGwx8AejAVqzkDop3r2yjdKRIW/06LDKfKIGbYLqfVZMXNhPqqW492I0uvKiMdvaFU24vhhDRno/cF5Hwj1wswy5LF7y54lB4KUubEAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a62a16fd87f51388-640.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-07T08:16:43.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "24mm",
+            "aperture": "f/8",
+            "shutter": "1/400s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:33.598Z"
+        },
         {
           "id": "c3c9da2aecb2dbb0",
           "filename": "IMG_1012.c3c9da2aecb2dbb0.jpg",
@@ -2280,9 +2362,9 @@
       "key": "teal",
       "name": "Teal",
       "oklch": {
-        "L": 0.646,
+        "L": 0.629,
         "C": 0.068,
-        "H": 213.8
+        "H": 215.1
       },
       "photos": [
         {
@@ -2327,6 +2409,51 @@
           "addedAt": "2026-07-26T13:07:45.934Z",
           "autoGenre": "architecture",
           "genre": "architecture"
+        },
+        {
+          "id": "5573a3f29a16eb32",
+          "filename": "DSC06503.5573a3f29a16eb32.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1365,
+          "bytes": 754364,
+          "oklch": {
+            "L": 0.522,
+            "C": 0.057,
+            "H": 218.3
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAADwAwCdASoYABAAPu1kq04ppaQiMAgBMB2JYwCdABuCNFbea+06e/0AAP5AG207Z3pb7vJBMeACOfZ5lzl5R4XDTtmAC848vzhGK/9ldnn5D7woDSNAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/5573a3f29a16eb32-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/5573a3f29a16eb32-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/5573a3f29a16eb32-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-07T16:54:40.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/8",
+            "shutter": "1/250s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:36.464Z"
         },
         {
           "id": "a8569641675d64f9",
@@ -2416,6 +2543,51 @@
           "addedAt": "2026-07-26T13:07:26.055Z",
           "autoGenre": "architecture",
           "genre": "architecture"
+        },
+        {
+          "id": "41561d6f1c3dc482",
+          "filename": "DSC06536.41561d6f1c3dc482.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1365,
+          "bytes": 1199601,
+          "oklch": {
+            "L": 0.568,
+            "C": 0.074,
+            "H": 223.9
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAABQBACdASoYABAAPu1kqU2ppaQiMAgBMB2JYgCdMoR8eCm80qv13cRO3ISwAP6RYV3nsReu0SE1yuaOOl62WglV/v43Bq/jtRWkbtWQmkWBEdFzeu0xRjesAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/41561d6f1c3dc482-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/41561d6f1c3dc482-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/41561d6f1c3dc482-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-08T13:24:39.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/11",
+            "shutter": "1/200s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:37.788Z"
         },
         {
           "id": "257ccae6d0ddc80f",
@@ -2723,8 +2895,8 @@
       "key": "blue",
       "name": "Blue",
       "oklch": {
-        "L": 0.552,
-        "C": 0.085,
+        "L": 0.539,
+        "C": 0.09,
         "H": 238.8
       },
       "photos": [
@@ -2772,6 +2944,129 @@
           "genre": "landscape"
         },
         {
+          "id": "42605e496d4fb8e9",
+          "filename": "DSC06557.42605e496d4fb8e9.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1365,
+          "bytes": 492139,
+          "oklch": {
+            "L": 0.623,
+            "C": 0.095,
+            "H": 238
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAAAQBACdASoYABAAPu1iqU2ppaOiMAgBMB2JbACdMoR4GBDEzoLXZFADuAD28Yz5OTZDpjHaGO/U/mEm08/2B/CNpq2rbx7vjJdmnL2G1pIX7ZWgUH6bcU/jzLiAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/42605e496d4fb8e9-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/42605e496d4fb8e9-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/42605e496d4fb8e9-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-08T13:53:02.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "24mm",
+            "aperture": "f/2.8",
+            "shutter": "1/4000s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:38.874Z"
+        },
+        {
+          "id": "d82e7193214aef84",
+          "filename": "DSC06571.d82e7193214aef84.jpg",
+          "ext": "jpg",
+          "width": 1536,
+          "height": 2048,
+          "bytes": 752762,
+          "oklch": {
+            "L": 0.577,
+            "C": 0.108,
+            "H": 230.3
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAABQBQCdASoYACAAPuVgp02pJaOiMAwBIByJaACClwPID2t3M6x5t5D+3JP/fL7t/U8Ex4AA7Sheo7NYvZyfPhfca24NW/8jrAEpZv/xv5LCH5Ndze+BEqzdc+junUyw94JK+vgtU7gwwnbLHk1dMhHrUvOx9zzEzu+1xfbdpxDza9PBwDK0pfw1i5OII8SH2r3Tff/zqH9PRmh3znYcAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/d82e7193214aef84-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/d82e7193214aef84-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-08T13:54:45.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "24mm",
+            "aperture": "f/2.8",
+            "shutter": "1/4000s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:34.017Z"
+        },
+        {
+          "id": "cba2fc9febffa837",
+          "filename": "DSC06551.cba2fc9febffa837.jpg",
+          "ext": "jpg",
+          "width": 1278,
+          "height": 1917,
+          "bytes": 1902219,
+          "oklch": {
+            "L": 0.57,
+            "C": 0.074,
+            "H": 236.1
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRpAAAABXRUJQVlA4IIQAAADwBQCdASoYACQAPu1mqk6ppaOiMBVaqTAdiUAYVnYAicsTdUrGZROlCYXIIBEcsgJUEvPAyY9HAAD9H2FoNYSI8B/oNg9cUtg293lG1GMjTVJnD0HnpJycVSuilwjVZJb3Z4nhKoUvHsOty3YJdX9O4s2vmzWbIFccvBlZYKsb+uwKAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/cba2fc9febffa837-640.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-08T13:51:05.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/9",
+            "shutter": "1/500s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:38.578Z"
+        },
+        {
           "id": "ffd598c8b38675b5",
           "filename": "IMG_3095.ffd598c8b38675b5.jpeg",
           "ext": "jpeg",
@@ -2805,6 +3100,94 @@
           "addedAt": "2026-07-27T13:21:08.162Z",
           "autoGenre": "landscape",
           "genre": "landscape"
+        },
+        {
+          "id": "d62b2154e7fee842",
+          "filename": "DSC06090.d62b2154e7fee842.jpg",
+          "ext": "jpg",
+          "width": 4341,
+          "height": 6511,
+          "bytes": 12556858,
+          "oklch": {
+            "L": 0.548,
+            "C": 0.129,
+            "H": 248.3
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAABwBQCdASoYACQAPtFYp02oJaQmNUwBABoJZACB4Qt6LGpyyME1rdjVmZ2V+ls1u53X3jeAAP7o2Erjl7NdFfkqtB/+SXKzf2GY7/7sU3f3vN4wS2CM3r3FxVzb+iiT/14DlxpgzlVHMmJSpNqypHCOXS4srcY7LFopLVh0aeq6w7sAzIhUctnIH4vSLJjU/DpQAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/d62b2154e7fee842-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/d62b2154e7fee842-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/d62b2154e7fee842-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-06-30T20:47:38.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "Viltrox 28mm F4.5 FE",
+            "focalLength": "28mm",
+            "aperture": "f/4.5",
+            "shutter": "1/20s",
+            "iso": 800,
+            "software": "Adobe Lightroom 11.4.0 (iOS)"
+          },
+          "addedAt": "2026-07-28T07:18:05.964Z"
+        },
+        {
+          "id": "54ad7a9a4ae5a375",
+          "filename": "IMG_3370.54ad7a9a4ae5a375.jpg",
+          "ext": "jpg",
+          "width": 3088,
+          "height": 2048,
+          "bytes": 7963492,
+          "oklch": {
+            "L": 0.536,
+            "C": 0.105,
+            "H": 243
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAADwAwCdASoYABAAPu1kqk2ppaQiMAgBMB2JbACdIExB6LotWQ1rGArAAP6iNtVHRhtYjdj77IfCxJkZ8KrF4nGqZQX10233OLqR526YsUqcgrDI96gFfJb2ASFPQfucZXzB3jd9bnoh4b3gkWsBAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/54ad7a9a4ae5a375-640.avif",
+              "webp": "/img/54ad7a9a4ae5a375-640.webp"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/54ad7a9a4ae5a375-1280.avif",
+              "webp": "/img/54ad7a9a4ae5a375-1280.webp"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/54ad7a9a4ae5a375-2000.avif",
+              "webp": "/img/54ad7a9a4ae5a375-2000.webp"
+            }
+          ],
+          "exif": {
+            "capturedAt": null,
+            "camera": "NORITSU KOKI QSS-32_33",
+            "software": "QSS-32_33 6.00.020 2006.12.27 "
+          },
+          "addedAt": "2026-07-26T13:07:44.229Z",
+          "autoGenre": "architecture",
+          "genre": "architecture"
         },
         {
           "id": "7ab33d66afc379a7",
@@ -2891,92 +3274,94 @@
           "genre": "landscape"
         },
         {
-          "id": "54ad7a9a4ae5a375",
-          "filename": "IMG_3370.54ad7a9a4ae5a375.jpg",
+          "id": "e07accf7f6d22a11",
+          "filename": "DSC06549.e07accf7f6d22a11.jpg",
           "ext": "jpg",
-          "width": 3088,
-          "height": 2048,
-          "bytes": 7963492,
+          "width": 2048,
+          "height": 1365,
+          "bytes": 442147,
           "oklch": {
-            "L": 0.536,
-            "C": 0.105,
-            "H": 243
-          },
-          "autoChapter": "blue",
-          "chapter": "blue",
-          "autoMedium": "film",
-          "medium": "film",
-          "placeholder": "data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAADwAwCdASoYABAAPu1kqk2ppaQiMAgBMB2JbACdIExB6LotWQ1rGArAAP6iNtVHRhtYjdj77IfCxJkZ8KrF4nGqZQX10233OLqR526YsUqcgrDI96gFfJb2ASFPQfucZXzB3jd9bnoh4b3gkWsBAAAA",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/54ad7a9a4ae5a375-640.avif",
-              "webp": "/img/54ad7a9a4ae5a375-640.webp"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/54ad7a9a4ae5a375-1280.avif",
-              "webp": "/img/54ad7a9a4ae5a375-1280.webp"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/54ad7a9a4ae5a375-2000.avif",
-              "webp": "/img/54ad7a9a4ae5a375-2000.webp"
-            }
-          ],
-          "exif": {
-            "capturedAt": null,
-            "camera": "NORITSU KOKI QSS-32_33",
-            "software": "QSS-32_33 6.00.020 2006.12.27 "
-          },
-          "addedAt": "2026-07-26T13:07:44.229Z",
-          "autoGenre": "architecture",
-          "genre": "architecture"
-        },
-        {
-          "id": "d62b2154e7fee842",
-          "filename": "DSC06090.d62b2154e7fee842.jpg",
-          "ext": "jpg",
-          "width": 4341,
-          "height": 6511,
-          "bytes": 12556858,
-          "oklch": {
-            "L": 0.548,
-            "C": 0.129,
-            "H": 248.3
+            "L": 0.454,
+            "C": 0.115,
+            "H": 245.7
           },
           "autoChapter": "blue",
           "chapter": "blue",
           "autoMedium": "digital",
           "medium": "digital",
-          "autoGenre": "architecture",
-          "genre": "architecture",
-          "placeholder": "data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAABwBQCdASoYACQAPtFYp02oJaQmNUwBABoJZACB4Qt6LGpyyME1rdjVmZ2V+ls1u53X3jeAAP7o2Erjl7NdFfkqtB/+SXKzf2GY7/7sU3f3vN4wS2CM3r3FxVzb+iiT/14DlxpgzlVHMmJSpNqypHCOXS4srcY7LFopLVh0aeq6w7sAzIhUctnIH4vSLJjU/DpQAAAA",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAAAQBACdASoYABAAPu1kqU4ppaOiMAgBMB2JagCdMoADTqvtm0uU7wolgAD+2KgAAlazOjICJ8XQhMLwHjfOGUM2fj5kpuV/Faq0tVi/ALT5pwnJTIQQxig7gAA=",
           "derivatives": [
             {
               "width": 640,
-              "avif": "/img/d62b2154e7fee842-640.avif"
+              "avif": "/img/e07accf7f6d22a11-640.avif"
             },
             {
               "width": 1280,
-              "avif": "/img/d62b2154e7fee842-1280.avif"
+              "avif": "/img/e07accf7f6d22a11-1280.avif"
             },
             {
               "width": 2000,
-              "avif": "/img/d62b2154e7fee842-2000.avif"
+              "avif": "/img/e07accf7f6d22a11-2000.avif"
             }
           ],
           "exif": {
-            "capturedAt": "2026-06-30T20:47:38.000Z",
+            "capturedAt": "2026-08-08T13:50:34.000Z",
             "camera": "SONY ILCE-7CM2",
-            "lens": "Viltrox 28mm F4.5 FE",
-            "focalLength": "28mm",
-            "aperture": "f/4.5",
-            "shutter": "1/20s",
-            "iso": 800,
-            "software": "Adobe Lightroom 11.4.0 (iOS)"
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/9",
+            "shutter": "1/500s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
           },
-          "addedAt": "2026-07-28T07:18:05.964Z"
+          "addedAt": "2026-08-09T22:21:38.349Z"
+        },
+        {
+          "id": "a1a3dcf53d5f770a",
+          "filename": "DSC06541.a1a3dcf53d5f770a.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1365,
+          "bytes": 644520,
+          "oklch": {
+            "L": 0.391,
+            "C": 0.093,
+            "H": 243.1
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAAAQBACdASoYABAAPu1krU2ppaSiMAgBMB2JZgCdACHegoCFqbj9JukGAAD+6MFD1G6y/5/pRpnuzDWwzOrR4jnaZaZR1L8dDE1TvZeXFs1sO1TNUdEDdtVU4gjgAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a1a3dcf53d5f770a-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a1a3dcf53d5f770a-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/a1a3dcf53d5f770a-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-08T13:26:39.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "36mm",
+            "aperture": "f/13",
+            "shutter": "1/400s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-09T22:21:37.103Z"
         }
       ]
     }

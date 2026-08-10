@@ -282,6 +282,82 @@ describe('/scout: the world view', () => {
     assert.ok(dem.length < 32, `${dem.length} DEM tiles for one world view`);
     await page.close();
   });
+
+  /* On a published build with no functions there is no place search, and the
+     advice left behind was "drag the pin" — but the pin arrives *with* the first
+     spot, so there was nothing to drag. On a phone, with the keyboard route
+     closed too, that was a dead end with no way out of it. A tap now chooses the
+     first spot, gated on the zoom rather than on the server, because a tap at
+     the world view is a guess of hundreds of kilometres.
+
+     Driven on a phone deliberately: this is the viewport it stranded people on. */
+
+  it('will not let a tap guess a place from the world view', async () => {
+    const page = await openPhone(375, 667);
+    const trouble = watchForTrouble(page);
+    await page.goto(`${origin}/scout`);
+    await waitForTheMap(page);
+
+    await page.touchscreen.tap(187, 320);
+    // Doing nothing at all is the old failure wearing a different hat: the page
+    // has to say why, or a dead gesture reads as a broken map.
+    await page.waitForFunction(
+      `!document.getElementById('toast').hidden`,
+      null,
+      { timeout: READY_MS },
+    );
+    const said = (await page.textContent('#toast-text')) ?? '';
+    assert.match(said, /zoom in/i, `a refused tap must say why: "${said}"`);
+    // The centre itself, not the place sheet: the sheet carries "Nowhere yet"
+    // and is on screen from the first paint, so its visibility says nothing
+    // about whether anywhere was chosen.
+    assert.equal(
+      await page.evaluate(`window.scout.state().centre`),
+      null,
+      'a tap at the world view chose a place anyway',
+    );
+    assert.deepEqual(trouble, []);
+    await page.close();
+  });
+
+  it('lets a tap choose the first spot once the map is close enough in', async () => {
+    const page = await openPhone(375, 667);
+    const trouble = watchForTrouble(page);
+    await page.goto(`${origin}/scout`);
+    await waitForTheMap(page);
+
+    // Past the gate, over Edinburgh. jumpTo rather than a gesture: what is being
+    // tested is the tap, not MapLibre's pinch handling.
+    await page.evaluate(
+      `window.scout.map().jumpTo({ center: [${EDINBURGH.lon}, ${EDINBURGH.lat}], zoom: 12 })`,
+    );
+    await waitForTheMap(page);
+    await page.touchscreen.tap(187, 320);
+
+    // The view controls, which really are hidden until somewhere is chosen —
+    // unlike the place sheet, which is on screen from the first paint saying
+    // "Nowhere yet".
+    await page.waitForSelector('#tools:not([hidden])', { timeout: READY_MS });
+
+    const chosen = (await page.evaluate(
+      `(() => { const s = window.scout.state();
+                return { lat: s.centre && s.centre.lat, lon: s.centre && s.centre.lon,
+                         zone: s.timeZone, name: document.getElementById('sheet-name').textContent.trim() }; })()`,
+    )) as { lat: number | null; lon: number | null; zone: string; name: string };
+
+    assert.ok(chosen.lat !== null && chosen.lon !== null, 'the tap did not choose anywhere');
+    assert.ok(
+      Math.abs(chosen.lat - EDINBURGH.lat) < 0.2 && Math.abs(chosen.lon - EDINBURGH.lon) < 0.2,
+      `the tap landed at ${chosen.lat}, ${chosen.lon}`,
+    );
+    // A spot with no zone would put the whole day in UTC, which is an hour of
+    // error in every time on the page — so one is carried even with no server
+    // to name the place.
+    assert.ok(chosen.zone && chosen.zone !== 'UTC', `no usable time zone: "${chosen.zone}"`);
+    assert.notEqual(chosen.name, 'Nowhere yet', 'the sheet still says nowhere was chosen');
+    assert.deepEqual(trouble, []);
+    await page.close();
+  });
 });
 
 describe('/scout: a spot, from a link', () => {

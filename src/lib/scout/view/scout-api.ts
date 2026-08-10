@@ -12,6 +12,11 @@
  * "Unexpected token '<'", and that string was landing in the results list as
  * though it were a search result. Detect it here and say the true thing
  * instead: search is unavailable, the map still is.
+ *
+ * **What it says next has to be something you can do.** The first version sent
+ * you to drag the pin, and the pin does not exist until a spot has been chosen —
+ * so on a phone, where there is no keyboard route in either, the advice closed
+ * the last door. Tapping the map now places the first spot, and this names that.
  */
 
 /**
@@ -32,7 +37,7 @@ export interface Place {
 
 export class NoSearchServer extends Error {
   constructor() {
-    super('Place search needs the server. Drag the pin to choose a spot instead.');
+    super('Place search needs the server. Zoom in and tap the map to choose a spot instead.');
     // Set explicitly: extending a built-in loses the constructor's name under
     // the ES5 downlevel some toolchains still emit, and this name is how the
     // failure is recognised in a log.

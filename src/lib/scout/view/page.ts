@@ -1311,9 +1311,18 @@ export async function startScout(): Promise<void> {
   });
 
   map?.on('click', (event) => {
-    // Nowhere chosen yet: the first spot is picked by name, not by guessing at
-    // a point on a world map.
-    if (!centre) return;
+    // Nowhere chosen yet. A tap can choose the first spot, but only once the map
+    // is close enough in for a fingertip to mean something — see
+    // `placeFirstSpotAt`, which is also the only way in when there is no server
+    // to search with.
+    if (!centre) {
+      if (map!.getZoom() < TAP_TO_PLACE_ZOOM) {
+        notify('Zoom in to pick a spot by tapping — from here a tap is tens of kilometres.');
+        return;
+      }
+      placeFirstSpotAt({ lat: event.lngLat.lat, lon: event.lngLat.lng });
+      return;
+    }
 
     // A hotspot is the one thing on this map you are meant to click, so it
     // wins over moving the pin. Without this, opening a photo spot would also
@@ -3823,7 +3832,7 @@ export async function startScout(): Promise<void> {
   /** The pin was dragged: keep everything, ask what the new spot is called. */
   let reverseToken = 0;
   function setCentreCoordinates(next: LatLon) {
-    const token = ++reverseToken;
+    reverseToken++;
     centre = next;
     label = { name: 'Naming that spot…', detail: formatCoords(next) };
     nearby = [];
@@ -3832,7 +3841,19 @@ export async function startScout(): Promise<void> {
     redrawEverything();
     void loadWeather();
     void loadPhotos();
+    nameSpot(next, reverseToken);
+  }
 
+  /**
+   * Ask the server what a coordinate is called, and take the answer if it comes.
+   *
+   * Shared by the two ways a spot arrives without a name — a dragged or tapped
+   * pin, and a first spot placed by tapping. The coordinate is what matters and
+   * is already set by the time this runs; a name is a courtesy, so failing to
+   * get one costs the label and nothing else. That is also what makes the whole
+   * page work with no server behind it.
+   */
+  function nameSpot(next: LatLon, token: number) {
     void (async () => {
       try {
         const data = await getScoutJson(`/api/scout/reverse?lat=${next.lat}&lon=${next.lon}`);
@@ -3846,8 +3867,6 @@ export async function startScout(): Promise<void> {
           renderPanel();
         }
       } catch {
-        // The coordinate is what matters and it is already set. A name is a
-        // courtesy, so failing to get one costs the label and nothing else.
         if (token === reverseToken) {
           label = { name: formatCoords(next), detail: '' };
           renderPanel();
@@ -3855,6 +3874,53 @@ export async function startScout(): Promise<void> {
       }
       save();
     })();
+  }
+
+  /**
+   * How far in the map has to be before a tap counts as choosing a place.
+   *
+   * At the world view a fingertip covers most of a country, and a coordinate
+   * guessed to within several hundred kilometres would make a nonsense of a
+   * radius measured in ones. At zoom 10 a fingertip is about a kilometre and a
+   * half — coarse, but a coordinate somebody actually chose, and one the pin can
+   * then be dragged to refine.
+   */
+  const TAP_TO_PLACE_ZOOM = 10;
+
+  /**
+   * Pick the *first* spot by tapping the map.
+   *
+   * Tapping has always refused to fire with nowhere chosen, on the reasoning
+   * that a first spot is picked by name rather than by guessing at a point on a
+   * world map. That is right about the world map and wrong about everything
+   * else, and the case it forgot is the one that strands people: where there is
+   * no server there is no place search either, and the advice left behind —
+   * drag the pin — named something that does not exist yet, because the pin
+   * arrives *with* the first spot. On a phone, with the keyboard route closed,
+   * that was a dead end with no way out of it.
+   *
+   * So the gate is the zoom rather than the server. Below it the page says so
+   * instead of doing nothing, because a gesture that silently fails reads as a
+   * broken map.
+   */
+  function placeFirstSpotAt(next: LatLon) {
+    setCentre(
+      {
+        name: formatCoords(next),
+        detail: '',
+        lat: next.lat,
+        lon: next.lon,
+        kind: 'point',
+        // The browser's zone until a reverse lookup can better it. Falling back
+        // to UTC instead would put every time on the page an hour out at these
+        // latitudes, which is worse than an approximate name.
+        timeZone: browserTimeZone(),
+      },
+      // The camera is already where it is because somebody put it there. Framing
+      // the ring would move the map out from under the tap that just chose it.
+      { refit: false },
+    );
+    nameSpot(next, ++reverseToken);
   }
 
   /* ── Tapping the map ───────────────────────────────────────────────────
