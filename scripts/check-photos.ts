@@ -29,15 +29,25 @@
  * run: nothing links to it, so it cannot reach a reader, and for a photograph
  * whose original has already been trashed the orphan may be the last copy of it
  * that exists. Deleting that is a decision, so it waits for --prune.
+ *
+ * **Two records own `public/img`, not one.** The archive keeps `photos.json` and
+ * the inspiration board keeps `inspiration.json`, and both run the same pipeline
+ * into the same directory. An audit that reads only the archive calls every
+ * reference on the board an orphan — and the first run of `--prune` here did
+ * exactly that, deleting all thirteen files behind the board and leaving it
+ * showing the same holes this command was written to remove. They came back from
+ * the originals in `inspiration/`, which is the only reason that is a story
+ * rather than a loss. Anything that renders from `/img/` must be in `owners()`.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { IMG_DIR, PHOTOS_DIR, imgUrl } from '../src/lib/paths.ts';
+import { IMG_DIR, INSPIRATION_DIR, PHOTOS_DIR, imgUrl } from '../src/lib/paths.ts';
 import { auditPhotos, auditClean, describeAudit, expectedTags, fileOf, GENERATED } from '../src/lib/derivatives.ts';
 import type { Audit } from '../src/lib/derivatives.ts';
 import { readStore, replaceDerivatives } from '../src/lib/manifest.ts';
+import { readInspStore, replaceInspDerivatives } from '../src/lib/inspiration.ts';
 import { renderDerivatives } from '../src/lib/ingest.ts';
-import type { Photo } from '../src/lib/types.ts';
+import type { Derivative, Photo } from '../src/lib/types.ts';
 
 const args = new Set(process.argv.slice(2));
 const FIX = args.has('--fix');
@@ -51,21 +61,40 @@ const listImages = async (): Promise<string[]> => {
   }
 };
 
-async function audit(): Promise<{ photos: Photo[]; audit: Audit }> {
-  const [photos, files] = await Promise.all([readStore(), listImages()]);
-  return { photos, audit: auditPhotos(photos, files) };
+/**
+ * One record that owns derivatives: which photographs, where their originals
+ * live, and how to write a repaired derivative list back to it.
+ */
+interface Owner {
+  label: string;
+  photos: Photo[];
+  originals: string;
+  write: (id: string, derivatives: Derivative[]) => Promise<unknown>;
+}
+
+async function owners(): Promise<Owner[]> {
+  const [archive, board] = await Promise.all([readStore(), readInspStore()]);
+  return [
+    { label: 'archive', photos: archive, originals: PHOTOS_DIR, write: replaceDerivatives },
+    { label: 'inspiration', photos: board, originals: INSPIRATION_DIR, write: replaceInspDerivatives },
+  ];
+}
+
+async function audit(): Promise<{ owners: Owner[]; audit: Audit }> {
+  const [records, files] = await Promise.all([owners(), listImages()]);
+  return { owners: records, audit: auditPhotos(records.flatMap((o) => o.photos), files) };
 }
 
 /** Regenerate every derivative for one photograph from its original. */
-async function regenerate(photo: Photo): Promise<'done' | 'no-original'> {
+async function regenerate(photo: Photo, owner: Owner): Promise<'done' | 'no-original'> {
   let buf: Buffer;
   try {
-    buf = await fs.readFile(path.join(PHOTOS_DIR, photo.filename));
+    buf = await fs.readFile(path.join(owner.originals, photo.filename));
   } catch {
     return 'no-original';
   }
   const derivatives = await renderDerivatives(buf, photo.id, photo.width);
-  await replaceDerivatives(photo.id, derivatives);
+  await owner.write(photo.id, derivatives);
   return 'done';
 }
 
@@ -76,23 +105,23 @@ async function regenerate(photo: Photo): Promise<'done' | 'no-original'> {
  * written a `.webp` since AVIF became universal, the page reads `avif` alone, and
  * every one of these entries has its AVIF sitting right beside the promise.
  */
-async function dropStale(photo: Photo, present: Set<string>): Promise<boolean> {
+async function dropStale(photo: Photo, owner: Owner, present: Set<string>): Promise<boolean> {
   const cleaned = photo.derivatives.map((d) => {
     if (!d.webp || present.has(fileOf(d.webp))) return d;
     const { webp, ...rest } = d;
     return rest;
   });
   if (cleaned.every((d, i) => d === photo.derivatives[i])) return false;
-  await replaceDerivatives(photo.id, cleaned);
+  await owner.write(photo.id, cleaned);
   return true;
 }
 
-/** The manifest asserting a file that is not there — the part that fails a run. */
+/** The records asserting a file that is not there — the part that fails a run. */
 const broken = (report: Audit): number => report.missing.length + report.undeclared.length;
 
 async function main() {
   const first = await audit();
-  const { photos } = first;
+  const records = first.owners;
   let report = first.audit;
   console.log(describeAudit(report).join('\n'));
 
@@ -106,7 +135,10 @@ async function main() {
 
   if (FIX) {
     const present = new Set((await listImages()).filter((f) => !f.startsWith('.')));
-    const byId = new Map(photos.map((p) => [p.id, p]));
+    // Which record a photograph belongs to decides where its original is read
+    // from and which store the repair is written back to.
+    const byId = new Map<string, { photo: Photo; owner: Owner }>();
+    for (const owner of records) for (const photo of owner.photos) byId.set(photo.id, { photo, owner });
 
     // Every photograph with a declared-but-absent AVIF, or a width the source is
     // large enough for that nothing declares. Both are answered by one render.
@@ -120,21 +152,22 @@ async function main() {
 
     console.log('');
     for (const id of rerender) {
-      const photo = byId.get(id);
-      if (!photo) continue;
+      const found = byId.get(id);
+      if (!found) continue;
+      const { photo, owner } = found;
       const tags = expectedTags(photo.width).join(', ');
-      const outcome = await regenerate(photo);
+      const outcome = await regenerate(photo, owner);
       if (outcome === 'no-original') {
-        console.log(`  ✗ ${photo.filename} — no original in photos/, left as it is`);
+        console.log(`  ✗ ${photo.filename} — no original in ${path.basename(owner.originals)}/, left as it is`);
       } else {
-        console.log(`  ✓ ${photo.filename} — rendered ${tags}`);
+        console.log(`  ✓ ${photo.filename} — rendered ${tags} (${owner.label})`);
       }
     }
     for (const id of staleOnly) {
-      const photo = byId.get(id);
-      if (!photo) continue;
-      if (await dropStale(photo, present)) {
-        console.log(`  ✓ ${photo.filename} — dropped a declaration for a format no longer generated`);
+      const found = byId.get(id);
+      if (!found) continue;
+      if (await dropStale(found.photo, found.owner, present)) {
+        console.log(`  ✓ ${found.photo.filename} — dropped a declaration for a format no longer generated`);
       }
     }
   }

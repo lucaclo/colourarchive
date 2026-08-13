@@ -202,12 +202,26 @@ nothing used to check them against each other, so one photograph sat in the
 manifest with no derivatives on disk at all — the page laid out a slot, asked for
 `/img/d62b2154e7fee842-2000.avif`, and the reader got a hole.
 
+**Two records own `public/img`, not one.** The inspiration board keeps its own
+`inspiration.json` and runs the same pipeline into the same directory, so an
+audit that reads only the archive calls every reference on the board an orphan.
+The first `--prune` did exactly that and deleted all thirteen of them; they came
+back from the originals in `inspiration/`, which is the only reason that is a
+story rather than a loss. Anything that renders from `/img/` belongs in
+`owners()` in `scripts/check-photos.ts`.
+
 The audit is `src/lib/derivatives.ts`, and `astro build` runs it over what it
 just emitted: a build that would publish a photograph with no file behind it
-fails instead. Orphans and undeclared widths are reported and do not block a
-publish — neither can reach a reader, and refusing to publish seventy-nine
-correct photographs over a file nobody can request would make the honest manual
-route harder to run.
+fails instead. It measures against `manifest.json` — the file the page is built
+from — rather than the store, so an unparseable store cannot pass the guard by
+auditing zero entries while the page renders from a manifest nobody checked.
+
+Only a missing derivative blocks a publish, in the build and in
+`deploy:site`'s preflight alike. Orphans, undeclared widths, and holes on the
+inspiration board (which is server-only and never published) are reported and do
+not: none can reach a reader, and refusing to publish seventy-nine correct
+photographs over a file nobody can request would make the honest manual route
+harder to run.
 
 A count of files per width proves nothing on its own: nothing is ever upscaled,
 so only the 46 photographs at 2000px or wider have a 2000px derivative, and that

@@ -25,10 +25,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ROOT, IMG_DIR } from '../src/lib/paths.ts';
 import { readManifest, readStore } from '../src/lib/manifest.ts';
-import { auditPhotos, describeAudit } from '../src/lib/derivatives.ts';
+import { describeAudit } from '../src/lib/derivatives.ts';
 import {
   SITE_URL,
   STAMP_FILE,
+  auditRendered,
   coverCount,
   describeDrift,
   driftBetween,
@@ -84,30 +85,59 @@ async function fetchCover(): Promise<{ count: number; chapters: number } | null>
  * shows an empty search rather than an error — which is how they were found to
  * have been missing for ten days.
  */
-async function functionsLive(): Promise<string> {
+async function functionsLive(): Promise<{ live: boolean; detail: string }> {
   const url = `${SITE_URL}/api/scout/geocode?q=edinburgh`;
   try {
     const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
     const type = res.headers.get('content-type') ?? '';
-    if (res.ok && type.includes('json')) return 'live';
-    return `${res.status}, ${type.split(';')[0] || 'no content-type'} — not a function`;
+    if (res.ok && type.includes('json')) return { live: true, detail: 'live' };
+    return { live: false, detail: `${res.status}, ${type.split(';')[0] || 'no content-type'} — not a function` };
   } catch (err) {
-    return err instanceof Error ? err.message : String(err);
+    return { live: false, detail: err instanceof Error ? err.message : String(err) };
   }
 }
 
-/** The manifest against the derivatives, before anything is uploaded. */
+/**
+ * Print the functions verdict, and say what it costs when they are down.
+ *
+ * The result used to be printed and then ignored, one line above a summary
+ * claiming the published site was current — so the report both measured the
+ * ten-day-old fault and talked over it. It still does not change the exit code:
+ * with the CLI unable to upload a function at all, failing here would fail every
+ * publish including the static-only one that works, and a command that always
+ * exits 1 is a command whose exit code stops being read.
+ */
+async function reportFunctions(): Promise<void> {
+  const { live, detail } = await functionsLive();
+  console.log(`\nScout's server functions: ${detail}`);
+  if (!live) {
+    console.log("  Typed place search is down on the published Scout; the pin still works.");
+  }
+}
+
+/**
+ * The rendered manifest against the derivatives, before anything is uploaded.
+ *
+ * Blocks on exactly one thing — a photograph the page will render with no file
+ * behind it — because that is the rule the build hook and the README both state,
+ * and a preflight stricter than the build would be a rule nobody wrote down. An
+ * undeclared width publishes fine: every file it declares exists, nothing 404s,
+ * and the reader gets a smaller largest size. Blocking on it would wedge every
+ * publish, including the unattended ones from `src/lib/deploy.ts`, over
+ * something no reader can see — and if that photograph's original had been
+ * trashed, `--fix` could not clear it and publishing would stay wedged.
+ */
 async function preflightImages(): Promise<boolean> {
-  const [photos, files] = await Promise.all([
-    readStore(),
-    fs.readdir(IMG_DIR).catch(() => [] as string[]),
-  ]);
-  const audit = auditPhotos(photos, files);
-  if (audit.missing.length || audit.undeclared.length) {
+  const files = await fs.readdir(IMG_DIR).catch(() => [] as string[]);
+  const { audit } = await auditRendered(files);
+  if (audit.missing.length) {
     console.error(rule('images'));
     console.error(describeAudit(audit).join('\n'));
     console.error('\nRun `npm run check:photos -- --fix` first — this would publish broken images.');
     return false;
+  }
+  if (audit.undeclared.length) {
+    console.log(`\n${audit.undeclared.length} width(s) no derivative records — publishing anyway, see \`npm run check:photos\`.`);
   }
   return true;
 }
@@ -133,7 +163,7 @@ async function main() {
   if (note) console.log(`  (${SITE_URL}/${STAMP_FILE} → ${note})`);
   const drift = driftBetween(local, published, new Date(), published ? null : await fetchCover());
   console.log(describeDrift(drift, nameOf).join('\n'));
-  console.log(`\nScout's server functions: ${await functionsLive()}`);
+  await reportFunctions();
 
   if (CHECK) {
     console.log('\nNothing published — run `npm run deploy:site` to publish.');
@@ -169,6 +199,9 @@ async function main() {
     const { stamp: live } = await fetchStamp();
     if (live?.builtAt === sent.builtAt) {
       console.log(`Live: ${live.count} photographs · the build from ${live.builtAt}.`);
+      // Asked again after the deploy, not only before it: whether the functions
+      // came up is a property of the publish that just happened.
+      await reportFunctions();
       return;
     }
     if (attempt < 6) await wait(5000);

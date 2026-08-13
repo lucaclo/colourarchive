@@ -20,7 +20,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditPhotos, describeAudit } from './derivatives';
-import { MANIFEST_PATH, STORE_PATH } from './paths';
+import type { Audit } from './derivatives';
+import { INSPIRATION_STORE, MANIFEST_PATH } from './paths';
 import type { Manifest, Photo } from './types';
 
 /**
@@ -39,6 +40,53 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
   } catch {
     return fallback;
   }
+}
+
+const EMPTY_MANIFEST: Manifest = { generatedAt: '', count: 0, chapters: [] };
+
+/**
+ * Audit a directory of derivatives against the records that own them.
+ *
+ * Two decisions, both learned the hard way:
+ *
+ * **What can break is what the page renders**, so the fatal half is measured
+ * against `manifest.json` — the file the archive page is actually built from —
+ * rather than `photos.json`. A store that will not parse used to audit as zero
+ * entries and pass, while the page went on rendering from a manifest nobody had
+ * checked; auditing the rendered record cannot fail open that way, because an
+ * unreadable manifest is a page with no photographs on it.
+ *
+ * **What owns a file is not only the archive.** The inspiration board keeps its
+ * own store and writes into the same `public/img`. Auditing without it declares
+ * every reference on the board an orphan — which is not a hypothetical: the
+ * first `--prune` run deleted all thirteen of them.
+ */
+export async function auditRendered(files: string[]): Promise<{ audit: Audit; manifest: Manifest }> {
+  const [manifest, board] = await Promise.all([
+    readJson<Manifest>(MANIFEST_PATH, EMPTY_MANIFEST),
+    readJson<Photo[]>(INSPIRATION_STORE, []),
+  ]);
+  const rendered = manifest.chapters.flatMap((c) => c.photos);
+  const audit = auditPhotos([...rendered, ...board], files);
+  return { manifest, audit: onlyRendered(audit, new Set(rendered.map((p) => p.id))) };
+}
+
+/**
+ * Narrow an audit's faults to the photographs the published page renders,
+ * keeping its orphans as they are.
+ *
+ * The board owns files in the same directory, so it has to be in the audit or
+ * every reference on it reads as an orphan. But it is `prerender = false` and
+ * never reaches the published build, so a hole in it is the CLI's business and
+ * not a reason to refuse to publish the archive. Both halves are needed and they
+ * pull in opposite directions; this is where they meet.
+ */
+export function onlyRendered(audit: Audit, renderedIds: Set<string>): Audit {
+  return {
+    ...audit,
+    missing: audit.missing.filter((m) => renderedIds.has(m.id)),
+    undeclared: audit.undeclared.filter((u) => renderedIds.has(u.id)),
+  };
 }
 
 /**
@@ -77,6 +125,10 @@ export function parseStamp(value: unknown): PublishStamp | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
   if (typeof v.builtAt !== 'string' || typeof v.count !== 'number') return null;
+  // A date that will not parse is not a stamp. Letting it through printed the
+  // age as "(null days ago)", which reads like a bug in the report rather than
+  // what it is — a file at that URL that is not the one we wrote.
+  if (!Number.isFinite(Date.parse(v.builtAt))) return null;
   return {
     builtAt: v.builtAt,
     count: v.count,
@@ -112,6 +164,8 @@ export interface Drift {
   ageDays: number | null;
   /** What the published cover claims, when there is no stamp to ask. */
   cover?: { count: number; chapters: number } | null;
+  /** Whether the published stamp named its photographs, or only counted them. */
+  named: boolean;
   drifted: boolean;
 }
 
@@ -121,10 +175,15 @@ export function driftBetween(
   now: Date,
   cover: { count: number; chapters: number } | null = null,
 ): Drift {
+  // A stamp from a build before the photo list existed carries a count and no
+  // ids. Comparing against its empty list would report every photograph as new,
+  // which is the same false alarm the `!published` branch exists to avoid — so
+  // that stamp answers "how many", and nothing else is claimed from it.
+  const names = Boolean(published?.photos.length);
   const there = new Set(published?.photos ?? []);
   const here = new Set(local.photos);
-  const added = published ? local.photos.filter((id) => !there.has(id)) : [];
-  const removed = published ? published.photos.filter((id) => !here.has(id)) : [];
+  const added = names ? local.photos.filter((id) => !there.has(id)) : [];
+  const removed = names ? published!.photos.filter((id) => !here.has(id)) : [];
   const builtAt = published ? Date.parse(published.builtAt) : NaN;
   const ageDays = Number.isFinite(builtAt)
     ? Math.floor((now.getTime() - builtAt) / 86_400_000)
@@ -133,7 +192,7 @@ export function driftBetween(
   // stamp, which is the state this whole mechanism was written for.
   const drifted =
     !published || added.length > 0 || removed.length > 0 || published.count !== local.count;
-  return { local, published, added, removed, ageDays, cover, drifted };
+  return { local, published, added, removed, ageDays, cover, named: names, drifted };
 }
 
 /**
@@ -170,7 +229,17 @@ export function describeDrift(drift: Drift, nameOf: (id: string) => string): str
     for (const id of drift.removed.slice(0, 12)) lines.push(`  ${nameOf(id)}`);
     if (drift.removed.length > 12) lines.push(`  …and ${drift.removed.length - 12} more`);
   }
-  if (!drift.drifted) lines.push('', 'The published site is this archive.');
+  if (!drift.drifted) {
+    // Deliberately only about photographs. This used to read "The published site
+    // is this archive", printed directly under a line saying Scout's functions
+    // answer 404 — a summary that contradicts the measurement above it is worse
+    // than no summary, and silence about a dead endpoint is what started all
+    // this. What this function can see is the photographs; it says that much.
+    lines.push('', 'The published site has the same photographs as this archive.');
+    if (!drift.named) {
+      lines.push('  (Its stamp counts them but does not name them, so only the counts were compared.)');
+    }
+  }
   return lines;
 }
 
@@ -195,15 +264,6 @@ export function publishStamp() {
         // fileURLToPath, not `dir.pathname`: this project lives in a directory
         // with a space in its name, and a pathname would hand `%20` to fs.
         const out = fileURLToPath(dir);
-        const manifest = await readJson<Manifest>(MANIFEST_PATH, {
-          generatedAt: new Date().toISOString(),
-          count: 0,
-          chapters: [],
-        });
-
-        const stamp = stampFor(manifest, new Date());
-        await fs.writeFile(path.join(out, STAMP_FILE), `${JSON.stringify(stamp, null, 2)}\n`);
-        logger.info(`stamped ${stamp.count} photographs · ${stamp.chapters} chapters`);
 
         // Audit what was emitted, not what is in public/ — the published site is
         // the only thing a reader ever asks for, and the copy step between them
@@ -215,7 +275,11 @@ export function publishStamp() {
         } catch {
           /* no images emitted at all — the audit below will say so loudly */
         }
-        const audit = auditPhotos(await readJson<Photo[]>(STORE_PATH, []), files);
+        const { audit, manifest } = await auditRendered(files);
+
+        const stamp = stampFor(manifest, new Date());
+        await fs.writeFile(path.join(out, STAMP_FILE), `${JSON.stringify(stamp, null, 2)}\n`);
+        logger.info(`stamped ${stamp.count} photographs · ${stamp.chapters} chapters`);
 
         if (audit.missing.length) {
           throw new Error(

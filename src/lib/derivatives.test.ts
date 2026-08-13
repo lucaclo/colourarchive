@@ -131,6 +131,17 @@ describe('auditPhotos', () => {
     assert.equal(audit.files, 3);
   });
 
+  it('counts every record that declares a file as owning it, not just the first list', () => {
+    // public/img is shared: the archive and the inspiration board both write
+    // into it. Whoever calls this must pass every record, or the ones left out
+    // read as orphans — and --prune deletes orphans.
+    const archive = entry('aaaa', 4000, generated('aaaa', 4000));
+    const reference = entry('bbbb', 4000, generated('bbbb', 4000));
+    const files = [...filesFor('aaaa', 4000), ...filesFor('bbbb', 4000)];
+    assert.equal(auditPhotos([archive, reference], files).orphans.length, 0);
+    assert.equal(auditPhotos([archive], files).orphans.length, 3);
+  });
+
   it('keeps a file owned while any entry still declares it, even when two do', () => {
     const shared = [{ width: 640, avif: '/img/aaaa-640.avif' }];
     const audit = auditPhotos(

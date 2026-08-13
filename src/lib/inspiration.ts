@@ -54,6 +54,20 @@ export async function addInspiration(buf: Buffer, name: string, source: string):
   return { photo, existed: false, id };
 }
 
+/**
+ * Replace one reference's derivative list and rebuild — the repair path for
+ * `npm run check:photos -- --fix`.
+ *
+ * The board shares `public/img` with the archive while keeping its own store, so
+ * it needs its own way to be put back in step. Leaving it without one is how
+ * every reference on the board came to be classified as an orphan and deleted.
+ */
+export async function replaceInspDerivatives(id: string, derivatives: Photo['derivatives']): Promise<void> {
+  const store = await readInspStore();
+  await writeJson(INSPIRATION_STORE, store.map((p) => (p.id === id ? { ...p, derivatives } : p)));
+  await rebuildInsp();
+}
+
 /** Remove an inspiration item (original → /inspiration/.trash, derivatives gone). */
 export async function removeInspiration(id: string): Promise<Manifest> {
   const store = await readInspStore();

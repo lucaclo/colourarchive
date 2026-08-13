@@ -455,18 +455,15 @@
     "derivatives": [
       {
         "width": 640,
-        "avif": "/img/568ab0b23a39eeca-640.avif",
-        "webp": "/img/568ab0b23a39eeca-640.webp"
+        "avif": "/img/568ab0b23a39eeca-640.avif"
       },
       {
         "width": 1280,
-        "avif": "/img/568ab0b23a39eeca-1280.avif",
-        "webp": "/img/568ab0b23a39eeca-1280.webp"
+        "avif": "/img/568ab0b23a39eeca-1280.avif"
       },
       {
         "width": 2000,
-        "avif": "/img/568ab0b23a39eeca-2000.avif",
-        "webp": "/img/568ab0b23a39eeca-2000.webp"
+        "avif": "/img/568ab0b23a39eeca-2000.avif"
       }
     ],
     "exif": {},

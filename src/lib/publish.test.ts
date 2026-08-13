@@ -1,9 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { coverCount, describeDrift, driftBetween, parseStamp, stampFor } from './publish.ts';
+import { coverCount, describeDrift, driftBetween, onlyRendered, parseStamp, stampFor } from './publish.ts';
 import type { PublishStamp } from './publish.ts';
-import type { Manifest } from './types.ts';
+import { auditPhotos } from './derivatives.ts';
+import type { Manifest, Photo } from './types.ts';
 
 const manifest = (chapters: string[][]): Manifest =>
   ({
@@ -49,6 +50,11 @@ describe('parseStamp', () => {
     assert.equal(parseStamp({ count: 69 }), null);
   });
 
+  it('refuses a builtAt that will not parse, rather than reporting a null age', () => {
+    assert.equal(parseStamp({ builtAt: 'yesterday', count: 69, photos: [] }), null);
+    assert.equal(parseStamp({ builtAt: '', count: 69 }), null);
+  });
+
   it('survives a stamp from an older build that carried no photo list', () => {
     const s = parseStamp({ builtAt: '2026-08-03T09:00:00.000Z', count: 69 });
     assert.deepEqual(s?.photos, []);
@@ -87,7 +93,32 @@ describe('driftBetween', () => {
     const local = stampFor(manifest([['a', 'b']]), NOW);
     const drift = driftBetween(local, stamp('2026-08-13T11:00:00.000Z', ['a', 'b']), NOW);
     assert.equal(drift.drifted, false);
-    assert.match(describeDrift(drift, (id) => id).join('\n'), /The published site is this archive/);
+    const text = describeDrift(drift, (id) => id).join('\n');
+    // Only about photographs: the functions probe is printed beside this line,
+    // and a summary that talks over a 404 measured a moment earlier is worse
+    // than no summary at all.
+    assert.match(text, /has the same photographs as this archive/);
+    assert.doesNotMatch(text, /functions/i);
+  });
+
+  it('compares counts only, when the published stamp names no photographs', () => {
+    // An older build stamped a count and no list. Differencing against its empty
+    // list would call all 79 photographs new when nothing had changed at all.
+    const local = stampFor(manifest([['a', 'b']]), NOW);
+    const drift = driftBetween(local, { builtAt: '2026-08-13T11:00:00.000Z', count: 2, chapters: 1, photos: [] }, NOW);
+    assert.deepEqual(drift.added, []);
+    assert.deepEqual(drift.removed, []);
+    assert.equal(drift.named, false);
+    assert.equal(drift.drifted, false);
+    const text = describeDrift(drift, (id) => id).join('\n');
+    assert.match(text, /does not name them, so only the counts were compared/);
+  });
+
+  it('still reports drift by count when the stamp names no photographs', () => {
+    const local = stampFor(manifest([['a', 'b', 'c']]), NOW);
+    const drift = driftBetween(local, { builtAt: '2026-08-13T11:00:00.000Z', count: 2, chapters: 1, photos: [] }, NOW);
+    assert.ok(drift.drifted);
+    assert.deepEqual(drift.added, []); // which ones is not known, and is not guessed
   });
 
   it('notices a count that disagrees even when the ids line up', () => {
@@ -118,6 +149,47 @@ describe('describeDrift', () => {
     const local = stampFor(manifest([['a']]), NOW);
     const drift = driftBetween(local, null, NOW, { count: 69, chapters: 8 });
     assert.match(describeDrift(drift, (id) => id).join('\n'), /cover says 69 photographs · 8 chapters/);
+  });
+});
+
+describe('onlyRendered', () => {
+  // The archive and the inspiration board keep separate stores and write their
+  // derivatives into the same public/img. Auditing one without the other is what
+  // deleted every file behind the board.
+  const photo = (id: string, files: string[]): Photo =>
+    ({
+      id,
+      filename: `${id}.jpg`,
+      width: 4000,
+      derivatives: files.map((f) => ({ width: Number(f.split('-')[1]), avif: `/img/${f}` })),
+    } as unknown as Photo);
+
+  const archive = photo('aaaa', ['aaaa-640.avif', 'aaaa-1280.avif', 'aaaa-2000.avif']);
+  const board = photo('bbbb', ['bbbb-640.avif', 'bbbb-1280.avif', 'bbbb-2000.avif']);
+  const onDisk = ['aaaa-640.avif', 'aaaa-1280.avif', 'aaaa-2000.avif', 'bbbb-640.avif', 'bbbb-1280.avif', 'bbbb-2000.avif'];
+  const rendered = new Set(['aaaa']);
+
+  it('does not call a reference on the board an orphan', () => {
+    const audit = onlyRendered(auditPhotos([archive, board], onDisk), rendered);
+    assert.deepEqual(audit.orphans, []);
+  });
+
+  it('would call it an orphan if the board were left out — the regression, stated', () => {
+    const audit = auditPhotos([archive], onDisk);
+    assert.equal(audit.orphans.length, 3);
+  });
+
+  it('does not block a publish over a hole on a board the publish does not carry', () => {
+    const audit = onlyRendered(auditPhotos([archive, board], ['aaaa-640.avif', 'aaaa-1280.avif', 'aaaa-2000.avif']), rendered);
+    assert.equal(audit.missing.length, 0);
+  });
+
+  it('still blocks on a hole in a photograph the page renders', () => {
+    const audit = onlyRendered(auditPhotos([archive, board], ['aaaa-640.avif', ...onDisk.slice(3)]), rendered);
+    assert.deepEqual(
+      audit.missing.map((m) => m.file),
+      ['aaaa-1280.avif', 'aaaa-2000.avif'],
+    );
   });
 });
 
