@@ -346,6 +346,24 @@ const hasItems = manifest.count > 0;
     .cell-match { top: auto; left: auto; bottom: 12px; right: 12px; }
     /* The credit is hover-revealed too, and on touch that means never. */
     .insp-frame .src { opacity: 1; padding-right: 5.5rem; }
+
+    /* ── The Add URL row ──────────────────────────────────────────────────
+       The three controls on a reference tile grow their target with the
+       `::after` inset above; this row never got the same pass and is the one
+       part of the page you type into.
+
+       The font size is the part that actually bites. Safari zooms the page in
+       when a control with text under 16px takes focus and then leaves it
+       zoomed — `scout.astro` already opts its own fields out for this reason,
+       and these were at 0.8rem, which is 12.8px. So pasting a URL on an iPhone
+       zoomed the archive and stranded it there.
+
+       44px on the button and the fields for the same reason as everywhere
+       else: these are pressed one-handed. Only the height changes, so the row
+       keeps its wrapping behaviour at every width. */
+    .urlrow input,
+    #addurl { min-height: 44px; }
+    .urlrow input { font-size: 16px; }
   }
 
   .mx { position: fixed; inset: 0; z-index: 84; display: flex; flex-direction: column; background: color-mix(in oklab, var(--bg) 98%, #000); }

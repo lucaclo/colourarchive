@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-09T22:21:38.881Z",
-  "count": 78,
+  "generatedAt": "2026-08-13T10:19:07.602Z",
+  "count": 79,
   "chapters": [
     {
       "key": "achromatic",
@@ -669,9 +669,9 @@
       "key": "orange",
       "name": "Camel",
       "oklch": {
-        "L": 0.56,
-        "C": 0.066,
-        "H": 61.3
+        "L": 0.561,
+        "C": 0.065,
+        "H": 61.9
       },
       "photos": [
         {
@@ -971,6 +971,51 @@
           "addedAt": "2026-07-26T13:07:40.248Z",
           "autoGenre": "architecture",
           "genre": "architecture"
+        },
+        {
+          "id": "4b9770dd43935280",
+          "filename": "DSC06420.4b9770dd43935280.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1280,
+          "bytes": 1490756,
+          "oklch": {
+            "L": 0.567,
+            "C": 0.057,
+            "H": 72.2
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAADwAwCdASoYAA8APu1orU6ppiSiMAgBMB2JZQC/OB6OYSALs3E7CxiAAP46kjccL/hzISgn83ZgUTxB6JJ/5ld1lcPfsgKTMuhxiAbGs8xQyL2f/nzoAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/4b9770dd43935280-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/4b9770dd43935280-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/4b9770dd43935280-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-08-06T14:50:35.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 24-50mm F2.8 G",
+            "focalLength": "50mm",
+            "aperture": "f/8",
+            "shutter": "1/200s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5 (Macintosh)"
+          },
+          "addedAt": "2026-08-13T10:19:07.591Z"
         },
         {
           "id": "a1c6ea8fe4d48668",

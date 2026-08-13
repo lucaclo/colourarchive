@@ -8,6 +8,12 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // those come from depends on whether there is a server behind it — see
 // `browser/sources.ts`.
 export const prerender = true;
+
+// `/inspiration` is `prerender = false` on purpose — it writes to disk and holds
+// other people's photographs pending credit — so it does not exist in a static
+// publish. The archive's own topbar already drops the link there; this page has
+// to do the same, or its Inspiration link is a 404 on the published site.
+const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
 ---
 
 <Layout
@@ -33,15 +39,20 @@ export const prerender = true;
       <!-- ── Top left: the way back ──────────────────────────────────────────
            Scout is a full-bleed map with no topbar, so the two links every
            other page carries have nowhere to live. They go here, in the same
-           segmented control the view switch uses, and unlike everything else
-           on the stage they are never hidden — being unable to pick a place is
-           the most likely reason to want to leave. -->
+           segmented control the view switch uses.
+
+           The *Archive* link is never hidden — being unable to pick a place is
+           the most likely reason to want to leave, so the way back has to
+           survive every width and every build. Inspiration is not in that
+           class: it stands down below 820px where the two controls would touch,
+           and it is absent altogether from a static publish, where the page it
+           points at does not exist. -->
       <nav class="seg scout-nav" aria-label="Colour Archive">
         <a href="/">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
           Archive
         </a>
-        <a href="/inspiration">Inspiration</a>
+        {!STATIC && <a href="/inspiration">Inspiration</a>}
       </nav>
 
       <!-- A map that fails renders as a black rectangle and says nothing. Every
