@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config';
 import node from '@astrojs/node';
 import fs from 'node:fs';
+import { publishStamp } from './src/lib/publish.ts';
 
 // HTTPS over the LAN — required so the iPad will save the archive OFFLINE.
 // iOS only lets a page cache itself (service worker) on a *secure* origin, and
@@ -23,6 +24,9 @@ try {
 export default defineConfig({
   output: 'server',
   adapter: node({ mode: 'standalone' }),
+  // Stamps the build with what it contains, and refuses to finish if a
+  // photograph it lists has no file behind it. See src/lib/publish.ts.
+  integrations: [publishStamp()],
   // host: true binds all interfaces so a phone on the same Wi-Fi can reach it
   // at https://<your-mac-ip>:4321 (home network only).
   server: { port: 4321, host: true },

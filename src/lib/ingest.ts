@@ -9,14 +9,14 @@ import { spatialSignature } from './signature';
 import { embedBuffer } from './embed';
 import { classifyGenreBuffer } from './genre';
 import { classify, roundOklch } from './color';
+import { WIDTHS, derivativeName } from './derivatives';
 import type { Photo, Exif, Derivative, Medium, Genre } from './types';
 
-// Widths for on-screen derivatives. Originals stay byte-for-byte untouched in
-// /photos — derivatives are display-only. Colour is preserved (ICC kept),
-// EXIF is stripped from the output files (it lives in the manifest instead).
-const WIDTHS = [640, 1280, 2000];
+// Widths live in ./derivatives, alongside the audit that checks the files this
+// writes are still there. Originals stay byte-for-byte untouched in /photos —
+// derivatives are display-only. Colour is preserved (ICC kept), EXIF is
+// stripped from the output files (it lives in the manifest instead).
 const AVIF_QUALITY = 62; // colour-managed, visually lossless-ish
-const WEBP_QUALITY = 82;
 
 export async function ensureDirs(): Promise<void> {
   await fs.mkdir(PHOTOS_DIR, { recursive: true });
@@ -111,6 +111,44 @@ function parseGps(gps: any): { lat: number; lon: number } | undefined {
   return { lat, lon };
 }
 
+/**
+ * Write the on-screen derivatives for one original and describe them.
+ *
+ * Its own function because ingest is no longer the only caller: `--fix` on the
+ * derivative audit regenerates a photograph whose files went missing, and a
+ * repair that wrote *slightly* different files from an ingest — a different
+ * quality, a width the never-upscale rule would have skipped — would be a
+ * second, quieter way for the two records to disagree.
+ */
+export async function renderDerivatives(
+  buf: Buffer,
+  id: string,
+  sourceWidth: number,
+): Promise<Derivative[]> {
+  await ensureDirs();
+  const derivatives: Derivative[] = [];
+  for (const w of WIDTHS) {
+    if (sourceWidth && w > sourceWidth) continue; // never upscale
+    const avifName = derivativeName(id, w);
+    await sharp(buf, { failOn: 'none' })
+      .resize({ width: w, withoutEnlargement: true })
+      .keepIccProfile()
+      .avif({ quality: AVIF_QUALITY, effort: 4 })
+      .toFile(path.join(IMG_DIR, avifName));
+    derivatives.push({ width: w, avif: imgUrl(avifName) });
+  }
+  if (derivatives.length === 0) {
+    // Image smaller than the smallest width: emit a single native-width file.
+    const avifName = derivativeName(id, 'full');
+    await sharp(buf, { failOn: 'none' })
+      .keepIccProfile()
+      .avif({ quality: AVIF_QUALITY, effort: 4 })
+      .toFile(path.join(IMG_DIR, avifName));
+    derivatives.push({ width: sourceWidth || 0, avif: imgUrl(avifName) });
+  }
+  return derivatives;
+}
+
 /** Full analysis + derivative generation for one original file. */
 export async function processPhoto(
   buf: Buffer,
@@ -126,24 +164,7 @@ export async function processPhoto(
   const oklch = roundOklch(await dominantColour(buf));
   const { chapter } = classify(oklch);
 
-  // Derivatives — keep ICC (colour), strip EXIF.
-  const derivatives: Derivative[] = [];
-  for (const w of WIDTHS) {
-    if (width && w > width) continue; // never upscale
-    const avifName = `${id}-${w}.avif`;
-    await sharp(buf, { failOn: 'none' })
-      .resize({ width: w, withoutEnlargement: true })
-      .keepIccProfile()
-      .avif({ quality: AVIF_QUALITY, effort: 4 })
-      .toFile(path.join(IMG_DIR, avifName));
-    derivatives.push({ width: w, avif: imgUrl(avifName) });
-  }
-  if (derivatives.length === 0) {
-    // Image smaller than the smallest width: emit a single native-width file.
-    const avifName = `${id}-full.avif`;
-    await sharp(buf, { failOn: 'none' }).keepIccProfile().avif({ quality: AVIF_QUALITY, effort: 4 }).toFile(path.join(IMG_DIR, avifName));
-    derivatives.push({ width: width || 0, avif: imgUrl(avifName) });
-  }
+  const derivatives = await renderDerivatives(buf, id, width);
 
   // Tiny blurred placeholder, inlined as a data URI for the fade-in.
   const placeholderBuf = await sharp(buf, { failOn: 'none' })

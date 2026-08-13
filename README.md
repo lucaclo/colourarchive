@@ -167,6 +167,52 @@ and points you at the pin. Use `npm run deploy:site` if you want search.
 photographs pending credit. That means "already in the archive" is a Mac feature
 by design, not by omission.
 
+## Publishing
+
+```bash
+npm run drift         # what is published, what is here, what a publish would change
+npm run deploy:site   # the same report, then publish, then confirm it arrived
+```
+
+One manual command, deliberately. The Netlify project has **no repository
+linked**, and linking one would not help: `photos/` and `public/img/*` are out of
+git because they are large, so a repository-driven build would produce a site
+listing seventy-nine photographs and able to show none of them. One route that
+carries the code *and* the imagery beats two routes with different latencies.
+
+The cost of a manual route is that not running it leaves no trace — publishing
+had drifted ten days and 69-against-79 photographs behind the Mac, and the site
+did not look old, it looked fine. So the build writes **`/publish.json`**: when
+it was built, how many photographs, and their ids. `npm run drift` reads it and
+names the photographs that would be added; the foot of the archive page carries
+the date for anyone reading it; and after a deploy the command asks the site
+whether the build it just sent is the one now being served, because the CLI has
+exited 0 on a deploy that never landed.
+
+## The manifest against the files
+
+```bash
+npm run check:photos            # both directions of the mismatch
+npm run check:photos -- --fix   # regenerate what is missing, drop dead promises
+npm run check:photos -- --prune # delete derivatives no entry owns
+```
+
+`photos.json` and `public/img` are two records of the same photographs and
+nothing used to check them against each other, so one photograph sat in the
+manifest with no derivatives on disk at all — the page laid out a slot, asked for
+`/img/d62b2154e7fee842-2000.avif`, and the reader got a hole.
+
+The audit is `src/lib/derivatives.ts`, and `astro build` runs it over what it
+just emitted: a build that would publish a photograph with no file behind it
+fails instead. Orphans and undeclared widths are reported and do not block a
+publish — neither can reach a reader, and refusing to publish seventy-nine
+correct photographs over a file nobody can request would make the honest manual
+route harder to run.
+
+A count of files per width proves nothing on its own: nothing is ever upscaled,
+so only the 46 photographs at 2000px or wider have a 2000px derivative, and that
+is the correct number rather than a shortfall.
+
 ## Offline
 
 The archive is a **local-first PWA**. Visit once from the iPad while the Mac is
@@ -207,6 +253,9 @@ Georgia. Update the `rel="preload"` tags in `src/layouts/Layout.astro` to match.
 
 ```bash
 npm run manifest          # rescan /photos, rebuild, print the chapter breakdown
+npm run check:photos      # the manifest against the files on disk, both ways
+npm run drift             # what is published against what is here
+npm run deploy:site       # publish, and confirm the site changed
 npm run fonts             # re-vendor the web fonts into public/fonts
 npm run export:sequence   # write sequence.json for the book (original filenames)
 ```

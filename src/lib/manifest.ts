@@ -1,18 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { MANIFEST_PATH, OVERRIDES_PATH, ROOT } from './paths';
+import { MANIFEST_PATH, OVERRIDES_PATH, STORE_PATH } from './paths';
 import {
   chapterName, chapterRank, chapterKey, baseKeyOf,
   lightnessBand, ACHROMATIC_KEY, SPLIT_MIN, MERGE_MAX, roundOklch,
   type OKLCH, type Band,
 } from './color';
-import type { Photo, Chapter, Manifest, Overrides } from './types';
+import type { Photo, Chapter, Manifest, Overrides, Derivative } from './types';
 import { scheduleDeploy } from './deploy';
 
 // Flat photo list is the source of truth (append-only, deduped by id).
 // The nested, ordered, override-applied `manifest.json` is derived from it —
-// so nothing hand-edited ever gets clobbered by a rebuild.
-const STORE_PATH = path.join(ROOT, 'src', 'data', 'photos.json');
+// so nothing hand-edited ever gets clobbered by a rebuild. Its path lives in
+// ./paths with the others, because the build hook reads the same file.
 
 async function readJson<T>(p: string, fallback: T): Promise<T> {
   try {
@@ -100,6 +100,30 @@ export function setGenre(id: string, genre: import('./types').Genre): Promise<Ma
     const manifest = await rebuild();
     scheduleDeploy();
     return manifest;
+  });
+}
+
+/**
+ * Replace one photo's derivative list and rebuild.
+ *
+ * The repair path for the derivative audit (`npm run check:photos -- --fix`):
+ * after regenerating the files, or after dropping a declaration for a format
+ * nothing writes any more, the entry has to say what is actually on disk.
+ *
+ * It takes the same write lock as every other mutation here, because it can run
+ * while the app is up — and a read-modify-write of the whole store racing an
+ * upload is exactly the bug the lock was added for.
+ *
+ * Deliberately no `scheduleDeploy()`: a repair leaves the archive looking the
+ * same as it was always meant to look, and the CLI that calls this exits long
+ * before the debounce would fire.
+ */
+export function replaceDerivatives(id: string, derivatives: Derivative[]): Promise<Manifest> {
+  return withLock(async () => {
+    const photos = await readStore();
+    const next = photos.map((p) => (p.id === id ? { ...p, derivatives } : p));
+    await writeJson(STORE_PATH, next);
+    return rebuild();
   });
 }
 

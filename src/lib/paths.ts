@@ -9,6 +9,9 @@ export const ROOT = process.cwd();
 
 export const PHOTOS_DIR = path.join(ROOT, 'photos');
 export const IMG_DIR = path.join(ROOT, 'public', 'img');
+// The flat, append-only list of every photograph — the source of truth.
+// manifest.json is derived from it (ordered, grouped, overrides applied).
+export const STORE_PATH = path.join(ROOT, 'src', 'data', 'photos.json');
 export const MANIFEST_PATH = path.join(ROOT, 'src', 'data', 'manifest.json');
 // Inspiration board — a separate collection of reference images.
 export const INSPIRATION_DIR = path.join(ROOT, 'inspiration');
