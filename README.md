@@ -116,6 +116,10 @@ so. Both paths share one measurement core, so the numbers agree.
 npx tsx scripts/match-probe.ts <reference> <your photo> --out=DIR --strength=0.5
 ```
 
+The Lightroom slider values it prints are estimated, not measured — see
+`CALIBRATION.md` for what that means and `scripts/match-calibrate.ts` for the
+harness that replaces the estimates with real ones.
+
 ### Already in the archive
 
 Opening a reference also ranks the whole archive against it **on grade alone** —
