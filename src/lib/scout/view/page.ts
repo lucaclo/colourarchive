@@ -151,12 +151,7 @@ import {
   type LightWindow,
   type Skyline,
 } from '../skyline';
-import {
-  compareSpots,
-  describeLighting,
-  litMinutesAhead,
-  type Lighting,
-} from '../lighting';
+import { compareSpots, describeLighting, litMinutesAhead } from '../lighting';
 import {
   MAX_ITINERARY_SPOTS,
   MIN_ITINERARY_SPOTS,
