@@ -85,9 +85,11 @@ you scrub with a strength slider, and an importable `.xmp`.
 
 `src/lib/match/` holds it. The pipeline:
 
-1. **Decode** — RAW via macOS `sips` (ARW/CR3/NEF/RAF/DNG…), or a zero-slider
-   Lightroom export, or the RAW's embedded preview. Each carries a different
-   fidelity, and every measurement records which one it came from.
+1. **Decode** — RAW via LibRaw's `dcraw_emu` (ARW/CR3/NEF/RAF/DNG…), which
+   renders materially closer to Lightroom's own colour science than the
+   macOS `sips` fallback it uses when LibRaw isn't installed; or a
+   zero-slider Lightroom export; or the RAW's embedded preview. Each carries
+   a different fidelity, and every measurement records which one it came from.
 2. **Segment** — SegFormer-B2/ADE20K for scene regions, SegFormer-B2/clothes for
    real skin masks, RMBG-1.4 for a subject matte. Local, offline after first
    download, same as the DINOv2 and CLIP models already here.
