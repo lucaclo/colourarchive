@@ -194,9 +194,13 @@ import {
   type WeatherReport,
 } from '../weather';
 import {
+  APERTURES,
+  CIRCLE_OF_CONFUSION_PX,
   FOCAL_LENGTHS,
+  FOCUS_DISTANCES_M,
   SENSORS,
   checkFraming,
+  depthOfField,
   describeLens,
   fieldOfView,
   frameAxis,
@@ -206,6 +210,18 @@ import {
   type Orientation,
 } from '../frame';
 import { lineOfSight, profileGeometry, type LineOfSight } from '../profile';
+import {
+  BASE_SHUTTER_SPEEDS_S,
+  ND_FILTERS,
+  countdownAfter,
+  formatCountdown,
+  formatExposureDuration,
+  formatShutterSpeed,
+  ndExposureSeconds,
+  startCountdown,
+  type Countdown,
+} from '../exposure';
+import { TIMELAPSE_FRAME_RATES, TIMELAPSE_INTERVALS_S, timelapse } from '../timelapse';
 import {
   fetchAirQualityDirect,
   fetchHorizonPairDirect,
@@ -1981,6 +1997,17 @@ export async function startScout(): Promise<void> {
       // pictures of the same light, computed two different ways, were free to
       // disagree — and did, because only one of them knew where it was: the
       // ramp has no idea whether the pin is a coast or a ridge, and this does.
+      //
+      // Issue #23 asked for a deliberate choice between this — the per-vertex
+      // light colour, which reads as a timeline — and a neutral heavy stroke,
+      // which reads more clearly at a glance and is closer to the reference
+      // it linked. This keeps the timeline. The reference is one screenshot of
+      // one moment; the colour is the answer to "what is the light doing" for
+      // every moment of the day at once, which is Scout's actual subject, and
+      // throwing it away for a flatter mark would be trading the thing this
+      // page is for in exchange for looking more like someone else's page.
+      // `WIDTH.arc` and `liftColour` were raised instead, in the same commit,
+      // so the ring gets the reference's *weight* without losing its colour.
       const aboveHorizon = coarse.filter((s) => s.altitude > -0.5);
       const arcField = terrainShadows?.state().field ?? null;
       const arcAir = atmosphereNow(
@@ -4734,6 +4761,12 @@ export async function startScout(): Promise<void> {
     for (const focal of FOCAL_LENGTHS) focalSelect.append(new Option(`${focal}mm`, String(focal)));
     const pixelSelect = $<HTMLSelectElement>('frame-mp');
     for (const mp of RESOLUTIONS) pixelSelect.append(new Option(`${mp} MP`, String(mp)));
+    const apertureSelect = $<HTMLSelectElement>('frame-aperture');
+    for (const a of APERTURES) apertureSelect.append(new Option(`ƒ/${a}`, String(a)));
+    const focusSelect = $<HTMLSelectElement>('frame-focus');
+    for (const m of FOCUS_DISTANCES_M) {
+      focusSelect.append(new Option(m >= 1000 ? `${m / 1000} km` : `${m} m`, String(m)));
+    }
   }
 
   /** Everything the frame draws and says, after any of its controls moves. */
@@ -4742,6 +4775,13 @@ export async function startScout(): Promise<void> {
     $('frame-bearing-out').textContent = `${lens.bearing}° ${compassPoint(lens.bearing)}`;
     $('frame-tilt-out').textContent = `${lens.tiltDeg > 0 ? '+' : ''}${lens.tiltDeg}°`;
     $('frame-lens').textContent = describeLens(sensor, lens.focalLengthMm, currentFov());
+    const circleOfConfusionMm = pixelPitchMm(sensor, lens.megapixels) * CIRCLE_OF_CONFUSION_PX;
+    $('frame-dof').textContent = depthOfField(
+      lens.focalLengthMm,
+      lens.aperture,
+      circleOfConfusionMm,
+      lens.focusDistanceM,
+    ).note;
     drawFrame();
     renderFraming();
     // The core fold prints two answers about this lens, and both go stale the
@@ -4760,6 +4800,14 @@ export async function startScout(): Promise<void> {
   });
   on('frame-mp', 'change', (event) => {
     lens.megapixels = Number((event.target as HTMLSelectElement).value);
+    frameChanged();
+  });
+  on('frame-aperture', 'change', (event) => {
+    lens.aperture = Number((event.target as HTMLSelectElement).value);
+    frameChanged();
+  });
+  on('frame-focus', 'change', (event) => {
+    lens.focusDistanceM = Number((event.target as HTMLSelectElement).value);
     frameChanged();
   });
   on('frameorient', 'click', (event) => {
@@ -4782,6 +4830,94 @@ export async function startScout(): Promise<void> {
     frameChanged({ persist: false });
   });
   on('frame-tilt', 'change', () => save());
+
+  /* ── Long exposure calculator, and its countdown ─────────────────────────
+     Issue #43. Self-contained on purpose — no coordinate, no sun, nothing
+     saved to the session — just a base shutter speed and a filter, and the
+     arithmetic and the clock that follow from them. */
+  {
+    const baseSelect = $<HTMLSelectElement>('nd-base');
+    for (const s of BASE_SHUTTER_SPEEDS_S) baseSelect.append(new Option(formatShutterSpeed(s), String(s)));
+    baseSelect.value = String(1 / 60);
+    const filterSelect = $<HTMLSelectElement>('nd-filter');
+    for (const f of ND_FILTERS) filterSelect.append(new Option(f.label, f.label));
+
+    const currentFilter = () => ND_FILTERS.find((f) => f.label === filterSelect.value) ?? ND_FILTERS[0];
+    const currentExposureSeconds = () => ndExposureSeconds(Number(baseSelect.value), currentFilter().stops);
+
+    function ndChanged() {
+      const filter = currentFilter();
+      $('nd-result').textContent =
+        `${formatShutterSpeed(Number(baseSelect.value))} at ${filter.label} ` +
+        `(${filter.stops.toFixed(1)} stops) becomes ${formatExposureDuration(currentExposureSeconds())}.`;
+    }
+    ndChanged();
+    on('nd-base', 'change', ndChanged);
+    on('nd-filter', 'change', ndChanged);
+
+    let countdown: Countdown | null = null;
+    let countdownStartedAt = 0;
+    let countdownTimer: ReturnType<typeof setInterval> | null = null;
+    const countdownEl = $('nd-countdown');
+
+    function stopCountdown() {
+      if (countdownTimer != null) clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+
+    // Reads the *total* time since the button was pressed on every tick,
+    // rather than trusting that a tick fired every second — see `exposure.ts`
+    // for why a background tab makes that assumption wrong.
+    function tickCountdown() {
+      if (!countdown) return;
+      countdown = countdownAfter(countdown, (performance.now() - countdownStartedAt) / 1000);
+      countdownEl.textContent = countdown.done ? 'Done' : formatCountdown(countdown.remainingSeconds);
+      countdownEl.classList.toggle('done', countdown.done);
+      if (countdown.done) stopCountdown();
+    }
+
+    on('nd-start', 'click', () => {
+      stopCountdown();
+      countdown = startCountdown(currentExposureSeconds());
+      countdownStartedAt = performance.now();
+      countdownEl.hidden = false;
+      countdownEl.classList.remove('done');
+      countdownEl.textContent = formatCountdown(countdown.remainingSeconds);
+      countdownTimer = setInterval(tickCountdown, 1000);
+    });
+  }
+
+  /* ── Time-lapse calculator ────────────────────────────────────────────────
+     Issue #44. Also self-contained: clip length, frame rate and shooting
+     interval in, photo count and storage estimate out. */
+  {
+    const fpsSelect = $<HTMLSelectElement>('tl-fps');
+    for (const fps of TIMELAPSE_FRAME_RATES) fpsSelect.append(new Option(`${fps} fps`, String(fps)));
+    fpsSelect.value = '24';
+    const intervalSelect = $<HTMLSelectElement>('tl-interval');
+    for (const s of TIMELAPSE_INTERVALS_S) {
+      intervalSelect.append(new Option(s < 1 ? `${s * 1000} ms` : `${s} s`, String(s)));
+    }
+    intervalSelect.value = '5';
+
+    function timelapseChanged() {
+      const clipLengthSeconds = Number($<HTMLInputElement>('tl-length').value);
+      $('tl-length-out').textContent = `${clipLengthSeconds} s`;
+      const fileSizeMb = Number($<HTMLInputElement>('tl-photosize').value);
+      $('tl-photosize-out').textContent = `${fileSizeMb} MB`;
+      $('tl-result').textContent = timelapse({
+        clipLengthSeconds,
+        frameRateFps: Number(fpsSelect.value),
+        intervalSeconds: Number(intervalSelect.value),
+        fileSizeMb,
+      }).note;
+    }
+    timelapseChanged();
+    on('tl-length', 'input', timelapseChanged);
+    on('tl-fps', 'change', timelapseChanged);
+    on('tl-interval', 'change', timelapseChanged);
+    on('tl-photosize', 'input', timelapseChanged);
+  }
 
   /**
    * Point the camera at something in the sky.
@@ -6055,6 +6191,8 @@ export async function startScout(): Promise<void> {
     // number that is not one, and a session with `megapixels: 0` in it would
     // take the whole panel down on restore.
     if (!(lens.megapixels > 0)) lens.megapixels = defaultLens().megapixels;
+    if (!(lens.aperture > 0)) lens.aperture = defaultLens().aperture;
+    if (!(lens.focusDistanceM > 0)) lens.focusDistanceM = defaultLens().focusDistanceM;
     if (saved.target) Object.assign(target, saved.target);
     view = saved.view;
     basemap = saved.basemap;
@@ -6070,6 +6208,8 @@ export async function startScout(): Promise<void> {
     $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
     $<HTMLSelectElement>('frame-focal').value = String(lens.focalLengthMm);
     $<HTMLSelectElement>('frame-mp').value = String(lens.megapixels);
+    $<HTMLSelectElement>('frame-aperture').value = String(lens.aperture);
+    $<HTMLSelectElement>('frame-focus').value = String(lens.focusDistanceM);
     $<HTMLInputElement>('frame-bearing').value = String(lens.bearing);
     $<HTMLInputElement>('frame-tilt').value = String(lens.tiltDeg);
     for (const b of $('frameorient').querySelectorAll('button')) {
