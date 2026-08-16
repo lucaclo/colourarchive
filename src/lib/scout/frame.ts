@@ -449,6 +449,139 @@ function framingNote(
   }
 }
 
+/* ── Depth of field ────────────────────────────────────────────────────────── */
+
+/**
+ * The apertures worth offering. Full stops, fastest to slowest, stopping at
+ * ƒ/22 because past it diffraction has usually already outgrown the circle of
+ * confusion this module bothers computing.
+ */
+export const APERTURES = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
+
+/**
+ * The focus distances worth offering, metres. Close enough for a foreground
+ * rock, far enough that focusing there is indistinguishable from infinity on
+ * anything but the longest lens here.
+ */
+export const FOCUS_DISTANCES_M = [0.5, 1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000];
+
+/**
+ * How wide a defocused point may spread and still read as sharp, in pixels
+ * rather than the film-era fraction of the sensor diagonal (1/1500, usually)
+ * that most published tables still quote. That fraction predates digital and
+ * knows nothing about how finely the sensor samples the image — the same gap
+ * `astrophoto.ts` found in the 500 rule. Two pixels is the number used there
+ * for an acceptable star trail, and the same reasoning applies: a value that
+ * can be checked against the file beats one that cannot.
+ */
+export const CIRCLE_OF_CONFUSION_PX = 2;
+
+/**
+ * The hyperfocal distance: focus here and everything from half this distance
+ * to infinity is acceptably sharp.
+ *
+ * `focalLengthMm² / (aperture · circleOfConfusionMm)`, plus the focal length
+ * itself — the thin-lens result, exact under that model rather than a fitted
+ * approximation. The circle of confusion is a parameter and not a constant
+ * here; see `CIRCLE_OF_CONFUSION_PX` for where this module's own pixel-based
+ * one comes from.
+ */
+export function hyperfocalDistanceMm(
+  focalLengthMm: number,
+  aperture: number,
+  circleOfConfusionMm: number,
+): number {
+  if (!(focalLengthMm > 0)) throw new RangeError('focalLengthMm must be greater than zero');
+  if (!(aperture > 0)) throw new RangeError('aperture must be greater than zero');
+  if (!(circleOfConfusionMm > 0)) throw new RangeError('circleOfConfusionMm must be greater than zero');
+  return focalLengthMm + (focalLengthMm * focalLengthMm) / (aperture * circleOfConfusionMm);
+}
+
+export interface DepthOfField {
+  /** Focus here and the far limit is infinity — see `hyperfocalDistanceMm`. */
+  hyperfocalM: number;
+  /** Nearest acceptably sharp distance, at the stated focus. */
+  nearM: number;
+  /** Farthest acceptably sharp distance. Infinity at or past the hyperfocal distance. */
+  farM: number;
+  /** `farM − nearM`. Infinity when `farM` is. */
+  spanM: number;
+  /** Whole sentence, for the panel. */
+  note: string;
+}
+
+/**
+ * The near and far limits of acceptable sharpness for a lens focused at
+ * `focusDistanceM`.
+ *
+ * Derived from the thin-lens blur-circle relationship directly — `D · f² /
+ * (f² ± N·c·(D − f))` — rather than routed through the hyperfocal distance
+ * with the usual "H + s − f" shorthand, which is only an approximation of
+ * this. The two agree closely except at close focus, but agreeing closely is
+ * not the same as being the identity this module can otherwise state exactly:
+ * focused *at* the hyperfocal distance, the near limit is exactly half of it,
+ * and that is the cross-check the tests hold this to.
+ */
+export function depthOfField(
+  focalLengthMm: number,
+  aperture: number,
+  circleOfConfusionMm: number,
+  focusDistanceM: number,
+): DepthOfField {
+  if (!(focusDistanceM > 0)) throw new RangeError('focusDistanceM must be greater than zero');
+  const hyperfocalMm = hyperfocalDistanceMm(focalLengthMm, aperture, circleOfConfusionMm);
+  const fMm = focalLengthMm;
+  const sMm = focusDistanceM * 1000;
+  const f2 = fMm * fMm;
+  const nc = aperture * circleOfConfusionMm * (sMm - fMm);
+
+  const nearMm = (sMm * f2) / (f2 + nc);
+  const farDenom = f2 - nc;
+  // Focused exactly at the hyperfocal distance this denominator is zero by
+  // construction, but `nc` and `f2` are two independent products and floating
+  // point does not know they are supposed to cancel — the residue comes back
+  // as a "far limit" a few million kilometres out rather than the infinity it
+  // actually is. The same failure mode `driftRateDegPerSec` guards against at
+  // the celestial pole, for the same reason: a huge finite number here is a
+  // worse answer than the true one, not a more cautious approximation of it.
+  const farMm = farDenom > f2 * 1e-9 ? (sMm * f2) / farDenom : Infinity;
+
+  const hyperfocalM = hyperfocalMm / 1000;
+  const nearM = nearMm / 1000;
+  const farM = Number.isFinite(farMm) ? farMm / 1000 : Infinity;
+
+  return {
+    hyperfocalM,
+    nearM,
+    farM,
+    spanM: Number.isFinite(farM) ? farM - nearM : Infinity,
+    note: describeDepthOfField(focusDistanceM, hyperfocalM, nearM, farM),
+  };
+}
+
+/** "3.4 m", "820 m", "1.2 km" — never more precision than the model itself has. */
+function formatDistanceM(m: number): string {
+  if (!Number.isFinite(m)) return 'infinity';
+  if (m >= 10_000) return `${Math.round(m / 1000)} km`;
+  if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
+  if (m >= 10) return `${Math.round(m)} m`;
+  return `${m.toFixed(1)} m`;
+}
+
+function describeDepthOfField(
+  focusDistanceM: number,
+  hyperfocalM: number,
+  nearM: number,
+  farM: number,
+): string {
+  const range = `${formatDistanceM(nearM)} to ${Number.isFinite(farM) ? formatDistanceM(farM) : 'infinity'}`;
+  const hyperfocalNote =
+    focusDistanceM >= hyperfocalM
+      ? ` Focused at or past the hyperfocal distance (${formatDistanceM(hyperfocalM)}) — this is as much as the lens can bring in.`
+      : ` The hyperfocal distance is ${formatDistanceM(hyperfocalM)}; focus there instead for the widest range that still reaches infinity.`;
+  return `Sharp from ${range}, focused at ${formatDistanceM(focusDistanceM)}.${hyperfocalNote}`;
+}
+
 /* ── Presentation ──────────────────────────────────────────────────────────── */
 
 /** "24mm · 74° × 53°" — the lens, and what it actually covers. */

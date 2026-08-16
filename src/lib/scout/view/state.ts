@@ -121,6 +121,10 @@ export interface Lens {
    * differ by a factor of two and the old rules of thumb cannot tell them apart.
    */
   megapixels: number;
+  /** The taking aperture, ƒ-number. Depth of field's other input besides the lens. */
+  aperture: number;
+  /** Where the lens is focused, metres from the camera. */
+  focusDistanceM: number;
 }
 
 export const defaultLens = (): Lens => ({
@@ -130,6 +134,8 @@ export const defaultLens = (): Lens => ({
   bearing: 270,
   tiltDeg: 0,
   megapixels: DEFAULT_MEGAPIXELS,
+  aperture: 8,
+  focusDistanceM: 10,
 });
 
 /** The far end of the sightline. Dragged on the map, like the monolith. */

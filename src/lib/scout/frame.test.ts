@@ -14,18 +14,22 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  APERTURES,
+  CIRCLE_OF_CONFUSION_PX,
   EDGE_TOLERANCE_DEG,
   FLARE_BAND_DEG,
   FOCAL_LENGTHS,
   SENSORS,
   angleDelta,
   checkFraming,
+  depthOfField,
   describeLens,
   equivalentFocalLength,
   fieldOfView,
   frameAxis,
   frameWedge,
   frameWidthAt,
+  hyperfocalDistanceMm,
   projectToFrame,
   sensorByKey,
   type Fov,
@@ -504,6 +508,80 @@ describe('describeLens', () => {
   it('carries the equivalent for anything that is not full frame', () => {
     const text = describeLens(APSC, 24, fieldOfView(APSC, 24));
     assert.match(text, /24mm \(37mm equiv\.\)/);
+  });
+});
+
+/* ── Depth of field ────────────────────────────────────────────────────────── */
+
+describe('hyperfocalDistanceMm', () => {
+  it('matches a published table: 50mm ƒ/8 at the classic 0.03mm circle gives ~10.47m', () => {
+    close(hyperfocalDistanceMm(50, 8, 0.03), 10_466.7, 1);
+  });
+
+  it('grows with focal length and shrinks with a smaller aperture number', () => {
+    const wide = hyperfocalDistanceMm(24, 8, 0.02);
+    const long = hyperfocalDistanceMm(100, 8, 0.02);
+    assert.ok(long > wide);
+    const open = hyperfocalDistanceMm(50, 1.4, 0.02);
+    const closed = hyperfocalDistanceMm(50, 16, 0.02);
+    assert.ok(open > closed, 'a wider aperture (smaller N) pulls the hyperfocal distance out, not in');
+  });
+
+  it('refuses a non-positive focal length, aperture or circle', () => {
+    assert.throws(() => hyperfocalDistanceMm(0, 8, 0.03), RangeError);
+    assert.throws(() => hyperfocalDistanceMm(50, 0, 0.03), RangeError);
+    assert.throws(() => hyperfocalDistanceMm(50, 8, 0), RangeError);
+  });
+});
+
+describe('depthOfField', () => {
+  it('puts the near limit at exactly half the hyperfocal distance when focused there', () => {
+    // The identity this module is held to: focused at the hyperfocal distance,
+    // everything from H/2 to infinity is sharp. True for any lens and any
+    // circle of confusion, not just the one worked example.
+    for (const focal of FOCAL_LENGTHS) {
+      for (const aperture of APERTURES) {
+        const circleMm = 0.02;
+        const h = hyperfocalDistanceMm(focal, aperture, circleMm);
+        const dof = depthOfField(focal, aperture, circleMm, h / 1000);
+        close(dof.nearM, h / 2000, h / 1e6, `${focal}mm ƒ/${aperture}`);
+        assert.equal(dof.farM, Infinity);
+      }
+    }
+  });
+
+  it('matches a published table at 50mm ƒ/8 focused at 5m', () => {
+    const dof = depthOfField(50, 8, 0.03, 5);
+    close(dof.nearM, 3.39, 0.01);
+    close(dof.farM, 9.53, 0.01);
+  });
+
+  it('widens as the aperture number grows and as the lens gets wider', () => {
+    const narrow = depthOfField(50, 2.8, 0.02, 5);
+    const wide = depthOfField(50, 16, 0.02, 5);
+    assert.ok(wide.spanM > narrow.spanM);
+    const long = depthOfField(135, 8, 0.02, 5);
+    const short = depthOfField(24, 8, 0.02, 5);
+    assert.ok(short.spanM > long.spanM);
+  });
+
+  it('never puts the far limit closer than the near one', () => {
+    for (const focus of [0.5, 2, 5, 20, 100]) {
+      const dof = depthOfField(35, 4, 0.02, focus);
+      assert.ok(dof.farM > dof.nearM);
+      assert.ok(dof.nearM < focus && (dof.farM > focus || dof.farM === Infinity));
+    }
+  });
+
+  it('refuses a focus distance that is not a distance', () => {
+    assert.throws(() => depthOfField(50, 8, 0.03, 0), RangeError);
+    assert.throws(() => depthOfField(50, 8, 0.03, -1), RangeError);
+  });
+});
+
+describe('CIRCLE_OF_CONFUSION_PX', () => {
+  it('is a small, stated number of pixels rather than a fitted constant', () => {
+    assert.ok(CIRCLE_OF_CONFUSION_PX > 0 && CIRCLE_OF_CONFUSION_PX <= 5);
   });
 });
 
