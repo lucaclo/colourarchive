@@ -281,11 +281,22 @@ export function publishStamp() {
         await fs.writeFile(path.join(out, STAMP_FILE), `${JSON.stringify(stamp, null, 2)}\n`);
         logger.info(`stamped ${stamp.count} photographs · ${stamp.chapters} chapters`);
 
-        if (audit.missing.length) {
+        // CI checks out `manifest.json` but never `public/img` — that directory
+        // is gitignored on purpose, so a runner has no photograph and reports
+        // every one of them missing. That is not the failure this audit exists
+        // to catch, which is a *specific* derivative absent from a Mac that has
+        // the rest; it would otherwise turn permanently red the moment this
+        // landed. The throw stays for every build that can actually publish.
+        if (audit.missing.length && !process.env.CI) {
           throw new Error(
             `This build would publish ${audit.missing.length} broken image${audit.missing.length === 1 ? '' : 's'}.\n\n` +
               `${describeAudit(audit).join('\n')}\n\n` +
               `Run \`npm run check:photos -- --fix\` and build again.`,
+          );
+        } else if (audit.missing.length) {
+          logger.warn(
+            `${audit.missing.length} missing derivative(s) — not enforced under CI, ` +
+              `since public/img is never checked out here. See \`npm run check:photos\`.`,
           );
         }
         // A summary, not the list. Neither of these stops a publish, and a build
