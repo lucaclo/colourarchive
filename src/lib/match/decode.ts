@@ -145,7 +145,10 @@ async function librawDecode(srcPath: string, outPath: string): Promise<void> {
     timeout: 180_000,
     maxBuffer: 1 << 24,
   });
-  const produced = srcPath.replace(/\.[^.]+$/, '.tiff');
+  // Appends '.tiff' to the whole filename (`src.ARW` -> `src.ARW.tiff`) —
+  // it does NOT replace the source extension, confirmed against the actual
+  // binary rather than assumed from docs.
+  const produced = `${srcPath}.tiff`;
   await fs.rename(produced, outPath);
 }
 
