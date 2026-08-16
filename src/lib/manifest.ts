@@ -1,18 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { MANIFEST_PATH, OVERRIDES_PATH, ROOT } from './paths';
+import { MANIFEST_PATH, OVERRIDES_PATH, STORE_PATH } from './paths';
 import {
   chapterName, chapterRank, chapterKey, baseKeyOf,
   lightnessBand, ACHROMATIC_KEY, SPLIT_MIN, MERGE_MAX, roundOklch,
   type OKLCH, type Band,
 } from './color';
-import type { Photo, Chapter, Manifest, Overrides } from './types';
+import type { Photo, Chapter, Manifest, Overrides, Derivative } from './types';
 import { scheduleDeploy } from './deploy';
 
 // Flat photo list is the source of truth (append-only, deduped by id).
 // The nested, ordered, override-applied `manifest.json` is derived from it —
-// so nothing hand-edited ever gets clobbered by a rebuild.
-const STORE_PATH = path.join(ROOT, 'src', 'data', 'photos.json');
+// so nothing hand-edited ever gets clobbered by a rebuild. Its path lives in
+// ./paths with the others, because the build hook reads the same file.
 
 async function readJson<T>(p: string, fallback: T): Promise<T> {
   try {
@@ -103,15 +103,72 @@ export function setGenre(id: string, genre: import('./types').Genre): Promise<Ma
   });
 }
 
+/**
+ * Replace one photo's derivative list and rebuild.
+ *
+ * The repair path for the derivative audit (`npm run check:photos -- --fix`):
+ * after regenerating the files, or after dropping a declaration for a format
+ * nothing writes any more, the entry has to say what is actually on disk.
+ *
+ * The write lock above is not enough here, and the difference matters. Every
+ * other mutation in this file runs inside the app, where `withLock` is a real
+ * queue; this one runs from a `tsx` CLI in a *different process* from the Astro
+ * server, which knows nothing of it. Two processes each doing a whole-file
+ * read-modify-write is the classic lost update: an upload landing between this
+ * read and its rename would be erased by it, and the rename being atomic only
+ * guarantees the file is never half-written, not that it is never stale.
+ *
+ * So the store's modification time is taken at the read and checked again at the
+ * write, and a change means someone else got there first — retry, then give up
+ * and say so rather than overwrite them. The lock is still taken, because within
+ * the app it is the cheaper of the two mechanisms.
+ *
+ * Deliberately no `scheduleDeploy()`: a repair leaves the archive looking the
+ * same as it was always meant to look, and the CLI that calls this exits long
+ * before the debounce would fire.
+ */
+export function replaceDerivatives(id: string, derivatives: Derivative[]): Promise<Manifest> {
+  return withLock(async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const stamp = await mtimeOf(STORE_PATH);
+      const photos = await readStore();
+      const next = photos.map((p) => (p.id === id ? { ...p, derivatives } : p));
+      if ((await mtimeOf(STORE_PATH)) !== stamp) continue; // someone wrote while we read
+      await writeJson(STORE_PATH, next, stamp);
+      return rebuild();
+    }
+    throw new Error(
+      `photos.json kept changing under the repair of ${id} — is an upload running? Nothing was written.`,
+    );
+  });
+}
+
+const mtimeOf = async (p: string): Promise<number> => {
+  try {
+    return (await fs.stat(p)).mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+
 // Write to a sibling temp file and rename over the target. photos.json is the
 // only copy of the archive's metadata; a plain writeFile interrupted halfway
 // (crash, power, Ctrl-C mid-ingest) leaves it truncated and unparseable, and
 // readJson's fallback would then quietly treat the archive as empty. Rename is
 // atomic within a filesystem, so the file is either the old one or the new one.
-async function writeJson(p: string, data: unknown): Promise<void> {
+//
+// `expect` is the modification time the caller last saw. Passing it turns the
+// write into a compare-and-swap for callers outside this process — see
+// replaceDerivatives. Omitting it keeps the old behaviour, which is correct for
+// everything running inside the app behind the write lock.
+async function writeJson(p: string, data: unknown, expect?: number): Promise<void> {
   await fs.mkdir(path.dirname(p), { recursive: true });
   const tmp = `${p}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(data, null, 2));
+  if (expect !== undefined && (await mtimeOf(p)) !== expect) {
+    await fs.rm(tmp, { force: true });
+    throw new Error(`${path.basename(p)} changed while it was being rewritten — nothing was written.`);
+  }
   await fs.rename(tmp, p);
   // The rename gives the file a new mtime, so the read cache would notice on its
   // own. Dropping the entry here anyway keeps the invariant local: whoever reads

@@ -26,6 +26,7 @@ import {
   frameAxis,
   frameWedge,
   frameWidthAt,
+  projectToFrame,
   sensorByKey,
   type Fov,
   type Sensor,
@@ -264,11 +265,14 @@ describe('checkFraming', () => {
   it('reads the offsets the way a photographer would', () => {
     const right = checkFraming({ azimuth: 290, altitude: 10 }, AIM, WIDE);
     assert.equal(right.horizontalOffsetDeg, 20);
-    assert.equal(right.verticalOffsetDeg, 10);
+    // Not 10. The offsets are measured on the image plane, and 20° off the axis
+    // a subject 10° up sits 10.6° up the frame — atan(tan 10° / cos 20°). The
+    // altitude difference is only the answer down the centre line.
+    assert.equal(right.verticalOffsetDeg, 10.6);
     assert.match(right.note, /right of centre/);
     const left = checkFraming({ azimuth: 250, altitude: -10 }, AIM, WIDE);
     assert.equal(left.horizontalOffsetDeg, -20);
-    assert.equal(left.verticalOffsetDeg, -10);
+    assert.equal(left.verticalOffsetDeg, -10.6);
   });
 
   it('agrees with the field of view about where the edges are', () => {
@@ -306,7 +310,12 @@ describe('checkFraming', () => {
     const back = checkFraming({ azimuth: 90, altitude: 5 }, AIM, LONG);
     assert.equal(off.placement, 'outside');
     assert.equal(back.placement, 'behind');
-    assert.match(back.note, /Front-lighting/);
+    assert.match(back.note, /Behind you/);
+    // This module answers where the sun is relative to the *frame*, and stops
+    // there. Whether that makes the subject front- or side-lit is
+    // `lighting.ts`'s question, decided on a different threshold — the two
+    // used to be printed on adjacent lines disagreeing about the same angle.
+    assert.doesNotMatch(back.note, /lighting|lit\b/i);
   });
 
   it('solves the tilt that just brings a high sun into the top edge', () => {
@@ -343,6 +352,27 @@ describe('checkFraming', () => {
     assert.equal(tilted.verticalOffsetDeg, 15);
   });
 
+  it('keeps a subject near the zenith in frame however far round it is in azimuth', () => {
+    // The case the old Δazimuth test could not get right, and the one that
+    // matters: aim 80° up and something 90° away in azimuth is five degrees
+    // across the picture, not out of it. Meridians converge.
+    const check = checkFraming({ azimuth: 90, altitude: 85 }, { bearing: 0, tiltDeg: 80 }, WIDE);
+    assert.equal(check.inFrame, true);
+    close(check.horizontalOffsetDeg, 5.1, 0.1);
+    close(check.verticalOffsetDeg, 10.0, 0.1);
+  });
+
+  it('spreads azimuth across the frame when the camera is tilted up', () => {
+    // Level, the horizon 20° off the aim is 20° across the frame. Tilt up 45°
+    // and the same point is 27° across it — which is why a wide lens pointed up
+    // takes in so much more of the skyline than the wedge on the map suggests.
+    const level = checkFraming({ azimuth: 200, altitude: 0 }, { bearing: 180, tiltDeg: 0 }, WIDE);
+    close(level.horizontalOffsetDeg, 20, 0.01);
+    const tilted = checkFraming({ azimuth: 200, altitude: 0 }, { bearing: 180, tiltDeg: 45 }, WIDE);
+    close(tilted.horizontalOffsetDeg, 27.2, 0.1);
+    close(tilted.verticalOffsetDeg, -45, 0.01);
+  });
+
   it('handles an aim that straddles north', () => {
     const check = checkFraming({ azimuth: 10, altitude: 0 }, { bearing: 350, tiltDeg: 0 }, WIDE);
     assert.equal(check.horizontalOffsetDeg, 20);
@@ -354,6 +384,112 @@ describe('checkFraming', () => {
     const target = { azimuth: 270 + 20, altitude: 8 };
     assert.equal(checkFraming(target, AIM, WIDE).inFrame, true);
     assert.equal(checkFraming(target, AIM, LONG).inFrame, false);
+  });
+});
+
+/* ── The projection itself ─────────────────────────────────────────────────── */
+
+describe('projectToFrame', () => {
+  it('puts the aim at the origin, whatever the tilt', () => {
+    for (const tiltDeg of [-60, -20, 0, 35, 80]) {
+      const p = projectToFrame({ azimuth: 128, altitude: tiltDeg }, { bearing: 128, tiltDeg });
+      close(p.acrossDeg, 0, 1e-9, `tilt ${tiltDeg} across`);
+      close(p.upDeg, 0, 1e-9, `tilt ${tiltDeg} up`);
+      assert.equal(p.ahead, true);
+    }
+  });
+
+  it('reduces to the azimuth difference when the camera is level', () => {
+    // A level frame's horizontal axis *is* a line of constant altitude, so on
+    // that one case the naive difference is right — and it is worth pinning,
+    // because it is the case every reading in the panel was checked against by
+    // hand before the projection existed.
+    for (let dAz = -80; dAz <= 80; dAz += 7) {
+      for (const altitude of [-30, 0, 25, 60]) {
+        const p = projectToFrame({ azimuth: 270 + dAz, altitude }, { bearing: 270, tiltDeg: 0 });
+        close(p.acrossDeg, dAz, 1e-9, `Δaz ${dAz} at ${altitude}°`);
+      }
+    }
+  });
+
+  it('agrees with the spherical separation between the aim and the target', () => {
+    // The independent identity: whatever the two frame angles are, the target's
+    // distance from the optical axis must come out the same as the spherical law
+    // of cosines makes it. tan(θ) = hypot(tan across, tan up), because both are
+    // the same right-angled solid triangle read two ways. This shares no
+    // arithmetic with `projectToFrame` and would catch any sign, axis or
+    // basis-ordering slip in it.
+    const rad = Math.PI / 180;
+    for (const bearing of [0, 73, 180, 291]) {
+      for (const tiltDeg of [-40, 0, 30, 75]) {
+        for (let dAz = -170; dAz <= 170; dAz += 23) {
+          for (const altitude of [-25, 0, 18, 55, 88]) {
+            const p = projectToFrame({ azimuth: bearing + dAz, altitude }, { bearing, tiltDeg });
+            if (!p.ahead) continue; // tan is meaningless once the target is behind
+            const cosSep =
+              Math.sin(altitude * rad) * Math.sin(tiltDeg * rad) +
+              Math.cos(altitude * rad) * Math.cos(tiltDeg * rad) * Math.cos(dAz * rad);
+            const separation = Math.acos(Math.min(1, Math.max(-1, cosSep)));
+            const fromAngles = Math.atan(
+              Math.hypot(Math.tan(p.acrossDeg * rad), Math.tan(p.upDeg * rad)),
+            );
+            close(fromAngles, separation, 1e-9, `${bearing}/${tiltDeg} → ${dAz}/${altitude}`);
+          }
+        }
+      }
+    }
+  });
+
+  it('calls anything past the image plane behind, not merely far off in azimuth', () => {
+    // Level, "behind" and "90° of azimuth" are the same statement, and the old
+    // test conflated them. Pointed 80° up they are nothing like it: a subject
+    // 60° up on the *opposite* bearing is 40° off the axis and squarely in front
+    // of the camera. Near the zenith every azimuth is in front of you.
+    assert.equal(projectToFrame({ azimuth: 180, altitude: 0 }, { bearing: 0, tiltDeg: 0 }).ahead, false);
+    const overhead = projectToFrame({ azimuth: 180, altitude: 60 }, { bearing: 0, tiltDeg: 80 });
+    assert.equal(overhead.ahead, true);
+    close(Math.hypot(overhead.acrossDeg, overhead.upDeg), 40, 1);
+  });
+});
+
+describe('tiltToIncludeDeg', () => {
+  it('is never offered unless it actually works', () => {
+    // The promise the panel makes when it prints a tilt. Swept rather than
+    // spot-checked because the closed form solves the vertical only, and tilting
+    // swings the horizontal axis too — so the cases where the arithmetic is
+    // right and the answer is still wrong are exactly the ones a hand-picked
+    // example misses.
+    let offered = 0;
+    for (const fov of [WIDE, LONG]) {
+      for (const tiltDeg of [-30, 0, 20, 70]) {
+        for (let dAz = -180; dAz < 180; dAz += 11) {
+          for (const altitude of [-45, -5, 12, 40, 78]) {
+            const target = { azimuth: 270 + dAz, altitude };
+            const check = checkFraming(target, { bearing: 270, tiltDeg }, fov);
+            if (check.tiltToIncludeDeg == null) continue;
+            offered++;
+            const tilted = checkFraming(target, { bearing: 270, tiltDeg: check.tiltToIncludeDeg }, fov);
+            assert.equal(
+              tilted.inFrame,
+              true,
+              `${dAz}/${altitude} from tilt ${tiltDeg}: offered ${check.tiltToIncludeDeg}° and it did not land`,
+            );
+          }
+        }
+      }
+    }
+    assert.ok(offered > 50, `only ${offered} tilts were offered — the sweep proves nothing`);
+  });
+
+  it('is independent of the tilt the camera happens to be at', () => {
+    // The answer is a property of the target and the lens, not of where the
+    // camera is pointed now. Two photographers at different tilts must be told
+    // the same number or one of them is being told a wrong one.
+    const target = { azimuth: 270, altitude: 52 };
+    const from0 = checkFraming(target, { bearing: 270, tiltDeg: 0 }, WIDE).tiltToIncludeDeg;
+    const from30 = checkFraming(target, { bearing: 270, tiltDeg: -30 }, WIDE).tiltToIncludeDeg;
+    assert.notEqual(from0, null);
+    assert.equal(from0, from30);
   });
 });
 

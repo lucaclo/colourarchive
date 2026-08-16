@@ -612,15 +612,20 @@ export class ShadowGeometry {
    * ring — it spills outside some corners and misses others — so the hull is
    * both the honest shape and the one that matches how the shadow itself was
    * built.
+   *
+   * `hull` is that same hull, when the caller already holds it. This runs for
+   * every building on every frame the depth map is rebuilt, and hulling here
+   * was undoing half of what precomputing them bought: the shadow pass stopped
+   * re-hulling, and the blocker pass carried straight on.
    */
-  addBlocker(ring: Ring, heightM: number): void {
+  addBlocker(ring: Ring, heightM: number, hull?: Ring): void {
     if (!(heightM > 0) || ring.length < 3) return;
-    const hull = convexHull(ring);
-    if (hull.length < 3) return;
-    const [ax, ay] = this.project(hull[0][0], hull[0][1]);
-    for (let i = 1; i < hull.length - 1; i++) {
-      const [bx, by] = this.project(hull[i][0], hull[i][1]);
-      const [cx, cy] = this.project(hull[i + 1][0], hull[i + 1][1]);
+    const outline = hull ?? convexHull(ring);
+    if (outline.length < 3) return;
+    const [ax, ay] = this.project(outline[0][0], outline[0][1]);
+    for (let i = 1; i < outline.length - 1; i++) {
+      const [bx, by] = this.project(outline[i][0], outline[i][1]);
+      const [cx, cy] = this.project(outline[i + 1][0], outline[i + 1][1]);
       this.blockers.push(ax, ay, heightM);
       this.blockers.push(bx, by, heightM);
       this.blockers.push(cx, cy, heightM);

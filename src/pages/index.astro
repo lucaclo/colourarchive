@@ -48,6 +48,17 @@ const insights = {
   maxChapter: Math.max(1, ...manifest.chapters.map((c) => c.photos.length)),
 };
 
+// The stamp at the foot of the scroll. This page is prerendered, so on the
+// published site this is the moment the build ran — which is the moment it was
+// published, the deploy following its build by seconds. On the Mac the page
+// renders per request and it reads as today, which is also true.
+//
+// It is here because the failure it answers is silence: a site ten days behind
+// looks exactly like a current one. `npm run drift` asks the same question from
+// the terminal; this is the version a reader can see.
+const builtAt = new Date();
+const builtLabel = builtAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
 const titleFg = (L: number) => (L > 0.62 ? '#0a0a0a' : '#f6f6f4');
 const roman = (n: number) =>
   ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI'][n] ?? String(n + 1);
@@ -191,6 +202,13 @@ const roman = (n: number) =>
         })}
       </main>
 
+      <!-- Outside <main>: .archive becomes a grid in the pinch-to-zoom overview,
+           and a footer inside it would be dealt a cell in the colour wall. -->
+      <footer class="colophon">
+        <p>{manifest.count} photographs · {manifest.chapters.length} chapters</p>
+        <p>Snapshot built <time datetime={builtAt.toISOString()}>{builtLabel}</time></p>
+      </footer>
+
       <aside class="meta" id="meta" aria-live="polite" hidden>
         <dl id="meta-body" />
         <p class="hint">Press <kbd>i</kbd> to hide</p>
@@ -299,6 +317,19 @@ const roman = (n: number) =>
   }
   .empty-lead { color: var(--muted); font-size: 1.05rem; line-height: 1.6; margin: 0; max-width: 34rem; }
   .empty-cta { color: var(--fg); text-decoration: none; border-bottom: 1px solid currentColor; padding-bottom: 2px; }
+
+  /* The end of the scroll. Quiet enough that arriving at it still feels like
+     the last photograph, loud enough to answer "is this current?". The deep
+     bottom padding keeps the last line clear of the metadata panel, which is
+     fixed to the bottom-right corner whenever it is open. */
+  .colophon {
+    display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+    padding: 5rem 8vw 6.5rem;
+    font-family: var(--font-label);
+    font-size: 0.7rem; letter-spacing: 0.06em;
+    color: var(--muted); text-align: center;
+  }
+  .colophon p { margin: 0; }
   kbd { font-family: var(--font-label); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 0.72em; }
 </style>
 

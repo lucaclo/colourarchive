@@ -32,9 +32,12 @@ actually in shadow and when the light arrives.
    automatic, plus a manual paste-a-URL adapter reusing `/api/inspiration/add`.
    *Still not started; this is the main remaining work.*
 
-**The whole point of the project** is still Part 7 below — the join between sun position
-and photo spots. Everything built so far is foundation for it, and the per-spot light
-timeline (`skyline.ts` + `terrain.ts`) is the half of that join that now works.
+**The whole point of the project** is Part 7 below — the join between sun position and
+photo spots — and as of 2026-08-07 it is **built**: every photographed spot near the pin
+carries its own day of light, the pins recolour as the slider moves, and there is a
+ranked list beside the map. What it cannot do is say front- or back-lit for someone
+else's photograph, because Commons records no shot bearing and this project does not
+invent one. That is waiting on Flickr, and on nothing else.
 
 **House style:** comments explain *why*, not *what*. The project's ethos is refusing to
 assert what wasn't measured — a shadow drawn from a guessed building height must look
@@ -45,24 +48,39 @@ as arithmetic. Keep that.
 
 ## What exists and is verified
 
-767 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
+902 tests pass (`npm test`), `npm run check` clean, `npm run build` clean.
 
 `npm run smoke` (`tests/scout.smoke.ts`) drives the page in a real browser —
 Playwright and Chromium, against `astro dev` because `window.scout` is gated
-behind `import.meta.env.DEV`. Four assertions, one per failure this tab has
-actually shipped: no uncaught errors; no height field fetched before a place is
+behind `import.meta.env.DEV`. Twenty-one assertions across four suites, each one
+per failure this tab has actually shipped: no uncaught errors; no height field fetched before a place is
 chosen (the 24,450-tile storm); a link restores a spot and scrubbing moves the
-sun; and turning the sun path off changes the pixels on the map, which is the
-only way to notice a shader that will not link. It runs in CI as its own job,
-so a red smoke against a green build reads as "look at the network".
+sun; turning the sun path off changes the pixels on the map, which is the
+only way to notice a shader that will not link; every photographed spot has
+its day computed, with the ranked list's rows laying out as a grid rather than
+falling back to a UA default; and the core fold states the shutter limit while
+refusing the framing until an aim exists, which is a gate in the page that no
+unit test can see. It runs in CI as its own job, so a red smoke against a green
+build reads as "look at the network".
+
+The alignment finder has its own suite, on its own page, because its cases have
+to *press* things rather than read them and pressing needs the panel open —
+which in an automation tab means killing CSS transitions first, since `max-height`
+never advances there and every click lands on the panel head. Three cases: it
+refuses a bearing nobody chose, a search fills rows that lay out as a grid and a
+row moves the whole page onto that evening, and a moved ring marks the standing
+answer stale instead of emptying a list somebody is reading.
 
 | File | Lines | What |
 |---|---|---|
 | `src/lib/scout/sun.ts` | 543 | Solar position/times engine (Meeus/NOAA). 56 tests |
 | `src/lib/scout/moon.ts` | 494 | Lunar position, phase, moonrise/set. Topocentric. 27 tests |
-| `src/lib/scout/terrain.ts` | 634 | Terrarium decode, height field, landform shadows, horizons. 35 tests |
+| `src/lib/scout/terrain.ts` | 700 | Terrarium decode, height field, landform shadow sweep, horizons. 41 tests |
 | `src/lib/scout/daylight.ts` | 616 | Phase bands, the continuous track, event rows, dates. 56 tests |
 | `src/lib/scout/skyline.ts` | 410 | Per-point horizon from buildings, merged with terrain. 30 tests |
+| `src/lib/scout/lighting.ts` | 245 | The join: front/side/back/rim-lit, the refusals, the order. 30 tests |
+| `src/lib/scout/alignment.ts` | 590 | Behind a target: bearing crossings, passes, the four absences. 23 tests |
+| `src/lib/scout/astrophoto.ts` | 380 | The night join: trailing limits, the core against the frame. 36 tests |
 | `src/lib/scout/shadows.ts` | 406 | Building + monolith shadow casting, with ceilings. 41 tests |
 | `src/lib/scout/weather.ts` | 273 | WMO codes, cloud → light quality, forecast parsing. 23 tests |
 | `src/lib/scout/air.ts` | 128 | Aerosol optical depth: parse, look up by instant. 7 tests |
@@ -75,9 +93,10 @@ so a red smoke against a green build reads as "look at the network".
 | `src/lib/scout/report.ts` | 95 | The day as pasteable text. 10 tests |
 | `src/lib/scout/geocode.ts` | 278 | Nominatim: search **and reverse**, rate limit, disk cache |
 | `src/lib/scout/weather-client.ts` | 100 | Open-Meteo, server-side, 20-minute cache |
-| `src/lib/scout/view/terrain-shadows.ts` | 333 | The landform overlay: tiles, canvas source, debounce |
+| `src/lib/scout/view/terrain-shadows.ts` | 333 | The landform overlay: tiles, canvas source, throttle |
 | `src/lib/scout/view/dome-layer.ts` | 160 | The custom WebGL layer + a geometry builder |
 | `src/lib/scout/view/shadow-layer.ts` | 564 | Cast shadows as volumes: height buffer, MAX blend. 8 tests |
+| `src/lib/scout/view/alignment-panel.ts` | 305 | The alignment fold: the ring's bearing, the rows, the staleness |
 | `src/pages/scout.astro` | ~2650 | The page: layout, map orchestration, every control |
 | `src/pages/api/scout/{geocode,reverse,weather}.ts` | — | Three thin proxies |
 | `scripts/check-astro-scripts.ts` | 78 | Typechecks page `<script>` blocks — see below |
@@ -216,25 +235,190 @@ DBSCAN or grid clustering, so 200 photos of one bridge become one pin, not 200 p
 
 **Provenance on every photo** — source, author, licence, original URL. Non-negotiable.
 
-### Part 6 — Pins and detail sheet *(not started)*
+### Part 6 — Pins and detail sheet *(done, except the bearing)*
 
-Clustered pins with thumbnails. Detail sheet: carousel with credit and licence,
-distance/bearing from centre, best-light window.
+**This was built under Part 5's heading and mislabelled here for two sessions.** Hotspot
+circles sized by count, a detail sheet with credit and licence under every thumbnail,
+distance and span in its header, and saved spots carrying a full `SpotFrame` — sensor,
+focal length, bearing, tilt — all already existed. The only piece genuinely missing was
+the best-light window per spot, and that landed with Part 7.
 
-**Shot bearing is the hard field.** Some Flickr EXIF carries `GPSImgDirection`; most
-doesn't. Fallback is a draggable cone the user sets. When unknown, say unknown.
+**Shot bearing is the hard field, and it is the one thing still absent.** Some Flickr
+EXIF carries `GPSImgDirection`; most doesn't, and Wikimedia Commons does not expose it
+*at all*. So no amount of work here produces a bearing — **this is blocked on Flickr, not
+on pins.** `RawPhoto.bearing` is deliberately optional and never invented.
 
-### Part 7 — The join ⭐ *(half done — this is the product)*
+### Part 7 — The join ⭐ *(built 2026-08-07 — this is the product)*
 
 For each spot: `spotBearing × sunAzimuth` at the slider time → **front-lit / side-lit /
 back-lit / rim-lit**, combined with lit-or-shaded.
 
-The lit-or-shaded half now exists and is good: `buildSkyline` + `mergeHorizon` +
-`lightWindows` already answer it for an arbitrary point, in one pass over the day, at
-about a millisecond a point. Running it per pin is the obvious next move. What is
-missing is the *bearing* half — which needs Part 6's data.
+Both halves now exist.
 
-Pins recolour live as you scrub. Beside the map, a ranked *"best right now"* list.
+- **Lit-or-shaded, per spot.** `rebuildHotspotLight()` runs `buildSkyline` +
+  `mergeHorizon` + `lightWindows` for every hotspot, not just the pin. Off the slider's
+  path entirely — it depends on the place, the buildings and the date, and the slider
+  moves none of them — so scrubbing is an array lookup and a sort. Guarded by a signature
+  over `isoDate`, `castableSignature` and the hotspot ids.
+- **`lighting.ts`** (28 tests) is the direction half: one measured angle,
+  `angleDelta(aim, azimuth)`, and three bands on it. It **refuses more often than it
+  answers** — sun down, spot in shade, or aim unknown each return a `direction` of null
+  and an `absence` saying which. Every Commons photograph hits `aim-unknown`.
+- **Pins recolour live**, four states not two: gold lit, blue shaded, slate sun-down, and
+  the original cyan for a spot whose light was never computed. `setData` is guarded by a
+  paint signature that includes the spot ids — without those, a moved pin returning a
+  differently-placed set with the same lit pattern would leave the old pins on the map.
+- **The ranked "best right now" list** in the panel, with the pin's own verdict in the
+  framing box (where the aim lives — asserting a direction from a bearing nobody chose
+  would be the same fabrication the module refuses for a photograph).
+
+**Two things this got wrong first, both found by driving the real page, neither
+visible to any test:**
+
+1. **Ranking on light alone rewards ignorance.** A spot with no buildings loaded has
+   nothing to shade it, so it reports *more* light than one properly examined — and the
+   list came back with eight of eight rows "terrain only". `buildingsKnown` is now a
+   ranking criterion, placed straight after `lit`, so confidence outranks the quantity it
+   inflates. `buildingsCover()` tests whether the whole 1.5 km skyline disc fell inside
+   the collected box, not merely whether the point did.
+2. **`frame.ts` was making a lighting claim on a different threshold.** Its `'behind'`
+   note said "front-lighting whatever you are pointed at", derived from its own 90°
+   behind-the-camera test. At 132° off aim it sat directly above `lighting.ts` saying
+   "side-lit", disagreeing about the same sun. `frame.ts` now answers only where the sun
+   is relative to the *frame*. One question, one owner.
+
+**Never rank by a score.** The order is five stated criteria in a stated priority and the
+note prints them. A number nobody can reproduce is exactly what this project refuses to
+publish about sunsets, and it would be no better here.
+
+Verified in a browser at Calton Hill: 38 hotspots, all with their day computed, 31 lit at
+08:00, 18 at 19:10, 0 at 23:00, pins painted 31 lit / 8 shaded. There is a smoke case for
+it — the list rows are built by script, which is the exact shape of the Astro scoping bug
+this project has already shipped once.
+
+### Part 7b — The night join *(built 2026-08-09)*
+
+The astrophotography counterpart to Part 7: the same "where is it *relative to my
+picture*" question, asked of the Milky Way core instead of the sun.
+
+- **`astrophoto.ts`** (36 tests). Two answers, and they are gated differently on
+  purpose. The **shutter limit** needs only the body, so it is always offered; **where
+  the core lands in the frame** needs an aim, and an aim nobody chose is the same
+  fabrication `lighting.ts` refuses for a Commons photograph, so it appears only with
+  the frame layer.
+- **No rule of thumb.** The 500 rule predates digital and cannot tell a 12 MP body
+  from a 61 MP one; the NPF rule does use pixel pitch but wraps it in fitted constants,
+  which makes it exactly the unreproducible number this project refuses to publish about
+  sunsets. Instead: a star at declination δ moves at `15.041″/s · cos δ` — an identity,
+  not a fit — projected through the focal length onto the pixel pitch, giving the trail
+  **in pixels**, which can be checked against the file afterwards. Two shutters are
+  printed (one pixel, three) because there is no single right answer and offering one
+  would imply there was. Calibration, since everyone arrives holding a rule: at 24mm on
+  33 MP the 500 rule is 6.2 px of trail and NPF at f/2.8 is 3.1 px.
+- **Pixel pitch is derived, not tabulated** — a table would be a list of bodies and the
+  picker offers formats. A "Sensor pixels" control was added to the lens box; it gives
+  the a7C II 5.11 µm against its real 5.12.
+- **The core is a region, not a point.** `CORE_SPAN_DEG = 15` now lives in `galactic.ts`
+  (the size of the thing belongs with the thing), and `frameRegion` walks its rim *on the
+  sky* and projects each point, rather than adding a radius to the frame offsets — near
+  the zenith ten degrees of sky is a hundred degrees of azimuth and only the projected
+  rim knows that. A circle on the sphere projects to a conic, so the rim really does
+  bound it. It reports overflow (how much is being cut off) and shortfall (how far the
+  nearest of it is from getting in) as **different numbers**, which the first version
+  conflated.
+- **`inFrameWindows`** says how long the composition holds — the sky turns 15°/hour, so
+  this is what decides how many frames there are to stack. Measured at Calton Hill:
+  18:55 → 00:37 on a 24mm.
+- **"At the core"** joins the aim buttons, and unlike the other two it aims at a moment
+  that has not happened — the best of the coming night, not the slider's minute.
+- **A Milky Way button** sits beside Layers in the top-right controls, because the answer
+  was reachable and not findable: a panel section opened by clicking a heading, a layer
+  toggle two menus deep *with the same name as that section*, and a framing answer gated
+  on a different toggle again. Three discoveries for one question. One press now switches
+  on the arc and the frame layer, opens the section, aims at the core and scrolls to it.
+  It **gives back only what it borrowed** — someone who already had the frame up to
+  compose a sunset does not lose it by glancing at the Milky Way. It deliberately does
+  *not* move the time slider: jumping to the best moment crosses a date boundary whenever
+  that moment is after midnight, since the night runs noon to noon and the slider runs
+  over the solar day. The layer toggle is renamed **"Milky Way arc"** — it only ever drew
+  the arc, and sharing a name with the text section made ticking it look like a no-op.
+- *Known:* the tilt slider stops at 80°, so an Atacama core at 85.6° cannot be centred.
+
+**`frame.ts`'s framing test was only right for a level camera** and had to be fixed
+first. It differenced azimuths and altitudes, which is exact only at tilt zero near the
+horizon. Two things break it: azimuth is not a distance (meridians converge, so aimed 80°
+up a subject 90° away in azimuth is **five degrees across the frame**, not out of shot —
+and that is the core from anywhere worth photographing), and tilt swings the frame's own
+axes (tilt up 45° and the horizon 20° off the aim sits 27° across it). `projectToFrame`
+now builds a camera basis and reads the two angles off the image plane. Exact for a
+rectilinear lens with no roll, which is the model the module already declared. Verified
+against the spherical law of cosines — `tan θ = hypot(tan across, tan up)` — over a sweep
+sharing no arithmetic with the implementation. The offered tilt is now also **checked
+before it is offered**, because tilting swings the horizontal axis too. One existing test
+changed: a subject 20° off axis and 10° up now reads 10.6°, which is what it is.
+
+### Part 7c — The alignment finder *(built 2026-08-09 — issues #30, #31, #32)*
+
+"On what dates does the sun set **behind that**?" Every other answer on this page
+starts from a moment and asks what the light is doing; this one starts from a
+picture and asks which dates it happens on.
+
+**Why this beats the usual answer.** The planners that offer this match an
+azimuth against a *flat* horizon — "the sun sets at 245° on 12 September", which
+is true and is not the answer, because a summit stands some degrees above the
+horizon and the sun reaches the bearing minutes before it reaches the height.
+Scout already holds the real profile, so `obstructionAt(skyline, bearing)` over
+the merged buildings-and-terrain skyline turns that into "12 September, 19:04,
+the sun meets the ridge 3.1° up".
+
+- **`alignment.ts`** (23 tests). Scans each day for sign changes of the gap
+  between the body's azimuth and the bearing, and bisects each to the second.
+  Measured: `sunPosition` 0.246 µs, `moonPosition` 0.523 µs, so a year at the
+  four-minute default is **38 ms for the sun and 74 ms for the moon** — a button
+  press, not a frame, which buys robustness that a seeded secant walk would not
+  have where this is interesting (a branch that appears in April and vanishes in
+  September).
+- **The answer is a *pass*, not a date.** Passes are the local minima of
+  |clearance| along each branch — "every time it comes closest and then goes away
+  again" — each carrying the run of consecutive dates whose disc still touches the
+  line. A run because that is the truth: the disc has width and the geometry
+  drifts a fraction of a degree a day, so the shot is usually on for two or three
+  evenings, and naming one would throw the others away.
+- **The tolerance is the body's own disc**, per instant, from the model:
+  `moonPosition` already returns `angularRadius` and the sun's follows from
+  `distanceAU`. So a perigee moon really does get a wider window than an apogee
+  one. A hand-picked degree would be the unreproducible constant this project
+  refuses to publish about sunsets.
+- **Four named absences, each carrying the closest approach**: `no-bearing` (it
+  never reaches that compass point — the equator in June never sees the sun due
+  south), `always-above`, `always-below`, `never-quite`. "No alignments" alone is
+  a bug report, not an answer.
+- **Apparent altitude, deliberately.** Refraction lifts the sun by more than its
+  own width at the horizon and this is a question about what a viewfinder sees.
+  Note `isSunlit` in `skyline.ts` compares the *geometric* altitude and is right
+  to — that one is about which surfaces the beam reaches. Same sky, two
+  questions, answered differently on purpose.
+- **The bearing is the sightline ring's**, not a second way to aim. Gated on the
+  *layer*, not on the coordinate: `redrawEverything` parks the ring half a radius
+  due north the moment a place is chosen, so the coordinate is almost never the
+  "never placed" sentinel — and due north is a placeholder, not a thing anyone
+  pointed at.
+- **A moved ring marks the answer stale; it does not clear it.** An arriving
+  terrain tile must not empty a list somebody is reading, and an old bearing must
+  not pass for the current one. `restate()` is a redraw, never a research.
+- **Moon rows carry the lit fraction and phase** (`withMoonPhase`), with a filter
+  that starts at nothing hidden and says how many rows it hid. Which fraction is
+  worth the drive is the reader's call.
+- *Known:* two crossings closer together than the scan step look like none. That
+  only happens at a turning point of the azimuth, where the body grazes the
+  bearing and turns back, and it is reported as `no-bearing` with how close it
+  came — which is the honest description of a graze anyway.
+- *Worth knowing about the moon:* alignments are date-quantised. The moon crosses
+  a bearing once a day and its altitude there swings degrees between nights, so
+  the nearest night is often 0.7° off and the disc never quite touches. That is
+  the real world, not a bug, and it is why the near-miss number is printed rather
+  than swallowed. The move that fixes it — walking a few hundred metres — is not
+  built.
 
 ### Part 8 — Field readiness *(not started)*
 
@@ -255,6 +439,43 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
 ## Debts and gotchas that will bite
 
 **Paid off since the last handoff:**
+
+- **Landform shadows walked straight over ridges, and that was the flickering.**
+  `terrainShadowMask` marched from every cell towards the sun with a step growing 3.5% a
+  time, justified in its own comment as "a ridge ten kilometres off is a kilometre wide
+  and does not need sampling at 30 m". That is false: distance makes a ridge subtend a
+  smaller *angle*, it does not make the crest broader in the grid. By 5 km out the step
+  was ~200 m and anything narrower fell between two samples.
+
+  Measured on a plain with one wall casting an 8.6 km shadow — fraction of the ground
+  behind it actually shaded: **20 m ridge 26%, 40 m 48%, 100 m 84%**, and only past
+  200 m reliable. Worse, *which* cells fell through depended on the sun's azimuth, so
+  the holes crawled as the slider moved. That is what "the shadows glitch and pass
+  through mountains" was.
+
+  Replaced with an exact **sweep**. Every cell on a line towards the sun blocks the ones
+  behind it identically, so a line settles in one walk instead of being re-marched from
+  each cell. Expanding the blocking condition separates the two distances completely:
+
+      A(s′) + s·B(s′) > C(s)
+      A(s′) = h(s′) − s′²/2R + s′·tan(alt),  B(s′) = s′/R,
+      C(s)  = h(s)  + s²/2R  + s·tan(alt)
+
+  — so "is anything upwind blocking me" is the upper envelope of a set of straight lines.
+  Cells arrive at increasing `s`, hence increasing slope, and are queried at increasing
+  `s`: the textbook conditions for a monotonic hull, O(1) a cell. Nothing is skipped, the
+  curvature term is carried in full (that expansion is an identity, and is invariant to
+  where the line's origin is put), and it is **~60× cheaper** — 2.9 ms for the full
+  470×470 production grid against tens of milliseconds.
+
+  Three knock-ons. `maxDistanceM`/`growth`/`maxSteps` are **gone**: they bounded a march
+  that no longer exists, and a distance cap could only lose a shadow a real mountain
+  casts. The **coarse stride-2 drag pass is gone** — it bought 1.7 ms and cost a visible
+  shift in the shadow edge the moment you let go. And `terrainShadowAt` now steps one
+  cell at a time too; it had its own coarser march, so the panel could say the pin was
+  lit while the map painted it shaded. `stride` survives as a dial nothing uses, and now
+  thins by taking the **tallest** cell in each block rather than a sample of it —
+  point-sampling would reintroduce the same bug at half strength.
 
 - The diagnostics scaffolding is gone: `/api/scout/diag`, `collectDiagnostics`,
   `reportDiagnostics`, the 500 ms `setInterval` and the visibilitychange reporter. In
@@ -434,6 +655,22 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
 
 **Traps already hit — do not repeat:**
 
+- **There was no way into the page on a phone without a server.** Place search needs
+  Nominatim, Nominatim needs a proxy, and a published build without functions has none —
+  so the search box refused and pointed at the pin. But the pin *arrives with the first
+  spot*: with nowhere chosen there was nothing on the map to drag, and `map.on('click')`
+  returned early on `!centre` by design ("the first spot is picked by name, not by
+  guessing at a point on a world map"). Right about the world map, wrong about everything
+  else, and on a phone the two rules closed the last door between them. A tap now places
+  the first spot, gated on **zoom ≥ `TAP_TO_PLACE_ZOOM` (10)** rather than on the server —
+  at the world view a fingertip is several hundred kilometres and the page says so rather
+  than doing nothing, because a dead gesture reads as a broken map. The zone falls back to
+  `browserTimeZone()`, since a spot with no zone puts the whole day in UTC.
+- **`#sheet` is on screen from the first paint.** It carries "Nowhere yet", and
+  `setCentre`'s `hidden = false` on it is a no-op. So its visibility is *not* a test for
+  whether a place has been chosen — `#tools` is, or `window.scout.state().centre`. A smoke
+  assertion written the obvious way passes at the world view and proves nothing.
+
 - **`tsc --noEmit` does not look inside `.astro` files.** Every line of client code in a
   page was going unchecked, which hid `day.dayEnd` on a type that only has
   `day.times.dayEnd` (it threw the moment you picked a place) and the
@@ -503,6 +740,24 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
   wide viewport spends its whole allowance on width and throws away the vertical detail
   it already fetched — 425 m a sample over Hong Kong instead of 283 m.
 
+**Two shadow faults found while fixing the above, both still open:**
+
+1. **Building shadows are projected at sea level.** Every vertex in
+   `shadow-layer.ts` goes through `scoutGround`, which hard-codes mercator Z to `0.0`;
+   there is no elevation term in the file. In 3D the ground is raised by the DEM
+   (`exaggeration: 1.15`) but the mask is not, so the shadow mask lands where the ground
+   *would* be on a flat earth — offset on screen by an amount that grows with elevation
+   and pitch and shifts as the camera moves. 3D only. The fix is an elevation input to
+   `scoutGround` (mercator units for the flat matrix, metres for the globe radius — the
+   two-units trap `dome-layer.ts` already documents) and a per-vertex DEM lookup when
+   packing `ShadowGeometry`. Note `gl_Position.z` is spoken for by the blocker height, so
+   only the projection's *xy* changes.
+2. **Terrain is not a blocker for building shadows.** The depth-mapped height field holds
+   only building footprints, so a mountain never stops a building's cast shadow, and on a
+   slope building heights are compared as though from a common ground. Fixing it means
+   absolute heights (terrain + building) in both the height field and `castShadow`'s
+   ceilings, which is a semantic change to `shadows.ts`.
+
 **Known modelling limits (documented, acceptable, worth revisiting):**
 
 - Building shadows now land correctly on *roofs* — a roof below the shadow's ceiling
@@ -535,7 +790,7 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
 
 ```bash
 npm run dev          # https://localhost:4321/scout
-npm test             # 480 tests
+npm test             # 874 tests
 npm run check        # tsc + the page <script> blocks
 npm run build
 ```

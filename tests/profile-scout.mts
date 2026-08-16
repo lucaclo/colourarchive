@@ -52,11 +52,12 @@ await page.waitForTimeout(20_000);
 const scale = await page.evaluate(
   `(() => {
      const map = window.scout.map();
-     const shadows = map.querySourceFeatures('scout-shadows').length;
+     const cast = window.scout.shadows();
      const buildings = map.querySourceFeatures('openmaptiles', { sourceLayer: 'building' }).length;
      const terrain = window.scout.terrain ? window.scout.terrain() : null;
      return {
-       shadows,
+       castable: cast.castable,
+       cast: cast.stats && cast.stats.cast,
        buildingFeaturesInTiles: buildings,
        zoom: map.getZoom(),
        terrainTiles: terrain && terrain.field ? terrain.field.tiles : null,
@@ -65,6 +66,11 @@ const scale = await page.evaluate(
 );
 console.log('=== scale of the scene ===');
 console.log(JSON.stringify(scale, null, 2));
+
+const scaleOf = `(() => {
+  const s = window.scout.shadows();
+  return { castable: s.castable, cast: s.stats && s.stats.cast };
+})()`;
 
 const cdp = await page.context().newCDPSession(page);
 await cdp.send('Profiler.enable');
@@ -80,14 +86,31 @@ const drive = `(async () => {
   return performance.now() - t0;
 })()`;
 
-// Warm once so the numbers are steady-state rather than first-call.
+// Warm twice, then take the *minimum* of several runs.
+//
+// A single timed run on a laptop that is also running a dev server, a browser
+// and a software GL stack measures the machine's mood as much as the code's
+// cost: the same build measured 5.24 ms and 14.36 ms per minute on identical
+// scenes. The minimum is the honest estimator here — noise only ever adds time,
+// so the fastest run is the one least polluted by everything else.
+await page.evaluate(drive);
 await page.evaluate(drive);
 
+const runs: number[] = [];
+for (let i = 0; i < 5; i++) runs.push((await page.evaluate(drive)) as number);
+const wall = Math.min(...runs);
+
 await cdp.send('Profiler.start');
-const wall = (await page.evaluate(drive)) as number;
+await page.evaluate(drive);
 const { profile } = (await cdp.send('Profiler.stop')) as any;
 
-console.log(`\n=== 240 slider minutes in ${wall.toFixed(0)} ms (${(wall / 240).toFixed(2)} ms each) ===`);
+console.log(
+  `\n=== 240 slider minutes: min ${wall.toFixed(0)} ms (${(wall / 240).toFixed(2)} ms each) ===`,
+);
+console.log(`runs: ${runs.map((r) => (r / 240).toFixed(2)).join(', ')} ms per minute`);
+// The set must not have grown under the measurement, or the runs are not
+// measurements of the same thing and the minimum is of the emptiest scene.
+console.log(`scale after: ${JSON.stringify(await page.evaluate(scaleOf))}`);
 
 // Self time per node, from the sample counts.
 const byId = new Map<number, any>();

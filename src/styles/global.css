@@ -760,16 +760,27 @@ body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
   :root { --gap: 66svh; --edge: 1.1rem; --gutter: 2px; }
 
   /* Top bar: drop the brand, shrink to fit a phone; still auto-hides.
-     Everything here is sized so the five groups (medium, genre, Inspiration,
-     Insights, Add) fit inside 390px without wrapping or running off the edge —
-     the right-hand links are the only way in to the other two pages. */
-  .topbar { padding: 0.85rem 0.7rem; gap: 0.35rem; }
+     This was sized so the five groups (medium, genre, Inspiration, Insights,
+     Add) fit inside 390px, and they do — at 390px. Measured since: the row
+     wants 389px, so on a 375px screen **Add / Remove ran off the edge**, and on
+     a 320px one Insights went with it. By the comment's own argument that is
+     the bad case, because these links are the only way in to the other two
+     pages; there is no menu behind them.
+
+     Fitting is the wrong goal, because what has to fit changes: the static
+     build drops Inspiration and Add entirely, and the genre label is whatever
+     the archive happens to hold. So the row is allowed to take a second line
+     when it needs one and stays on one when it does not — which is what
+     `flex-wrap` does without anybody having to know the widths. */
+  .topbar { padding: 0.85rem 0.7rem; gap: 0.35rem; flex-wrap: wrap; row-gap: 0.15rem; }
   .topbar .brand { display: none; }
   .topbar a, .topbar .ghost, .view-toggle button, .genre-btn {
     font-size: 0.55rem; letter-spacing: 0.06em; padding-top: 0.2rem; padding-bottom: 0.2rem;
     white-space: nowrap;   /* a wrapped label was what tipped it over the edge */
   }
-  .topbar-right { gap: 0.75rem; }
+  /* Wrapping as a block, not one link at a time: the destinations belong
+     together, and a lone "Add" under the filters reads as a filter. */
+  .topbar-right { gap: 0.75rem; flex: 0 0 auto; }
   .view-toggle { gap: 0.6rem; }
   .genre-btn { gap: 0.3rem; }
   .wide-only { display: none; }
@@ -821,6 +832,76 @@ body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
 /* Touch devices: reveal the hover-only affordances (no hover on touch). */
 @media (hover: none), (pointer: coarse) {
   .cell-remove, .cell-similar, .frame .remove { opacity: 0.85; }
-  .spectrum { width: 12px; }
   .lb-hint { display: none; } /* the desktop key hints don't apply on touch */
+}
+
+/* The scrubber is wider where it is a vertical strip, because a finger on a
+   tablet still has to land on it.
+
+   Above 640px only, and that qualifier is the whole point: this rule used to be
+   in the block above, unqualified, and it sits *after* the phone layout that
+   turns the scrubber into a bar along the foot of the screen. So on every
+   touch phone it won — `width: 12px` beat `width: auto` — and the foot bar its
+   own comment describes has never actually appeared there. Measured: a 12px
+   column of 3px-wide segments in the bottom corner. */
+@media (pointer: coarse) and (min-width: 641px), (hover: none) and (min-width: 641px) {
+  .spectrum { width: 12px; }
+}
+
+/* ===== A finger is not a cursor ===========================================
+   Applied by pointer, not by width: a tablet is wide and still touched, and a
+   narrow desktop window is not. Every rule here changes the *target*, never the
+   type size or the spacing between labels, so nothing about the look of these
+   bars moves — a link that reads at 0.55rem still reads at 0.55rem, it simply
+   has 44px of height to be hit in. 44 is the usual floor; measured before this,
+   the archive's nav links were 18px tall.
+
+   The scroll-hiding topbar is the one that matters most: it is the only way in
+   to Scout, Insights and the upload page from a phone. */
+@media (pointer: coarse) {
+  /* Deliberately not `.brand`: it is `display: none` under 640px to buy the
+     room these links need, and setting a display here would turn it back on. */
+  .topbar a,
+  .topbar .ghost,
+  .view-toggle button,
+  .genre-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .genre-menu li { min-height: 44px; display: flex; align-items: center; }
+
+  /* A short label is still a small target sideways: "All" is 17px wide and
+     "Film" 23px, with nine pixels between them. The row wraps now, so the width
+     can be spent. */
+  .topbar a, .topbar .ghost, .view-toggle button { min-width: 44px; justify-content: center; }
+
+  /* The cover's chapter strip is a 4px hairline that is also eight buttons.
+     Same answer the side spectrum already uses: keep the hairline, hand the
+     thumb the height above it. The bar is `overflow: hidden`, so the target has
+     to grow *downwards* from inside it rather than by making the bar taller —
+     which would put a coloured band across the cover. */
+  .cover-spectrum { height: 4px; overflow: visible; }
+  .cover-spectrum .cs-seg {
+    position: relative;
+    -webkit-mask-image: linear-gradient(to bottom, #000 4px, transparent 4px);
+    mask-image: linear-gradient(to bottom, #000 4px, transparent 4px);
+    height: 44px;
+    margin-bottom: -40px;
+  }
+  /* The hover flourish scaled the whole 44px box, which reads as a jump. */
+  .cover-spectrum .cs-seg:hover { transform: none; }
+
+  /* Text fields and pickers, everywhere. Two separate problems, one rule: a
+     38px field is under the target floor, and iOS zooms the whole page in when
+     a focused field's text is under 16px and does not zoom back out — which on
+     the inspiration page left half the form off-screen with no way back. Range
+     inputs are exempt because they are sized deliberately where they are used
+     (the day slider is 44px already, and the aim sliders set their own). */
+  input:not([type='range']):not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: max(16px, 1em);
+  }
 }

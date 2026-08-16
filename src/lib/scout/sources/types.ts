@@ -69,8 +69,12 @@ export interface RawPhoto {
    * The single most useful quality signal available, because it is a judgement
    * by other photographers rather than anything this code could compute. A
    * source without a review process leaves it undefined.
+   *
+   * `contest` is the odd one and is deliberately named for what it is: entered
+   * in a competition, not reviewed by anybody. It ranks below the three
+   * reviewed tiers and says so on the picture.
    */
-  accolade?: 'featured' | 'quality' | 'valued';
+  accolade?: 'featured' | 'quality' | 'valued' | 'contest';
   /** Blunt, but real: nobody shoots forty megapixels of somewhere they did not care about. */
   megapixels?: number;
 }

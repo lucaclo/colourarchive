@@ -15,10 +15,11 @@
  * the honest answers here are refusals.
  *
  * **What is being pointed at.** The core is a region, not a point: the visually
- * bright part around Sagittarius spans something like fifteen degrees. This
- * module tracks Sgr A*, the galactic centre itself, because it is a defined
- * coordinate rather than a matter of taste. Treat every altitude as the middle
- * of something much larger than the number's precision suggests.
+ * bright part around Sagittarius spans something like fifteen degrees
+ * (`CORE_SPAN_DEG`). This module tracks Sgr A*, the galactic centre itself,
+ * because it is a defined coordinate rather than a matter of taste. Treat every
+ * altitude as the middle of something much larger than the number's precision
+ * suggests.
  *
  * **What is not modelled: light pollution.** Nothing here knows whether the sky
  * above the pin is a national park or a city centre, and a core at 20° over a
@@ -68,6 +69,19 @@ export const CORE_J2000 = {
  */
 export const CORE_RISE_ALTITUDE = 0;
 export const CORE_USABLE_ALTITUDE = 10;
+
+/**
+ * How wide the bright part is, degrees.
+ *
+ * A number rather than the prose above, because anything asking whether the core
+ * *fits in a frame* needs one, and two modules each picking their own would
+ * disagree about the same photograph. It is a soft-edged brightness gradient
+ * with no defined boundary, so this is a stated convention and not a
+ * measurement: roughly the Sagittarius star cloud through to the Lagoon nebula,
+ * which is the stretch people mean by "the core" and about what a 24mm frame is
+ * composed around. Treat it as the scale of the thing, not its extent.
+ */
+export const CORE_SPAN_DEG = 15;
 
 /**
  * J2000 equatorial coordinates, precessed to the epoch of date.

@@ -8,6 +8,12 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // those come from depends on whether there is a server behind it — see
 // `browser/sources.ts`.
 export const prerender = true;
+
+// `/inspiration` is `prerender = false` on purpose — it writes to disk and holds
+// other people's photographs pending credit — so it does not exist in a static
+// publish. The archive's own topbar already drops the link there; this page has
+// to do the same, or its Inspiration link is a 404 on the published site.
+const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
 ---
 
 <Layout
@@ -26,20 +32,27 @@ export const prerender = true;
     <div class="scout-stage">
       <div class="scout-map" id="map"></div>
 
-      <p class="scout-hint" id="scout-hint">Type a place to begin.</p>
+      <!-- Both ways in, because on a published build without functions the
+           first one is not available and the second is the only one there is. -->
+      <p class="scout-hint" id="scout-hint">Type a place to begin — or zoom in and tap the map.</p>
 
       <!-- ── Top left: the way back ──────────────────────────────────────────
            Scout is a full-bleed map with no topbar, so the two links every
            other page carries have nowhere to live. They go here, in the same
-           segmented control the view switch uses, and unlike everything else
-           on the stage they are never hidden — being unable to pick a place is
-           the most likely reason to want to leave. -->
+           segmented control the view switch uses.
+
+           The *Archive* link is never hidden — being unable to pick a place is
+           the most likely reason to want to leave, so the way back has to
+           survive every width and every build. Inspiration is not in that
+           class: it stands down below 820px where the two controls would touch,
+           and it is absent altogether from a static publish, where the page it
+           points at does not exist. -->
       <nav class="seg scout-nav" aria-label="Colour Archive">
         <a href="/">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
           Archive
         </a>
-        <a href="/inspiration">Inspiration</a>
+        {!STATIC && <a href="/inspiration">Inspiration</a>}
       </nav>
 
       <!-- A map that fails renders as a black rectangle and says nothing. Every
@@ -138,6 +151,15 @@ export const prerender = true;
             <p class="core-line" id="core-times">—</p>
             <p class="core-line" id="core-window">—</p>
             <p class="core-note" id="core-note"></p>
+            <!-- Where the core falls in the picture, and how long the shutter
+                 can stay open before the stars stop being points. The framing
+                 needs an aim, so it appears only once the frame layer is on —
+                 asserting one from a bearing nobody chose is the fabrication
+                 `lighting.ts` refuses for a photograph. The shutter needs only
+                 the lens, so it is always offered. -->
+            <p class="core-line" id="core-frame"></p>
+            <p class="core-note" id="core-extent"></p>
+            <p class="core-note" id="core-exposure"></p>
             <p class="core-caveat">Light pollution is not modelled.</p>
           </details>
 
@@ -154,8 +176,26 @@ export const prerender = true;
           <div class="framing" id="framing" hidden>
             <p class="framing-head" id="framing-lens">—</p>
             <p class="framing-line" id="framing-sun">—</p>
+            <!-- The join, for the pin: the aim above crossed with whether the
+                 light actually gets here. Only meaningful once an aim exists,
+                 which is why it lives with the lens and not with the spot. -->
+            <p class="framing-line framing-light" id="framing-light"></p>
             <p class="framing-line framing-moon" id="framing-moon"></p>
             <p class="framing-note" id="framing-width"></p>
+          </div>
+
+          <!-- ── Best right now ────────────────────────────────────────────
+               Every hotspot near the pin, ordered by what the light is doing
+               at the minute on the slider. The order is four stated criteria
+               in a stated priority — lit, then light remaining, then how many
+               people photographed it, then how far — and never a score: a
+               number nobody can reproduce is exactly what this project
+               refuses to publish about sunsets, and it would be no better
+               here. Each row prints the facts it was ordered by. -->
+          <div class="best" id="best" hidden>
+            <p class="best-head">Best right now</p>
+            <ol class="best-list" id="best-list"></ol>
+            <p class="best-note" id="best-note"></p>
           </div>
 
           <!-- The ground between here and there, and whether it is in the way. -->
@@ -168,6 +208,36 @@ export const prerender = true;
             <p class="sight-line" id="sight-verdict">—</p>
             <p class="sight-note" id="sight-detail"></p>
           </div>
+
+          <!-- ── The alignment finder ──────────────────────────────────────
+               The one question this page could answer for a moment but never
+               for a year: not "where is the sun now" but "on what dates does
+               it go behind *that*". The bearing is the sightline ring's, so it
+               is something pointed at rather than a number typed; the height
+               it has to reach is the real skyline on that bearing rather than
+               the flat horizon every other planner matches against. -->
+          <details class="fold" id="fold-align">
+            <summary>Behind a target</summary>
+            <div class="align">
+              <div class="align-controls">
+                <div class="seg" id="align-body">
+                  <button type="button" data-body="sun" class="on">Sun</button>
+                  <button type="button" data-body="moon">Moon</button>
+                </div>
+                <button class="ghost" id="align-run" type="button">Find dates</button>
+              </div>
+              <p class="align-basis" id="align-basis">—</p>
+              <ol class="align-list" id="align-list"></ol>
+              <p class="align-note" id="align-note"></p>
+              <!-- Which fraction of the moon is worth going out for is the
+                   reader's call, so this starts at nothing hidden: the filter
+                   can only ever be something they turned on. -->
+              <label class="align-phase" id="align-phase-row" hidden>
+                <span>Moon at least <output id="align-phase-out">0%</output> lit</span>
+                <input id="align-phase" type="range" min="0" max="100" step="5" value="0" />
+              </label>
+            </div>
+          </details>
 
           <dl class="facts">
             <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
@@ -228,6 +298,27 @@ export const prerender = true;
               <p class="note-say" id="note-say"></p>
             </div>
           </details>
+
+          <!-- ── The day plan ──────────────────────────────────────────────
+               Every other answer on this page is about one place. A day of
+               shooting is several, and the two constraints pull against each
+               other: each spot's light is fixed by the sun, the travel between
+               them by geography. Pick two to six kept spots and the solver in
+               `itinerary.ts` orders them exhaustively — reporting whatever it
+               could not fit rather than quietly leaving it out. -->
+          <details class="fold" id="fold-plan" hidden>
+            <summary>Day plan</summary>
+            <div class="plan">
+              <p class="plan-help" id="plan-help">Choose two to six kept spots.</p>
+              <ul class="plan-pick" id="plan-pick"></ul>
+              <ol class="plan-stops" id="plan-stops"></ol>
+              <p class="plan-total" id="plan-total"></p>
+              <ul class="plan-trouble" id="plan-trouble"></ul>
+              <p class="plan-assume" id="plan-assume"></p>
+              <button class="ghost" id="plan-copy" type="button" hidden>Copy the day</button>
+              <p class="note-say" id="plan-say"></p>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -269,6 +360,21 @@ export const prerender = true;
           <button type="button" data-view="2d" class="on">2D</button>
           <button type="button" data-view="3d">3D</button>
         </div>
+        <!-- The night, in one press. Everything the Milky Way answer needs was
+             reachable before this and none of it was findable: a panel section
+             that opens by clicking a heading, a layer toggle two menus deep with
+             the same name as that section, and a framing answer that stays
+             silent until a *different* toggle is on. Three discoveries for one
+             question is two too many. -->
+        <button class="round" id="night-button" type="button" aria-pressed="false" title="Milky Way">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 17c5.5 0 9-2 11-5.5S17.5 4 21 3"/>
+            <circle cx="8.5" cy="14.5" r="1" class="star"/>
+            <circle cx="13" cy="10" r="1" class="star"/>
+            <circle cx="17.5" cy="6" r="1" class="star"/>
+          </svg>
+          <span class="sr">Milky Way</span>
+        </button>
         <button class="round" id="layers-button" type="button" aria-expanded="false" aria-controls="layers" title="Layers">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M2 13l10 5 10-5"/></svg>
           <span class="sr">Layers</span>
@@ -296,7 +402,10 @@ export const prerender = true;
         <label class="toggle"><input type="checkbox" id="t-sunpath" checked /> <span>Sun path</span></label>
         <label class="toggle"><input type="checkbox" id="t-moonpath" /> <span>Moon path</span></label>
         <label class="toggle"><input type="checkbox" id="t-solstice" /> <span>Solstice paths</span></label>
-        <label class="toggle"><input type="checkbox" id="t-core" /> <span>Milky Way core</span></label>
+        <!-- "arc", not "core": this draws the path across the sky dome and
+             nothing else. It shared its name with the panel section that holds
+             all the text, so ticking it looked like it had done nothing. -->
+        <label class="toggle"><input type="checkbox" id="t-core" /> <span>Milky Way arc</span></label>
         <label class="toggle"><input type="checkbox" id="t-monolith" /> <span>Monolith</span></label>
         <label class="toggle"><input type="checkbox" id="t-photos" checked /> <span>Photo hotspots</span></label>
         <label class="toggle"><input type="checkbox" id="t-frame" /> <span>Frame</span></label>
@@ -313,6 +422,14 @@ export const prerender = true;
             </label>
             <label class="frame-field" for="frame-focal"><span>Lens</span>
               <select id="frame-focal"></select>
+            </label>
+          </div>
+          <!-- Not part of the frame at all — the rectangle is the same however
+               finely it is sampled. It is here because it belongs to the body,
+               and it is the one number the night's shutter limit turns on. -->
+          <div class="frame-row">
+            <label class="frame-field" for="frame-mp"><span>Sensor pixels</span>
+              <select id="frame-mp"></select>
             </label>
           </div>
           <div class="seg seg-wide" id="frameorient">
@@ -332,6 +449,9 @@ export const prerender = true;
           <div class="frame-aims">
             <button class="chip chip-step" id="aim-sun" type="button">Aim at the sun</button>
             <button class="chip chip-step" id="aim-moon" type="button">At the moon</button>
+            <!-- The core does not move with the slider, so this aims at where it
+                 will be at the best moment of the night rather than at now. -->
+            <button class="chip chip-step" id="aim-core" type="button">At the core</button>
           </div>
           <p class="slab-note" id="frame-lens">—</p>
         </div>
@@ -471,6 +591,9 @@ export const prerender = true;
           <div>
             <p class="photos-title" id="photos-title">Photographs</p>
             <p class="photos-sub" id="photos-sub"></p>
+            <!-- What the light does here, on the date and minute on the
+                 slider. Tracks the slider while the sheet is open. -->
+            <p class="photos-light" id="photos-light"></p>
           </div>
           <button class="chip" id="photos-close" type="button">Close</button>
         </div>
@@ -503,12 +626,32 @@ export const prerender = true;
      timebar already grew by it — everything anchored *above* the timebar has to
      grow by it too, or on a device with a home indicator the sheet and the
      layers panel sit a centimetre into the jump buttons. */
+  /* `--dock-h` and `--sheet-h` are the *measured* heights of the timebar and the
+     place sheet, written by `page.ts` from a ResizeObserver. Everything stacked
+     above them on a phone is anchored to these rather than to a hand-counted
+     rem, because the hand-counted version was wrong and wrong in the worst way:
+     the jump row wraps to two lines below about 390px, that grew the timebar by
+     37px, and the sheet — pinned 5.2rem off the bottom — came to rest exactly on
+     top of the time slider. Measured on a 375px viewport, a tap at the middle of
+     the slider landed on the **Keep this spot** star. The one control the whole
+     page turns on was not merely unreachable, it was somebody else's button.
+
+     A measured anchor cannot drift like that: whatever the timebar's content
+     does — a wrapped row, a longer phase name, a bigger system font — the things
+     above it move with it. The fallbacks are the old values, so the first frame
+     before the observer runs is laid out exactly as it used to be. */
   .scout-stage {
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
     --stage-top: 3.4rem;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --dock-h: 5.2rem;
+    --sheet-h: 3.4rem;
+    --edge-h: 2.2rem;
+    /* What has to be cleared to sit above the timebar, and above the sheet. */
+    --above-dock: calc(var(--dock-h) + 0.5rem);
+    --above-sheet: calc(var(--dock-h) + var(--sheet-h) + 1rem);
   }
   .scout-map { position: absolute; inset: 0; }
 
@@ -803,6 +946,263 @@ export const prerender = true;
     color: var(--muted);
   }
   .framing-note:empty { display: none; }
+  /* The verdict is the answer the lens row exists to produce, so it carries the
+     sun's own colour rather than the body colour of the lines above it. */
+  .framing-light { color: #f0b866; }
+
+  /* ── Best right now ───────────────────────────────────────────────────── */
+
+  .best {
+    margin: 0.7rem 0 0;
+    padding-top: 0.6rem;
+    border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  }
+  .best[hidden] { display: none; }
+  .best-head {
+    margin: 0 0 0.4rem;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .best-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  /* Every row below is built by the page script, so each selector has to leave
+     this component's scope to reach it — an unscoped rule here matches nothing
+     and the rows fall back to the user agent's defaults. */
+  .best-list :global(li) {
+    display: grid;
+    grid-template-columns: 0.55rem 1fr auto;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.3rem 0.35rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+    /* 44px targets are the field standard on this page; these are rows in a
+       list rather than controls, so they take the smaller of the two. */
+    min-height: 2rem;
+    cursor: pointer;
+  }
+  .best-list :global(li:hover),
+  .best-list :global(li:focus-visible) {
+    background: color-mix(in oklab, var(--border) 40%, transparent);
+    outline: none;
+  }
+  .best-list :global(.best-rank) {
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    color: var(--muted);
+  }
+  .best-list :global(.best-name) {
+    font-size: 0.7rem;
+    line-height: 1.35;
+    color: var(--fg);
+    /* Commons titles run long and a wrapped one pushes the light off the row. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .best-list :global(.best-where) {
+    display: block;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
+  .best-list :global(.best-light) {
+    justify-self: end;
+    text-align: right;
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  /* The same three states the pins take, so the list and the map agree without
+     the reader having to learn two vocabularies. */
+  .best-list :global(.best-light.is-lit) { color: #f0b866; }
+  .best-list :global(.best-light.is-shaded) { color: #7fa8c4; }
+  .best-list :global(.best-light.is-down) { color: var(--muted); }
+  .best-note {
+    margin: 0.4rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .best-note:empty { display: none; }
+
+  /* ── The alignment finder ─────────────────────────────────────────────── */
+
+  .align { display: flex; flex-direction: column; gap: 0.45rem; }
+  .align-controls { display: flex; align-items: stretch; gap: 0.4rem; }
+  .align-controls .seg { flex: 1; }
+  .align-controls .seg button { flex: 1; }
+  .align-basis {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .align-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  /* Every row below is built by the page script, so each selector has to leave
+     this component's scope to reach it — see the note over `.best-list`. */
+  .align-list :global(.align-row) {
+    display: grid;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0.35rem 0.4rem;
+    border: 0;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+    text-align: left;
+    cursor: pointer;
+    min-height: 2.4rem;
+    font: inherit;
+    color: var(--fg);
+  }
+  .align-list :global(.align-row:hover),
+  .align-list :global(.align-row:focus-visible) {
+    background: color-mix(in oklab, var(--border) 40%, transparent);
+    outline: none;
+  }
+  .align-list :global(.align-when) { font-size: 0.7rem; line-height: 1.3; }
+  .align-list :global(.align-what) {
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    color: #f0b866;
+  }
+  .align-list :global(.align-detail) {
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+  .align-list :global(.align-also) {
+    margin: 0.25rem 0 0;
+    padding: 0 0 0 0.4rem;
+    list-style: none;
+  }
+  .align-list :global(.align-alt) {
+    padding: 0.2rem 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.4;
+    color: var(--muted);
+    text-align: left;
+  }
+  .align-list :global(.align-alt:hover) { color: var(--fg); }
+  .align-note {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .align-note:empty { display: none; }
+  .align-phase { display: flex; flex-direction: column; gap: 0.2rem; }
+  .align-phase[hidden] { display: none; }
+  .align-phase span {
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
+
+  /* ── The day plan ─────────────────────────────────────────────────────── */
+
+  .plan { display: flex; flex-direction: column; gap: 0.45rem; }
+  .plan-help { margin: 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); }
+  .plan-pick,
+  .plan-stops,
+  .plan-trouble { margin: 0; padding: 0; list-style: none; }
+  .plan-pick { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  /* Every row below is built by the page script, so each selector has to leave
+     this component's scope to reach it. See the month grid above. */
+  .plan-pick :global(label) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    /* 44px is the field target on this page; a checkbox row keeps it. */
+    min-height: 2.75rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .plan-pick :global(label:has(input:checked)) {
+    border-color: #f0b866;
+    background: color-mix(in oklab, #f0b866 16%, transparent);
+  }
+  /* A spot already at its ceiling should look unavailable, not broken. */
+  .plan-pick :global(label:has(input:disabled)) { opacity: 0.45; cursor: default; }
+
+  .plan-stops { display: flex; flex-direction: column; gap: 0.3rem; counter-reset: stop; }
+  .plan-stops :global(li) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+  }
+  .plan-stops :global(.plan-when) {
+    font-family: var(--font-label);
+    font-size: 0.62rem;
+    color: #f0b866;
+    white-space: nowrap;
+  }
+  .plan-stops :global(.plan-where) { font-size: 0.7rem; line-height: 1.35; color: var(--fg); }
+  .plan-stops :global(.plan-leg) {
+    display: block;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
+  .plan-total {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    color: var(--fg);
+  }
+  .plan-total:empty { display: none; }
+  .plan-trouble { display: flex; flex-direction: column; gap: 0.25rem; }
+  /* What did not fit is not a footnote. It is the other half of the answer, so
+     it is drawn as loudly as the plan itself. */
+  .plan-trouble :global(li) {
+    font-family: var(--font-label);
+    font-size: 0.58rem;
+    line-height: 1.45;
+    color: #e8a0a0;
+    padding-left: 0.7rem;
+    text-indent: -0.7rem;
+  }
+  .plan-assume {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .plan-assume:empty { display: none; }
 
   .sight-chart {
     display: block;
@@ -1257,6 +1657,14 @@ export const prerender = true;
   }
   .round:hover { border-color: var(--fg); }
   .round svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+  /* Held down, in the same violet the core's arc is drawn in — the button and
+     the mark it puts on the map have to read as the same thing. */
+  .round[aria-pressed='true'] {
+    color: #bd99f2;
+    border-color: #bd99f2;
+    background: color-mix(in oklab, #bd99f2 16%, transparent);
+  }
+  #night-button .star { fill: currentColor; stroke: none; }
   .compass svg { transform: rotate(var(--bearing, 0deg)); transition: transform 120ms linear; }
   .compass .needle-n { fill: #e0603a; stroke: none; }
   .compass .needle-s { fill: color-mix(in oklab, var(--fg) 55%, transparent); stroke: none; }
@@ -1550,6 +1958,8 @@ export const prerender = true;
   .photos-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
   .photos-title { margin: 0; font-family: var(--font-label); font-size: 0.82rem; color: var(--fg); }
   .photos-sub { margin: 0.15rem 0 0; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); }
+  .photos-light { margin: 0.2rem 0 0; font-family: var(--font-label); font-size: 0.62rem; line-height: 1.45; color: #f0b866; }
+  .photos-light:empty { display: none; }
   .photo-grid {
     flex: 1 1 auto;
     overflow-y: auto;
@@ -1589,6 +1999,13 @@ export const prerender = true;
   .photo-grid :global(.acc-featured) { background: #e8b33a; color: #1a1408; }
   .photo-grid :global(.acc-quality) { background: color-mix(in oklab, #6fc3f0 70%, transparent); color: #08121c; }
   .photo-grid :global(.acc-valued) { background: color-mix(in oklab, var(--fg) 18%, transparent); color: var(--fg); }
+  /* Outlined, not filled: a contest entry is not a review, and the chip should
+     not look like the three above it at a glance. */
+  .photo-grid :global(.acc-contest) {
+    background: none;
+    color: color-mix(in oklab, var(--fg) 55%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 25%, transparent);
+  }
   .photo-grid :global(.by) {
     display: block;
     padding: 0.35rem 0.4rem 0;
@@ -1620,7 +2037,7 @@ export const prerender = true;
   }
 
   @media (max-width: 820px) {
-    .photos { left: 0.9rem; width: auto; top: auto; height: 58vh; bottom: calc(5.2rem + var(--safe-bottom)); }
+    .photos { left: 0.9rem; width: auto; top: auto; height: 58vh; bottom: calc(var(--above-dock) + var(--safe-bottom)); }
     .photo-grid { grid-template-columns: repeat(3, 1fr); }
   }
 
@@ -1805,10 +2222,11 @@ export const prerender = true;
   @media (max-width: 820px) {
     .panel { width: calc(100vw - 1.8rem); }
     .panel[data-open='true'] { width: calc(100vw - 1.8rem); }
-    .edge { top: auto; bottom: calc(9.6rem + var(--safe-bottom)); transform: none; flex-direction: row; align-items: center; }
-    .sheet { bottom: calc(5.2rem + var(--safe-bottom)); }
-    .layers { top: auto; bottom: calc(9.6rem + var(--safe-bottom)); }
-    .datesheet { top: auto; bottom: calc(9.6rem + var(--safe-bottom)); transform: none; }
+    /* All four measured off the dock, not counted in rem. See `--dock-h`. */
+    .edge { top: auto; bottom: calc(var(--above-sheet) + var(--safe-bottom)); transform: none; flex-direction: row; align-items: center; }
+    .sheet { bottom: calc(var(--above-dock) + var(--safe-bottom)); }
+    .layers { top: auto; bottom: calc(var(--above-sheet) + var(--safe-bottom)); }
+    .datesheet { top: auto; bottom: calc(var(--above-sheet) + var(--safe-bottom)); transform: none; }
     /* The nav and the view controls share the top row, and on a phone there is
        not room for both at full width — measured, they touch at 390px. The way
        back is the one that has to survive, so Inspiration stands down; it is
@@ -1816,21 +2234,65 @@ export const prerender = true;
     .scout-nav a[href='/inspiration'] { display: none; }
     .cards { grid-template-columns: repeat(2, 1fr); }
 
-    /* The seven jumps want 409px on a phone and have 379, so Dusk — the last of
-       them — wrapped onto a line of its own and sat there looking like a
-       mistake rather than like the end of a day. Thirty pixels is all it is
-       over, so it comes off the padding and the gaps instead of off the row:
-       the letter-spacing these chips are set in is most of their width, and
-       trimming the box around it costs nothing anyone can see. They stay a
-       thumb's height, which is the measurement that matters. */
-    .jumps { gap: 0.18rem; }
-    .jumps button { padding: 0.45rem 0.45rem; min-height: 34px; }
+    /* The seven jumps want more width than a phone has, and trimming the padding
+       to buy it only moved the failure: it fits at 393px and still wraps at 375
+       and 320, where Dusk dropped onto a line of its own — and that extra line
+       is what pushed the time slider under the place sheet. See `--dock-h`.
+
+       So they stop wrapping altogether and the row scrolls instead. Seven fixed
+       stops along a day is a list, and a list that runs off the edge is a
+       familiar thing to drag; a row that silently reflows underneath the
+       controls above it is not. Snapping means a flick lands on a chip rather
+       than between two, and they go back up to a thumb's height because the
+       width problem is no longer being solved out of their box. */
+    .jumps {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      /* Centred while they fit, left-aligned once they do not — `safe` is what
+         stops the first chip being pushed out of reach when it overflows. */
+      justify-content: safe center;
+      gap: 0.3rem;
+      scroll-snap-type: x proximity;
+      scrollbar-width: none;
+      /* The row is the full width of the bar so the scroll starts at the edge,
+         and the padding puts the chips back where they were. */
+      margin-inline: -0.9rem;
+      padding-inline: 0.9rem;
+      overscroll-behavior-x: contain;
+    }
+    .jumps::-webkit-scrollbar { display: none; }
+    .jumps button { flex: 0 0 auto; scroll-snap-align: center; padding: 0.45rem 0.7rem; min-height: 44px; }
+
+    /* Which way there is more day to reach. `data-more` is set from the element's
+       own scroll position (see `page.ts`), so the fade is on the edge that can
+       actually still move and gone the moment it cannot. */
+    .jumps[data-more='end'] { mask-image: linear-gradient(to right, #000 82%, transparent 100%); }
+    .jumps[data-more='start'] { mask-image: linear-gradient(to left, #000 82%, transparent 100%); }
+    .jumps[data-more='both'] {
+      mask-image: linear-gradient(to right, transparent 0%, #000 12%, #000 88%, transparent 100%);
+    }
 
     /* The layers panel grew two control blocks. Anchored to the bottom, its own
        70vh could now run off the top of a short phone and put the basemap
        buttons under the status bar, so it is measured from where it actually
        starts instead. */
-    .layers { max-height: calc(100vh - 11.4rem - var(--safe-bottom)); }
+    .layers { max-height: calc(100vh - var(--above-sheet) - var(--stage-top) - 0.9rem - var(--safe-bottom)); }
+
+    /* The map's own controls move to the top on a phone.
+       Measured at 375px: the scale bar sat at y 426–448 and the phase chip at
+       415–445, so "5 km" was printed underneath "Daylight"; the attribution
+       button sat at 341–365 across the place sheet's right edge. There is no
+       band left at the bottom — sheet to timebar is an 8px gap — so raising them
+       by any amount only picks a different control to hide behind. Under the
+       tools row is empty map at every width, and the scale bar is worth keeping
+       legible: it is the only thing on screen that says how big the shadows are. */
+    .scout-map :global(.maplibregl-ctrl-bottom-right) {
+      bottom: auto;
+      top: calc(var(--stage-top) + var(--sheet-h) + 0.6rem);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
 
     /* Sensor and lens stack: side by side each select is about 150px wide, which
        is not enough for "Micro Four Thirds" and truncates the one thing the
@@ -1863,7 +2325,10 @@ export const prerender = true;
      the thumb and directly above the track it drives; the date, which is
      changed far less often, moves up. */
   @media (max-width: 620px) {
-    .edge-left { bottom: calc(12.6rem + var(--safe-bottom)); }
+    /* Stacked on the time row, measured off it — `--edge-h` is that row's own
+       height, so a phase name long enough to wrap it cannot push the date chip
+       back underneath the buttons this rule exists to separate it from. */
+    .edge-left { bottom: calc(var(--above-sheet) + var(--edge-h) + 0.5rem + var(--safe-bottom)); }
 
     /* One row on its own still needs 355px at the longest phase name, which a
        320px phone does not have either. The phase is the part that gives: the
@@ -1883,6 +2348,56 @@ export const prerender = true;
      puts half of it off-screen — the select has to opt out by being big enough. */
   @media (pointer: coarse) {
     .frame-field select { font-size: 16px; }
+
+    /* ── A finger is not a cursor ──────────────────────────────────────────
+       Everything below was between 30 and 36px tall, which is fine to click and
+       a guess to tap: the usual floor for a touch target is 44px, and these are
+       rows of times read and pressed while holding a camera. Only the *height*
+       changes — every one of these is already full-width or a comfortable pill,
+       so nothing reflows and nothing moves sideways.
+
+       The event rows keep their text where it was and gain the height as
+       padding, so the list reads at the same rhythm it always did. */
+    .events :global(button),
+    .seasons :global(button),
+    .week :global(button) { min-height: 44px; }
+    .chip { min-height: 44px; }
+    .round { min-width: 44px; min-height: 44px; }
+    .datesheet input[type='date'] { min-height: 44px; font-size: 16px; }
+    #framebox input[type='range'],
+    #sightbox input[type='range'] { min-height: 44px; }
+    .frame-field select { min-height: 44px; }
+    .frame-aims .chip { min-height: 44px; }
+    .seg button, .seg a { min-height: 44px; }
+    .wx { min-height: 44px; }
+    .best-list :global(li) { min-height: 44px; }
+    .align-list :global(.align-row) { min-height: 44px; }
+    .align-list :global(.align-alt) { min-height: 44px; }
+    .align-phase input[type='range'] { min-height: 44px; }
+    .scout-nav a { min-height: 44px; display: inline-flex; align-items: center; }
+    /* − and + were 28px wide. Tall enough and half the width of a thumb, which
+       is the more common way to miss a stepper: you hit the date between them. */
+    .chip-step { min-width: 44px; }
+
+    /* The time slider was 18px of drag height for the control the page is for.
+       The track is not decoration — it is the day's light, shaded — so it keeps
+       its gradient and simply gets taller, which on a phone reads better than
+       the hairline it was. The thumb grows with it. */
+    .scout-slider { height: 44px; border-radius: 6px; }
+    /* The cursor spans the track it marks; the −8px was centring it on 18px. */
+    .scout-slider::-webkit-slider-thumb { height: 42px; margin-top: 0; }
+    .scout-slider::-moz-range-thumb { height: 42px; }
+
+    /* The pin is a 26px mark and stays one — a bigger circle would misreport the
+       precision of a coordinate. The *target* grows instead, with a transparent
+       ring that belongs to the pin and is not drawn. */
+    .scout-map :global(.pin) { touch-action: none; }
+    .scout-map :global(.pin)::after {
+      content: '';
+      position: absolute;
+      inset: -9px;
+      border-radius: 50%;
+    }
   }
 </style>
 

@@ -138,6 +138,27 @@ function watchDemTiles(page: Page) {
   return asked;
 }
 
+/**
+ * The same page on a phone.
+ *
+ * `isMobile` and `hasTouch` are not decoration: they are what make the coarse
+ * pointer rules apply and what makes `touchscreen.tap` mean anything. 375×667
+ * is the smallest screen in common use, and it is the one the bottom of this
+ * page was broken on — see the mobile suite below.
+ */
+async function openPhone(width = 375, height = 667) {
+  const page = await browser.newPage({
+    viewport: { width, height },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    serviceWorkers: 'block',
+  });
+  page.setDefaultTimeout(READY_MS);
+  return page;
+}
+
 async function openPage() {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 },
@@ -261,6 +282,82 @@ describe('/scout: the world view', () => {
     assert.ok(dem.length < 32, `${dem.length} DEM tiles for one world view`);
     await page.close();
   });
+
+  /* On a published build with no functions there is no place search, and the
+     advice left behind was "drag the pin" — but the pin arrives *with* the first
+     spot, so there was nothing to drag. On a phone, with the keyboard route
+     closed too, that was a dead end with no way out of it. A tap now chooses the
+     first spot, gated on the zoom rather than on the server, because a tap at
+     the world view is a guess of hundreds of kilometres.
+
+     Driven on a phone deliberately: this is the viewport it stranded people on. */
+
+  it('will not let a tap guess a place from the world view', async () => {
+    const page = await openPhone(375, 667);
+    const trouble = watchForTrouble(page);
+    await page.goto(`${origin}/scout`);
+    await waitForTheMap(page);
+
+    await page.touchscreen.tap(187, 320);
+    // Doing nothing at all is the old failure wearing a different hat: the page
+    // has to say why, or a dead gesture reads as a broken map.
+    await page.waitForFunction(
+      `!document.getElementById('toast').hidden`,
+      null,
+      { timeout: READY_MS },
+    );
+    const said = (await page.textContent('#toast-text')) ?? '';
+    assert.match(said, /zoom in/i, `a refused tap must say why: "${said}"`);
+    // The centre itself, not the place sheet: the sheet carries "Nowhere yet"
+    // and is on screen from the first paint, so its visibility says nothing
+    // about whether anywhere was chosen.
+    assert.equal(
+      await page.evaluate(`window.scout.state().centre`),
+      null,
+      'a tap at the world view chose a place anyway',
+    );
+    assert.deepEqual(trouble, []);
+    await page.close();
+  });
+
+  it('lets a tap choose the first spot once the map is close enough in', async () => {
+    const page = await openPhone(375, 667);
+    const trouble = watchForTrouble(page);
+    await page.goto(`${origin}/scout`);
+    await waitForTheMap(page);
+
+    // Past the gate, over Edinburgh. jumpTo rather than a gesture: what is being
+    // tested is the tap, not MapLibre's pinch handling.
+    await page.evaluate(
+      `window.scout.map().jumpTo({ center: [${EDINBURGH.lon}, ${EDINBURGH.lat}], zoom: 12 })`,
+    );
+    await waitForTheMap(page);
+    await page.touchscreen.tap(187, 320);
+
+    // The view controls, which really are hidden until somewhere is chosen —
+    // unlike the place sheet, which is on screen from the first paint saying
+    // "Nowhere yet".
+    await page.waitForSelector('#tools:not([hidden])', { timeout: READY_MS });
+
+    const chosen = (await page.evaluate(
+      `(() => { const s = window.scout.state();
+                return { lat: s.centre && s.centre.lat, lon: s.centre && s.centre.lon,
+                         zone: s.timeZone, name: document.getElementById('sheet-name').textContent.trim() }; })()`,
+    )) as { lat: number | null; lon: number | null; zone: string; name: string };
+
+    assert.ok(chosen.lat !== null && chosen.lon !== null, 'the tap did not choose anywhere');
+    assert.ok(
+      Math.abs(chosen.lat - EDINBURGH.lat) < 0.2 && Math.abs(chosen.lon - EDINBURGH.lon) < 0.2,
+      `the tap landed at ${chosen.lat}, ${chosen.lon}`,
+    );
+    // A spot with no zone would put the whole day in UTC, which is an hour of
+    // error in every time on the page — so one is carried even with no server
+    // to name the place.
+    assert.ok(chosen.zone && chosen.zone !== 'UTC', `no usable time zone: "${chosen.zone}"`);
+    assert.notEqual(chosen.name, 'Nowhere yet', 'the sheet still says nowhere was chosen');
+    assert.deepEqual(trouble, []);
+    await page.close();
+  });
 });
 
 describe('/scout: a spot, from a link', () => {
@@ -342,5 +439,573 @@ describe('/scout: a spot, from a link', () => {
         'the layer is drawing nothing',
     );
     assert.deepEqual(trouble, []);
+  });
+
+  it('works out the light at every photographed spot, not just at the pin', async () => {
+    // The join. Every part of it is invisible to `tsc` and to the unit tests:
+    // the windows are computed against buildings that only exist once vector
+    // tiles have arrived, and the list rows are built by script — which is the
+    // exact shape of a bug this project has shipped, where a runtime-built
+    // element matched no scoped rule and silently fell back to a UA default.
+    await page.waitForFunction(`window.scout.spots().length > 0`, null, { timeout: READY_MS });
+
+    const spots = (await page.evaluate(`window.scout.spots()`)) as Array<{
+      windows: number;
+      lit: boolean | null;
+    }>;
+    const computed = spots.filter((spot) => spot.windows > 0).length;
+    assert.ok(
+      computed === spots.length,
+      `${computed} of ${spots.length} hotspots had their day computed; ` +
+        'a spot with no windows is drawn as though nothing were known about it',
+    );
+
+    // Midnight is the one answer that needs no buildings, no terrain and no
+    // agreement about a threshold to check: nowhere on earth is in direct sun
+    // with the sun below the horizon. A pipeline that reported light here would
+    // be wrong in a way no amount of geometry could excuse.
+    await page.evaluate(`window.scout.setMinute(0)`);
+    await page.waitForFunction(
+      `window.scout.spots().every((spot) => spot.lit !== true)`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    // And it has to *change*: a set of windows that never moves would pass the
+    // test above by being uniformly dark.
+    await page.evaluate(`window.scout.setMinute(${NOON})`);
+    await page.waitForFunction(`window.scout.spots().some((spot) => spot.lit === true)`, null, {
+      timeout: READY_MS,
+    });
+
+    const rows: { hidden: boolean; count: number; display: string | null } = await page.evaluate(
+      `(() => {
+         const first = document.querySelector('#best-list li');
+         return {
+           hidden: document.getElementById('best').hidden,
+           count: document.querySelectorAll('#best-list li').length,
+           // A row that matched no rule lays out as a list-item, not a grid.
+           display: first ? getComputedStyle(first).display : null,
+         };
+       })()`,
+    );
+    assert.equal(rows.hidden, false, 'the ranked list is hidden with spots to rank');
+    assert.ok(rows.count > 0, 'the ranked list has no rows');
+    assert.equal(
+      rows.display,
+      'grid',
+      'a list row fell back to the user agent default, so its scoped styles never reached it',
+    );
+    assert.deepEqual(trouble, []);
+  });
+
+  it('answers the core against the lens, and refuses the half that needs an aim', async () => {
+    // Two claims, and the second is the one worth a browser. The shutter limit
+    // needs only the body, so it is always offered; where the core falls in the
+    // picture needs an aim, and an aim nobody chose is exactly the fabrication
+    // this project refuses elsewhere. That gate is a `shown.frame` check in the
+    // page and nothing in `astrophoto.ts` — so no unit test can see it.
+    const readCore = () =>
+      page.evaluate(
+        `({ exposure: document.getElementById('core-exposure').textContent.trim(),
+            frame: document.getElementById('core-frame').textContent.trim(),
+            extent: document.getElementById('core-extent').textContent.trim() })`,
+      ) as Promise<{ exposure: string; frame: string; extent: string }>;
+
+    const withoutAim = await readCore();
+    assert.match(
+      withoutAim.exposure,
+      /trails a single pixel/,
+      `the shutter limit needs no aim and should be stated: "${withoutAim.exposure}"`,
+    );
+    // Edinburgh's default 24mm on a 33 MP full frame. Both inputs have to travel
+    // with the number or nobody can check it.
+    assert.match(withoutAim.exposure, /24mm/);
+    assert.match(withoutAim.exposure, /µm/);
+    assert.equal(withoutAim.frame, '', 'the core was placed in a frame nobody had aimed');
+    assert.equal(withoutAim.extent, '');
+
+    await page.evaluate(
+      `(() => {
+         const box = document.getElementById('t-frame');
+         box.checked = true;
+         box.dispatchEvent(new Event('change', { bubbles: true }));
+       })()`,
+    );
+    await page.waitForFunction(
+      `document.getElementById('core-frame').textContent.trim() !== ''`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    // Point the camera at it. This is the "At the core" button, which aims at
+    // where the core will be at the best moment of the night rather than at the
+    // slider's minute — the sun and moon buttons cannot be asked that.
+    //
+    // Aiming first is also what makes the next two assertions mean anything. On
+    // the default westward aim the core is ninety degrees off, its fifteen
+    // degrees straddle the image plane, and the module correctly refuses to say
+    // how much of it lands in shot.
+    // Dispatched rather than clicked, for the reason the sun-path case gives:
+    // the button lives inside the layers menu, which is closed, and it is the
+    // handler being tested rather than the menu.
+    await page.evaluate(`document.getElementById('aim-core').click()`);
+    await page.waitForFunction(
+      `document.getElementById('core-extent').textContent.includes('bright region')`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const withAim = await readCore();
+    assert.match(withAim.frame, /In frame/i, `aimed straight at it and missed: "${withAim.frame}"`);
+    assert.match(
+      withAim.extent,
+      /whole bright region is in the picture/,
+      `a 15° core should fit a 24mm frame's 53°: "${withAim.extent}"`,
+    );
+
+    // Turning the camera has to move the answer. The lens-dependent half is
+    // recomputed off a cached night rather than by re-running `coreNight`, and
+    // a cache that was never invalidated would pass every assertion above.
+    await page.evaluate(
+      `(() => {
+         const aim = document.getElementById('frame-bearing');
+         aim.value = String((Number(aim.value) + 90) % 360);
+         aim.dispatchEvent(new Event('input', { bubbles: true }));
+       })()`,
+    );
+    const turned = await readCore();
+    assert.notEqual(
+      turned.frame,
+      withAim.frame,
+      'turning the camera ninety degrees left the framing answer unchanged',
+    );
+    assert.deepEqual(trouble, []);
+  });
+
+  it('reaches the whole Milky Way answer from one button', async () => {
+    // The affordance, not the arithmetic. Everything this switches on was
+    // reachable before and none of it was findable — and every part of that is
+    // page wiring, which is precisely what no unit test can see.
+    //
+    // Both layers off first, so the button is being measured rather than
+    // whatever the previous test left behind.
+    await page.evaluate(
+      `(() => {
+         for (const id of ['t-core', 't-frame']) {
+           const box = document.getElementById(id);
+           if (box.checked) {
+             box.checked = false;
+             box.dispatchEvent(new Event('change', { bubbles: true }));
+           }
+         }
+         document.getElementById('fold-core').open = false;
+       })()`,
+    );
+
+    await page.click('#night-button');
+    await page.waitForFunction(
+      `document.getElementById('core-frame').textContent.trim() !== ''`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const on = await page.evaluate(
+      `({ pressed: document.getElementById('night-button').getAttribute('aria-pressed'),
+          fold: document.getElementById('fold-core').open,
+          arc: document.getElementById('t-core').checked,
+          frame: document.getElementById('t-frame').checked,
+          extent: document.getElementById('core-extent').textContent.trim() })`,
+    ) as { pressed: string; fold: boolean; arc: boolean; frame: boolean; extent: string };
+
+    assert.equal(on.pressed, 'true', 'the button does not show as held down');
+    assert.equal(on.fold, true, 'the panel section stayed shut, which is where all the text is');
+    assert.equal(on.arc, true, 'the arc layer was not switched on');
+    assert.equal(on.frame, true, 'the frame layer was not switched on, so the framing stays silent');
+    // Pressing it also aims at the core, so the region must be placed rather
+    // than refused — a refusal here means the aim never happened.
+    assert.match(
+      on.extent,
+      /whole bright region is in the picture/,
+      `pressing the button did not point the camera at it: "${on.extent}"`,
+    );
+
+    // And it has to be leavable. Both layers were off before the press, so both
+    // must be off after the second one.
+    await page.click('#night-button');
+    const off = await page.evaluate(
+      `({ pressed: document.getElementById('night-button').getAttribute('aria-pressed'),
+          fold: document.getElementById('fold-core').open,
+          arc: document.getElementById('t-core').checked,
+          frame: document.getElementById('t-frame').checked })`,
+    ) as { pressed: string; fold: boolean; arc: boolean; frame: boolean };
+
+    assert.equal(off.pressed, 'false');
+    assert.equal(off.fold, false);
+    assert.equal(off.arc, false, 'leaving night mode left the arc behind');
+    assert.equal(off.frame, false, 'leaving night mode left the frame behind');
+    assert.deepEqual(trouble, []);
+  });
+
+  it('gives back only the layers it borrowed', async () => {
+    // The trap in a mode button: someone with the frame already up to compose a
+    // sunset glances at the Milky Way, and leaving takes their frame away with
+    // it. Off must restore what was there, not what the mode assumes was there.
+    await page.evaluate(
+      `(() => {
+         const frame = document.getElementById('t-frame');
+         if (!frame.checked) {
+           frame.checked = true;
+           frame.dispatchEvent(new Event('change', { bubbles: true }));
+         }
+         const arc = document.getElementById('t-core');
+         if (arc.checked) {
+           arc.checked = false;
+           arc.dispatchEvent(new Event('change', { bubbles: true }));
+         }
+       })()`,
+    );
+
+    await page.click('#night-button');
+    await page.click('#night-button');
+
+    const after = await page.evaluate(
+      `({ arc: document.getElementById('t-core').checked,
+          frame: document.getElementById('t-frame').checked })`,
+    ) as { arc: boolean; frame: boolean };
+
+    assert.equal(after.frame, true, 'the frame was already up and the mode took it away');
+    assert.equal(after.arc, false, 'the arc was off and the mode left it on');
+    assert.deepEqual(trouble, []);
+  });
+
+});
+
+/* ── The alignment finder ──────────────────────────────────────────────────
+   Two things no unit test can see. The first is a gate in the page: the bearing
+   comes from the sightline ring, and with no ring placed the answer has to be a
+   refusal that says how to place one — `alignment.ts` never sees that case
+   because it is never called. The second is the layout: every row here is built
+   by script, which is the exact shape of the Astro scoping bug this project has
+   already shipped once, where a runtime-built element misses the scoping
+   attribute and silently falls back to the user agent's defaults.
+
+   Its own page, because these have to *press* things rather than read them, and
+   pressing needs the panel open. */
+describe('/scout: the alignment finder', () => {
+  let page: Page;
+  let trouble: string[];
+
+  before(async () => {
+    page = await openPage();
+    trouble = watchForTrouble(page);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#panel:not([hidden])');
+
+    // The panel body opens by animating `max-height`, and this tab's rAF is
+    // suspended, so the transition never advances and the body stays measured
+    // at zero however open it is. Every click below would land on the head.
+    await page.addStyleTag({ content: '* { transition: none !important }' });
+    await page.click('#panel-head');
+    await page.waitForFunction(
+      `document.getElementById('panel').dataset.open === 'true'
+       && document.getElementById('align-run').getBoundingClientRect().height > 0`,
+      null,
+      { timeout: READY_MS },
+    );
+    await page.evaluate(`document.getElementById('fold-align').open = true`);
+  });
+
+  after(async () => {
+    await page.close();
+  });
+
+  it('refuses to guess a bearing nobody chose', async () => {
+    await page.evaluate(
+      `(() => {
+         const box = document.getElementById('t-sight');
+         if (box.checked) { box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); }
+       })()`,
+    );
+
+    const basis = (await page.textContent('#align-basis')) ?? '';
+    assert.match(
+      basis,
+      /Line of sight/,
+      `with no ring placed the finder must say how to place one: "${basis}"`,
+    );
+    const rows = (await page.evaluate(
+      `document.querySelectorAll('#align-list .align-row').length`,
+    )) as number;
+    assert.equal(rows, 0, 'it answered without being given a bearing');
+    assert.deepEqual(trouble, []);
+  });
+
+  it('finds the dates the sun goes behind the ring, and a row moves the page to one', async () => {
+    // Two kilometres due west of the pin, which is where the sun goes down —
+    // so the year holds the two equinox passes and the answer is not a refusal.
+    await page.evaluate(
+      `(() => {
+         const box = document.getElementById('t-sight');
+         if (!box.checked) { box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); }
+         window.scout.setSightTarget(${EDINBURGH.lat}, ${EDINBURGH.lon - 0.0321});
+       })()`,
+    );
+
+    const basis = (await page.textContent('#align-basis')) ?? '';
+    assert.match(basis, /On 27\d° —/, `the bearing did not come from the ring: "${basis}"`);
+    // What the horizon was is half of what the answer means, so it is stated
+    // whether or not there is anything on that bearing.
+    assert.match(basis, /skyline stands|flat horizon/, basis);
+
+    await page.click('#align-run');
+    await page.waitForFunction(
+      `document.querySelectorAll('#align-list .align-row').length > 0`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const found = (await page.evaluate(
+      `(() => {
+         const row = document.querySelector('#align-list .align-row');
+         return {
+           rows: document.querySelectorAll('#align-list .align-row').length,
+           display: getComputedStyle(row).display,
+           when: row.querySelector('.align-when').textContent.trim(),
+           what: row.querySelector('.align-what').textContent.trim(),
+           note: document.getElementById('align-note').textContent.trim(),
+         };
+       })()`,
+    )) as { rows: number; display: string; when: string; what: string; note: string };
+
+    // `display: block` here is the scoping bug: the rule exists, the element
+    // never matched it, and the row falls back to the UA's button layout.
+    assert.equal(found.display, 'grid', 'the alignment rows lost their stylesheet');
+    assert.match(found.when, /\w{3} \d+ \w{3}.*\d{2}:\d{2}/, `no date and time on the row: "${found.when}"`);
+    assert.match(found.what, /setting|rising/, found.what);
+    assert.match(found.what, /\d+\.\d° off/, `a row must carry the angle it missed by: "${found.what}"`);
+    assert.match(
+      found.note,
+      /pass(es)? where the disc meets/,
+      `due west over a year should meet the horizon: "${found.note}"`,
+    );
+
+    // And the row is the point: pressing it puts the whole page — map, shadows,
+    // dome and all — on that evening.
+    const before = (await page.textContent('#chip-date')) ?? '';
+    await page.click('#align-list .align-row');
+    await page.waitForFunction(
+      `document.getElementById('chip-date').textContent !== ${JSON.stringify(before)}`,
+      null,
+      { timeout: READY_MS },
+    );
+    assert.deepEqual(trouble, []);
+  });
+
+  it('marks an answer stale rather than emptying the list under a reader', async () => {
+    // The ring moved after the search ran. Clearing would take away the thing
+    // being read; saying nothing would let an old bearing pass for the current
+    // one. It says so and leaves the rows standing.
+    const rowsBefore = (await page.evaluate(
+      `document.querySelectorAll('#align-list .align-row').length`,
+    )) as number;
+    assert.ok(rowsBefore > 0, 'nothing to go stale');
+
+    await page.evaluate(
+      `window.scout.setSightTarget(${EDINBURGH.lat + 0.02}, ${EDINBURGH.lon})`,
+    );
+
+    const after = (await page.evaluate(
+      `({ rows: document.querySelectorAll('#align-list .align-row').length,
+          note: document.getElementById('align-note').textContent.trim() })`,
+    )) as { rows: number; note: string };
+
+    assert.equal(after.rows, rowsBefore, 'the list was emptied instead of being marked');
+    assert.match(after.note, /find again/, `a stale answer must say so: "${after.note}"`);
+    assert.deepEqual(trouble, []);
+  });
+});
+
+/* ── On a phone ─────────────────────────────────────────────────────────────
+   Everything here is a geometry failure that no unit test can see and that the
+   desktop viewport hides completely, because the bottom of this page is four
+   layers deep and each one used to clear the next by a number counted in rem.
+
+   The one that shipped: below about 390px the jump row wraps to two lines, which
+   grows the timebar by 37px, which slides the place sheet — pinned 5.2rem off
+   the bottom — directly on top of the time slider. Measured at 375px, a tap in
+   the middle of the slider landed on the *Keep this spot* star. The control the
+   whole page turns on was not merely covered, it was another button. */
+describe('/scout: on a phone', () => {
+  /** The two sizes it broke at, and the two it did not — so a fix that only
+      works at one width cannot pass. */
+  const SCREENS: Array<[string, number, number]> = [
+    ['iPhone SE', 375, 667],
+    ['iPhone 14 Pro', 393, 852],
+    ['Pixel 7', 412, 915],
+    ['the 320px floor', 320, 568],
+  ];
+
+  for (const [name, width, height] of SCREENS) {
+    it(`lets a thumb reach the time slider on ${name}`, async () => {
+      const page = await openPhone(width, height);
+      const trouble = watchForTrouble(page);
+      await page.goto(`${origin}${SPOT}`);
+      await waitForTheMap(page);
+      await page.waitForSelector('#timebar:not([hidden])');
+
+      // What is actually on top of the slider, which is the whole question.
+      const covering = (await page.evaluate(
+        `(() => {
+           const r = document.getElementById('time').getBoundingClientRect();
+           const el = document.elementFromPoint(
+             Math.round(r.left + r.width * 0.75), Math.round(r.top + r.height / 2));
+           return el ? (el.id || el.className.toString()) : 'nothing';
+         })()`,
+      )) as string;
+      assert.equal(covering, 'time', `the slider is under ${covering} at ${width}px`);
+
+      // And then drive it as a finger would, because being on top is necessary
+      // and not sufficient — a zero-height target is on top of itself.
+      const before = (await page.evaluate(`document.getElementById('chip-clock').textContent`)) as string;
+      const at = (await page.evaluate(
+        `(() => { const r = document.getElementById('time').getBoundingClientRect();
+                  return { x: Math.round(r.left + r.width * 0.75), y: Math.round(r.top + r.height / 2) }; })()`,
+      )) as { x: number; y: number };
+      await page.touchscreen.tap(at.x, at.y);
+      await page.waitForFunction(
+        `document.getElementById('chip-clock').textContent !== ${JSON.stringify(before)}`,
+      );
+
+      assert.deepEqual(trouble, []);
+      await page.close();
+    });
+  }
+
+  it('keeps all seven jumps on one line, and reachable', async () => {
+    // They stopped wrapping and started scrolling. Both halves matter: one line
+    // is what keeps the timebar short enough to clear the sheet, and Dusk being
+    // off the right-hand edge is only acceptable if it can still be got to.
+    const page = await openPhone(375, 667);
+    const trouble = watchForTrouble(page);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#jumps button');
+
+    const lines = (await page.evaluate(
+      `new Set([...document.getElementById('jumps').children]
+         .map((k) => Math.round(k.getBoundingClientRect().top))).size`,
+    )) as number;
+    assert.equal(lines, 1, 'the jump row wrapped, which is what buried the slider');
+
+    // The row says which way it can still be moved; without that, the chips
+    // past the edge are a feature nobody knows is there.
+    assert.equal(
+      await page.evaluate(`document.getElementById('jumps').getAttribute('data-more')`),
+      'end',
+    );
+
+    const before = (await page.evaluate(`document.getElementById('chip-clock').textContent`)) as string;
+    await page.evaluate(
+      `(() => { const r = document.getElementById('jumps'); r.scrollLeft = r.scrollWidth; })()`,
+    );
+    const at = (await page.evaluate(
+      `(() => { const b = document.getElementById('jumps').lastElementChild.getBoundingClientRect();
+                return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2),
+                         inView: b.right <= innerWidth + 0.5 && b.left >= -0.5 }; })()`,
+    )) as { x: number; y: number; inView: boolean };
+    assert.ok(at.inView, 'Dusk cannot be scrolled into view');
+    await page.touchscreen.tap(at.x, at.y);
+    await page.waitForFunction(
+      `document.getElementById('chip-clock').textContent !== ${JSON.stringify(before)}`,
+    );
+
+    assert.deepEqual(trouble, []);
+    await page.close();
+  });
+
+  it('never lays a control on top of another one at the bottom', async () => {
+    // The general form of the bug, guarded generally: these four are stacked up
+    // from the bottom edge and none of them may overlap any other. The heights
+    // are measured and published by the page (`--dock-h` and friends), so this
+    // is really a test that the measuring is wired up.
+    const page = await openPhone(375, 667);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#timebar:not([hidden])');
+
+    const clashes = (await page.evaluate(
+      `(() => {
+         const ids = ['edge-date', 'edge-time', 'sheet', 'timebar'];
+         const box = ids.map((id) => [id, document.getElementById(id).getBoundingClientRect()]);
+         const hits = [];
+         for (let i = 0; i < box.length; i++) for (let j = i + 1; j < box.length; j++) {
+           const [an, a] = box[i], [bn, b] = box[j];
+           const over = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+           const across = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+           if (over > 1 && across > 1) hits.push(an + ' over ' + bn + ' by ' + Math.round(over) + 'px');
+         }
+         return hits;
+       })()`,
+    )) as string[];
+    assert.deepEqual(clashes, []);
+
+    // And the whole stack has to fit on the screen it is pinned to.
+    const offScreen = (await page.evaluate(
+      `(() => { const r = document.getElementById('edge-date').getBoundingClientRect();
+                return r.top < 0 || r.bottom > innerHeight; })()`,
+    )) as boolean;
+    assert.equal(offScreen, false, 'the date row was pushed off the top of the screen');
+    await page.close();
+  });
+
+  it('gives a finger something to hit', async () => {
+    // 44px is the usual floor for a touch target. This asserts the controls the
+    // page is driven by, not every element: the map's own credit is MapLibre's
+    // markup and the pin is a mark whose size states a precision.
+    const page = await openPhone(375, 667);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#timebar:not([hidden])');
+
+    const small = (await page.evaluate(
+      `(() => {
+         const want = ['#time', '#chip-play', '#chip-now', '#chip-today', '#chip-date',
+                       '#day-back', '#day-forward', '#search-button', '#star', '#radius-button',
+                       '#layers-button', '#night-button'];
+         // Half a pixel of slack. A box asked for 44 comes back as 43.99 when the
+         // layout lands off the device grid — Now measures exactly that — and a
+         // test that fails on the hundredth of a pixel is measuring the renderer,
+         // not the thing anyone is trying to tap.
+         const FLOOR = 43.5;
+         const out = [];
+         for (const sel of want) {
+           const el = document.querySelector(sel);
+           if (!el || el.hidden) continue;
+           const r = el.getBoundingClientRect();
+           if (r.height < FLOOR || r.width < FLOOR) out.push(sel + ' ' + r.width.toFixed(1) + '×' + r.height.toFixed(1));
+         }
+         const jump = document.querySelector('#jumps button').getBoundingClientRect();
+         if (jump.height < FLOOR) out.push('#jumps button ' + jump.height.toFixed(1));
+         return out;
+       })()`,
+    )) as string[];
+    assert.deepEqual(small, []);
+    await page.close();
+  });
+
+  it('does not scroll sideways', async () => {
+    // A map that pans and a document that also slides is two gestures fighting.
+    for (const [, width, height] of SCREENS) {
+      const page = await openPhone(width, height);
+      await page.goto(`${origin}${SPOT}`);
+      await waitForTheMap(page);
+      const wide = (await page.evaluate(
+        `document.documentElement.scrollWidth - document.documentElement.clientWidth`,
+      )) as number;
+      assert.equal(wide, 0, `the page scrolls ${wide}px sideways at ${width}px`);
+      await page.close();
+    }
   });
 });

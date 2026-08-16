@@ -9,6 +9,13 @@ import { ROOT } from './paths';
 // privacy (TCC), while the app you launched yourself has it. Debounced so a
 // burst of uploads collapses into a single deploy. netlify.toml pins the build
 // to the correct read-only PUBLIC_STATIC snapshot.
+//
+// It goes through `scripts/deploy-site.ts` rather than the Netlify CLI directly,
+// because these are the deploys nobody is watching: they fire from an upload and
+// report to a log file. That script refuses to publish a photograph with no file
+// behind it, and afterwards asks the site whether the build it sent is the one
+// now being served — three deploys on 10 August died inside Netlify's API and the
+// only trace was a site that stayed ten days old.
 const DEBOUNCE_MS = 8000;
 const LOG = '/tmp/colour-archive-deploy.log';
 
@@ -31,7 +38,7 @@ function runDeploy(): void {
   let out: number;
   try { out = fs.openSync(LOG, 'a'); } catch { running = false; return; }
   fs.writeSync(out, `\n=== ${new Date().toISOString()} auto-deploy ===\n`);
-  const child = spawn('npx', ['--no-install', 'netlify', 'deploy', '--prod'], {
+  const child = spawn('npx', ['--no-install', 'tsx', 'scripts/deploy-site.ts'], {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', out, out],

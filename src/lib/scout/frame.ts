@@ -28,6 +28,9 @@
  *     `skyline.ts`'s question, and it is asked separately so the two answers stay
  *     distinguishable — "outside the frame" and "behind a hill" are not the same
  *     reason to see nothing.
+ *   - **No roll.** The camera is assumed level, so the frame's own horizontal is
+ *     the world's. A tilted horizon rotates the rectangle and nothing here knows
+ *     about it.
  *
  * Angles in degrees throughout, to match the rest of Scout. Tilt is positive up.
  */
@@ -229,6 +232,61 @@ export const EDGE_TOLERANCE_DEG = 1.5;
  */
 export const FLARE_BAND_DEG = 12;
 
+/* ── Onto the image plane ──────────────────────────────────────────────────── */
+
+const sin = (deg: number) => Math.sin(deg * RAD);
+const cos = (deg: number) => Math.cos(deg * RAD);
+
+export interface FrameOffsets {
+  /** Across the frame from its centre, degrees. Positive right. */
+  acrossDeg: number;
+  /** Up the frame from its centre, degrees. Positive up. */
+  upDeg: number;
+  /** In front of the camera at all. Everything else is meaningless without it. */
+  ahead: boolean;
+}
+
+/**
+ * Where a direction in the sky lands on the frame, as two angles from its centre.
+ *
+ * The naive version of this — difference the azimuths, difference the altitudes —
+ * is what the frame test used to do, and it is only right for a level camera
+ * looking at something near the horizon. Two things break it:
+ *
+ *   - **Azimuth is not a distance.** Meridians converge, so a degree of azimuth
+ *     is `cos(altitude)` of a degree of sky. Point a 10° lens at a subject 85°
+ *     up and things ninety degrees away in azimuth are *five degrees* across the
+ *     frame, not out of the picture. That is not an exotic case: it is the
+ *     Milky Way core from anywhere it is worth photographing.
+ *   - **Tilt swings the frame's own axes.** Tilt up 45° and the horizon 20° off
+ *     the aim sits 27° across the frame, because the frame's horizontal is no
+ *     longer a line of constant altitude.
+ *
+ * So the aim is turned into a camera basis — forward, right, up — the target
+ * into a unit vector, and the two angles read off the image plane the way the
+ * lens actually projects them. Exact for a rectilinear lens with no roll, which
+ * is the model this module already declares.
+ */
+export function projectToFrame(target: SkyTarget, aim: Aim): FrameOffsets {
+  const dAz = angleDelta(aim.bearing, target.azimuth);
+  const ch = cos(target.altitude);
+  const sh = sin(target.altitude);
+  const ct = cos(aim.tiltDeg);
+  const st = sin(aim.tiltDeg);
+
+  // Components of the target in the camera's own frame. `right` stays level —
+  // that is the no-roll assumption, and the only place it enters.
+  const right = ch * sin(dAz);
+  const forward = ct * ch * cos(dAz) + st * sh;
+  const up = ct * sh - st * ch * cos(dAz);
+
+  return {
+    acrossDeg: Math.atan2(right, forward) * DEG,
+    upDeg: Math.atan2(up, forward) * DEG,
+    ahead: forward > 0,
+  };
+}
+
 export interface FrameCheck {
   placement: FramePlacement;
   inFrame: boolean;
@@ -269,77 +327,125 @@ const roundTiltInward = (v: number, upward: boolean) =>
 /**
  * Where a body in the sky falls relative to the frame.
  *
- * The vertical test is against the *tilted* frame, so pointing up at a tower
- * moves the sun down through the picture exactly as it does through the
- * viewfinder. Horizontal and vertical are tested independently — the rectangle
- * is a rectangle, not a cone — which is why the reported gap is the larger of
- * the two overruns and not their hypotenuse.
+ * The offsets come from `projectToFrame`, so the rectangle is tested on the
+ * image plane rather than on the azimuth grid — see that function for why the
+ * difference is not academic. Horizontal and vertical are then tested
+ * independently, because the rectangle is a rectangle and not a cone, which is
+ * why the reported gap is the larger of the two overruns and not their
+ * hypotenuse.
  */
 export function checkFraming(target: SkyTarget, aim: Aim, fov: Fov): FrameCheck {
-  const dAz = angleDelta(aim.bearing, target.azimuth);
-  const dAlt = target.altitude - aim.tiltDeg;
+  const { acrossDeg, upDeg, ahead } = projectToFrame(target, aim);
   const halfH = fov.horizontalDeg / 2;
   const halfV = fov.verticalDeg / 2;
 
   // Overrun past each edge: negative means inside on that axis.
-  const overH = Math.abs(dAz) - halfH;
-  const overV = Math.abs(dAlt) - halfV;
-  const inside = overH <= 0 && overV <= 0;
+  const overH = Math.abs(acrossDeg) - halfH;
+  const overV = Math.abs(upDeg) - halfV;
+  const inside = ahead && overH <= 0 && overV <= 0;
   // Inside, the gap to the nearest edge is whichever axis is tightest, so the
   // less negative of the two. Outside, it is whichever axis has escaped
   // furthest — clearing one edge is enough to be out of the picture.
-  const edgeGapDeg = inside ? Math.max(overH, overV) : Math.max(overH, overV);
+  const edgeGapDeg = Math.max(overH, overV);
 
-  // A tilt can only rescue something that is already inside horizontally.
-  const tiltToIncludeDeg =
-    overH <= 0 && overV > 0
-      ? roundTiltInward(target.altitude - Math.sign(dAlt) * halfV, dAlt > 0)
-      : null;
+  const tiltToIncludeDeg = inside ? null : tiltToInclude(target, aim, fov, upDeg);
 
-  const behind = Math.abs(dAz) > 90;
   let placement: FramePlacement;
   if (inside) placement = edgeGapDeg > -EDGE_TOLERANCE_DEG ? 'edge' : 'in-frame';
-  else if (behind) placement = 'behind';
+  else if (!ahead) placement = 'behind';
   else if (edgeGapDeg <= FLARE_BAND_DEG) placement = 'just-outside';
   else placement = 'outside';
 
   return {
     placement,
     inFrame: inside,
-    horizontalOffsetDeg: round1(dAz),
-    verticalOffsetDeg: round1(dAlt),
+    horizontalOffsetDeg: round1(acrossDeg),
+    verticalOffsetDeg: round1(upDeg),
     edgeGapDeg: round1(edgeGapDeg),
     tiltToIncludeDeg,
     flareRisk: placement === 'just-outside' || placement === 'edge',
-    note: framingNote(placement, dAz, dAlt, edgeGapDeg, tiltToIncludeDeg),
+    note: framingNote(placement, acrossDeg, upDeg, edgeGapDeg, overH >= overV, tiltToIncludeDeg),
   };
+}
+
+/**
+ * The tilt that would just bring the target onto the top or bottom edge — or
+ * null, when no tilt can.
+ *
+ * Solved rather than searched. Writing the up-angle as `atan2(y, z)` with the
+ * tilt's sine and cosine pulled out gives `tan(t) = (B − kA)/(A + kB)`, where
+ * `A` and `B` are the target's components in and out of the horizontal plane
+ * and `k` is the tangent of the edge being aimed for.
+ *
+ * Then it is **checked before it is offered**, which the closed form alone does
+ * not settle: tilting also swings the frame's horizontal axis, so a tilt that
+ * fixes the vertical can leave the target outside sideways. Rather than reason
+ * about when that happens, apply the answer and look. A tilt this function
+ * returns is one that demonstrably works.
+ */
+function tiltToInclude(target: SkyTarget, aim: Aim, fov: Fov, upDeg: number): number | null {
+  const dAz = angleDelta(aim.bearing, target.azimuth);
+  const A = cos(target.altitude) * cos(dAz);
+  const B = sin(target.altitude);
+  const upward = upDeg >= 0;
+  const k = Math.tan(((upward ? 1 : -1) * fov.verticalDeg) / 2 * RAD);
+
+  const exact = Math.atan2(B - k * A, A + k * B) * DEG;
+  if (!Number.isFinite(exact)) return null;
+  const rounded = roundTiltInward(exact, upward);
+
+  const { acrossDeg, upDeg: landedUp, ahead } = projectToFrame(target, {
+    bearing: aim.bearing,
+    tiltDeg: rounded,
+  });
+  const fits =
+    ahead && Math.abs(acrossDeg) <= fov.horizontalDeg / 2 && Math.abs(landedUp) <= fov.verticalDeg / 2;
+  return fits ? rounded : null;
 }
 
 const side = (d: number) => (d >= 0 ? 'right' : 'left');
 
+/**
+ * `horizontalEscape` says which axis the target left the frame by, and the note
+ * names *that* edge. It used to always name a side, which read as nonsense for
+ * a sun straight above the frame — and with the projection fixed the vertical
+ * axis is now the one that overruns more often than not.
+ */
 function framingNote(
   placement: FramePlacement,
-  dAz: number,
-  dAlt: number,
+  acrossDeg: number,
+  upDeg: number,
   gap: number,
+  horizontalEscape: boolean,
   tilt: number | null,
 ): string {
-  const across = `${Math.abs(round1(dAz))}° ${side(dAz)} of centre`;
+  const across = `${Math.abs(round1(acrossDeg))}° ${side(acrossDeg)} of centre`;
+  const edge = horizontalEscape
+    ? `past the ${side(acrossDeg)} edge`
+    : `${upDeg >= 0 ? 'above the top' : 'below the bottom'} edge`;
+  const tiltTo = tilt == null ? '' : ` Tilt to ${tilt >= 0 ? '+' : ''}${tilt}° to include it.`;
   switch (placement) {
     case 'in-frame':
-      return `In frame — ${across}, ${Math.abs(round1(dAlt))}° ${dAlt >= 0 ? 'above' : 'below'} it, with ${Math.abs(round1(gap))}° to the nearest edge.`;
+      return `In frame — ${across}, ${Math.abs(round1(upDeg))}° ${upDeg >= 0 ? 'above' : 'below'} it, with ${Math.abs(round1(gap))}° to the nearest edge.`;
     case 'edge':
       return `On the frame edge — inside by ${Math.abs(round1(gap))}°, which is inside this model's own error. Treat it as either.`;
     case 'just-outside':
       return tilt == null
-        ? `Just outside, ${round1(gap)}° past the ${side(dAz)} edge. Close enough to flare across the frame.`
-        : `Just outside the ${dAlt >= 0 ? 'top' : 'bottom'} edge by ${round1(gap)}°. Tilt to ${tilt >= 0 ? '+' : ''}${tilt}° to bring it in — or leave it there to flare.`;
+        ? `Just outside, ${round1(gap)}° ${edge}. Close enough to flare across the frame.`
+        : `Just outside by ${round1(gap)}°, ${edge}.${tiltTo} Or leave it there to flare.`;
     case 'outside':
       return tilt == null
-        ? `Out of frame, ${round1(gap)}° past the ${side(dAz)} edge. It lights the scene without being in it.`
-        : `Out of frame, ${round1(gap)}° ${dAlt >= 0 ? 'above' : 'below'} the top edge. Tilt to ${tilt >= 0 ? '+' : ''}${tilt}° to include it.`;
+        ? `Out of frame, ${round1(gap)}° ${edge}. It lights the scene without being in it.`
+        : `Out of frame, ${round1(gap)}° ${edge}.${tiltTo}`;
     case 'behind':
-      return `Behind you — ${Math.abs(round1(dAz))}° off the aim. Front-lighting whatever you are pointed at.`;
+      // Deliberately says nothing about the *kind* of light any more. It used
+      // to add "front-lighting whatever you are pointed at", which is a claim
+      // about the light rather than about the frame, made off this function's
+      // 90° behind-the-camera test. `lighting.ts` now answers that question on
+      // its own three-way split, and prints its answer on the very next line —
+      // so at 132° off aim the two sat one above the other saying "front" and
+      // "side" about the same sun. One question, one owner.
+      return `Behind you — ${Math.abs(round1(acrossDeg))}° off the aim, so it is not in the picture.`;
   }
 }
 

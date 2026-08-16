@@ -7,10 +7,17 @@ import {
   parsePhotoDetails,
   parseSearchTitles,
   photoDetailsUrl,
+  type Accolade,
 } from './wikimedia.ts';
 import type { RawPhoto } from './types.ts';
 
 const CENTRE = { lat: 55.9533, lon: -3.1883 };
+
+/** The search expression for one tier, which is what most of these assert on. */
+const of = (tier: Accolade) =>
+  new URL(assessedSearchUrl({ centre: CENTRE, radiusM: 5000, limit: 10 }, tier)).searchParams.get(
+    'srsearch',
+  ) ?? '';
 
 const page = (over: Record<string, unknown> = {}, info: Record<string, unknown> = {}) => ({
   pageid: 1,
@@ -50,13 +57,27 @@ describe('assessedSearchUrl', () => {
   });
 
   it('uses the right category for each tier', () => {
-    const of = (tier: 'featured' | 'quality' | 'valued') =>
-      new URL(assessedSearchUrl({ centre: CENTRE, radiusM: 5000, limit: 10 }, tier)).searchParams.get(
-        'srsearch',
-      ) ?? '';
     assert.match(of('featured'), /Featured pictures on Wikimedia Commons/);
     assert.match(of('quality'), /Quality images/);
     assert.match(of('valued'), /Valued images/);
+    assert.match(of('contest'), /Images from Wiki Loves Earth/);
+  });
+
+  it('walks the subcategories for the tiers that are filed in them', () => {
+    // `Category:Valued images` holds three files; every promoted one is in a
+    // subcategory. Asking with `incategory:` returned nothing, everywhere, and
+    // looked exactly like a place with no valued images. Same for Wiki Loves
+    // Earth, which is filed by year and country.
+    assert.match(of('valued'), /deepcat:"Valued images"/);
+    assert.match(of('contest'), /deepcat:"Images from Wiki Loves Earth"/);
+    assert.doesNotMatch(of('valued'), /incategory:/);
+  });
+
+  it('keeps direct membership where Commons files them directly', () => {
+    // Not a preference — quality images really are in `Category:Quality
+    // images`, and `deepcat:` there would drag in the whole review apparatus.
+    assert.match(of('quality'), /incategory:"Quality images"/);
+    assert.match(of('featured'), /incategory:"Featured pictures on Wikimedia Commons"/);
   });
 
   it('asks in kilometres, which is not what geosearch takes', () => {
@@ -183,6 +204,19 @@ describe('byStanding', () => {
   it('ranks an unassessed photograph below every assessed one', () => {
     const sorted = [photo(undefined, 60), photo('valued', 1)].sort(byStanding);
     assert.deepEqual(sorted.map((p) => p.accolade), ['valued', undefined]);
+  });
+
+  it('puts a contest entry under every reviewed tier, however large it is', () => {
+    // Wiki Loves Earth says somebody meant to make the picture. It does not say
+    // anybody thought it was good, so forty megapixels of it must not outrank a
+    // photograph three other photographers voted for.
+    const sorted = [photo('contest', 60), photo('valued', 1), photo('featured', 1)].sort(byStanding);
+    assert.deepEqual(sorted.map((p) => p.accolade), ['featured', 'valued', 'contest']);
+  });
+
+  it('still ranks a contest entry above a photograph with no standing at all', () => {
+    const sorted = [photo(undefined, 60), photo('contest', 1)].sort(byStanding);
+    assert.deepEqual(sorted.map((p) => p.accolade), ['contest', undefined]);
   });
 });
 

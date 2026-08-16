@@ -35,6 +35,7 @@
 import type MapLibre from 'maplibre-gl';
 type MapLibreMap = MapLibre.Map;
 type GeoJSONSource = MapLibre.GeoJSONSource;
+type ColourExpression = MapLibre.DataDrivenPropertyValueSpecification<string>;
 
 import {
   boundingBox,
@@ -43,6 +44,7 @@ import {
   destination,
   distance,
   formatDistance,
+  initialBearing,
   type LatLon,
 } from '../geo';
 import { shadowBearing, shadowLengthRatio, type SunSample } from '../sun';
@@ -78,7 +80,7 @@ import {
   type SpotPhoto,
 } from '../spots';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
-import { shootPlan } from '../report';
+import { itineraryReport, shootPlan } from '../report';
 import {
   buildingHeight,
   castPrisms,
@@ -102,6 +104,7 @@ import {
   formatClock,
   formatDayLabel,
   formatDuration,
+  formatMinute,
   formatShadowRatio,
   formatZoneAbbreviation,
   isoDateIn,
@@ -123,9 +126,38 @@ import {
   type MoonSample,
 } from '../moon';
 import { aodAt, type AirReport } from '../air';
-import { coreNight, coreTrack, type CoreSample } from '../galactic';
+import {
+  coreNight,
+  corePosition,
+  coreTrack,
+  type CoreNight,
+  type CoreSample,
+} from '../galactic';
+import {
+  RESOLUTIONS,
+  frameTheCore,
+  inFrameWindows,
+  pixelPitchMm,
+  trailLimit,
+} from '../astrophoto';
 import { bracketingSolstices, seasonEvents, seasonName } from '../almanac';
-import { buildSkyline, lightWindows, mergeHorizon, nextChange, type Skyline } from '../skyline';
+import {
+  buildSkyline,
+  isSunlit,
+  lightWindows,
+  mergeHorizon,
+  nextChange,
+  obstructionAt,
+  type LightWindow,
+  type Skyline,
+} from '../skyline';
+import { compareSpots, describeLighting, litMinutesAhead } from '../lighting';
+import {
+  MAX_ITINERARY_SPOTS,
+  MIN_ITINERARY_SPOTS,
+  planItinerary,
+  type Itinerary,
+} from '../itinerary';
 import {
   elevationAt,
   terrainHorizon,
@@ -208,6 +240,7 @@ import {
 import { getScoutJson, type Place } from './scout-api';
 import { createSearchBox } from './search-box';
 import { pace } from './pacing';
+import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createMonthGrid } from './month-grid';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
@@ -234,12 +267,57 @@ export async function startScout(): Promise<void> {
   const TERRAIN_SOURCE = 'scout-terrain';
   const SATELLITE_SOURCE = 'scout-satellite';
   const PHOTO_SOURCE = 'scout-photos-src';
+  const PLAN_SOURCE = 'scout-plan-src';
   const FRAME_SOURCE = 'scout-frame-src';
   const SIGHT_SOURCE = 'scout-sight-src';
 
   /** OpenMapTiles only carries building footprints from z14. */
   const BUILDING_MIN_ZOOM = 14;
   const MAX_SHADOW_BUILDINGS = 4000;
+  /**
+   * How far out a building can still put a point in shade — `buildSkyline`'s
+   * own default, named here because three separate things now have to agree
+   * about it: which footprints are kept for the pin, which are gathered for a
+   * hotspot, and how much of the map must have been collected before either
+   * answer can be trusted.
+   */
+  const SKYLINE_RADIUS_M = 1500;
+
+  /**
+   * The day plan's two assumptions, named here so they are one edit apart from
+   * the sentence that states them to the reader.
+   *
+   * Half an hour at a spot is a working figure — long enough to set up, wait
+   * out a cloud and shoot; short enough that a plan built on it is not absurd.
+   * 30 km/h over straight-line distance is deliberately pessimistic for a car
+   * and optimistic for a bus, which is the honest middle for "can I get there".
+   * Both are printed with every plan; neither is a measurement.
+   */
+  const PLAN_DWELL_MINUTES = 30;
+  const PLAN_SPEED_KMH = 30;
+
+  /**
+   * A hotspot's colour is what the light is doing there, right now.
+   *
+   * Four states and not two, because the pin is the only part of the join most
+   * people will ever read. Gold is direct sun; blue is the sun up and something
+   * in the way; slate is the sun down, which is not the same finding as shade
+   * and must not look like it. The original flat cyan is kept for a spot whose
+   * light has not been computed — it is the one colour here that asserts
+   * nothing, which is exactly right for "we have not worked this one out".
+   *
+   * All four are light enough to carry the count in dark text.
+   */
+  const HOTSPOT_COLOUR = [
+    'case',
+    ['!', ['coalesce', ['get', 'known'], false]],
+    '#6fc3f0',
+    ['coalesce', ['get', 'lit'], false],
+    '#f6c67e',
+    ['coalesce', ['get', 'sunUp'], false],
+    '#7fa8c4',
+    '#94a0ad',
+  ] as unknown as ColourExpression;
 
   const STYLES = {
     light: 'https://tiles.openfreemap.org/styles/liberty',
@@ -282,6 +360,26 @@ export async function startScout(): Promise<void> {
    * costs a track nobody asked for on every date change otherwise.
    */
   let coreSamples: CoreSample[] = [];
+  /**
+   * Where the core will be at the best moment of the coming night.
+   *
+   * Kept because the "At the core" button aims at a moment that has not
+   * happened, unlike the sun and moon buttons which aim at the slider's own
+   * minute. Null when the core never clears the horizon, and the button then
+   * has nothing to do — which is the honest answer at Tromsø.
+   */
+  let coreAim: { azimuth: number; altitude: number; declination: number } | null = null;
+  /**
+   * The night the core fold last computed, kept so turning the camera does not
+   * recompute it.
+   *
+   * `coreNight` is three interval sweeps over twenty-four hours plus a peak
+   * scan — well over a thousand trigonometric solves — and it depends on the
+   * place, the date and nothing else. The aim slider fires faster than the
+   * screen refreshes, and putting that behind it would stick the slider for the
+   * sake of an answer that cannot have changed.
+   */
+  let coreNightCache: { night: CoreNight; window: { from: Date; to: Date } } | null = null;
   let weather: WeatherReport | null = null;
   /** The aerosol column over the pin, when the air-quality host answered. */
   let air: AirReport | null = null;
@@ -384,6 +482,27 @@ export async function startScout(): Promise<void> {
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+    /**
+     * Start the credit folded on a phone, and only on a phone.
+     *
+     * `compact: true` above already asks MapLibre for the ⓘ form, but compact
+     * still *opens* on load, and on a 375px screen that is a 355px bar of source
+     * names lying across the map. The bottom of the screen has no room to put it
+     * — sheet to timebar is an 8px gap — so it sits under the tools instead, and
+     * folded it is a marked button one tap from the same text.
+     *
+     * Not hidden and not removed: this project does not show other people's work
+     * without their name on it, and that applies to whoever surveyed the roads
+     * as much as to whoever made the photographs. On anything wider it stays
+     * open, because there it costs nothing.
+     */
+    if (window.innerWidth <= 820) {
+      map.once('load', () => {
+        document
+          .querySelector('.maplibregl-ctrl-attrib')
+          ?.classList.remove('maplibregl-compact-show');
+      });
+    }
     watchForFirstPaint(map);
   }
 
@@ -398,12 +517,48 @@ export async function startScout(): Promise<void> {
         map: () => map,
         state: () => ({ centre, radiusKm, minute, isoDate, timeZone, view, basemap, shown }),
         terrain: () => terrainShadows?.state(),
+        // What is actually being cast, which is the only honest scale for a
+        // timing run: the count of buildings in the vector tiles says nothing
+        // about how many survived the collection box, and a measurement taken
+        // before the set finished populating reads as a speed-up.
+        shadows: () => ({ castable: castable.length, stats: shadowStats }),
+        // The join, as numbers: what each hotspot's light was computed to be at
+        // the minute the slider is on, and what it was computed *from*. The
+        // basis is the half worth checking — a spot outside the collected box
+        // has no buildings and must not be reported as though it had.
+        spots: () =>
+          hotspots.map((spot, index) => ({
+            id: spot.id,
+            count: spot.count,
+            at: spot.at,
+            distanceM: centre ? Math.round(distance(centre, spot.at)) : null,
+            lit: spotLitAt(index, Math.min(Math.max(minute, 0), 1439)),
+            litMinutesAhead: spotLights[index]
+              ? litMinutesAhead(spotLights[index].windows, Math.min(Math.max(minute, 0), 1439))
+              : null,
+            windows: spotLights[index]?.windows.length ?? 0,
+            buildingsKnown: spotLights[index]?.buildingsKnown ?? false,
+            considered: spotLights[index]?.considered ?? 0,
+            phrase: spotLights.length ? spotLightPhrase(index) : null,
+          })),
         // Runs one batched frame by hand. Needed because a backgrounded tab
         // suspends requestAnimationFrame entirely, so the scheduler that draws
         // this page never fires there — which is correct behaviour and makes
         // the page impossible to measure from an automated browser without it.
         tick: () => runFrame(),
         setMinute: (value: number) => setMinute(value),
+        // The sightline ring, which is also the alignment finder's aim. Placing
+        // it is a drag on the map, and a drag is the gesture an automated
+        // browser reproduces least reliably — so the thing under the drag is
+        // exposed rather than the drag being simulated.
+        setSightTarget: (lat: number, lon: number) => {
+          target.lat = lat;
+          target.lon = lon;
+          solveSight();
+          drawSight();
+          renderSight();
+          alignPanel.restate();
+        },
       },
     });
   }
@@ -574,6 +729,9 @@ export async function startScout(): Promise<void> {
     solveSight();
     drawSight();
     renderSight();
+    // The ring is the alignment finder's aim. Moving it does not rerun the
+    // search — it marks whatever is on screen as answering the old bearing.
+    alignPanel.restate();
     save();
   });
 
@@ -941,7 +1099,7 @@ export async function startScout(): Promise<void> {
       paint: {
         // Grows with how many people stopped here — the size *is* the finding.
         'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 11, 10, 17, 60, 26, 200, 34],
-        'circle-color': '#4ea3d8',
+        'circle-color': HOTSPOT_COLOUR,
         'circle-opacity': 0.2,
         'circle-blur': 0.6,
       },
@@ -952,7 +1110,7 @@ export async function startScout(): Promise<void> {
       source: PHOTO_SOURCE,
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 7, 10, 11, 60, 16, 200, 21],
-        'circle-color': '#6fc3f0',
+        'circle-color': HOTSPOT_COLOUR,
         'circle-opacity': 0.92,
         'circle-stroke-width': 2,
         'circle-stroke-color': 'rgba(10,14,22,0.75)',
@@ -965,6 +1123,50 @@ export async function startScout(): Promise<void> {
       layout: {
         'text-field': ['to-string', ['get', 'count']],
         'text-size': 11,
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': '#08121c' },
+    });
+
+    // --- The day's route ---------------------------------------------------
+    // Straight legs, because a straight line is exactly what the travel
+    // estimate assumes. Drawing a road route over a great-circle number would
+    // show a precision the number underneath does not have. Dashed for the
+    // same reason: it reads as a connection, not as a way to drive.
+    map.addSource(PLAN_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+      id: 'scout-plan-leg',
+      type: 'line',
+      source: PLAN_SOURCE,
+      filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': '#f0b866',
+        'line-width': 2.2,
+        'line-opacity': 0.9,
+        'line-dasharray': [2, 2],
+      },
+    });
+    map.addLayer({
+      id: 'scout-plan-stop',
+      type: 'circle',
+      source: PLAN_SOURCE,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 11,
+        'circle-color': '#f0b866',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': 'rgba(10,14,22,0.8)',
+      },
+    });
+    map.addLayer({
+      id: 'scout-plan-order',
+      type: 'symbol',
+      source: PLAN_SOURCE,
+      filter: ['==', ['geometry-type'], 'Point'],
+      layout: {
+        'text-field': ['to-string', ['get', 'order']],
+        'text-size': 12,
         'text-allow-overlap': true,
       },
       paint: { 'text-color': '#08121c' },
@@ -1090,6 +1292,9 @@ export async function startScout(): Promise<void> {
     lastCast = null;
     blockerSet = null;
     castableSignature = '';
+    // The photo source is new and empty too, so the pins must be redrawn even
+    // though their colours have not changed.
+    hotspotPaint = '';
     applyView();
     applyVisibility();
     redrawEverything();
@@ -1101,9 +1306,18 @@ export async function startScout(): Promise<void> {
   });
 
   map?.on('click', (event) => {
-    // Nowhere chosen yet: the first spot is picked by name, not by guessing at
-    // a point on a world map.
-    if (!centre) return;
+    // Nowhere chosen yet. A tap can choose the first spot, but only once the map
+    // is close enough in for a fingertip to mean something — see
+    // `placeFirstSpotAt`, which is also the only way in when there is no server
+    // to search with.
+    if (!centre) {
+      if (map!.getZoom() < TAP_TO_PLACE_ZOOM) {
+        notify('Zoom in to pick a spot by tapping — from here a tap is tens of kilometres.');
+        return;
+      }
+      placeFirstSpotAt({ lat: event.lngLat.lat, lon: event.lngLat.lng });
+      return;
+    }
 
     // A hotspot is the one thing on this map you are meant to click, so it
     // wins over moving the pin. Without this, opening a photo spot would also
@@ -1444,6 +1658,29 @@ export async function startScout(): Promise<void> {
       now.altitude <= -0.833
         ? `Sun ${Math.round(Math.abs(sun.horizontalOffsetDeg))}° ${sun.horizontalOffsetDeg >= 0 ? 'right' : 'left'} of the aim, and below the horizon.`
         : `Sun: ${sun.note}`;
+
+    // The join, for the pin. Two things this page already knows separately —
+    // where the sun is relative to the aim, and whether the sun reaches here at
+    // all — and the answer a photographer wants is the pair of them together.
+    // It lives here rather than in the spot box because it needs an aim, and
+    // the aim is a thing you set with the lens; asserting a direction from a
+    // bearing nobody chose would be the same fabrication `lighting.ts` refuses
+    // for a Commons photograph.
+    const litHere = spotWindows.length
+      ? Boolean(skyline && isSunlit(skyline, now.azimuth, now.altitude))
+      : false;
+    const verdict = describeLighting({
+      aimBearing: lens.bearing,
+      sunAzimuth: now.azimuth,
+      sunAltitude: now.altitude,
+      lit: litHere,
+    });
+    // A spot with no windows computed has not been found to be in shade, so
+    // say nothing rather than say "in shadow".
+    $('framing-light').textContent =
+      !spotWindows.length && now.altitude > 0
+        ? ''
+        : `Subject at this aim: ${verdict.note}.`;
 
     const moon = moonSamples[Math.min(moonSamples.length - 1, Math.max(0, minute))];
     $('framing-moon').textContent =
@@ -2031,8 +2268,25 @@ export async function startScout(): Promise<void> {
   let shadowStats = { cast: 0, estimated: 0, longestM: 0, tooFar: false, omitted: 0 };
   /** The footprints near the centre, kept for the skyline. */
   let nearby: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
-  /** Everything in range to cast, gathered once per view rather than per frame. */
-  let castable: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
+  /**
+   * Everything in range to cast, gathered once per view rather than per frame,
+   * each footprint carrying its own hull.
+   *
+   * The hull is computed once per gather and read by both passes — the cast and
+   * the blocker depth map — because both used to derive it per building per
+   * frame. See `ShadowOptions.hull`.
+   */
+  let castable: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring }> = [];
+  /**
+   * The box `castable` was collected from.
+   *
+   * Kept because the hotspots are up to 2 km from the pin and this box is not:
+   * it is bounded by the viewport. A spot outside it has no buildings loaded
+   * around it, and a skyline built from an empty set says "lit all day" for a
+   * courtyard — the one kind of error a scouting tool must never make quietly.
+   * `buildingsCover` turns that into a stated absence instead.
+   */
+  let castableBox: { west: number; south: number; east: number; north: number } | null = null;
   /**
    * What `castable` was last gathered from, so a gather that found the same
    * buildings can stop rather than reassigning and forcing a recast. Cleared,
@@ -2064,6 +2318,7 @@ export async function startScout(): Promise<void> {
     if (map.getZoom() < BUILDING_MIN_ZOOM || !shown.buildings) {
       castable = [];
       castableSignature = '';
+      castableBox = null;
       nearby = [];
       shadowStats = {
         cast: 0,
@@ -2113,6 +2368,7 @@ export async function startScout(): Promise<void> {
       east: Math.min(viewport.east, ve, re),
       north: Math.min(viewport.north, vn, rn),
     };
+    castableBox = box;
 
     // The same building appears once per tile it touches, so dedupe before
     // casting — otherwise a block on a tile seam gets a doubly dark shadow.
@@ -2142,8 +2398,10 @@ export async function startScout(): Promise<void> {
         if (isEstimated) estimated++;
         const entry = { ring, height, estimated: isEstimated };
         buildings.push(entry);
-        // Within 1.5 km of the pin: the ones that can put it in shade.
-        if (distance(centre, { lat: ring[0][1], lon: ring[0][0] }) < 1500) close.push(entry);
+        // Within reach of the pin: the ones that can put it in shade.
+        if (distance(centre, { lat: ring[0][1], lon: ring[0][0] }) < SKYLINE_RADIUS_M) {
+          close.push(entry);
+        }
       }
     }
 
@@ -2301,7 +2559,9 @@ export async function startScout(): Promise<void> {
     blockerSlab = slabKey;
 
     const geometry = new ShadowGeometry(projectFlat);
-    for (const building of castable) geometry.addBlocker(building.ring, building.height);
+    for (const building of castable) {
+      geometry.addBlocker(building.ring, building.height, building.hull);
+    }
     if (slabKey) geometry.addBlocker(monolithFootprint(), slab.heightM);
     shadowLayer.setBlockers(geometry.blockerVertices());
   }
@@ -2391,6 +2651,28 @@ export async function startScout(): Promise<void> {
     // spot's own shadow over the top.
     timeInput.style.setProperty('--scout-shade', shadeOverlayGradient(spotWindows));
     renderSpot();
+
+    // Every input the hotspots' own light depends on — the buildings, the
+    // terrain field, the date — has just been settled for the pin, and they
+    // share all three. Guarded by its own signature, so a rebuild that changes
+    // nothing costs one string compare.
+    rebuildHotspotLight();
+    drawHotspots();
+    renderBest();
+    renderSheetLight();
+
+    // The day plan rests on exactly the same three things, and a stop's light
+    // must not go stale while the pin's own timeline is refreshed beside it.
+    // At most six spots, so this is a few milliseconds and it only runs when
+    // the buildings, the place or the date actually moved.
+    rebuildPlan();
+    renderPlan();
+
+    // The alignment finder measures its target's height off this same profile,
+    // so a profile that just changed may have left a standing answer behind.
+    // Restating is a redraw, not a research: an arriving terrain tile must not
+    // empty a list somebody is reading.
+    alignPanel.restate();
   }
 
   /** The countdown, which is the only part of the spot box that ticks. */
@@ -2480,6 +2762,11 @@ export async function startScout(): Promise<void> {
     renderMoonNow();
     renderWeather();
     renderSpotNext();
+    // The join, on the slider's clock. All three read precomputed windows —
+    // no skyline is built here — so scrubbing stays a lookup and a sort.
+    drawHotspots();
+    renderBest();
+    renderSheetLight();
   }
 
   /**
@@ -2848,6 +3135,7 @@ export async function startScout(): Promise<void> {
     if (!centre || !window) return;
 
     const night = coreNight(centre.lat, centre.lon, window.from, window.to);
+    coreNightCache = { night, window };
     const clock = (date: Date) => formatClock(date, timeZone);
     const { core } = night;
 
@@ -2878,6 +3166,82 @@ export async function startScout(): Promise<void> {
     $('core-note').textContent = night.best
       ? `Best at ${clock(night.best.at)}, ${night.best.altitude.toFixed(0)}° up.`
       : night.refusal;
+
+    renderCoreLens(night, window);
+  }
+
+  /**
+   * The core against the lens: where it falls in the picture, and how long an
+   * exposure it will take before it stops being a point.
+   *
+   * Both are answered for **the best moment of the night**, not for the slider's
+   * minute, for the same reason the rest of this fold is: nobody scrubs to find
+   * the core. `coreAim` is remembered here so the "At the core" button can point
+   * the camera at a moment that has not happened yet.
+   */
+  /**
+   * Redo only the half of the core fold that depends on the lens.
+   *
+   * The night itself cannot have moved because the camera did, and recomputing
+   * it would put a thousand trigonometric solves behind a slider that fires
+   * faster than the screen refreshes.
+   */
+  function refreshCoreLens() {
+    if (coreNightCache) renderCoreLens(coreNightCache.night, coreNightCache.window);
+  }
+
+  function renderCoreLens(night: CoreNight, window: { from: Date; to: Date }) {
+    const frameLine = $('core-frame');
+    const extentLine = $('core-extent');
+    const exposureLine = $('core-exposure');
+    if (!centre) return;
+    const clock = (date: Date) => formatClock(date, timeZone);
+
+    const at = night.best?.at ?? night.core.transit;
+    coreAim = at ? corePosition(centre.lat, centre.lon, at) : null;
+
+    // The shutter needs the lens and the target's declination, and no aim at
+    // all, so it is offered whether or not the frame layer is up. It names the
+    // focal length and the pixel it was worked out from, because a shutter
+    // limit nobody can reproduce is worth no more than a sunset score.
+    const sensor = sensorByKey(lens.sensor) ?? SENSORS[0];
+    exposureLine.textContent = coreAim
+      ? trailLimit({
+          focalLengthMm: lens.focalLengthMm,
+          pixelPitchMm: pixelPitchMm(sensor, lens.megapixels),
+          declinationDeg: coreAim.declination,
+        }).note
+      : '';
+
+    // Where it lands in the frame does need an aim, and one nobody chose would
+    // be an invention. Off until the lens is on the map.
+    if (!shown.frame || !coreAim || !at) {
+      frameLine.textContent = '';
+      extentLine.textContent = '';
+      return;
+    }
+
+    const aim = { bearing: lens.bearing, tiltDeg: lens.tiltDeg };
+    const fov = currentFov();
+    const region = frameTheCore(coreAim, aim, fov);
+
+    // How long the composition holds. The sky turns fifteen degrees an hour, so
+    // this is the number that decides how many frames there are to stack — and
+    // on a long lens it is startlingly short.
+    const held = inFrameWindows(
+      window.from,
+      window.to,
+      (t) => corePosition(centre!.lat, centre!.lon, t),
+      aim,
+      fov,
+    );
+    const holding = held
+      .map((w) => `${clock(w.from)} → ${clock(w.to)}`)
+      .join(' · ');
+
+    frameLine.textContent =
+      `At ${clock(at)}: ${region.centre.note}` + (holding ? ` In frame ${holding}.` : '');
+    extentLine.textContent = region.note;
   }
 
   function renderMoonNow() {
@@ -3463,7 +3827,7 @@ export async function startScout(): Promise<void> {
   /** The pin was dragged: keep everything, ask what the new spot is called. */
   let reverseToken = 0;
   function setCentreCoordinates(next: LatLon) {
-    const token = ++reverseToken;
+    reverseToken++;
     centre = next;
     label = { name: 'Naming that spot…', detail: formatCoords(next) };
     nearby = [];
@@ -3472,7 +3836,19 @@ export async function startScout(): Promise<void> {
     redrawEverything();
     void loadWeather();
     void loadPhotos();
+    nameSpot(next, reverseToken);
+  }
 
+  /**
+   * Ask the server what a coordinate is called, and take the answer if it comes.
+   *
+   * Shared by the two ways a spot arrives without a name — a dragged or tapped
+   * pin, and a first spot placed by tapping. The coordinate is what matters and
+   * is already set by the time this runs; a name is a courtesy, so failing to
+   * get one costs the label and nothing else. That is also what makes the whole
+   * page work with no server behind it.
+   */
+  function nameSpot(next: LatLon, token: number) {
     void (async () => {
       try {
         const data = await getScoutJson(`/api/scout/reverse?lat=${next.lat}&lon=${next.lon}`);
@@ -3486,8 +3862,6 @@ export async function startScout(): Promise<void> {
           renderPanel();
         }
       } catch {
-        // The coordinate is what matters and it is already set. A name is a
-        // courtesy, so failing to get one costs the label and nothing else.
         if (token === reverseToken) {
           label = { name: formatCoords(next), detail: '' };
           renderPanel();
@@ -3495,6 +3869,53 @@ export async function startScout(): Promise<void> {
       }
       save();
     })();
+  }
+
+  /**
+   * How far in the map has to be before a tap counts as choosing a place.
+   *
+   * At the world view a fingertip covers most of a country, and a coordinate
+   * guessed to within several hundred kilometres would make a nonsense of a
+   * radius measured in ones. At zoom 10 a fingertip is about a kilometre and a
+   * half — coarse, but a coordinate somebody actually chose, and one the pin can
+   * then be dragged to refine.
+   */
+  const TAP_TO_PLACE_ZOOM = 10;
+
+  /**
+   * Pick the *first* spot by tapping the map.
+   *
+   * Tapping has always refused to fire with nowhere chosen, on the reasoning
+   * that a first spot is picked by name rather than by guessing at a point on a
+   * world map. That is right about the world map and wrong about everything
+   * else, and the case it forgot is the one that strands people: where there is
+   * no server there is no place search either, and the advice left behind —
+   * drag the pin — named something that does not exist yet, because the pin
+   * arrives *with* the first spot. On a phone, with the keyboard route closed,
+   * that was a dead end with no way out of it.
+   *
+   * So the gate is the zoom rather than the server. Below it the page says so
+   * instead of doing nothing, because a gesture that silently fails reads as a
+   * broken map.
+   */
+  function placeFirstSpotAt(next: LatLon) {
+    setCentre(
+      {
+        name: formatCoords(next),
+        detail: '',
+        lat: next.lat,
+        lon: next.lon,
+        kind: 'point',
+        // The browser's zone until a reverse lookup can better it. Falling back
+        // to UTC instead would put every time on the page an hour out at these
+        // latitudes, which is worse than an approximate name.
+        timeZone: browserTimeZone(),
+      },
+      // The camera is already where it is because somebody put it there. Framing
+      // the ring would move the map out from under the tap that just chose it.
+      { refit: false },
+    );
+    nameSpot(next, ++reverseToken);
   }
 
   /* ── Tapping the map ───────────────────────────────────────────────────
@@ -3580,10 +4001,27 @@ export async function startScout(): Promise<void> {
       licence: { name: string; url?: string };
       originUrl: string;
       thumbUrl: string;
-      accolade?: 'featured' | 'quality' | 'valued';
+      accolade?: 'featured' | 'quality' | 'valued' | 'contest';
       megapixels?: number;
     }>;
   }
+
+  /**
+   * What each standing is called on the picture, and what it actually means.
+   *
+   * The wording is the whole job here. Three of these are judgements other
+   * photographers made; the fourth is a competition entry and is worded so that
+   * nobody can mistake it for the first three.
+   */
+  const ACCOLADE_BADGE: Record<string, { text: string; hint: string }> = {
+    featured: { text: 'Featured', hint: 'Featured picture on Commons — promoted by community vote.' },
+    quality: { text: 'Quality', hint: 'Quality image on Commons — reviewed for technical quality.' },
+    valued: { text: 'Valued', hint: 'Valued image on Commons — the most useful illustration of its subject.' },
+    contest: {
+      text: 'Entered',
+      hint: 'Entered in Wiki Loves Earth. Somebody went there to photograph it; nobody has reviewed it.',
+    },
+  };
 
   let hotspots: Hotspot[] = [];
   let photoToken = 0;
@@ -3591,14 +4029,120 @@ export async function startScout(): Promise<void> {
   let photoKey = '';
   let photoSearching = false;
 
+  /* ── The join ──────────────────────────────────────────────────────────
+     Until now the light was only ever computed for the pin. Everything the
+     page could say about a hotspot was where it is and how many people
+     stopped there — which is a map of the past, not a plan for this evening.
+
+     The whole of the machinery already existed and was pointed at one
+     coordinate: `buildSkyline` + `mergeHorizon` + `lightWindows` answers
+     "when does the sun reach here" for an arbitrary point in about a
+     millisecond. Running it per hotspot is what turns the photograph layer
+     into a decision. See `lighting.ts` for the direction half. */
+
+  /** What the light does at one hotspot, across the whole day. */
+  interface SpotLight {
+    windows: LightWindow[];
+    /**
+     * Whether the buildings around *this* spot were loaded, as opposed to the
+     * buildings around the pin.
+     *
+     * Never assumed. `castable` is bounded by the viewport and the hotspots
+     * run to 2 km from the pin, so a spot can easily sit outside the gathered
+     * box — and a skyline built there from an empty set reports a shaded
+     * courtyard as lit from dawn to dusk. False means the answer is terrain
+     * and horizon only, and the row says so.
+     */
+    buildingsKnown: boolean;
+    /** Buildings that actually contributed, for the same reason. */
+    considered: number;
+  }
+
+  let spotLights: SpotLight[] = [];
+  /** What `spotLights` was computed from, so it is not recomputed unchanged. */
+  let spotLightKey = '';
+
+  /**
+   * Is every building that could shade `at` inside the box we collected from?
+   *
+   * The skyline reaches 1.5 km, so the honest test is whether that whole disc
+   * was covered — not whether the point itself happens to fall inside.
+   */
+  function buildingsCover(at: LatLon): boolean {
+    if (!castableBox) return false;
+    const [west, south, east, north] = boundingBox(at, SKYLINE_RADIUS_M);
+    return (
+      west >= castableBox.west &&
+      east <= castableBox.east &&
+      south >= castableBox.south &&
+      north <= castableBox.north
+    );
+  }
+
+  /**
+   * The day's light at an arbitrary point.
+   *
+   * The one implementation behind three answers — the pin's own timeline, the
+   * photograph hotspots, and the day plan's stops — so none of them can end up
+   * describing the same coordinate differently. Costs about a millisecond.
+   */
+  function dayLightAt(at: LatLon, samples: SunSample[]): SpotLight {
+    // From `castable` rather than `nearby`: `nearby` is filtered to 1.5 km of
+    // the *pin*, and a spot 2 km away needs its own neighbours, not the pin's.
+    const around = castable.filter(
+      (building) =>
+        distance(at, { lat: building.ring[0][1], lon: building.ring[0][0] }) < SKYLINE_RADIUS_M,
+    );
+    let profile = buildSkyline(at, around);
+    const field = terrainShadows?.state().field;
+    if (field) {
+      const horizon = terrainHorizon(field, at.lon, at.lat, { stepDeg: 1, radiusM: 30_000 });
+      if (horizon.elevationM != null) profile = mergeHorizon(profile, horizon);
+    }
+    return {
+      windows: lightWindows(profile, samples),
+      buildingsKnown: buildingsCover(at),
+      considered: profile.considered,
+    };
+  }
+
+  /**
+   * Work out the day's light at every hotspot.
+   *
+   * Off the slider's path entirely — this depends on the place, the buildings
+   * and the date, none of which the slider moves. What the slider does with
+   * the result is an array lookup.
+   */
+  function rebuildHotspotLight() {
+    if (!day || !centre || !hotspots.length) {
+      spotLights = [];
+      spotLightKey = '';
+      return;
+    }
+
+    const field = terrainShadows?.state().field;
+    // The date matters because the sun samples do; the building signature
+    // because a pan can bring a whole street into range of a hotspot.
+    const key = `${isoDate}|${castableSignature}|${field ? 'terrain' : 'flat'}|${hotspots.map((s) => s.id).join(',')}`;
+    if (key === spotLightKey) return;
+    spotLightKey = key;
+
+    const samples = day.samples.slice(0, 1440);
+    spotLights = hotspots.map((spot) => dayLightAt(spot.at, samples));
+  }
+
   async function loadPhotos() {
     if (!map || !styleReady) return;
     const source = map.getSource(PHOTO_SOURCE) as GeoJSONSource | undefined;
     if (!source) return;
     if (!centre || !shown.photos) {
       hotspots = [];
+      spotLights = [];
+      spotLightKey = '';
+      hotspotPaint = '';
       photoKey = '';
       source.setData({ type: 'FeatureCollection', features: [] });
+      renderBest();
       return;
     }
 
@@ -3639,26 +4183,229 @@ export async function startScout(): Promise<void> {
       photoKey = '';
     }
     photoSearching = false;
+    // The light before the pins, so they are painted from it rather than
+    // painted neutral and corrected a frame later.
+    rebuildHotspotLight();
     drawHotspots();
+    renderBest();
+    renderSheetLight();
     renderFacts();
   }
+
+  /**
+   * Is this hotspot in direct sun at the minute the slider is on?
+   *
+   * Read off the windows rather than recomputed, so a pin's colour, its row in
+   * the list and the sentence in its sheet cannot disagree with each other.
+   * Null when there is nothing to say — no light computed for it yet.
+   */
+  function spotLitAt(index: number, atMinute: number): boolean | null {
+    const light = spotLights[index];
+    if (!light || !light.windows.length) return null;
+    const window = light.windows.find(
+      (w) => atMinute >= w.startMinute && atMinute < w.endMinute,
+    );
+    return window ? window.lit : null;
+  }
+
+  /**
+   * What the pins are currently painted as, so the slider does not re-upload
+   * a source that would come out identical.
+   *
+   * Scrubbing runs this 240 times over a drag. The set is small — tens of
+   * points, not the four thousand polygons that made this matter for shadows —
+   * but the guard is one string compare and MapLibre re-tessellates on every
+   * `setData` regardless of whether anything moved.
+   */
+  let hotspotPaint = '';
 
   function drawHotspots() {
     const source = map?.getSource(PHOTO_SOURCE) as GeoJSONSource | undefined;
     if (!source) return;
-    source.setData({
-      type: 'FeatureCollection',
-      features: hotspots.map((spot, index) => ({
-        type: 'Feature',
-        properties: { index, count: spot.count },
-        geometry: { type: 'Point', coordinates: [spot.at.lon, spot.at.lat] },
-      })),
+    const now = current();
+    const sunUp = Boolean(now && now.altitude > 0);
+    const at = Math.min(Math.max(minute, 0), 1439);
+
+    const features = hotspots.map((spot, index) => {
+      const lit = spotLitAt(index, at);
+      return {
+        type: 'Feature' as const,
+        properties: {
+          index,
+          count: spot.count,
+          // Three states, not two. "Shaded" and "the sun is down" look the same
+          // in a boolean and are completely different answers to stand in.
+          lit: Boolean(sunUp && lit),
+          sunUp,
+          // A spot whose light was never computed must not be painted as though
+          // it had been found to be in shade.
+          known: lit !== null,
+        },
+        geometry: { type: 'Point' as const, coordinates: [spot.at.lon, spot.at.lat] },
+      };
     });
+
+    // The identity of the spots is in the signature, not just their colours: a
+    // moved pin can return a different set of hotspots that happen to be lit in
+    // the same pattern, and skipping that would leave the old pins on the map.
+    const paint = features
+      .map((f) => `${f.properties.lit ? 1 : 0}${f.properties.known ? 1 : 0}`)
+      .join('');
+    const signature = `${paint}|${sunUp}|${hotspots.map((s) => s.id).join(',')}`;
+    if (signature === hotspotPaint) return;
+    hotspotPaint = signature;
+
+    source.setData({ type: 'FeatureCollection', features });
+  }
+
+  /* ── Saying it ─────────────────────────────────────────────────────────── */
+
+  /**
+   * A hotspot's light at the current minute, as a phrase and a state.
+   *
+   * One function behind the pin colour, the list row and the sheet, so those
+   * three cannot end up describing the same place differently.
+   */
+  function spotLightPhrase(index: number): { text: string; state: 'lit' | 'shaded' | 'down' } {
+    const now = current();
+    const at = Math.min(Math.max(minute, 0), 1439);
+    const light = spotLights[index];
+    if (!now || !day || !light || !light.windows.length) {
+      return { text: 'light not computed', state: 'down' };
+    }
+    if (!(now.altitude > 0)) return { text: 'sun down', state: 'down' };
+
+    const lit = spotLitAt(index, at);
+    if (lit === null) return { text: 'light not computed', state: 'down' };
+
+    const change = nextChange(light.windows, at);
+    const until = change ? formatMinute(day.dayStart, change.atMinute, timeZone) : null;
+    if (lit) {
+      // "Lit until 20:14" is the number you act on; "lit" alone is not, because
+      // the whole question is whether it will still be lit when you get there.
+      return { text: until ? `lit until ${until}` : 'lit', state: 'lit' };
+    }
+    return { text: until ? `shaded, lit ${until}` : 'in shadow', state: 'shaded' };
+  }
+
+  /** A Commons filename, made readable enough to identify a place by. */
+  function spotLabel(spot: Hotspot): string {
+    const title = spot.photos[0]?.title ?? '';
+    const trimmed = title.replace(/\.[a-z0-9]{3,4}$/i, '').trim();
+    return trimmed || `${spot.count} photograph${spot.count === 1 ? '' : 's'}`;
+  }
+
+  /**
+   * The ranked list. Rebuilt on every slider minute, so it stays cheap: the
+   * expensive part is `rebuildHotspotLight`, and this is a sort of tens of
+   * rows over numbers that are already computed.
+   */
+  function renderBest() {
+    const box = $<HTMLElement>('best');
+    const list = $('best-list');
+    if (!centre || !day || !shown.photos || !hotspots.length || !spotLights.length) {
+      box.hidden = true;
+      list.replaceChildren();
+      return;
+    }
+    box.hidden = false;
+
+    // Captured because every callback below outlives the narrowing above, and
+    // the pin can move under an async redraw.
+    const from = centre;
+    const at = Math.min(Math.max(minute, 0), 1439);
+    const now = current();
+    const sunUp = Boolean(now && now.altitude > 0);
+
+    const rows = hotspots
+      .map((spot, index) => {
+        const light = spotLights[index];
+        const lit = spotLitAt(index, at);
+        return {
+          spot,
+          index,
+          distanceM: distance(from, spot.at),
+          buildingsKnown: light?.buildingsKnown ?? false,
+          rank: {
+            lit: Boolean(sunUp && lit),
+            buildingsKnown: light?.buildingsKnown ?? false,
+            litMinutesAhead: light ? litMinutesAhead(light.windows, at) : 0,
+            count: spot.count,
+            distanceM: distance(from, spot.at),
+          },
+        };
+      })
+      .sort((a, b) => compareSpots(a.rank, b.rank))
+      .slice(0, 8);
+
+    list.replaceChildren(
+      ...rows.map((row, position) => {
+        const li = document.createElement('li');
+        li.tabIndex = 0;
+        li.setAttribute('role', 'button');
+
+        const rank = document.createElement('span');
+        rank.className = 'best-rank';
+        rank.textContent = String(position + 1);
+
+        const name = document.createElement('span');
+        name.className = 'best-name';
+        name.textContent = spotLabel(row.spot);
+        const where = document.createElement('span');
+        where.className = 'best-where';
+        // The bearing here is from the pin to the spot — where to walk. It is
+        // not the direction anyone pointed a camera, and does not pretend to be.
+        where.textContent = `${compassPoint(initialBearing(from, row.spot.at))} ${formatDistance(row.distanceM)} · ${row.spot.count} photo${row.spot.count === 1 ? '' : 's'}${row.buildingsKnown ? '' : ' · terrain only'}`;
+        name.append(where);
+
+        const phrase = spotLightPhrase(row.index);
+        const light = document.createElement('span');
+        light.className = `best-light is-${phrase.state}`;
+        light.textContent = phrase.text;
+
+        li.append(rank, name, light);
+        // The row is the same action as the pin: open this spot's photographs.
+        const open = () => openHotspot(row.index);
+        li.addEventListener('click', open);
+        li.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            open();
+          }
+        });
+        return li;
+      }),
+    );
+
+    // Say what the order is, once, rather than implying a score by hiding it.
+    const partial = rows.filter((row) => !row.buildingsKnown).length;
+    const order =
+      'Ordered by light now, then how well the surroundings are known, then light left today, then photographs, then distance.';
+    $('best-note').textContent = partial
+      ? `${order} ${partial} of ${rows.length} sit outside the buildings loaded here — those are terrain and horizon only, and rank below the rest because nothing was there to shade them.`
+      : order;
+  }
+
+  /** Which hotspot's sheet is open, so the slider can keep its light current. */
+  let openSpotIndex: number | null = null;
+
+  function renderSheetLight() {
+    const cell = $('photos-light');
+    if (openSpotIndex === null || !spotLights.length) {
+      cell.textContent = '';
+      return;
+    }
+    const light = spotLights[openSpotIndex];
+    const phrase = spotLightPhrase(openSpotIndex);
+    cell.textContent = light?.buildingsKnown
+      ? `Here now: ${phrase.text}.`
+      : `Here now: ${phrase.text} — from terrain and horizon only, no buildings loaded this far out.`;
   }
 
   function openHotspot(index: number) {
     const spot = hotspots[index];
     if (!spot) return;
+    openSpotIndex = index;
     $('photos-title').textContent = `${spot.count} photograph${spot.count === 1 ? '' : 's'} here`;
     // The span is the honest part: a spot 8 m across is a doorway, one 200 m
     // across is a stretch of riverbank, and they are not the same claim.
@@ -3690,11 +4437,17 @@ export async function startScout(): Promise<void> {
 
         // What the reviewers said, on the picture. It is the reason this one
         // is here at all and the reason it is above the others.
+        //
+        // `contest` is not that, and must not be allowed to read as if it were:
+        // it means the photograph was entered in Wiki Loves Earth, which says
+        // somebody went there meaning to make a picture and says nothing about
+        // whether it is any good. It gets its own wording and an outlined chip
+        // rather than a filled one — see the styles in `scout.astro`.
         if (photo.accolade) {
           const badge = document.createElement('span');
           badge.className = `acc acc-${photo.accolade}`;
-          badge.textContent =
-            photo.accolade === 'featured' ? 'Featured' : photo.accolade === 'quality' ? 'Quality' : 'Valued';
+          badge.textContent = ACCOLADE_BADGE[photo.accolade].text;
+          badge.title = ACCOLADE_BADGE[photo.accolade].hint;
           link.append(badge);
         }
 
@@ -3712,10 +4465,17 @@ export async function startScout(): Promise<void> {
         return li;
       }),
     );
+    renderSheetLight();
     $<HTMLElement>('photos').hidden = false;
   }
 
-  on('photos-close', 'click', () => ($<HTMLElement>('photos').hidden = true));
+  /** Closing the sheet takes its spot with it — a closed sheet has no light. */
+  function closePhotoSheet() {
+    openSpotIndex = null;
+    $<HTMLElement>('photos').hidden = true;
+  }
+
+  on('photos-close', 'click', closePhotoSheet);
 
   async function loadWeather() {
     if (!centre) return;
@@ -3892,17 +4652,27 @@ export async function startScout(): Promise<void> {
       if (key === 'frame') {
         drawFrame();
         renderFraming();
+        // The core's framing is gated on this toggle, so it appears and
+        // disappears with it.
+        refreshCoreLens();
       }
       if (key === 'sight') {
         placeTarget();
         solveSight();
         drawSight();
         renderSight();
+        // The alignment finder's bearing *is* this ring, so turning the layer on
+        // is what takes it from having no question to ask to having one.
+        alignPanel.restate();
       }
       if (key === 'photos') {
         // Turned off, the sheet goes with the pins — it is about a hotspot
-        // that is no longer on the map.
-        if (!shown.photos) $<HTMLElement>('photos').hidden = true;
+        // that is no longer on the map. So does the ranked list, which is the
+        // same finding in a different shape.
+        if (!shown.photos) {
+          closePhotoSheet();
+          renderBest();
+        }
         void loadPhotos();
       }
       domeStatic = null;
@@ -3929,6 +4699,8 @@ export async function startScout(): Promise<void> {
     }
     const focalSelect = $<HTMLSelectElement>('frame-focal');
     for (const focal of FOCAL_LENGTHS) focalSelect.append(new Option(`${focal}mm`, String(focal)));
+    const pixelSelect = $<HTMLSelectElement>('frame-mp');
+    for (const mp of RESOLUTIONS) pixelSelect.append(new Option(`${mp} MP`, String(mp)));
   }
 
   /** Everything the frame draws and says, after any of its controls moves. */
@@ -3939,6 +4711,9 @@ export async function startScout(): Promise<void> {
     $('frame-lens').textContent = describeLens(sensor, lens.focalLengthMm, currentFov());
     drawFrame();
     renderFraming();
+    // The core fold prints two answers about this lens, and both go stale the
+    // moment it is turned or changed.
+    refreshCoreLens();
     if (persist) save();
   }
 
@@ -3948,6 +4723,10 @@ export async function startScout(): Promise<void> {
   });
   on('frame-focal', 'change', (event) => {
     lens.focalLengthMm = Number((event.target as HTMLSelectElement).value);
+    frameChanged();
+  });
+  on('frame-mp', 'change', (event) => {
+    lens.megapixels = Number((event.target as HTMLSelectElement).value);
     frameChanged();
   });
   on('frameorient', 'click', (event) => {
@@ -3991,6 +4770,10 @@ export async function startScout(): Promise<void> {
   on('aim-moon', 'click', () =>
     aimAt(moonSamples[Math.min(moonSamples.length - 1, Math.max(0, minute))] ?? null),
   );
+  // Not at the core *now* — at where it will be when the night is at its best.
+  // The other two aim at the slider's minute because the sun and the moon are
+  // what the slider is for; the core is a question about the whole night.
+  on('aim-core', 'click', () => aimAt(coreAim));
 
   /* ── The sightline's controls ──────────────────────────────────────────── */
 
@@ -4013,6 +4796,7 @@ export async function startScout(): Promise<void> {
     $('sight-out').textContent = `${target.heightM} m`;
     solveSight();
     renderSight();
+    alignPanel.restate();
   });
   on('sight-height', 'change', () => save());
 
@@ -4021,6 +4805,73 @@ export async function startScout(): Promise<void> {
     const open = panel.hidden;
     panel.hidden = !open;
     $('layers-button').setAttribute('aria-expanded', String(open));
+  });
+
+  /**
+   * Which of the night's layers this button switched on, so that switching it
+   * off puts back what was there rather than what it assumes was there.
+   *
+   * Somebody who already had the frame up to compose a sunset should not lose
+   * it because they glanced at the Milky Way. A mode that cannot be left
+   * cleanly is worse than one that is fiddly to enter.
+   */
+  let nightTurnedOn: Array<keyof typeof shown> = [];
+
+  /**
+   * The whole Milky Way answer, in one press.
+   *
+   * It sets four things that had to be found separately before: the arc on the
+   * sky dome, the frame layer (which is what the *framing* half of the answer is
+   * gated on), the panel section opened, and the camera pointed at where the
+   * core will be at its best.
+   *
+   * What it deliberately does **not** do is move the time slider. The obvious
+   * next step — jump to the best moment — crosses a date boundary whenever that
+   * moment is after midnight, because the night runs noon to noon while the
+   * slider runs over the solar day. The fold prints the times; the slider is
+   * left where the user put it.
+   */
+  function setNightMode(on: boolean) {
+    const button = $('night-button');
+    button.setAttribute('aria-pressed', String(on));
+
+    if (on) {
+      nightTurnedOn = (['corePath', 'frame'] as const).filter((key) => !shown[key]);
+      for (const key of nightTurnedOn) {
+        shown[key] = true;
+        const box = $<HTMLInputElement>(key === 'corePath' ? 't-core' : 't-frame');
+        box.checked = true;
+      }
+    } else {
+      for (const key of nightTurnedOn) {
+        shown[key] = false;
+        $<HTMLInputElement>(key === 'corePath' ? 't-core' : 't-frame').checked = false;
+      }
+      nightTurnedOn = [];
+    }
+
+    applyVisibility();
+    rebuildCore();
+    drawFrame();
+    renderFraming();
+    invalidate({ dome: true });
+
+    const fold = $<HTMLDetailsElement>('fold-core');
+    fold.open = on;
+    if (on) {
+      // Aim before the fold is read, so the framing lines are already the
+      // answer for a camera pointed at the core rather than for whatever the
+      // lens happened to be doing.
+      aimAt(coreAim);
+      fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      refreshCoreLens();
+    }
+    save();
+  }
+
+  on('night-button', 'click', () => {
+    setNightMode($('night-button').getAttribute('aria-pressed') !== 'true');
   });
 
   on('compass', 'click', () => {
@@ -4269,6 +5120,70 @@ export async function startScout(): Promise<void> {
     goTo: goToInstant,
   });
 
+  /* ── The alignment finder ───────────────────────────────────────────────
+     "On what dates does the sun go behind that?" — the sightline ring picks
+     the bearing, and the height it has to reach is the same merged profile the
+     pin's own day is built from rather than the flat horizon every other
+     planner matches against. */
+
+  /**
+   * What stands on a bearing, and what that reading rests on.
+   *
+   * The number is `obstructionAt` over the merged skyline, which is the one
+   * thing on this page that owns "what blocks the sun in that direction" — the
+   * spot's own day is computed from the same profile, so the two cannot
+   * disagree about a ridge.
+   *
+   * Where the ring's own target sits at a different height from the profile,
+   * that difference is *reported* rather than resolved. It means something
+   * nearer or taller hides the sun first, which is exactly what the person who
+   * dropped the ring on a summit needs to be told.
+   */
+  function alignHorizon(bearing: number): HorizonReading | null {
+    if (!skyline) return null;
+    const deg = obstructionAt(skyline, bearing);
+    const field = terrainShadows?.state().field;
+    const from = [
+      skyline.considered
+        ? `${skyline.considered} building${skyline.considered === 1 ? '' : 's'}`
+        : 'no buildings',
+      field ? 'the terrain' : 'no terrain loaded',
+    ];
+    const parts = [`the skyline stands ${deg.toFixed(1)}° up, from ${from.join(' and ')}.`];
+
+    const targetDeg = sight?.targetAltitudeDeg;
+    if (targetDeg != null) {
+      if (deg - targetDeg > 0.2) {
+        parts.push(
+          `The ring's own target reads ${targetDeg.toFixed(1)}° up, so something nearer or taller hides it first.`,
+        );
+      } else if (targetDeg - deg > 0.2) {
+        parts.push(
+          `The ring's own target reads ${targetDeg.toFixed(1)}° up — it stands beyond the profile's reach, so this understates what the sun has to clear.`,
+        );
+      }
+    }
+    return { deg, basis: parts.join(' ') };
+  }
+
+  const alignPanel = createAlignmentPanel({
+    centre: () => centre,
+    // Gated on the layer, not merely on the coordinate. `redrawEverything`
+    // parks the ring half a radius due north the moment a place is chosen, so
+    // the coordinate is almost never the sentinel — and due north is a
+    // placeholder, not a thing anyone pointed at. Once the layer is on the ring
+    // is visible on the map and draggable, which is what makes its bearing a
+    // choice rather than a default.
+    target: () =>
+      shown.sight && !(target.lat === 0 && target.lon === 0)
+        ? { lat: target.lat, lon: target.lon }
+        : null,
+    horizon: alignHorizon,
+    timeZone: () => timeZone,
+    from: () => day?.dayStart ?? new Date(),
+    goTo: goToInstant,
+  });
+
   on('open-month', 'click', () => {
     // The layers panel is where the button lives, and leaving it standing under
     // a full-screen sheet means finding it still open on the way back out.
@@ -4448,6 +5363,7 @@ export async function startScout(): Promise<void> {
     renderStar();
     renderKept();
     renderNotebook();
+    forgetUnkeptPicks();
   });
 
   on('kept-list', 'click', (event) => {
@@ -4460,6 +5376,7 @@ export async function startScout(): Promise<void> {
         storeSpots();
         renderStar();
         renderKept();
+        forgetUnkeptPicks();
       }
       return;
     }
@@ -4525,6 +5442,219 @@ export async function startScout(): Promise<void> {
 
     renderNotebook();
   }
+
+  /* ── The day plan ──────────────────────────────────────────────────────
+     Issue #21. Every other answer on this page is about one coordinate; a day
+     of shooting is several, and the two constraints come from different places
+     and do not negotiate — the light is fixed by the sun, the travel by
+     geography. `itinerary.ts` holds the solver and is pure; everything here is
+     choosing the spots, feeding it the same windows the panel already draws,
+     and putting the route on the map. */
+
+  /** Which kept spots are in the plan, by their `spotKey`. */
+  const planPicks = new Set<string>();
+  let planned: Itinerary | null = null;
+
+  /** A saved spot's identity, stable across reloads and independent of name. */
+  const spotKey = (spot: { lat: number; lon: number }) =>
+    `${spot.lat.toFixed(5)},${spot.lon.toFixed(5)}`;
+
+  /**
+   * Rebuild the plan from the current picks.
+   *
+   * The per-spot windows come from `dayLightAt` — the same call the hotspots
+   * and the pin's own timeline go through — so a stop's light in the plan is
+   * the light the rest of the page would show for that coordinate.
+   */
+  function rebuildPlan() {
+    if (!day || planPicks.size < MIN_ITINERARY_SPOTS) {
+      planned = null;
+      drawPlanRoute();
+      return;
+    }
+    const samples = day.samples.slice(0, 1440);
+    const chosen = keptSpots.filter((spot) => planPicks.has(spotKey(spot)));
+    planned = planItinerary(
+      chosen.map((spot) => {
+        const light = dayLightAt({ lat: spot.lat, lon: spot.lon }, samples);
+        return {
+          name: spot.name || formatCoords({ lat: spot.lat, lon: spot.lon }),
+          at: { lat: spot.lat, lon: spot.lon },
+          windows: light.windows,
+        };
+      }),
+      samples,
+      { dwellMinutes: PLAN_DWELL_MINUTES, speedKmh: PLAN_SPEED_KMH },
+    );
+    drawPlanRoute();
+  }
+
+  /**
+   * The stops and the legs between them, on the map.
+   *
+   * Straight lines, because straight lines are exactly what the travel estimate
+   * assumes. Drawing a road route over a great-circle estimate would show a
+   * precision the number underneath does not have.
+   */
+  function drawPlanRoute() {
+    const source = map?.getSource(PLAN_SOURCE) as GeoJSONSource | undefined;
+    if (!source) return;
+    const stops = planned?.stops ?? [];
+    if (!stops.length) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+    const line = {
+      type: 'Feature' as const,
+      properties: {},
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: stops.map((stop) => [stop.spot.at.lon, stop.spot.at.lat]),
+      },
+    };
+    source.setData({
+      type: 'FeatureCollection',
+      features: [
+        line,
+        ...stops.map((stop, index) => ({
+          type: 'Feature' as const,
+          properties: { order: index + 1 },
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [stop.spot.at.lon, stop.spot.at.lat],
+          },
+        })),
+      ],
+    });
+  }
+
+  function renderPlan() {
+    const fold = $<HTMLElement>('fold-plan');
+    // Nothing to order with fewer than two places kept. Showing an empty
+    // picker would advertise a feature that cannot yet do anything.
+    fold.hidden = keptSpots.length < MIN_ITINERARY_SPOTS;
+    if (fold.hidden) return;
+
+    const atLimit = planPicks.size >= MAX_ITINERARY_SPOTS;
+    $('plan-pick').replaceChildren(
+      ...keptSpots.map((spot) => {
+        const key = spotKey(spot);
+        const picked = planPicks.has(key);
+        const label = document.createElement('label');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = picked;
+        // At the ceiling the unpicked boxes go dead rather than silently
+        // refusing on click — the cap is stated by the control itself.
+        box.disabled = !picked && atLimit;
+        box.addEventListener('change', () => {
+          if (box.checked) planPicks.add(key);
+          else planPicks.delete(key);
+          rebuildPlan();
+          renderPlan();
+        });
+        label.append(box, document.createTextNode(spot.name || formatCoords(spot)));
+        return label;
+      }),
+    );
+
+    $('plan-help').textContent = atLimit
+      ? `${MAX_ITINERARY_SPOTS} is the most that can be ordered — unpick one to swap it.`
+      : `Choose ${MIN_ITINERARY_SPOTS} to ${MAX_ITINERARY_SPOTS} kept spots.`;
+
+    const stops = planned?.stops ?? [];
+    $('plan-stops').replaceChildren(
+      ...stops.map((stop) => {
+        const li = document.createElement('li');
+        const when = document.createElement('span');
+        when.className = 'plan-when';
+        when.textContent = `${planClock(stop.arriveMinute)}–${planClock(stop.leaveMinute)}`;
+
+        const where = document.createElement('span');
+        where.className = 'plan-where';
+        where.textContent = stop.spot.name;
+        const leg = document.createElement('span');
+        leg.className = 'plan-leg';
+        const parts = [`sun ${Math.round(stop.sunAltitude)}°`];
+        if (stop.travelMinutes) {
+          parts.unshift(`${stop.travelMinutes} min from the last · ${formatDistance(stop.travelM)}`);
+        }
+        // How far off this spot's own best light the visit landed is the cost
+        // of fitting the rest of the day in, and it is the number a
+        // photographer would otherwise have to work out for themselves.
+        if (stop.offBestMinutes > 0) {
+          parts.push(`${formatDuration(stop.offBestMinutes)} off its best light`);
+        } else {
+          parts.push('at its best light');
+        }
+        leg.textContent = parts.join(' · ');
+        where.append(leg);
+
+        li.append(when, where);
+        return li;
+      }),
+    );
+
+    $('plan-total').textContent = stops.length
+      ? `${stops.length} spot${stops.length === 1 ? '' : 's'} · ${formatDuration(planned!.totalTravelMinutes)} travelling · ${formatDistance(planned!.totalTravelM)}`
+      : planPicks.size >= MIN_ITINERARY_SPOTS
+        ? 'Nothing could be planned for this day.'
+        : '';
+
+    // Everything that did not fit, as loud as the plan itself. A day plan that
+    // showed only its successes would be a different answer from the one the
+    // solver gave.
+    const trouble = [
+      ...(planned?.dropped ?? []).map((drop) => drop.note),
+      ...(planned?.conflicts ?? []).map((conflict) => conflict.note),
+    ];
+    $('plan-trouble').replaceChildren(
+      ...trouble.map((note) => {
+        const li = document.createElement('li');
+        li.textContent = `— ${note}`;
+        return li;
+      }),
+    );
+
+    $('plan-assume').textContent = planned?.travelAssumption ?? '';
+    $<HTMLElement>('plan-copy').hidden = !stops.length;
+  }
+
+  /** A day-minute as a clock time in the spot's own zone. */
+  const planClock = (minute: number) =>
+    day ? formatMinute(day.dayStart, minute, timeZone) : String(minute);
+
+  /**
+   * Drop any pick whose spot is no longer kept, then redraw.
+   *
+   * Unkeeping a place has to take it out of the plan as well. Left behind, the
+   * pick would keep a stop in the route for a spot the notebook no longer has —
+   * an itinerary to somewhere you deleted.
+   */
+  function forgetUnkeptPicks() {
+    const alive = new Set(keptSpots.map(spotKey));
+    for (const key of planPicks) if (!alive.has(key)) planPicks.delete(key);
+    rebuildPlan();
+    renderPlan();
+  }
+
+  on('plan-copy', 'click', () => {
+    if (!planned || !day) return;
+    void toClipboard(
+      'plan-copy',
+      itineraryReport({
+        dayLabel: formatDayLabel(isoDate, timeZone),
+        timeZone,
+        itinerary: planned,
+        clock: planClock,
+        caveat: shadowCaveat({
+          showing: shown.buildings,
+          cast: shadowStats.cast,
+          estimated: shadowStats.estimated,
+        }),
+      }),
+    );
+  });
 
   on('radius-button', 'click', () => {
     const box = $<HTMLElement>('radiusbox');
@@ -4871,6 +6001,8 @@ export async function startScout(): Promise<void> {
   // Before restore, so a spot recovered from storage or a link can already tell
   // whether it is one of the kept ones.
   loadSpots();
+  // The picker is built from that list, so it cannot be drawn before it.
+  renderPlan();
 
   (function restore() {
     let saved: SavedView;
@@ -4885,6 +6017,11 @@ export async function startScout(): Promise<void> {
     if (saved.shown) Object.assign(shown, saved.shown);
     if (saved.slab) Object.assign(slab, saved.slab);
     if (saved.lens) Object.assign(lens, saved.lens);
+    // Storage is the one input written by an older build of this page, so the
+    // pixel count is checked rather than trusted: `pixelPitchMm` throws on a
+    // number that is not one, and a session with `megapixels: 0` in it would
+    // take the whole panel down on restore.
+    if (!(lens.megapixels > 0)) lens.megapixels = defaultLens().megapixels;
     if (saved.target) Object.assign(target, saved.target);
     view = saved.view;
     basemap = saved.basemap;
@@ -4899,6 +6036,7 @@ export async function startScout(): Promise<void> {
 
     $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
     $<HTMLSelectElement>('frame-focal').value = String(lens.focalLengthMm);
+    $<HTMLSelectElement>('frame-mp').value = String(lens.megapixels);
     $<HTMLInputElement>('frame-bearing').value = String(lens.bearing);
     $<HTMLInputElement>('frame-tilt').value = String(lens.tiltDeg);
     for (const b of $('frameorient').querySelectorAll('button')) {
@@ -4995,6 +6133,76 @@ export async function startScout(): Promise<void> {
     } catch {
       return 'UTC';
     }
+  }
+
+  /* ── What the bottom of the screen is actually doing ──────────────────────
+     The timebar, the place sheet and the time row are stacked up from the
+     bottom edge, and until now each knew how much to clear by a number counted
+     in rem. That is a guess about content, and it was wrong: below ~390px the
+     jump row wraps to two lines, the timebar grows by 37px, and the sheet — 5.2
+     rem off the bottom — comes to rest on top of the time slider. Measured on a
+     375px viewport, a tap in the middle of the slider hit the *Keep this spot*
+     star. The control the page exists to drive was covered by another button.
+
+     So the heights are measured and published as custom properties, and the CSS
+     stacks on those. Nothing here decides layout — it only reports what the
+     browser already laid out, which is the one source that cannot disagree with
+     the screen. Content-box height is deliberate: `getBoundingClientRect` would
+     be the same number here, but a transform on any of these (the sheet has one)
+     would make it lie. */
+  const stage = document.querySelector<HTMLElement>('.scout-stage');
+  if (stage && typeof ResizeObserver !== 'undefined') {
+    const measured: Array<[string, string]> = [
+      ['timebar', '--dock-h'],
+      ['sheet', '--sheet-h'],
+      ['edge-time', '--edge-h'],
+    ];
+    const publish = () => {
+      for (const [id, prop] of measured) {
+        const el = document.getElementById(id);
+        // A hidden bar has no height and must not collapse the stack onto the
+        // map's own controls, so its variable is left at the CSS fallback.
+        if (!el || el.hidden) continue;
+        stage.style.setProperty(prop, `${Math.round(el.offsetHeight)}px`);
+      }
+    };
+    const observer = new ResizeObserver(publish);
+    for (const [id] of measured) {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    }
+    // `hidden` flips on these three once a place is chosen, and that is not a
+    // resize — without this the first measurement is of three hidden bars.
+    new MutationObserver(publish).observe(stage, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+      subtree: true,
+    });
+    publish();
+  }
+
+  /* ── Saying that the row runs on ────────────────────────────────────────
+     The jump row scrolls on a phone rather than wrapping, which fixes the
+     layout but hides Dusk off the right-hand edge — and a control nobody knows
+     is there is not much better than one that is covered up. So the row reports
+     which way it can still move and the CSS fades that edge.
+
+     Measured rather than assumed, because how much overflows depends on the
+     width: 46px on a 412px phone, 138px on a 320px one, and none at all on a
+     tablet, where the fade must not appear. */
+  const jumps = document.getElementById('jumps');
+  if (jumps) {
+    const markOverflow = () => {
+      const more = jumps.scrollWidth - jumps.clientWidth;
+      // A pixel of slack: sub-pixel layout leaves a fraction over constantly.
+      if (more <= 1) return jumps.removeAttribute('data-more');
+      const atStart = jumps.scrollLeft <= 1;
+      const atEnd = jumps.scrollLeft >= more - 1;
+      jumps.setAttribute('data-more', atStart ? 'end' : atEnd ? 'start' : 'both');
+    };
+    jumps.addEventListener('scroll', markOverflow, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(markOverflow).observe(jumps);
+    markOverflow();
   }
 
   if (!centre) {

@@ -50,9 +50,17 @@ describe('reading one of Scout’s own endpoints', () => {
     await assert.rejects(
       () => getScoutJson('/api/scout/geocode?q=leith'),
       (error: Error) => {
-        // This string is shown in the results list, so it has to name the way
-        // out — the map works without search, and dragging the pin is it.
-        assert.match(error.message, /drag the pin/i);
+        // This string is shown in the results list, so it has to name a way out
+        // that exists. It used to say "drag the pin", and there is no pin until
+        // a spot has been chosen — which on a phone, with search unavailable,
+        // left no way in at all. Tapping the map is the one that works from a
+        // standing start.
+        assert.match(error.message, /tap the map/i);
+        assert.doesNotMatch(
+          error.message,
+          /drag the pin/i,
+          'the pin does not exist before a spot is chosen',
+        );
         return true;
       },
     );
