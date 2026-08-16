@@ -2378,6 +2378,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     /* − and + were 28px wide. Tall enough and half the width of a thumb, which
        is the more common way to miss a stepper: you hit the date between them. */
     .chip-step { min-width: 44px; }
+    /* Now, at three uppercase letters and 0.56rem, was 42.6px wide — height
+       alone did not cover it the way it did every wider chip here. */
+    .chip-strong { min-width: 44px; }
 
     /* The time slider was 18px of drag height for the control the page is for.
        The track is not decoration — it is the day's light, shaded — so it keeps
