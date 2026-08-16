@@ -15,6 +15,45 @@ npm install
 npm run dev          # http://localhost:4321
 ```
 
+That is enough to get the app running, but not enough to see the archive: the
+photographs themselves are not in git.
+
+### Fresh clone
+
+`photos/` and `public/img/*` are gitignored — large, and originals belong on
+disk, not in history. `photos.json` and `manifest.json` *are* tracked, so a
+fresh clone starts in a state where the manifest describes photographs that
+are not actually there. That is not a bug to fix; it is what "gitignored" means,
+and `npm run check:photos` will say so plainly rather than the page quietly
+laying out slots for images that never arrive.
+
+- **Restoring an existing archive** — copy the original files back into
+  `photos/` (however you move them between machines: a drive, Time Machine,
+  whatever), then run `npm run check:photos -- --fix`. It regenerates every
+  derivative from the untouched original against the manifest already in git,
+  which is the same repair path a missing-derivative bug uses — see
+  `scripts/check-photos.ts`.
+- **Starting empty** — leave `photos/` empty and use `/upload`; the pipeline
+  creates `photos/` and `public/img/` itself on the first request. If the
+  tracked `photos.json` still lists photographs from another machine's
+  archive, reset it first (see "Reset the archive" below) rather than letting
+  `check:photos` try to reconcile files that were never going to reappear.
+
+`certs/` is gitignored too and optional — the app runs over plain HTTP without
+it, falling back automatically (see `astro.config.mjs`). It only matters for
+testing the offline PWA on an iPad, which iOS refuses to do over an insecure
+origin. [mkcert](https://github.com/FiloSottile/mkcert) is the standard tool
+for exactly this: it creates a local CA and signs a certificate against it.
+
+```bash
+mkcert -install                                   # trust the local CA on this Mac
+mkdir -p certs
+mkcert -key-file certs/server.key -cert-file certs/server.crt localhost "*.local"
+```
+
+Then install that same CA's root on the iPad once (`mkcert -CAROOT` shows
+where it lives) so Safari there trusts `https://…local:4321` too.
+
 - `/upload` — drag-and-drop photos in (or paste them). They're saved to
   `/photos` untouched, analysed, and placed into a colour chapter. Each photo is
   its own request, so progress is real, one bad file can't take the batch down
@@ -310,3 +349,8 @@ Anything absent falls back to the automatic result.
 rm -f photos/*.* public/img/*.avif public/img/*.webp
 echo '[]' > src/data/photos.json && npm run manifest
 ```
+
+## License
+
+MIT — see `LICENSE`. That covers the code; the photographs are not part of
+it, are not in git, and stay under whatever rights their author reserves.
