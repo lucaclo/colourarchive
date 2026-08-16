@@ -263,6 +263,25 @@ Display, Libre Bodoni or Space Mono means editing the family list at the top of
 `scripts/fetch-fonts.ts` and re-running it — otherwise that preset falls back to
 Georgia. Update the `rel="preload"` tags in `src/layouts/Layout.astro` to match.
 
+## Landing a change
+
+`main` is protected. Changes go through a pull request, and the branch has to be
+up to date with `main` before it can merge — recorded here because the mode is a
+choice rather than a default, and the alternative was pushing straight to `main`
+as everything before #26 did.
+
+`verify` — `npm test`, `npm run check`, `npm run build` — is a required check. A
+red one blocks the merge.
+
+`smoke` is **not** required, deliberately. It drives a real map whose tiles come
+from hosts nobody here controls, so a red smoke against a green verify means
+"look at the network", not "the code is broken"; requiring it would let someone
+else's outage block every merge. Read it, do not obey it blindly.
+
+Protections are not enforced for admins, so the sole maintainer can still push
+directly to `main` when there is a reason to. That is an escape hatch and not the
+normal path — using it skips every check above.
+
 ## Commands
 
 ```bash

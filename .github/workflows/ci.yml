@@ -1,8 +1,8 @@
 name: CI
 
-# Nothing here was verified anywhere but a developer's Mac until now. The three
-# commands are the same ones run by hand before a commit — kept as three separate
-# steps so a red run says *which* of the three broke without opening a log.
+# Nothing here was verified anywhere but a developer's Mac until now. The four
+# commands are the same ones run by hand before a commit — kept as four separate
+# steps so a red run says *which* of the four broke without opening a log.
 on:
   push:
     branches: [main]
@@ -24,6 +24,11 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # First, because it is the cheapest of the four by an order of magnitude:
+      # a lint error is worth reporting in seconds rather than after the build.
+      - name: Lint
+        run: npm run lint
 
       - name: Tests
         run: npm test

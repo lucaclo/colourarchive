@@ -219,7 +219,7 @@ const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 /** Shortest-path interpolation on a hue circle — 350 to 10 goes through 0, not
  *  the long way round through 180. */
 function lerpHue(a: number, b: number, t: number): number {
-  let d = ((b - a) % 360 + 540) % 360 - 180;
+  const d = ((b - a) % 360 + 540) % 360 - 180;
   return ((a + d * t) % 360 + 360) % 360;
 }
 

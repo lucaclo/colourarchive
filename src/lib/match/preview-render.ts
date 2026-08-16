@@ -46,10 +46,6 @@ export interface RenderSpec {
 
 const srgbDecode = (v: number): number =>
   v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-const srgbEncode = (y: number): number => {
-  const x = Math.max(0, Math.min(1, y));
-  return x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
-};
 
 /** Lightroom Colour Grading hue (HSV convention) -> unit OKLab a/b direction.
  *  The forward direction lives in solve.ts; this is its exact counterpart. */
