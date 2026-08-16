@@ -215,6 +215,19 @@ ring no longer refetches.
 ready for it to drop in, and `sort=interestingness-desc` would be the quality signal
 there that the accolade categories are here.
 
+**A tier going quiet used to look exactly like a place with nothing in it** — the fault
+behind #29. `incategory:` against `Category:Valued images` matches direct membership
+only, and everything actually promoted lives in a subcategory by country, by subject, by
+month; that tier measured 0 at Edinburgh, Glencoe and Skye, at every radius, for as long
+as it existed, and `collectCommonsPhotos` folding a failed request into the same
+`titles: []` a genuinely empty one produces meant nothing said so. `deepcat:` fixed the
+query (0 → 14 at Edinburgh); `collectCommonsPhotos` now also returns a `tiers: { accolade,
+ok }[]` alongside the photographs, so a request that actually failed is distinguishable
+from one that came back empty, the "Photographed" fact row says *"N of 4 sources
+answered"* when they disagree, and `photo-client.canary.ts` asks the real API for a
+coordinate with known non-zero counts in every tier — `npm run canary:scout-photos`, not
+part of `npm test`, since a live dependency should not decide whether it passes.
+
 `src/lib/scout/sources/` with a common interface:
 
 ```ts

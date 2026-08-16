@@ -2976,10 +2976,23 @@ export async function startScout(): Promise<void> {
     // seconds and then saying "nothing found" is indistinguishable from being
     // broken, so the search says it is still going.
     else if (photoSearching) photos.textContent = 'searching…';
-    else if (!hotspots.length) photos.textContent = 'nothing found';
+    // The whole search failed outright — a route or network error, not a tier
+    // going quiet on its own. Worth its own word: "nothing found" would read
+    // as an honest empty place, which this is not.
+    else if (photoFailed) photos.textContent = 'search failed';
     else {
-      const total = hotspots.reduce((n, spot) => n + spot.count, 0);
-      photos.textContent = `${total} in ${hotspots.length} spot${hotspots.length === 1 ? '' : 's'}`;
+      const okTiers = photoTiers.filter((t) => t.ok).length;
+      // Say when a tier went quiet, so a broken source and an honestly empty
+      // place stop looking identical — the bug this fact row used to have.
+      const partial =
+        photoTiers.length && okTiers < photoTiers.length
+          ? ` (${okTiers} of ${photoTiers.length} sources answered)`
+          : '';
+      if (!hotspots.length) photos.textContent = `nothing found${partial}`;
+      else {
+        const total = hotspots.reduce((n, spot) => n + spot.count, 0);
+        photos.textContent = `${total} in ${hotspots.length} spot${hotspots.length === 1 ? '' : 's'}${partial}`;
+      }
     }
 
     const landform = $('f-landform');
@@ -4006,6 +4019,12 @@ export async function startScout(): Promise<void> {
     }>;
   }
 
+  /** Whether one accolade's own Commons request answered, apart from what it found. */
+  interface TierStatus {
+    accolade: 'featured' | 'quality' | 'valued' | 'contest';
+    ok: boolean;
+  }
+
   /**
    * What each standing is called on the picture, and what it actually means.
    *
@@ -4028,6 +4047,10 @@ export async function startScout(): Promise<void> {
   /** The query the pins on screen already answer. */
   let photoKey = '';
   let photoSearching = false;
+  /** Per-accolade answer/failure from the last search, so a broken tier does not read as an empty place. */
+  let photoTiers: TierStatus[] = [];
+  /** The whole search failed — a route or network error, not a tier going quiet. */
+  let photoFailed = false;
 
   /* ── The join ──────────────────────────────────────────────────────────
      Until now the light was only ever computed for the pin. Everything the
@@ -4137,6 +4160,8 @@ export async function startScout(): Promise<void> {
     if (!source) return;
     if (!centre || !shown.photos) {
       hotspots = [];
+      photoTiers = [];
+      photoFailed = false;
       spotLights = [];
       spotLightKey = '';
       hotspotPaint = '';
@@ -4169,17 +4194,25 @@ export async function startScout(): Promise<void> {
             `/api/scout/photos?lat=${at.lat}&lon=${at.lon}&radius=${PHOTO_SEARCH_RADIUS_M}`,
           )
             .then((response) => response.json())
-            .then((data) => (data.ok ? { hotspots: data.hotspots as Hotspot[] } : null));
+            .then((data) =>
+              data.ok
+                ? { hotspots: data.hotspots as Hotspot[], tiers: data.tiers as TierStatus[] }
+                : null,
+            );
       // A slower earlier search must not overwrite a faster later one, and a
       // result for a spot you have already left is not a result.
       if (token !== photoToken) return;
       hotspots = found?.hotspots ?? [];
+      photoTiers = found?.tiers ?? [];
+      photoFailed = !found;
       // A failed answer is not an answer: let the next attempt through rather
       // than caching the failure as though the place had no photographs.
       if (!found) photoKey = '';
     } catch {
       if (token !== photoToken) return;
       hotspots = [];
+      photoTiers = [];
+      photoFailed = true;
       photoKey = '';
     }
     photoSearching = false;

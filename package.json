@@ -20,6 +20,7 @@
     "fonts": "tsx scripts/fetch-fonts.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "smoke": "node --import tsx --test tests/scout.smoke.ts",
+    "canary:scout-photos": "node --import tsx --test src/lib/scout/sources/photo-client.canary.ts",
     "check": "astro sync && tsc --noEmit && tsx scripts/check-astro-scripts.ts",
     "lint": "eslint ."
   },

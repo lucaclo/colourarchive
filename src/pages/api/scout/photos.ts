@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   try {
-    const photos = await fetchCommonsPhotos({
+    const { photos, tiers } = await fetchCommonsPhotos({
       centre: { lat, lon },
       // Capped here as well as at the caller: this route is reachable directly,
       // and a 200 km radius would be somebody else's bandwidth.
@@ -26,9 +26,11 @@ export const GET: APIRoute = async ({ url }) => {
     });
     // Commons photographs do not move and neither do their licences, so a
     // reload should not pay for this again.
-    return json({ ok: true, hotspots: toHotspots(photos), photoCount: photos.length }, 200, {
-      'cache-control': 'public, max-age=1800',
-    });
+    return json(
+      { ok: true, hotspots: toHotspots(photos), photoCount: photos.length, tiers },
+      200,
+      { 'cache-control': 'public, max-age=1800' },
+    );
   } catch (err) {
     // Spot photographs are an addition to this page, never a dependency of it.
     // Every failure here is reported as a failure of the photo layer alone —

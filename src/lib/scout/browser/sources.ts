@@ -25,7 +25,7 @@
 import { destination, type LatLon } from '../geo';
 import { parseForecast, type WeatherReport } from '../weather';
 import { airQualityUrl, parseAirQuality, type AirReport } from '../air';
-import { collectCommonsPhotos, toHotspots, type Hotspot } from '../sources/photo-client';
+import { collectCommonsPhotos, toHotspots, type Hotspot, type TierStatus } from '../sources/photo-client';
 import { MAX_PHOTOS, PHOTO_SEARCH_RADIUS_M, type SpotSearch } from '../sources/types';
 
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
@@ -169,6 +169,7 @@ export async function fetchHorizonPairDirect(
 export interface PhotoResultDirect {
   hotspots: Hotspot[];
   photoCount: number;
+  tiers: TierStatus[];
 }
 
 /**
@@ -186,6 +187,6 @@ export async function fetchPhotosDirect(
     radiusM: Math.min(PHOTO_SEARCH_RADIUS_M, Number.isFinite(radiusM) ? radiusM : PHOTO_SEARCH_RADIUS_M),
     limit: MAX_PHOTOS,
   };
-  const photos = await collectCommonsPhotos(query, getJson, { cors: true });
-  return { hotspots: toHotspots(photos), photoCount: photos.length };
+  const { photos, tiers } = await collectCommonsPhotos(query, getJson, { cors: true });
+  return { hotspots: toHotspots(photos), photoCount: photos.length, tiers };
 }

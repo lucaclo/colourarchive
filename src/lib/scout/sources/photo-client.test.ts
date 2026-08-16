@@ -97,7 +97,7 @@ describe('collectCommonsPhotos', () => {
       featured: ['File:Both.jpg'],
       quality: ['File:Both.jpg', 'File:Only.jpg'],
     });
-    const photos = await collectCommonsPhotos(QUERY, transport);
+    const { photos } = await collectCommonsPhotos(QUERY, transport);
     const both = photos.find((p) => p.title === 'Both.jpg');
     const only = photos.find((p) => p.title === 'Only.jpg');
     assert.equal(both?.accolade, 'featured');
@@ -122,7 +122,8 @@ describe('collectCommonsPhotos', () => {
 
   it('returns nothing, and asks for no details, when nowhere has anything', async () => {
     const { transport, urls } = recorder({});
-    assert.deepEqual(await collectCommonsPhotos(QUERY, transport), []);
+    const { photos } = await collectCommonsPhotos(QUERY, transport);
+    assert.deepEqual(photos, []);
     assert.equal(urls.filter((u) => u.includes('titles=')).length, 0);
   });
 
@@ -136,7 +137,7 @@ describe('collectCommonsPhotos', () => {
       if (term.includes(ACCOLADES.quality.category)) throw new Error('502');
       return transport(url);
     };
-    const photos = await collectCommonsPhotos(QUERY, flaky);
+    const { photos } = await collectCommonsPhotos(QUERY, flaky);
     assert.deepEqual(photos.map((p) => p.title), ['A.jpg']);
   });
 
@@ -146,8 +147,48 @@ describe('collectCommonsPhotos', () => {
       quality: ['File:Q.jpg'],
       featured: ['File:F.jpg'],
     });
-    const photos = await collectCommonsPhotos(QUERY, transport);
+    const { photos } = await collectCommonsPhotos(QUERY, transport);
     assert.deepEqual(photos.map((p) => p.accolade), ['featured', 'quality', 'valued']);
+  });
+
+  it('reports every tier as answered when nothing failed, even if empty', async () => {
+    const { transport } = recorder({ featured: ['File:A.jpg'] });
+    const { tiers } = await collectCommonsPhotos(QUERY, transport);
+    assert.deepEqual(
+      tiers.map((t) => t.accolade).sort(),
+      Object.keys(ACCOLADES).sort(),
+    );
+    assert.ok(
+      tiers.every((t) => t.ok),
+      'an empty tier is not the same as a failed one',
+    );
+  });
+
+  it('marks a tier failed, not just thin, when its search request fails', async () => {
+    // This is the bug the "valued" tier had — a broken query and an honestly
+    // empty one both folded into `titles: []`, so nobody could tell them apart.
+    const { transport } = recorder({ featured: ['File:A.jpg'], quality: ['File:B.jpg'] });
+    const flaky: JsonTransport = async (url) => {
+      const term = new URL(url).searchParams.get('srsearch') ?? '';
+      if (term.includes(ACCOLADES.quality.category)) throw new Error('502');
+      return transport(url);
+    };
+    const { tiers } = await collectCommonsPhotos(QUERY, flaky);
+    assert.equal(tiers.find((t) => t.accolade === 'quality')?.ok, false);
+    assert.equal(tiers.find((t) => t.accolade === 'featured')?.ok, true);
+  });
+
+  it('marks a tier failed when its search succeeds but the details call fails', async () => {
+    // Titles were found; nothing about them could be confirmed. That is still
+    // a tier the caller could not get an answer from.
+    const { transport } = recorder({ quality: ['File:B.jpg'] });
+    const flaky: JsonTransport = async (url) => {
+      if (new URL(url).searchParams.get('titles')) throw new Error('502');
+      return transport(url);
+    };
+    const { photos, tiers } = await collectCommonsPhotos(QUERY, flaky);
+    assert.deepEqual(photos, []);
+    assert.equal(tiers.find((t) => t.accolade === 'quality')?.ok, false);
   });
 
   it('passes the CORS opt-in through to every request it makes', async () => {
@@ -172,7 +213,8 @@ describe('collectCommonsPhotos', () => {
 describe('toHotspots', () => {
   it('groups photographs taken from the same place', async () => {
     const { transport } = recorder({ quality: ['File:A.jpg', 'File:B.jpg'] });
-    const hotspots = toHotspots(await collectCommonsPhotos(QUERY, transport));
+    const { photos } = await collectCommonsPhotos(QUERY, transport);
+    const hotspots = toHotspots(photos);
     // Both fixtures sit on the same coordinate, so they are one spot.
     assert.equal(hotspots.length, 1);
     assert.equal(hotspots[0].count, 2);
@@ -182,8 +224,8 @@ describe('toHotspots', () => {
   it('gives a spot the same id however the photographs arrived', async () => {
     const forwards = recorder({ quality: ['File:A.jpg', 'File:B.jpg'] });
     const backwards = recorder({ quality: ['File:B.jpg', 'File:A.jpg'] });
-    const a = toHotspots(await collectCommonsPhotos(QUERY, forwards.transport));
-    const b = toHotspots(await collectCommonsPhotos(QUERY, backwards.transport));
+    const a = toHotspots((await collectCommonsPhotos(QUERY, forwards.transport)).photos);
+    const b = toHotspots((await collectCommonsPhotos(QUERY, backwards.transport)).photos);
     assert.equal(a[0].id, b[0].id);
   });
 
