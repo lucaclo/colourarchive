@@ -115,13 +115,13 @@ export const MAX_SPOTS = 24;
  * and a reverse lookup, so saving "Calton Hill" twice from two routes gives one
  * entry rather than two that look identical and are not.
  */
-const SAME_SPOT_M = 50;
+export const SAME_SPOT_M = 50;
 
 const EARTH_R = 6_371_000;
 const RAD = Math.PI / 180;
 
-/** Flat-earth distance, fine at the scale that decides "same spot". */
-function metresBetween(a: LatLon, b: LatLon): number {
+/** Flat-earth distance, fine at the scale that decides "same spot". Exported so anything else keyed on spot identity — the DEM upload store, for one — agrees with `indexOfSpot` on what "the same place" means. */
+export function metresBetween(a: LatLon, b: LatLon): number {
   const dLat = (b.lat - a.lat) * RAD;
   const dLon = (b.lon - a.lon) * RAD * Math.cos(((a.lat + b.lat) / 2) * RAD);
   return Math.hypot(dLat, dLon) * EARTH_R;
