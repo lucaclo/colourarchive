@@ -160,6 +160,11 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
             <p class="core-line" id="core-frame"></p>
             <p class="core-note" id="core-extent"></p>
             <p class="core-note" id="core-exposure"></p>
+            <!-- Issue #47. Optional and quiet about it: no forecast this far
+                 out, no server behind the published build, or 7Timer simply
+                 not answering all mean the same thing here — nothing to add,
+                 so nothing is shown. -->
+            <p class="core-note" id="core-seeing" hidden></p>
             <p class="core-caveat">Light pollution is not modelled.</p>
           </details>
 
@@ -296,6 +301,25 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                 <button class="ghost" id="note-add" type="button">Add</button>
               </div>
               <p class="note-say" id="note-say"></p>
+
+              <!-- Issue #45. The note above is written once, when the place is
+                   kept; this is written every time you actually go, and is the
+                   only part of the notebook that can say whether a return trip
+                   was any good. -->
+              <p class="note-kept" id="visit-match" hidden></p>
+              <ul class="visit-list" id="visit-list"></ul>
+              <div class="note-add">
+                <input
+                  class="note-url"
+                  id="visit-outcome"
+                  type="text"
+                  maxlength="600"
+                  placeholder="What actually happened? (optional)"
+                  aria-label="What happened on this visit"
+                />
+                <button class="ghost" id="visit-log" type="button">Log this visit</button>
+              </div>
+              <p class="note-say" id="visit-say"></p>
             </div>
           </details>
 
@@ -1502,7 +1526,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     border-radius: 8px;
     padding: 0.35rem 0.5rem;
   }
-  #note-add {
+  #note-add, #visit-log {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: transparent;
@@ -1513,7 +1537,33 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     text-transform: uppercase;
     padding: 0 0.7rem;
     cursor: pointer;
+    white-space: nowrap;
   }
+
+  /* Issue #45: the visit log, styled as a lighter, textual cousin of the
+     photo list beside it rather than as something new. */
+  .visit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+  .visit-list :global(li) {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+  .visit-list :global(.visit-date) { color: var(--fg); flex: none; }
+  .visit-list :global(.visit-detail) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .visit-list :global(.drop-visit) {
+    flex: none;
+    background: none;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0 0.2rem;
+  }
+  .visit-list :global(.drop-visit:hover) { color: #e0603a; }
   /* Elements built at runtime are outside Astro's scoping, so anything the
      script creates needs :global() or it falls back to the UA stylesheet. */
   .note-photos :global(.drop-photo) {

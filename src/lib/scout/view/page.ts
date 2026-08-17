@@ -69,15 +69,20 @@ import {
 import { decodeScoutLink, encodeScoutLink } from '../share';
 import {
   addSpot,
+  addVisit,
+  closestVisit,
   describeFrame,
+  formatVisitDate,
   indexOfSpot,
   readPhoto,
   readSpots,
   removeSpot,
   updateSpot,
+  MAX_OUTCOME,
   MAX_PHOTOS,
   type SavedSpot,
   type SpotPhoto,
+  type SpotVisit,
 } from '../spots';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
 import { itineraryReport, shootPlan } from '../report';
@@ -133,6 +138,7 @@ import {
   type CoreNight,
   type CoreSample,
 } from '../galactic';
+import { describeSeeingPoint, seeingAt, type SeeingForecast } from '../seeing';
 import {
   RESOLUTIONS,
   frameTheCore,
@@ -399,6 +405,15 @@ export async function startScout(): Promise<void> {
   let weather: WeatherReport | null = null;
   /** The aerosol column over the pin, when the air-quality host answered. */
   let air: AirReport | null = null;
+  /**
+   * Seeing and transparency near the pin, when 7Timer answered — issue #47.
+   * Location-keyed rather than date-keyed like the weather, since it is
+   * fetched once per pin and read against whatever night is being planned;
+   * `seeingKey` remembers which coordinate it is for, so `loadSeeing` can
+   * skip a call that would only fetch the same three days again.
+   */
+  let seeingForecast: SeeingForecast | null = null;
+  let seeingKey: string | null = null;
   /**
    * The forecast where the sunrise or sunset light passes low over the ground —
    * three hundred kilometres away, in the sun's own direction. Kept beside the
@@ -3240,6 +3255,16 @@ export async function startScout(): Promise<void> {
     const at = night.best?.at ?? night.core.transit;
     coreAim = at ? corePosition(centre.lat, centre.lon, at) : null;
 
+    // Issue #47. Read for the same moment as the rest of this fold — the
+    // night's best moment, not the slider's minute, for the reason given at
+    // the top of this function: nobody scrubs to find the core. Silent when
+    // there is nothing to say: no aim, no forecast fetched yet, or the night
+    // in question is past 7Timer's own 3-day horizon are the same case here.
+    const seeingEl = $<HTMLElement>('core-seeing');
+    const seeingPoint = at ? seeingAt(seeingForecast, at.getTime()) : null;
+    seeingEl.hidden = !seeingPoint;
+    if (seeingPoint) seeingEl.textContent = describeSeeingPoint(seeingPoint);
+
     // The shutter needs the lens and the target's declination, and no aim at
     // all, so it is offered whether or not the frame layer is up. It names the
     // focal length and the pixel it was worked out from, because a shutter
@@ -3837,6 +3862,7 @@ export async function startScout(): Promise<void> {
     // restored spot showed "nothing found" no matter how much was there.
     // The dedupe guard makes the extra calls from a basemap switch free.
     void loadPhotos();
+    void loadSeeing();
   }
 
   function setCentre(place: Place, { refit = true } = {}) {
@@ -4610,6 +4636,36 @@ export async function startScout(): Promise<void> {
       air = null;
     }
     renderFacts();
+  }
+
+  /**
+   * Seeing and transparency, three days out — issue #47.
+   *
+   * 7Timer sends no CORS header (checked against the live host, not assumed),
+   * so unlike the weather and the aerosol column there is no direct path for
+   * the published static build: `STATIC` skips the fetch entirely rather than
+   * making a request that can only fail. Every other failure — no server
+   * reachable, 7Timer down, the coordinate outside its coverage — leaves
+   * `seeingForecast` at whatever it already was and `renderSeeing` hides the
+   * line, exactly like a missing aerosol column falls back silently rather
+   * than blocking the row it sits in.
+   */
+  async function loadSeeing() {
+    if (STATIC || !centre) return;
+    const key = `${centre.lat.toFixed(3)},${centre.lon.toFixed(3)}`;
+    if (key === seeingKey) return;
+    seeingKey = key;
+    const at = centre;
+    try {
+      const forecast = await fetch(`/api/scout/seeing?lat=${at.lat}&lon=${at.lon}`)
+        .then((response) => response.json())
+        .then((data) => (data.ok ? (data.forecast as SeeingForecast) : null));
+      if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
+      seeingForecast = forecast;
+    } catch {
+      if (centre?.lat === at.lat && centre?.lon === at.lon) seeingForecast = null;
+    }
+    refreshCoreLens();
   }
 
   /**
@@ -5426,6 +5482,53 @@ export async function startScout(): Promise<void> {
     $<HTMLInputElement>('note-url').disabled = photos.length >= MAX_PHOTOS;
     $('note-say').textContent =
       photos.length >= MAX_PHOTOS ? `That is ${MAX_PHOTOS} references — remove one to add another.` : '';
+
+    renderVisits(spot);
+  }
+
+  /**
+   * The visit log and, if the current plan has anything to compare against,
+   * which past trip it most resembles.
+   *
+   * Issue #45. Split from `renderNotebook` because it has its own question
+   * to answer — not "what does this spot's notebook say" but "has this
+   * exact light happened here before, and how did it go".
+   */
+  function renderVisits(spot: SavedSpot) {
+    const matchEl = $<HTMLElement>('visit-match');
+    const sun = current();
+    const match = sun ? closestVisit(spot.visits, sun.altitude, sun.azimuth) : null;
+    matchEl.hidden = !match;
+    if (match) matchEl.textContent = match.note;
+
+    $('visit-list').replaceChildren(
+      ...(spot.visits ?? []).map((visit, index) => {
+        const li = document.createElement('li');
+
+        const date = document.createElement('span');
+        date.className = 'visit-date';
+        date.textContent = formatVisitDate(visit.at);
+        li.append(date);
+
+        const detail = document.createElement('span');
+        detail.className = 'visit-detail';
+        const conditions = [visit.weather, visit.cloud].filter(Boolean).join(', ');
+        detail.textContent =
+          `Sun ${visit.sunAltitude.toFixed(0)}° ${bearingLabel(visit.sunAzimuth)}` +
+          (conditions ? ` · ${conditions}` : '') +
+          (visit.outcome ? ` · ${visit.outcome}` : '');
+        li.append(detail);
+
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'drop-visit';
+        drop.dataset.visit = String(index);
+        drop.textContent = '×';
+        drop.title = 'Remove this visit';
+        li.append(drop);
+        return li;
+      }),
+    );
   }
 
   /** Patch the kept spot under the pin, keeping the list's order. */
@@ -5495,6 +5598,56 @@ export async function startScout(): Promise<void> {
     const index = Number(target.dataset.photo);
     const photos = spot.photos.filter((_, i) => i !== index);
     editSpot({ photos: photos.length ? photos : undefined });
+    renderNotebook();
+  });
+
+  /**
+   * Snapshot the plan's own numbers for the date and hour on the slider, as
+   * a logged visit.
+   *
+   * Everything but the outcome is read off state this page already computed
+   * for the panel a moment ago — this is not a second measurement, it is the
+   * first one written down. Sun position is the one thing a visit cannot be
+   * logged without; the rest enriches it the way a photo or a frame enriches
+   * the notebook, and is simply left off when it was not available.
+   */
+  on('visit-log', 'click', () => {
+    const spot = keptHere();
+    const sun = current();
+    if (!centre || !spot || !sun) return;
+
+    const visit: SpotVisit = { at: Date.now(), sunAltitude: sun.altitude, sunAzimuth: sun.azimuth };
+
+    const instant = currentInstant();
+    if (instant) visit.moonFraction = moonIllumination(instant).fraction;
+
+    if (weather && instant) {
+      const hour = hourAt(weather, instant);
+      if (hour) {
+        visit.weather = weatherCondition(hour.weatherCode).label;
+        visit.cloud = cloudStructure(hour).note;
+      }
+    }
+
+    const outcomeField = $<HTMLInputElement>('visit-outcome');
+    const outcome = outcomeField.value.trim();
+    if (outcome) visit.outcome = outcome.slice(0, MAX_OUTCOME);
+
+    keptSpots = addVisit(keptSpots, centre, visit);
+    if (storeSpotsOrSay()) {
+      outcomeField.value = '';
+      $('visit-say').textContent = '';
+    }
+    renderNotebook();
+  });
+
+  on('visit-list', 'click', (event) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-visit]');
+    const spot = keptHere();
+    if (!target || !spot?.visits) return;
+    const index = Number(target.dataset.visit);
+    const visits = spot.visits.filter((_, i) => i !== index);
+    editSpot({ visits: visits.length ? visits : undefined });
     renderNotebook();
   });
 
@@ -6262,6 +6415,7 @@ export async function startScout(): Promise<void> {
     map?.once('idle', frameRing);
     void loadWeather();
     void loadPhotos();
+    void loadSeeing();
 
     // A link that arrived without a name gets one, so the panel is not blank.
     if (link && !link.name) void nameTheSpot();
