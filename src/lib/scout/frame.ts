@@ -287,6 +287,37 @@ export function projectToFrame(target: SkyTarget, aim: Aim): FrameOffsets {
   };
 }
 
+/**
+ * The inverse of `projectToFrame`: given a point on the image plane, where in
+ * the sky it is.
+ *
+ * Issue #48 needs this to draw the frame's own rectangle onto the dome —
+ * `checkFraming` only ever asks "where does *this* target land", and drawing
+ * an edge of the rectangle needs the opposite question answered at every
+ * sampled point along it. Solved by inverting the same rotation
+ * `projectToFrame` applies, not by a second model of the camera: that
+ * function turns (target azimuth, altitude) into (right, forward, up) via a
+ * tilt rotation about the level `right` axis, and this undoes exactly that
+ * rotation — see the tests, which round-trip every case `projectToFrame`
+ * itself is tested against.
+ */
+export function frameOffsetToSky(acrossDeg: number, upDeg: number, aim: Aim): SkyTarget {
+  const right = Math.tan(acrossDeg * RAD);
+  const upCam = Math.tan(upDeg * RAD);
+  const ct = cos(aim.tiltDeg);
+  const st = sin(aim.tiltDeg);
+
+  // The tilt rotation, undone: `projectToFrame` computes (forward, upCam) by
+  // rotating (north, up) by `tiltDeg` about the level axis; this is that
+  // rotation matrix's transpose, which is its inverse.
+  const north = ct - upCam * st;
+  const up = st + upCam * ct;
+
+  const dAz = Math.atan2(right, north) * DEG;
+  const altitude = Math.atan2(up, Math.hypot(right, north)) * DEG;
+  return { azimuth: norm360(aim.bearing + dAz), altitude };
+}
+
 export interface FrameCheck {
   placement: FramePlacement;
   inFrame: boolean;

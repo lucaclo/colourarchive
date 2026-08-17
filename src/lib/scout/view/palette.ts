@@ -88,6 +88,15 @@ export const WIDTH = {
   solstice: 1.8,
   moon: 2.6,
   ground: 2.2,
+  /**
+   * Issue #48: the frame's own rectangle, overlaid on the dome. Quieter than
+   * the sun's arc — it is a reference mark about the lens, not about the
+   * light — but not below 2: `DomeGeometry.path` only adds the sprites that
+   * give a mark its weight at 2px and up, and anything under that silently
+   * degrades to WebGL's own one-pixel aliased hairline, which is the exact
+   * failure issue #23 already spent a whole mechanism fixing for the arc.
+   */
+  frameOverlay: 2.4,
   /** How much wider the lift stroke is than the mark it sits under. */
   lift: 3.4,
 };
