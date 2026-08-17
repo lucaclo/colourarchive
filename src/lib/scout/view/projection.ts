@@ -171,26 +171,38 @@ export const GLSL_PROJECT_ELEVATED = `
 #endif`;
 
 /**
- * A point on the ground, for a layer that needs Z for something else.
+ * A point at a stated elevation above sea level, for a layer that needs Z for
+ * something else.
  *
- * The shadow mask encodes a blocker's height in Z so the tallest thing standing
- * at each pixel wins, which means it cannot also carry the clipping depth. So
- * how far past the horizon a vertex is comes back as a number to be handed to
- * the fragment shader and discarded on, which costs a varying and hides the far
- * side of the planet just the same.
+ * The shadow mask encodes a blocker's own height in Z so the tallest thing
+ * standing at each pixel wins, which means it cannot also carry the clipping
+ * depth. So how far past the horizon a vertex is comes back as a number to be
+ * handed to the fragment shader and discarded on, which costs a varying and
+ * hides the far side of the planet just the same.
  *
  * Above 1.0 is past the horizon; MapLibre's clipping plane is scaled that way.
+ *
+ * `mercatorZ` and `metres` are the same elevation in the two units the two
+ * projections each want — see the elevation trap above — and issue #51 is
+ * why this takes them at all: every vertex here used to be nailed to
+ * `merc, 0.0`, so a building's own shadow was projected as though the ground
+ * under it were flat and at sea level. On a slope, in 3D, that put the shadow
+ * visibly beside the terrain it was supposed to be falling across, by an
+ * amount that grew with elevation and pitch. Passing the real elevation
+ * through is the same fix `GLSL_PROJECT_ELEVATED` already makes for the dome;
+ * this is that fix for the layer that only ever needed the ground.
  */
 export const GLSL_PROJECT_GROUND = `
 #ifdef GLOBE
-  vec4 scoutGround(vec2 merc, out float beyondHorizon) {
+  vec4 scoutGround(vec2 merc, float mercatorZ, float metres, out float beyondHorizon) {
     vec3 sphere = projectToSphere(merc);
-    vec4 globePos = u_projection_matrix * vec4(sphere, 1.0);
-    beyondHorizon = globeComputeClippingZ(sphere);
+    vec3 elevated = sphere * (1.0 + metres / GLOBE_RADIUS);
+    vec4 globePos = u_projection_matrix * vec4(elevated, 1.0);
+    beyondHorizon = globeComputeClippingZ(elevated);
 
     if (u_projection_transition > 0.999) return globePos;
 
-    vec4 flatPos = u_projection_fallback_matrix * vec4(merc, 0.0, 1.0);
+    vec4 flatPos = u_projection_fallback_matrix * vec4(merc, mercatorZ, 1.0);
     vec4 result = globePos;
     result.xyw = mix(flatPos.xyw, globePos.xyw, u_projection_transition);
     beyondHorizon = mix(
@@ -201,8 +213,8 @@ export const GLSL_PROJECT_GROUND = `
     return result;
   }
 #else
-  vec4 scoutGround(vec2 merc, out float beyondHorizon) {
+  vec4 scoutGround(vec2 merc, float mercatorZ, float metres, out float beyondHorizon) {
     beyondHorizon = 0.0;
-    return u_projection_matrix * vec4(merc, 0.0, 1.0);
+    return u_projection_matrix * vec4(merc, mercatorZ, 1.0);
   }
 #endif`;

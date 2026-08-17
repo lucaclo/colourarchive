@@ -27,6 +27,7 @@ import {
   equivalentFocalLength,
   fieldOfView,
   frameAxis,
+  frameOffsetToSky,
   frameWedge,
   frameWidthAt,
   hyperfocalDistanceMm,
@@ -453,6 +454,52 @@ describe('projectToFrame', () => {
     const overhead = projectToFrame({ azimuth: 180, altitude: 60 }, { bearing: 0, tiltDeg: 80 });
     assert.equal(overhead.ahead, true);
     close(Math.hypot(overhead.acrossDeg, overhead.upDeg), 40, 1);
+  });
+});
+
+describe('frameOffsetToSky', () => {
+  it('is the exact inverse of projectToFrame, swept across aim, tilt and offset', () => {
+    // The identity issue #48's dome overlay depends on: whatever
+    // projectToFrame says a sky point's offsets are, running those offsets
+    // back through frameOffsetToSky must recover a point projectToFrame
+    // agrees is at that same offset — not necessarily the same azimuth and
+    // altitude, since across ±180° in azimuth at the zenith is one point
+    // under many names, but the same place on the image plane.
+    for (const bearing of [0, 47, 180, 311]) {
+      for (const tiltDeg of [-55, -20, 0, 35, 75]) {
+        const aim = { bearing, tiltDeg };
+        for (let across = -80; across <= 80; across += 17) {
+          for (let up = -70; up <= 70; up += 17) {
+            const sky = frameOffsetToSky(across, up, aim);
+            const back = projectToFrame(sky, aim);
+            assert.ok(back.ahead, `${bearing}/${tiltDeg} → ${across}/${up} landed behind the camera`);
+            close(back.acrossDeg, across, 1e-6, `across at ${bearing}/${tiltDeg}`);
+            close(back.upDeg, up, 1e-6, `up at ${bearing}/${tiltDeg}`);
+          }
+        }
+      }
+    }
+  });
+
+  it('puts dead centre at the aim itself', () => {
+    for (const aim of [{ bearing: 0, tiltDeg: 0 }, { bearing: 210, tiltDeg: 40 }, { bearing: 88, tiltDeg: -30 }]) {
+      const sky = frameOffsetToSky(0, 0, aim);
+      close(sky.azimuth, ((aim.bearing % 360) + 360) % 360, 1e-9);
+      close(sky.altitude, aim.tiltDeg, 1e-9);
+    }
+  });
+
+  it('agrees with checkFraming about where the frame edges are', () => {
+    // A second, independent cross-check: the sky point this function puts at
+    // the frame's own top-right corner must checkFraming as in-frame (or on
+    // the edge, for the tolerance the model already carries), and a point a
+    // couple of degrees further out must not.
+    const aim = { bearing: 270, tiltDeg: 10 };
+    const fov = fieldOfView(FF, 35);
+    const corner = frameOffsetToSky(fov.horizontalDeg / 2 - 0.5, fov.verticalDeg / 2 - 0.5, aim);
+    assert.equal(checkFraming(corner, aim, fov).inFrame, true);
+    const outside = frameOffsetToSky(fov.horizontalDeg / 2 + 3, fov.verticalDeg / 2 + 3, aim);
+    assert.equal(checkFraming(outside, aim, fov).inFrame, false);
   });
 });
 

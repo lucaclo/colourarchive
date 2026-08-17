@@ -366,6 +366,63 @@ export function elevationAt(field: HeightField, lon: number, lat: number): numbe
   return top * (1 - fy) + bottom * fy;
 }
 
+/* ── Terrain as a shadow blocker ───────────────────────────────────────────── */
+
+/** One ground triangle, corners at their own absolute elevation. */
+export interface TerrainFacet {
+  a: [lon: number, lat: number, heightM: number];
+  b: [lon: number, lat: number, heightM: number];
+  c: [lon: number, lat: number, heightM: number];
+}
+
+/**
+ * The loaded field, as a coarse mesh of absolute-elevation triangles —
+ * issue #51's second gap. Building shadows already stop at whatever else is
+ * standing in their way; this is what lets a mountain do the same, by
+ * entering the identical height-field competition a building's own blocker
+ * already runs in `shadow-layer.ts`, at the same absolute elevation that
+ * blocker now carries instead of a height measured from sea level.
+ *
+ * Strided rather than one triangle a cell, the same trade `downsample`
+ * already makes for the shadow march: a mountain's silhouette does not need
+ * building-level precision to stop a shadow, and the full field can be
+ * hundreds of thousands of cells — cheap to sample, not cheap to hand the GPU
+ * two triangles each.
+ */
+export function terrainFacets(field: HeightField, stride = 4): TerrainFacet[] {
+  const s = Math.max(1, Math.floor(stride));
+  if (field.width <= s || field.height <= s) return [];
+
+  const zoom = field.zoom;
+  const samplesPerTile =
+    field.width / (lonToTileX(field.bounds.east, zoom) - lonToTileX(field.bounds.west, zoom));
+  const minTileX = lonToTileX(field.bounds.west, zoom);
+  const minTileY = latToTileY(field.bounds.north, zoom);
+
+  // The exact inverse of `sampleAt`'s cell-centre convention, so a facet's
+  // corners sit where the height stored for that cell actually belongs.
+  const at = (col: number, row: number): [number, number, number] => [
+    tileXToLon(minTileX + (col + 0.5) / samplesPerTile, zoom),
+    tileYToLat(minTileY + (row + 0.5) / samplesPerTile, zoom),
+    field.heights[row * field.width + col],
+  ];
+
+  const facets: TerrainFacet[] = [];
+  for (let row = 0; row + s < field.height; row += s) {
+    for (let col = 0; col + s < field.width; col += s) {
+      const nw = at(col, row);
+      const ne = at(col + s, row);
+      const sw = at(col, row + s);
+      const se = at(col + s, row + s);
+      // Split along the same diagonal both ways, so the two triangles share
+      // an edge exactly rather than leaving a sliver a rounding error apart.
+      facets.push({ a: nw, b: ne, c: sw });
+      facets.push({ a: ne, b: se, c: sw });
+    }
+  }
+  return facets;
+}
+
 /* ── The shadow itself ─────────────────────────────────────────────────────── */
 
 export interface TerrainShadowOptions {
@@ -738,6 +795,45 @@ export function terrainShadowAt(
 
 /* ── The horizon from a point ──────────────────────────────────────────────── */
 
+/**
+ * How far away a peak this much higher than the observer can still just clear
+ * the horizon — issue #52.
+ *
+ * A comparable tool (TPE 3D) has a documented failure mode: it only loads
+ * terrain out to a fixed radius, so a real, tall, distant peak sitting just
+ * past that radius is silently never checked, and a sunrise is reported early
+ * with no sign anything was missed. Auditing `terrainHorizon`'s own radius
+ * against the same failure starts here rather than with a guessed number.
+ *
+ * Solved from the identity the ray-march already evaluates per sample —
+ * apparent altitude reaches zero exactly where the peak's height above the
+ * observer equals the curvature-and-refraction drop, `height = groundM² /
+ * (2·R)` — so this is the same geometry `terrainHorizon` walks, read
+ * backwards, not a second model of it. At a 1,000 m prominence — a real,
+ * unremarkable ridge, not an extreme case — that is about 120 km; at 2,500 m
+ * it is close to 190 km. The old default of 30 km caught neither.
+ */
+export function horizonReachM(peakHeightAboveObserverM: number): number {
+  if (!(peakHeightAboveObserverM > 0)) return 0;
+  return Math.sqrt(2 * EFFECTIVE_EARTH_RADIUS_M * peakHeightAboveObserverM);
+}
+
+/**
+ * The default search radius for `terrainHorizon`.
+ *
+ * `horizonReachM(1500)` is about 149 km — a 1,500 m prominence is a serious
+ * mountain but not an exceptional one, and this is chosen to comfortably
+ * cover it rather than to cover the most extreme peak on earth, because nothing
+ * this walks is free: past this point every step costs a sample, and a radius
+ * chosen for Denali would spend most of its steps over ocean for everyone
+ * scouting nearer sea level. In practice this rarely is the binding limit
+ * anyway — `terrain-shadows.ts` pads the fetched field by 35% past the
+ * viewport on every side, so a tight scouting view runs out of *loaded*
+ * terrain well inside this radius, and this number only starts to matter once
+ * someone is zoomed out far enough for it to.
+ */
+export const DEFAULT_HORIZON_RADIUS_M = 150_000;
+
 export interface TerrainHorizon {
   /** Bearing resolution, degrees. `altitudes` has 360/stepDeg entries. */
   stepDeg: number;
@@ -769,7 +865,7 @@ export function terrainHorizon(
   options: { stepDeg?: number; radiusM?: number; maxSteps?: number; growth?: number } = {},
 ): TerrainHorizon {
   const stepDeg = options.stepDeg ?? 0.5;
-  const radiusM = options.radiusM ?? 30_000;
+  const radiusM = options.radiusM ?? DEFAULT_HORIZON_RADIUS_M;
   const maxSteps = options.maxSteps ?? 220;
   const growth = options.growth ?? 1.03;
   const bins = Math.max(4, Math.round(360 / stepDeg));

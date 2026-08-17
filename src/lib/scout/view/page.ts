@@ -85,6 +85,8 @@ import {
   type SpotVisit,
 } from '../spots';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
+import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-upload';
+import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
 import { itineraryReport, shootPlan } from '../report';
 import {
   buildingHeight,
@@ -166,6 +168,7 @@ import {
 } from '../itinerary';
 import {
   elevationAt,
+  terrainFacets,
   terrainHorizon,
   terrainShadowAt,
   type HeightField,
@@ -210,10 +213,12 @@ import {
   describeLens,
   fieldOfView,
   frameAxis,
+  frameOffsetToSky,
   frameWedge,
   frameWidthAt,
   sensorByKey,
   type Orientation,
+  type SkyTarget,
 } from '../frame';
 import { lineOfSight, profileGeometry, type LineOfSight } from '../profile';
 import {
@@ -227,7 +232,7 @@ import {
   startCountdown,
   type Countdown,
 } from '../exposure';
-import { TIMELAPSE_FRAME_RATES, TIMELAPSE_INTERVALS_S, timelapse } from '../timelapse';
+import { TIMELAPSE_FRAME_RATES, TIMELAPSE_INTERVALS_S, formatStorage, timelapse } from '../timelapse';
 import {
   fetchAirQualityDirect,
   fetchHorizonPairDirect,
@@ -2133,6 +2138,43 @@ export async function startScout(): Promise<void> {
     const ink = inkColour(basemap);
     const lift = liftColour(basemap);
 
+    // Issue #48: the frame's own rectangle, drawn on the sky it actually
+    // frames rather than left to two separate panels — the ground wedge
+    // `drawFrame` already draws, and the sun/moon/core paths this dome
+    // already carries. `frameOffsetToSky` (the inverse of the FOV solver's
+    // own `projectToFrame`) walks each edge in the image plane and asks
+    // where in the sky that point is; `domePosition` then puts it on the
+    // same dome everything else here is drawn on, so the two cannot drift
+    // out of registration with each other.
+    if (shown.frame) {
+      const aim = { bearing: lens.bearing, tiltDeg: lens.tiltDeg };
+      const fov = currentFov();
+      const halfH = fov.horizontalDeg / 2;
+      const halfV = fov.verticalDeg / 2;
+      // Corners, walked clockwise from the top left, with the first repeated
+      // to close the ring exactly.
+      const corners: Array<[number, number]> = [
+        [-halfH, halfV],
+        [halfH, halfV],
+        [halfH, -halfV],
+        [-halfH, -halfV],
+        [-halfH, halfV],
+      ];
+      const STEPS_PER_EDGE = 16;
+      const rectSky: SkyTarget[] = [];
+      for (let e = 0; e < corners.length - 1; e++) {
+        const [a0, u0] = corners[e];
+        const [a1, u1] = corners[e + 1];
+        for (let i = 0; i < STEPS_PER_EDGE; i++) {
+          const t = i / STEPS_PER_EDGE;
+          rectSky.push(frameOffsetToSky(a0 + (a1 - a0) * t, u0 + (u1 - u0) * t, aim));
+        }
+      }
+      rectSky.push(rectSky[0]);
+      const rectPoints = rectSky.map((sky) => domePosition(centre!, sky.azimuth, sky.altitude, radius));
+      moving.push(rectPoints, 'strip', [...ink, 0.75] as RGBA, WIDTH.frameOverlay);
+    }
+
     if (shown.moonPath) {
       const moonNow = currentMoon();
       if (moonNow && moonNow.altitude > -1) {
@@ -2545,7 +2587,23 @@ export async function startScout(): Promise<void> {
       const result = castPrisms(castable, now.azimuth, now.altitude, options);
       const geometry = new ShadowGeometry(projectFlat);
       for (const prism of result.prisms) {
-        geometry.addShadow(prism.ring, prism.ceilings, shadowDarkness(prism.lengthM, now.altitude));
+        // Issue #51: the ceiling castShadow returns is relative to the
+        // building's own base — exactly right for its shape, silent about
+        // where that base actually sits. Re-based here, once per building
+        // rather than once per vertex, onto the same sea-level datum the
+        // height field now compares everything against; the ground each
+        // vertex is *positioned* on, by contrast, genuinely varies along a
+        // shadow that can run hundreds of metres across sloped terrain, so
+        // that one stays a per-vertex lookup.
+        const baseElevM = groundElevationAt(prism.anchorLon, prism.anchorLat);
+        const absoluteCeilings = prism.ceilings.map((c) => baseElevM + c);
+        const groundM = prism.ring.map(([lon, lat]) => groundElevationAt(lon, lat));
+        geometry.addShadow(
+          prism.ring,
+          absoluteCeilings,
+          groundM,
+          shadowDarkness(prism.lengthM, now.altitude),
+        );
       }
 
       // The monolith joins the same pass rather than keeping its own layer.
@@ -2553,7 +2611,15 @@ export async function startScout(): Promise<void> {
       // shadows used to, and the one shadow here cast from a height that was
       // *stated* is the last one that should be drawn twice over.
       const slabShadow = monolithShadow(now);
-      if (slabShadow) geometry.addShadow(slabShadow.ring, slabShadow.ceilings, 0.55);
+      if (slabShadow) {
+        const baseElevM = groundElevationAt(slabShadow.anchorLon, slabShadow.anchorLat);
+        geometry.addShadow(
+          slabShadow.ring,
+          slabShadow.ceilings.map((c) => baseElevM + c),
+          slabShadow.ring.map(([lon, lat]) => groundElevationAt(lon, lat)),
+          0.55,
+        );
+      }
 
       ensureBlockers();
       shadowLayer.setShadows(geometry.shadowVertices());
@@ -2572,14 +2638,36 @@ export async function startScout(): Promise<void> {
 
   const EMPTY_GEOMETRY = new Float32Array(0);
 
-  const projectFlat = (lon: number, lat: number): [number, number] => {
-    const m = maplibregl.MercatorCoordinate.fromLngLat({ lng: lon, lat });
-    return [m.x, m.y];
+  const projectFlat = (lon: number, lat: number, elevationM: number): [number, number, number] => {
+    const m = maplibregl.MercatorCoordinate.fromLngLat({ lng: lon, lat }, elevationM);
+    return [m.x, m.y, m.z ?? 0];
   };
+
+  /**
+   * The ground's own elevation at a coordinate, or sea level when neither an
+   * uploaded survey nor the global field has an answer — issue #51.
+   * Falling back to 0 rather than refusing to draw is the same choice
+   * `loadHeightField` already makes for a tile that failed to load: the
+   * least harmful guess, since it reproduces exactly today's flat-ground
+   * behaviour rather than inventing a wrong one.
+   *
+   * Issue #50's override sits in front of the global DEM here rather than as
+   * a separate code path: every caller of `groundElevationAt` — shadows,
+   * blockers, terrain facets — gets the sharper survey for free wherever one
+   * covers the point, with nothing else about how they use elevation
+   * changing.
+   */
+  function groundElevationAt(lon: number, lat: number): number {
+    const field = terrainShadows?.state().field;
+    const global = (lo: number, la: number) => (field ? (elevationAt(field, lo, la) ?? null) : null);
+    return elevationWithOverride(demUploads, global, lon, lat) ?? 0;
+  }
 
   /** What the blocker buffer was last built from. */
   let blockerSet: typeof castable | null = null;
   let blockerSlab = '';
+  let blockerField: HeightField | null = null;
+  let blockerDem: typeof demUploads | null = null;
 
   /**
    * Hand the layer the things a shadow can land on — but only when they have
@@ -2591,20 +2679,54 @@ export async function startScout(): Promise<void> {
    *
    * The set turns over when the view moves or the monolith does, and at no
    * other time — so scrubbing a whole day rebuilds it exactly never, which is
-   * the point of keeping it out of the shadow buffer.
+   * the point of keeping it out of the shadow buffer. The field is watched by
+   * the same rule, added for issue #51's terrain facets: `ensureField` only
+   * ever replaces it with a new object when the loaded area actually changes,
+   * so its identity is as cheap a dedupe key as the building set's already is.
+   * `demUploads` (issue #50) is watched the same way: `loadDemUploads` only
+   * ever assigns a new array once its fetch actually resolves with something
+   * different, so an upload finishing mid-session rebuilds the blockers
+   * exactly once rather than on every frame that happens to check.
    */
   function ensureBlockers() {
     const slabKey =
       shown.monolith && centre ? `${slab.lon},${slab.lat},${slab.heightM},${slab.sizeM}` : '';
-    if (blockerSet === castable && blockerSlab === slabKey) return;
+    const field = terrainShadows?.state().field ?? null;
+    if (
+      blockerSet === castable &&
+      blockerSlab === slabKey &&
+      blockerField === field &&
+      blockerDem === demUploads
+    )
+      return;
     blockerSet = castable;
     blockerSlab = slabKey;
+    blockerField = field;
+    blockerDem = demUploads;
 
     const geometry = new ShadowGeometry(projectFlat);
     for (const building of castable) {
-      geometry.addBlocker(building.ring, building.height, building.hull);
+      // One sample for the whole footprint (issue #51's note on addBlocker) —
+      // the anchor is the same vertex castShadow itself measures the building
+      // from, so a shadow's re-based ceiling and its own blocker agree about
+      // which ground they are both standing on.
+      const groundM = groundElevationAt(building.ring[0][0], building.ring[0][1]);
+      geometry.addBlocker(building.ring, groundM + building.height, groundM, building.hull);
     }
-    if (slabKey) geometry.addBlocker(monolithFootprint(), slab.heightM);
+    if (slabKey) {
+      const groundM = groundElevationAt(slab.lon, slab.lat);
+      geometry.addBlocker(monolithFootprint(), groundM + slab.heightM, groundM);
+    }
+
+    // The terrain itself, in the same pass and at the same absolute
+    // elevation as everything standing on it — issue #51's other gap. A
+    // mountain now competes for each pixel the identical way a taller
+    // building already did, which is what lets it occlude a shadow that
+    // would otherwise be drawn straight through it.
+    if (field) {
+      for (const facet of terrainFacets(field)) geometry.addTerrainFacet(facet);
+    }
+
     shadowLayer.setBlockers(geometry.blockerVertices());
   }
 
@@ -2683,7 +2805,7 @@ export async function startScout(): Promise<void> {
     let profile = buildSkyline(centre, nearby);
     const field = terrainShadows?.state().field;
     if (field) {
-      const horizon = terrainHorizon(field, centre.lon, centre.lat, { stepDeg: 1, radiusM: 30_000 });
+      const horizon = terrainHorizon(field, centre.lon, centre.lat, { stepDeg: 1 });
       if (horizon.elevationM != null) profile = mergeHorizon(profile, horizon);
     }
     skyline = profile;
@@ -3863,6 +3985,7 @@ export async function startScout(): Promise<void> {
     // The dedupe guard makes the extra calls from a basemap switch free.
     void loadPhotos();
     void loadSeeing();
+    void loadDemUploads();
   }
 
   function setCentre(place: Place, { refit = true } = {}) {
@@ -4172,7 +4295,7 @@ export async function startScout(): Promise<void> {
     let profile = buildSkyline(at, around);
     const field = terrainShadows?.state().field;
     if (field) {
-      const horizon = terrainHorizon(field, at.lon, at.lat, { stepDeg: 1, radiusM: 30_000 });
+      const horizon = terrainHorizon(field, at.lon, at.lat, { stepDeg: 1 });
       if (horizon.elevationM != null) profile = mergeHorizon(profile, horizon);
     }
     return {
@@ -4843,6 +4966,10 @@ export async function startScout(): Promise<void> {
     // The core fold prints two answers about this lens, and both go stale the
     // moment it is turned or changed.
     refreshCoreLens();
+    // Issue #48: the dome's own frame rectangle, which changes with every one
+    // of this function's inputs and belongs to the "moving" half of the dome
+    // geometry rather than the day's static half — see updateDome.
+    updateDome();
     if (persist) save();
   }
 
@@ -5217,6 +5344,51 @@ export async function startScout(): Promise<void> {
 
   let keptSpots: SavedSpot[] = [];
 
+  /**
+   * A spot's own surveys — issue #50. Held separately from `SavedSpot` itself
+   * rather than as one more field on it: a raster can run to `MAX_UPLOAD_BYTES`
+   * and `keptSpots` is serialised into `localStorage` on every edit, which a
+   * megapixel-scale array has no business being part of. IndexedDB holds the
+   * bytes; this is just this session's copy of whichever spot the pin is on.
+   */
+  let demUploads: StoredDem[] = [];
+  let demUploadsKey = '';
+
+  /**
+   * Fetch the current spot's surveys from IndexedDB.
+   *
+   * Keyed on the coordinate itself, not on `keptHere()`: an upload made
+   * before a spot was starred should still show up the moment the pin lands
+   * back on it, the same way `loadSeeing` and `loadWeather` key on the raw
+   * centre rather than on whether the place happens to be kept.
+   */
+  async function loadDemUploads() {
+    if (!centre) {
+      demUploads = [];
+      demUploadsKey = '';
+      return;
+    }
+    const key = `${centre.lat.toFixed(6)},${centre.lon.toFixed(6)}`;
+    if (key === demUploadsKey) return;
+    demUploadsKey = key;
+    const at = centre;
+    try {
+      const uploads = await uploadsFor(at);
+      if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
+      demUploads = uploads;
+    } catch {
+      // Most likely private browsing, where IndexedDB either does not open or
+      // is wiped on close — the global DEM still answers, so this fails quiet.
+      if (centre?.lat === at.lat && centre?.lon === at.lon) demUploads = [];
+    }
+    // A new array reference is exactly what `ensureBlockers`' dedupe watches
+    // for; the shadow cast itself is keyed on the sun's own position, which an
+    // upload arriving does not move, so it needs telling directly.
+    lastCast = null;
+    invalidate({ shadows: true });
+    renderNotebook();
+  }
+
   function loadSpots() {
     try {
       keptSpots = readSpots(localStorage.getItem(SPOTS_KEY));
@@ -5484,6 +5656,7 @@ export async function startScout(): Promise<void> {
       photos.length >= MAX_PHOTOS ? `That is ${MAX_PHOTOS} references — remove one to add another.` : '';
 
     renderVisits(spot);
+    renderDemUploads();
   }
 
   /**
@@ -5525,6 +5698,47 @@ export async function startScout(): Promise<void> {
         drop.dataset.visit = String(index);
         drop.textContent = '×';
         drop.title = 'Remove this visit';
+        li.append(drop);
+        return li;
+      }),
+    );
+  }
+
+  /**
+   * The surveys uploaded for this spot — issue #50.
+   *
+   * Listed the same shape as the visit log beside it: a line describing what
+   * it covers, a button to drop it. There is nothing here to mark as "the
+   * active one", because `elevationWithOverride` does not choose between
+   * uploads — every survey for this spot is checked, in the order they were
+   * added, and the first that covers the point being sampled answers.
+   */
+  function renderDemUploads() {
+    $('dem-kept').textContent = demUploads.length
+      ? `${demUploads.length} survey${demUploads.length === 1 ? '' : 's'} on record here — sharper ground than the free terrain wherever they cover.`
+      : 'No survey uploaded here — shadows and the dome measure against the free global terrain.';
+
+    $('dem-list').replaceChildren(
+      ...demUploads.map((upload) => {
+        const li = document.createElement('li');
+
+        const name = document.createElement('span');
+        name.className = 'visit-date';
+        name.textContent = upload.filename;
+        li.append(name);
+
+        const detail = document.createElement('span');
+        detail.className = 'visit-detail';
+        const megabytes = (upload.width * upload.height * 4) / (1024 * 1024);
+        detail.textContent = `${upload.width}×${upload.height} · ${formatStorage(megabytes)}`;
+        li.append(detail);
+
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'drop-visit';
+        drop.dataset.dem = upload.id;
+        drop.textContent = '×';
+        drop.title = 'Remove this survey';
         li.append(drop);
         return li;
       }),
@@ -5649,6 +5863,58 @@ export async function startScout(): Promise<void> {
     const visits = spot.visits.filter((_, i) => i !== index);
     editSpot({ visits: visits.length ? visits : undefined });
     renderNotebook();
+  });
+
+  /**
+   * Parse and store the chosen file — issue #50.
+   *
+   * The same refuse-rather-than-guess posture `dem-upload.ts` itself keeps:
+   * every way this can fail (too large, not a GeoTIFF, not longitude and
+   * latitude) already carries a stated reason as a `DemUploadError`, so this
+   * has nothing to add beyond showing it.
+   */
+  async function addSurvey() {
+    const say = $('dem-say');
+    if (!centre || !keptHere()) return;
+    const input = $<HTMLInputElement>('dem-file');
+    const file = input.files?.[0];
+    if (!file) {
+      say.textContent = 'Choose a GeoTIFF file first.';
+      return;
+    }
+
+    say.textContent = 'Reading…';
+    const at = centre;
+    try {
+      const dem = await parseGeoTiffDem(await file.arrayBuffer());
+      await saveUpload(at, file.name, dem, Date.now());
+      if (centre?.lat !== at.lat || centre?.lon !== at.lon) return; // the pin moved while this was reading
+      demUploads = await uploadsFor(at);
+      demUploadsKey = `${at.lat.toFixed(6)},${at.lon.toFixed(6)}`;
+      lastCast = null;
+      invalidate({ shadows: true });
+      input.value = '';
+      say.textContent = '';
+      renderDemUploads();
+    } catch (err) {
+      say.textContent = err instanceof DemUploadError ? err.message : 'Could not read that file.';
+    }
+  }
+
+  on('dem-add', 'click', () => void addSurvey());
+
+  on('dem-list', 'click', (event) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-dem]');
+    if (!target?.dataset.dem || !centre) return;
+    const id = target.dataset.dem;
+    const at = centre;
+    void removeUpload(id).then(() => {
+      if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
+      demUploads = demUploads.filter((upload) => upload.id !== id);
+      lastCast = null;
+      invalidate({ shadows: true });
+      renderDemUploads();
+    });
   });
 
   on('star', 'click', () => {
