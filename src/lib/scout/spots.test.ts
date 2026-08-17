@@ -3,18 +3,25 @@ import assert from 'node:assert/strict';
 
 import {
   MAX_NOTE,
+  MAX_OUTCOME,
   MAX_PHOTOS,
   MAX_SPOTS,
+  MAX_VISITS,
   addSpot,
+  addVisit,
+  closestVisit,
   describeFrame,
+  formatVisitDate,
   indexOfSpot,
   readFrame,
   readPhoto,
   readSpot,
   readSpots,
+  readVisit,
   removeSpot,
   updateSpot,
   type SavedSpot,
+  type SpotVisit,
 } from './spots.ts';
 
 const spot = (name: string, lat = 55.9532, lon = -3.1883, savedAt = 1): SavedSpot => ({
@@ -260,6 +267,152 @@ describe('updateSpot', () => {
   it('leaves the list alone when nothing there matches', () => {
     const list = [PLACE];
     assert.equal(updateSpot(list, { lat: 0, lon: 0 }, { note: 'nowhere' }), list);
+  });
+});
+
+describe('readVisit', () => {
+  const VISIT = { at: 1_700_000_000_000, sunAltitude: 12.5, sunAzimuth: 250 };
+
+  it('takes a whole visit', () => {
+    const visit = readVisit({
+      ...VISIT,
+      moonFraction: 0.4,
+      cloud: 'broken cloud, mostly low',
+      weather: 'Partly cloudy',
+      outcome: 'The core cleared just after midnight.',
+    });
+    assert.deepEqual(visit, {
+      at: VISIT.at,
+      sunAltitude: 12.5,
+      sunAzimuth: 250,
+      moonFraction: 0.4,
+      cloud: 'broken cloud, mostly low',
+      weather: 'Partly cloudy',
+      outcome: 'The core cleared just after midnight.',
+    });
+  });
+
+  it('refuses a visit with no timestamp or no sun position', () => {
+    assert.equal(readVisit(null), null);
+    assert.equal(readVisit({ sunAltitude: 10, sunAzimuth: 200 }), null, 'no `at`');
+    assert.equal(readVisit({ at: VISIT.at, sunAzimuth: 200 }), null, 'no altitude');
+    assert.equal(readVisit({ at: VISIT.at, sunAltitude: 10 }), null, 'no azimuth');
+    assert.equal(readVisit({ at: VISIT.at, sunAltitude: 95, sunAzimuth: 200 }), null, 'impossible altitude');
+  });
+
+  it('normalises azimuth past the compass rather than refusing it', () => {
+    assert.equal(readVisit({ ...VISIT, sunAzimuth: 370 })?.sunAzimuth, 10);
+  });
+
+  it('drops an optional field that fails checking without losing the visit', () => {
+    const visit = readVisit({ ...VISIT, moonFraction: 4, cloud: 123, outcome: { not: 'text' } });
+    assert.equal(visit?.sunAltitude, 12.5);
+    assert.equal(visit?.moonFraction, undefined);
+    assert.equal(visit?.cloud, undefined);
+    assert.equal(visit?.outcome, undefined);
+  });
+
+  it('truncates an outcome rather than refusing it', () => {
+    const visit = readVisit({ ...VISIT, outcome: 'x'.repeat(MAX_OUTCOME + 500) });
+    assert.equal(visit?.outcome?.length, MAX_OUTCOME);
+  });
+});
+
+describe('readSpot with visits', () => {
+  const VISIT = { at: 1_700_000_000_000, sunAltitude: 12.5, sunAzimuth: 250 };
+
+  it('keeps a list of visits, newest first', () => {
+    const spot = readSpot({
+      ...PLACE,
+      visits: [
+        { ...VISIT, at: 1, sunAltitude: 1 },
+        { ...VISIT, at: 3, sunAltitude: 3 },
+        { ...VISIT, at: 2, sunAltitude: 2 },
+      ],
+    });
+    assert.deepEqual(spot?.visits?.map((v) => v.at), [3, 2, 1]);
+  });
+
+  it('drops a bad visit without losing the place or the good ones', () => {
+    const spot = readSpot({ ...PLACE, visits: [VISIT, 'rubbish', { at: 2 }] });
+    assert.equal(spot?.name, 'Calton Hill');
+    assert.equal(spot?.visits?.length, 1);
+  });
+
+  it('caps the visits a spot may carry', () => {
+    const many = Array.from({ length: MAX_VISITS + 5 }, (_, i) => ({ ...VISIT, at: i + 1 }));
+    assert.equal(readSpot({ ...PLACE, visits: many })?.visits?.length, MAX_VISITS);
+  });
+
+  it('carries visits across a re-save that says nothing about them', () => {
+    const kept = addSpot([], { ...PLACE, visits: [VISIT] });
+    const again = addSpot(kept, { ...PLACE, name: 'Calton Hill, Edinburgh', savedAt: 2 });
+    assert.deepEqual(again[0].visits, [VISIT]);
+  });
+});
+
+describe('addVisit', () => {
+  const VISIT: SpotVisit = { at: 100, sunAltitude: 10, sunAzimuth: 200 };
+
+  it('puts the newest visit first', () => {
+    const kept = addSpot([], PLACE);
+    const once = addVisit(kept, PLACE, VISIT);
+    const twice = addVisit(once, PLACE, { ...VISIT, at: 200, sunAltitude: 20 });
+    assert.deepEqual(
+      twice[0].visits?.map((v) => v.at),
+      [200, 100],
+    );
+  });
+
+  it('does nothing when the spot is not kept', () => {
+    assert.deepEqual(addVisit([], PLACE, VISIT), []);
+  });
+
+  it('does not move the spot in the list', () => {
+    const list = [
+      { ...PLACE, savedAt: 3 },
+      { name: 'Arthur’s Seat', lat: 55.944, lon: -3.1618, savedAt: 2 },
+    ];
+    const next = addVisit(list, PLACE, VISIT);
+    assert.equal(next[0].name, 'Calton Hill');
+  });
+});
+
+describe('closestVisit', () => {
+  const low: SpotVisit = { at: 1, sunAltitude: 5, sunAzimuth: 100, outcome: 'Flat light.' };
+  const high: SpotVisit = { at: 2, sunAltitude: 40, sunAzimuth: 180 };
+  const mid: SpotVisit = { at: 3, sunAltitude: 20, sunAzimuth: 260 };
+
+  it('is null with nothing logged', () => {
+    assert.equal(closestVisit(undefined, 10, 0), null);
+    assert.equal(closestVisit([], 10, 0), null);
+  });
+
+  it('picks the visit closest in sun altitude, ignoring azimuth entirely', () => {
+    // `mid` is 100° round in bearing from the target and still wins, because
+    // ranking is on altitude alone — see the function's own reasoning for why
+    // fusing the two axes would be an invented weighting, not a measured one.
+    const match = closestVisit([low, high, mid], 18, 0);
+    assert.equal(match?.visit, mid);
+    assert.equal(match?.altitudeDiffDeg, 2);
+  });
+
+  it('reports the azimuth gap as context without it affecting the pick', () => {
+    const match = closestVisit([low], 6, 280);
+    assert.equal(match?.visit, low);
+    assert.equal(match?.azimuthDiffDeg, 180);
+  });
+
+  it("mentions the outcome when there is one, and says plainly when there isn't", () => {
+    assert.match(closestVisit([low], 5, 100)!.note, /Flat light\./);
+    assert.match(closestVisit([high], 40, 180)!.note, /No outcome was logged\./);
+  });
+});
+
+describe('formatVisitDate', () => {
+  it('reads as a date, not a timestamp', () => {
+    assert.match(formatVisitDate(Date.UTC(2025, 5, 3)), /2025/);
+    assert.doesNotMatch(formatVisitDate(Date.UTC(2025, 5, 3)), /^\d+$/);
   });
 });
 
