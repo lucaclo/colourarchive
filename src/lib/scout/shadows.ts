@@ -92,6 +92,16 @@ export interface ShadowResult {
   lengthM: number;
   /** True when the true shadow is longer than `lengthM`. */
   clipped: boolean;
+  /**
+   * The footprint's own `footprint[0]` — what `ceilings` is measured relative
+   * to, and where issue #51's renderer samples the ground elevation that
+   * turns "how high above the *building's own base*" into "how high above
+   * sea level". Exposed rather than re-derived, because it is already this
+   * function's `anchor` and a second building-set lookup to recover it would
+   * be paid for on every shadow, every frame.
+   */
+  anchorLon: number;
+  anchorLat: number;
 }
 
 /**
@@ -227,7 +237,14 @@ export function castShadow(
     return Math.min(heightM, Math.max(0, heightM - drop));
   });
 
-  return { ring, ceilings, lengthM, clipped: full > maxLengthM };
+  return {
+    ring,
+    ceilings,
+    lengthM,
+    clipped: full > maxLengthM,
+    anchorLon: anchor[0],
+    anchorLat: anchor[1],
+  };
 }
 
 /**
