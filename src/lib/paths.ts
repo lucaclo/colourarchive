@@ -42,6 +42,9 @@ export const SCOUT_WEATHER_DIR = path.join(SCOUT_CACHE_DIR, 'weather');
 // The aerosol column, from a different host and on a slower clock than the
 // weather — it is a smooth field that moves over half a day. See AIR_TTL_MS.
 export const SCOUT_AIR_DIR = path.join(SCOUT_CACHE_DIR, 'air');
+// Seeing and transparency, from a third host on 7Timer's own four-times-a-day
+// clock. See SEEING_TTL_MS.
+export const SCOUT_SEEING_DIR = path.join(SCOUT_CACHE_DIR, 'seeing');
 
 /** Web path (as served) for a derivative file. */
 export const imgUrl = (name: string): string => `/img/${name}`;
