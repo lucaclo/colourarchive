@@ -266,6 +266,113 @@ export function scanCrossings(
   return { crossings, closestGapDeg, closestGapAt, samples };
 }
 
+/* ── Crossings of an altitude ──────────────────────────────────────────────── */
+
+export interface AltitudeCrossing {
+  /** The instant the body's centre is exactly at the target altitude. */
+  at: Date;
+  /** Where it is then, degrees clockwise from north. */
+  azimuth: number;
+  /** Half the disc, degrees, at that instant. */
+  angularRadius: number;
+  /** True when the body is climbing through the altitude, false when sinking. */
+  ascending: boolean;
+}
+
+export interface AltitudeScan {
+  crossings: AltitudeCrossing[];
+  /** The smallest gap to the target altitude seen anywhere in the window, and when. */
+  closestGapDeg: number;
+  closestGapAt: Date;
+  samples: number;
+}
+
+/**
+ * Every time the body's centre is at `targetAltitude`, between two instants.
+ *
+ * Issue #49's free-form counterpart to `scanCrossings`: that one tracks the
+ * gap to a *bearing*, which wraps at 360° and has to be told apart from the
+ * antipodal point on the far side of the compass. Altitude does neither — it
+ * runs from -90° to 90° and stops, so a sign change of `altitude −
+ * targetAltitude` is always a real crossing and never needs the wrap check
+ * `scanCrossings` carries. That is the whole of the difference; the sampling,
+ * the bisection to the second, and the closest-gap bookkeeping for an empty
+ * result are the same machinery, reused rather than rewritten.
+ */
+export function scanAltitudeCrossings(
+  body: BodySampler,
+  point: LatLon,
+  targetAltitude: number,
+  from: Date,
+  to: Date,
+  stepMinutes: number = DEFAULT_STEP_MINUTES,
+): AltitudeScan {
+  const stepMs = Math.max(1, stepMinutes) * 60_000;
+  const endMs = to.getTime();
+  const crossings: AltitudeCrossing[] = [];
+
+  const record = (atMs: number, ascending: boolean) => {
+    const at = new Date(Math.round(atMs));
+    const sample = body(point, at);
+    crossings.push({ at, azimuth: sample.azimuth, angularRadius: sample.angularRadius, ascending });
+  };
+
+  const gapAt = (atMs: number) => body(point, new Date(atMs)).altitude - targetAltitude;
+
+  let previousMs = from.getTime();
+  let previousGap = gapAt(previousMs);
+  let closestGapDeg = Math.abs(previousGap);
+  let closestGapAt = from;
+  let samples = 1;
+  if (previousGap === 0) record(previousMs, true);
+
+  for (let ms = previousMs + stepMs; ms <= endMs; ms += stepMs) {
+    const gap = gapAt(ms);
+    samples++;
+    if (Math.abs(gap) < closestGapDeg) {
+      closestGapDeg = Math.abs(gap);
+      closestGapAt = new Date(ms);
+    }
+
+    if (gap === 0) {
+      record(ms, gap >= previousGap);
+    } else if (previousGap !== 0 && Math.sign(gap) !== Math.sign(previousGap)) {
+      const atMs = refineAltitudeCrossing(body, point, targetAltitude, previousMs, ms);
+      record(atMs, gap > previousGap);
+    }
+
+    previousMs = ms;
+    previousGap = gap;
+  }
+
+  return { crossings, closestGapDeg, closestGapAt, samples };
+}
+
+/** The instant inside a bracket where the altitude gap changes sign. Plain bisection, as `refineCrossing`. */
+function refineAltitudeCrossing(
+  body: BodySampler,
+  point: LatLon,
+  targetAltitude: number,
+  loMs: number,
+  hiMs: number,
+): number {
+  let lo = loMs;
+  let hi = hiMs;
+  let gapLo = body(point, new Date(lo)).altitude - targetAltitude;
+  while (hi - lo > REFINE_MS) {
+    const mid = (lo + hi) / 2;
+    const gapMid = body(point, new Date(mid)).altitude - targetAltitude;
+    if (gapMid === 0) return mid;
+    if (Math.sign(gapMid) === Math.sign(gapLo)) {
+      lo = mid;
+      gapLo = gapMid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
 /* ── Alignments ────────────────────────────────────────────────────────────── */
 
 export interface AlignmentCrossing extends BearingCrossing {
@@ -582,6 +689,39 @@ export function withMoonPhase(events: Alignment[]): MoonAlignment[] {
     const illumination = moonIllumination(event.best.at);
     return {
       ...event,
+      fraction: illumination.fraction,
+      phase: illumination.name,
+      waxing: illumination.waxing,
+    };
+  });
+}
+
+/**
+ * The free-form query issue #49 asks for: every time the moon is at a given
+ * altitude, each carrying how much of it is lit — "when is the moon at 15°
+ * and over 80% illuminated", with no target bearing at all.
+ *
+ * `findAlignments` answers "when does it pass behind *that*", which needs a
+ * bearing chosen on the map before it means anything. Not every shot has one
+ * yet: sometimes the height and the phase are the whole of the plan, and the
+ * compass point is whatever the ground offers on the night. `scanAltitudeCrossings`
+ * is the search this needs; this is that search with the same illumination
+ * enrichment `withMoonPhase` already does, so filtering "over 80% lit" is a
+ * plain array filter on the result, in the panel, the same way it already is
+ * for the bearing search — see that function's own note on why the fraction
+ * threshold belongs to the reader and not to this module.
+ */
+export interface MoonAltitudeCrossing extends AltitudeCrossing {
+  fraction: number;
+  phase: MoonPhaseName;
+  waxing: boolean;
+}
+
+export function withMoonPhaseAt(crossings: AltitudeCrossing[]): MoonAltitudeCrossing[] {
+  return crossings.map((crossing) => {
+    const illumination = moonIllumination(crossing.at);
+    return {
+      ...crossing,
       fraction: illumination.fraction,
       phase: illumination.name,
       waxing: illumination.waxing,

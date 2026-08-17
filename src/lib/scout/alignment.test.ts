@@ -7,8 +7,10 @@ import {
   SUN,
   closestPass,
   findAlignments,
+  scanAltitudeCrossings,
   scanCrossings,
   withMoonPhase,
+  withMoonPhaseAt,
   type BodySampler,
 } from './alignment.ts';
 import { seasonEvents } from './almanac.ts';
@@ -83,6 +85,67 @@ describe('scanCrossings', () => {
     const scan = scanCrossings(SUN, EQUATOR, 180, new Date('2026-06-18T00:00:00Z'), new Date('2026-06-23T00:00:00Z'));
     assert.equal(scan.crossings.length, 0);
     assert.ok(scan.closestGapDeg > 100, `${scan.closestGapDeg}`);
+  });
+});
+
+describe('scanAltitudeCrossings', () => {
+  it('finds the moon at a given altitude, and lands on it to a thousandth of a degree', () => {
+    const scan = scanAltitudeCrossings(MOON, CALTON, 15, AUGUST, new Date('2026-08-14T00:00:00Z'));
+    assert.ok(scan.crossings.length > 0);
+    for (const crossing of scan.crossings) {
+      const altitude = moonPosition(CALTON.lat, CALTON.lon, crossing.at).altitudeApparent;
+      assert.ok(Math.abs(altitude - 15) < 0.001, `${crossing.at.toISOString()} → ${altitude}°`);
+    }
+  });
+
+  it('tells rising from sinking without needing a wrap check altitude never has', () => {
+    const scan = scanAltitudeCrossings(SUN, CALTON, 10, AUGUST, new Date('2026-08-10T00:00:00Z'));
+    const rising = scan.crossings.filter((c) => c.ascending);
+    const sinking = scan.crossings.filter((c) => !c.ascending);
+    assert.ok(rising.length > 0 && sinking.length > 0);
+    for (const c of rising) {
+      const after = sunPosition(CALTON.lat, CALTON.lon, new Date(c.at.getTime() + 60_000)).altitudeApparent;
+      assert.ok(after > 10, `rising crossing at ${c.at.toISOString()} did not climb`);
+    }
+    for (const c of sinking) {
+      const after = sunPosition(CALTON.lat, CALTON.lon, new Date(c.at.getTime() + 60_000)).altitudeApparent;
+      assert.ok(after < 10, `sinking crossing at ${c.at.toISOString()} did not fall`);
+    }
+  });
+
+  it('says how close it came when the altitude is never reached at all', () => {
+    // The sun does not clear 70° at Calton Hill's latitude even at midsummer noon.
+    const scan = scanAltitudeCrossings(SUN, CALTON, 70, new Date('2026-06-21T00:00:00Z'), new Date('2026-06-22T00:00:00Z'));
+    assert.equal(scan.crossings.length, 0);
+    assert.ok(scan.closestGapDeg > 0 && scan.closestGapDeg < 70);
+  });
+
+  it('carries no bearing at all — issue #49\'s free-form query needs none', () => {
+    const scan = scanAltitudeCrossings(MOON, CALTON, 15, AUGUST, new Date('2026-08-14T00:00:00Z'));
+    assert.ok(scan.crossings.length > 0);
+    assert.ok(scan.crossings.every((c) => typeof c.azimuth === 'number' && !('bearing' in c)));
+  });
+});
+
+describe('withMoonPhaseAt', () => {
+  it('attaches the same illumination moonIllumination itself reports', () => {
+    const scan = scanAltitudeCrossings(MOON, CALTON, 15, AUGUST, new Date('2026-08-19T00:00:00Z'));
+    const withPhase = withMoonPhaseAt(scan.crossings);
+    assert.equal(withPhase.length, scan.crossings.length);
+    for (const crossing of withPhase) {
+      const illumination = moonIllumination(crossing.at);
+      assert.equal(crossing.fraction, illumination.fraction);
+      assert.equal(crossing.phase, illumination.name);
+    }
+  });
+
+  it('answers issue #49\'s worked example: 15° altitude, over 80% illuminated', () => {
+    const scan = scanAltitudeCrossings(MOON, CALTON, 15, AUGUST, new Date('2026-09-08T00:00:00Z'));
+    const bright = withMoonPhaseAt(scan.crossings).filter((c) => c.fraction > 0.8);
+    // A lunar month has a handful of nights over 80% lit; a four-week window
+    // crossing 15° twice a day should catch at least one of them.
+    assert.ok(bright.length > 0, `no bright crossings among ${scan.crossings.length}`);
+    for (const c of bright) assert.ok(c.fraction > 0.8);
   });
 });
 
