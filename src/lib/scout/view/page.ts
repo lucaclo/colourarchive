@@ -85,7 +85,7 @@ import {
   type SpotVisit,
 } from '../spots';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
-import { DemUploadError, elevationWithOverride, parseGeoTiffDem, MAX_UPLOAD_BYTES } from '../dem-upload';
+import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-upload';
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
 import { itineraryReport, shootPlan } from '../report';
 import {
