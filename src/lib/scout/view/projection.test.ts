@@ -86,6 +86,16 @@ describe('the projection shader snippets', () => {
     assert.ok(GLSL_PROJECT_ELEVATED.includes('u_projection_fallback_matrix * vec4(merc, mercatorZ, 1.0)'));
   });
 
+  it('issue #51: scoutGround takes a real elevation rather than nailing every vertex to sea level', () => {
+    // Before this, the mercator branch was `vec4(merc, 0.0, 1.0)` — a shadow
+    // was always projected as though the ground under it were flat and at sea
+    // level, which is exactly the fault this asserts is gone.
+    assert.ok(!GLSL_PROJECT_GROUND.includes('vec4(merc, 0.0, 1.0)'));
+    assert.ok(GLSL_PROJECT_GROUND.includes('metres / GLOBE_RADIUS'));
+    assert.ok(GLSL_PROJECT_GROUND.includes('u_projection_fallback_matrix * vec4(merc, mercatorZ, 1.0)'));
+    assert.ok(GLSL_PROJECT_GROUND.includes('vec4 scoutGround(vec2 merc, float mercatorZ, float metres,'));
+  });
+
   it('hides the far side of the planet, by clipping or by discarding', () => {
     // The elevated one can put it in Z, because nothing else needs Z.
     assert.ok(GLSL_PROJECT_ELEVATED.includes('globeComputeClippingZ'));

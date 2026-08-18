@@ -35,11 +35,34 @@
  * fill-extrusion layer, out of reach from here, so a shadow crossing a low roof
  * is drawn on the roof but does not run up the side of the building it climbed.
  * Doing that properly means taking over the extrusion pass, which is a much
- * larger change than this one.
+ * larger change than this one — reconsidered for issue #51 and left exactly
+ * where it was: still out of reach, for the same reason.
+ *
+ * ## Issue #51: absolute elevation, both ways
+ *
+ * Two related gaps closed together, because they turned out to be the same
+ * missing number seen twice. Every vertex here used to be projected at
+ * mercator Z zero and packed with a height measured from its *own* base —
+ * which is consistent for one building on flat ground and wrong twice over on
+ * a slope: the ground position drifted from the terrain under it (worse the
+ * more the map is pitched or elevated), and a building down-slope from a
+ * mountain had no way to be shorter than it in absolute terms, because
+ * nothing here spoke in absolute terms at all.
+ *
+ * The fix is one idea applied to both blockers and shadows: carry the DEM
+ * elevation at every vertex, feed it to `scoutGround` (see `projection.ts`)
+ * so the *position* sits on the real ground, and fold that same elevation
+ * into the *height* every blocker and shadow ceiling already carries, so the
+ * single height-field pass this file was built around now compares heights
+ * that are all measured from the same sea level rather than each from its
+ * own doorstep. A mountain is then just another blocker in that pass — see
+ * `terrain.ts`'s `terrainFacets` — and it stops a building's shadow exactly
+ * the way a taller building already did, for free, in the same test.
  */
 
 import type maplibregl from 'maplibre-gl';
 import { convexHull, type Ring } from '../shadows';
+import type { TerrainFacet } from '../terrain';
 import {
   GLSL_PROJECT_GROUND,
   NO_PRELUDE,
@@ -49,8 +72,23 @@ import {
   type ShaderData,
 } from './projection';
 
-/** Taller than anything that has been built. Sets the depth buffer's scale. */
-const MAX_HEIGHT_M = 1000;
+/**
+ * Sets the depth buffer's scale. Used to be "taller than anything that has
+ * been built" — 1000 m was plenty for a *relative* building height. Issue
+ * #51 made every height here absolute (terrain elevation folded in), and
+ * terrain alone clears 1000 m across a large fraction of the world's
+ * mountains before a single building is added on top, so this now has to
+ * clear the tallest ground on earth, not the tallest building: Everest is
+ * 8,849 m, and 12,000 leaves headroom above it for whatever is standing on
+ * top. The 16-bit depth buffer still resolves this to about 18 cm a step —
+ * far finer than a shadow calculation needs.
+ */
+const MAX_HEIGHT_M = 12_000;
+
+/** x, y, elevMercZ, elevM, ceiling, dark — 6 floats a vertex. */
+const SHADOW_STRIDE = 6;
+/** x, y, elevMercZ, elevM, height — 5 floats a vertex. */
+const BLOCKER_STRIDE = 5;
 
 export interface ShadowLayer extends maplibregl.CustomLayerInterface {
   /**
@@ -91,21 +129,26 @@ export interface ShadowLayer extends maplibregl.CustomLayerInterface {
 /**
  * Everything here stands on the ground, so it is projected by `scoutGround`.
  *
- * Z cannot come from the projection: it carries the blocker's height, which is
- * the whole mechanism by which the tallest thing at a pixel wins. That is also
- * why the far side of the planet has to be discarded in the fragment shader
- * rather than clipped — the one number that would have done it is spoken for.
+ * `a_height` is *absolute* now — see this file's issue #51 note — so
+ * `gl_Position`'s Z still cannot come from the projection: it carries that
+ * absolute height, which is the whole mechanism by which the tallest thing
+ * at a pixel wins, whether that thing is a building or the mountain behind
+ * it. That is also why the far side of the planet has to be discarded in the
+ * fragment shader rather than clipped — the one number that would have done
+ * it is spoken for.
  */
 const BLOCKER_VERTEX = (prelude: string, define: string) => `
   ${prelude}
   ${define}
   ${GLSL_PROJECT_GROUND}
   attribute vec2 a_pos;
+  attribute float a_elevMercZ;
+  attribute float a_elevM;
   attribute float a_height;
   varying mediump float v_beyond;
   void main() {
     float beyond;
-    vec4 p = scoutGround(a_pos, beyond);
+    vec4 p = scoutGround(a_pos, a_elevMercZ, a_elevM, beyond);
     v_beyond = beyond;
     // Height straight into normalised depth: tall is near, ground is far, so a
     // LESS test keeps the tallest thing standing at each pixel.
@@ -129,14 +172,20 @@ const SHADOW_VERTEX = (prelude: string, define: string) => `
   ${define}
   ${GLSL_PROJECT_GROUND}
   attribute vec2 a_pos;
+  attribute float a_elevMercZ;
+  attribute float a_elevM;
   attribute float a_ceiling;
   attribute float a_dark;
   varying mediump float v_dark;
   varying mediump float v_beyond;
   void main() {
     float beyond;
-    vec4 p = scoutGround(a_pos, beyond);
+    vec4 p = scoutGround(a_pos, a_elevMercZ, a_elevM, beyond);
     v_beyond = beyond;
+    // a_ceiling is absolute too (issue #51): the building's own base
+    // elevation, folded in once by the caller rather than measured per
+    // vertex, so a shadow's ceiling stays the flat-ground shape castShadow
+    // computed and only its datum moves with the terrain.
     float z = 1.0 - 2.0 * clamp(a_ceiling / ${MAX_HEIGHT_M}.0, 0.0, 1.0);
     gl_Position = vec4(p.xy, z * p.w, p.w);
     v_dark = a_dark;
@@ -265,14 +314,14 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       gl,
       BLOCKER_VERTEX(shader.vertexShaderPrelude, shader.define),
       BLOCKER_FRAGMENT,
-      ['a_pos', 'a_height'],
+      ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_height'],
       [...PROJECTION_UNIFORMS],
     );
     shadowProgram = build(
       gl,
       SHADOW_VERTEX(shader.vertexShaderPrelude, shader.define),
       SHADOW_FRAGMENT,
-      ['a_pos', 'a_ceiling', 'a_dark'],
+      ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
       [...PROJECTION_UNIFORMS],
     );
     variant = shader.variantName;
@@ -346,13 +395,13 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
 
     setShadows(vertices: Float32Array) {
       shadows = vertices;
-      shadowCount = vertices.length / 4;
+      shadowCount = vertices.length / SHADOW_STRIDE;
       shadowsDirty = true;
     },
 
     setBlockers(vertices: Float32Array) {
       blockers = vertices;
-      blockerCount = vertices.length / 3;
+      blockerCount = vertices.length / BLOCKER_STRIDE;
       blockersDirty = true;
     },
 
@@ -500,12 +549,19 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
         gl.useProgram(blockerProgram.program);
         setProjectionUniforms(gl, blockerProgram.uniforms, projection);
         gl.bindBuffer(gl.ARRAY_BUFFER, blockerBuffer);
+        const blockerStride = BLOCKER_STRIDE * 4;
         gl.enableVertexAttribArray(blockerProgram.attributes.a_pos);
-        gl.vertexAttribPointer(blockerProgram.attributes.a_pos, 2, gl.FLOAT, false, 12, 0);
+        gl.vertexAttribPointer(blockerProgram.attributes.a_pos, 2, gl.FLOAT, false, blockerStride, 0);
+        gl.enableVertexAttribArray(blockerProgram.attributes.a_elevMercZ);
+        gl.vertexAttribPointer(blockerProgram.attributes.a_elevMercZ, 1, gl.FLOAT, false, blockerStride, 8);
+        gl.enableVertexAttribArray(blockerProgram.attributes.a_elevM);
+        gl.vertexAttribPointer(blockerProgram.attributes.a_elevM, 1, gl.FLOAT, false, blockerStride, 12);
         gl.enableVertexAttribArray(blockerProgram.attributes.a_height);
-        gl.vertexAttribPointer(blockerProgram.attributes.a_height, 1, gl.FLOAT, false, 12, 8);
+        gl.vertexAttribPointer(blockerProgram.attributes.a_height, 1, gl.FLOAT, false, blockerStride, 16);
         gl.drawArrays(gl.TRIANGLES, 0, blockerCount);
         gl.disableVertexAttribArray(blockerProgram.attributes.a_pos);
+        gl.disableVertexAttribArray(blockerProgram.attributes.a_elevMercZ);
+        gl.disableVertexAttribArray(blockerProgram.attributes.a_elevM);
         gl.disableVertexAttribArray(blockerProgram.attributes.a_height);
       }
 
@@ -521,14 +577,21 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       gl.useProgram(shadowProgram.program);
       setProjectionUniforms(gl, shadowProgram.uniforms, projection);
       gl.bindBuffer(gl.ARRAY_BUFFER, shadowBuffer);
+      const shadowStride = SHADOW_STRIDE * 4;
       gl.enableVertexAttribArray(shadowProgram.attributes.a_pos);
-      gl.vertexAttribPointer(shadowProgram.attributes.a_pos, 2, gl.FLOAT, false, 16, 0);
+      gl.vertexAttribPointer(shadowProgram.attributes.a_pos, 2, gl.FLOAT, false, shadowStride, 0);
+      gl.enableVertexAttribArray(shadowProgram.attributes.a_elevMercZ);
+      gl.vertexAttribPointer(shadowProgram.attributes.a_elevMercZ, 1, gl.FLOAT, false, shadowStride, 8);
+      gl.enableVertexAttribArray(shadowProgram.attributes.a_elevM);
+      gl.vertexAttribPointer(shadowProgram.attributes.a_elevM, 1, gl.FLOAT, false, shadowStride, 12);
       gl.enableVertexAttribArray(shadowProgram.attributes.a_ceiling);
-      gl.vertexAttribPointer(shadowProgram.attributes.a_ceiling, 1, gl.FLOAT, false, 16, 8);
+      gl.vertexAttribPointer(shadowProgram.attributes.a_ceiling, 1, gl.FLOAT, false, shadowStride, 16);
       gl.enableVertexAttribArray(shadowProgram.attributes.a_dark);
-      gl.vertexAttribPointer(shadowProgram.attributes.a_dark, 1, gl.FLOAT, false, 16, 12);
+      gl.vertexAttribPointer(shadowProgram.attributes.a_dark, 1, gl.FLOAT, false, shadowStride, 20);
       gl.drawArrays(gl.TRIANGLES, 0, shadowCount);
       gl.disableVertexAttribArray(shadowProgram.attributes.a_pos);
+      gl.disableVertexAttribArray(shadowProgram.attributes.a_elevMercZ);
+      gl.disableVertexAttribArray(shadowProgram.attributes.a_elevM);
       gl.disableVertexAttribArray(shadowProgram.attributes.a_ceiling);
       gl.disableVertexAttribArray(shadowProgram.attributes.a_dark);
 
@@ -581,32 +644,76 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
  * punch a hole in it.
  *
  * Positions are in whatever space `project` returns — mercator, to match the
- * matrix MapLibre hands the layer.
+ * matrix MapLibre hands the layer. `project` now also takes the elevation to
+ * put a vertex at (issue #51): it hands back the mercator-Z that elevation
+ * corresponds to, alongside x and y, which is what lets a footprint sit on
+ * sloped ground rather than on the flat sea-level plane every vertex here
+ * used to be nailed to.
+ *
+ * Every height this class is handed is now **absolute** — metres above sea
+ * level, not above whatever the building's own doorstep happens to be — so
+ * that the single height-field pass `shadow-layer.ts` runs can compare a
+ * blocker against a mountain on the same footing it already compares one
+ * blocker against another. Combining a relative height with the ground it
+ * stands on is the caller's job (see `page.ts`), because only the caller
+ * knows which elevation a given relative height was measured from.
  */
 export class ShadowGeometry {
   private readonly shadows: number[] = [];
   private readonly blockers: number[] = [];
 
-  constructor(private readonly project: (lon: number, lat: number) => [number, number]) {}
+  constructor(
+    private readonly project: (
+      lon: number,
+      lat: number,
+      elevationM: number,
+    ) => [x: number, y: number, mercatorZ: number],
+  ) {}
 
-  /** One cast shadow: a closed ring with a ceiling height at every vertex. */
-  addShadow(ring: Ring, ceilings: number[], darkness: number): void {
+  /**
+   * One cast shadow: a closed ring, each vertex carrying its own ground
+   * elevation (where the shadow actually falls) and its own absolute ceiling
+   * (how high above sea level the shaded volume still reaches there).
+   *
+   * The two are not the same number and must not be confused: `groundM[i]`
+   * moves the *point* onto the slope beneath it, while `ceilingsM[i]` is the
+   * shadow's own geometry — flat-ground-relative, per `castShadow` — already
+   * re-based onto sea level by the caller. A shadow's ceiling does not bend
+   * to follow the ground it crosses; only its datum does.
+   */
+  addShadow(ring: Ring, ceilingsM: number[], groundM: number[], darkness: number): void {
     // The ring is closed, so the last vertex repeats the first and is dropped.
     const n = ring.length - 1;
     if (n < 3 || darkness <= 0) return;
-    const [ax, ay] = this.project(ring[0][0], ring[0][1]);
-    const ac = ceilings[0];
+    // `mercZ` is the same elevation `groundM[i]` is, in the projection's own
+    // units — `scoutGround` wants both, one for each side of the globe blend
+    // it does (see projection.ts), so both are packed rather than one derived
+    // from the other in a shader that has no access to `project`'s formula.
+    const point = (i: number) => {
+      const [lon, lat] = ring[i];
+      const [x, y, mercZ] = this.project(lon, lat, groundM[i]);
+      return [x, y, mercZ, groundM[i], ceilingsM[i]] as const;
+    };
+    const a = point(0);
     for (let i = 1; i < n - 1; i++) {
-      const [bx, by] = this.project(ring[i][0], ring[i][1]);
-      const [cx, cy] = this.project(ring[i + 1][0], ring[i + 1][1]);
-      this.shadows.push(ax, ay, ac, darkness);
-      this.shadows.push(bx, by, ceilings[i], darkness);
-      this.shadows.push(cx, cy, ceilings[i + 1], darkness);
+      const b = point(i);
+      const c = point(i + 1);
+      this.shadows.push(a[0], a[1], a[2], a[3], a[4], darkness);
+      this.shadows.push(b[0], b[1], b[2], b[3], b[4], darkness);
+      this.shadows.push(c[0], c[1], c[2], c[3], c[4], darkness);
     }
   }
 
   /**
    * One thing standing on the ground that a shadow can land on, or miss.
+   *
+   * `absoluteHeightM` is the top of the thing in metres above sea level —
+   * ground elevation plus whatever stands on it — and `groundM` is that same
+   * ground elevation on its own, used only to place the footprint. A single
+   * sample for the whole footprint rather than one per vertex: a building is
+   * small next to the DEM grid it sits on, so every corner reads the same
+   * cell in practice, and one lookup a building keeps this affordable at a
+   * few thousand of them.
    *
    * Hulled before fanning. A fan drawn straight off a concave ring is not that
    * ring — it spills outside some corners and misses others — so the hull is
@@ -618,17 +725,35 @@ export class ShadowGeometry {
    * was undoing half of what precomputing them bought: the shadow pass stopped
    * re-hulling, and the blocker pass carried straight on.
    */
-  addBlocker(ring: Ring, heightM: number, hull?: Ring): void {
-    if (!(heightM > 0) || ring.length < 3) return;
+  addBlocker(ring: Ring, absoluteHeightM: number, groundM: number, hull?: Ring): void {
+    if (!(absoluteHeightM > 0) || ring.length < 3) return;
     const outline = hull ?? convexHull(ring);
     if (outline.length < 3) return;
-    const [ax, ay] = this.project(outline[0][0], outline[0][1]);
+    const point = (i: number) => this.project(outline[i][0], outline[i][1], groundM);
+    const [ax, ay, az] = point(0);
     for (let i = 1; i < outline.length - 1; i++) {
-      const [bx, by] = this.project(outline[i][0], outline[i][1]);
-      const [cx, cy] = this.project(outline[i + 1][0], outline[i + 1][1]);
-      this.blockers.push(ax, ay, heightM);
-      this.blockers.push(bx, by, heightM);
-      this.blockers.push(cx, cy, heightM);
+      const [bx, by, bz] = point(i);
+      const [cx, cy, cz] = point(i + 1);
+      this.blockers.push(ax, ay, az, groundM, absoluteHeightM);
+      this.blockers.push(bx, by, bz, groundM, absoluteHeightM);
+      this.blockers.push(cx, cy, cz, groundM, absoluteHeightM);
+    }
+  }
+
+  /**
+   * One triangle of bare terrain — issue #51's other half. A mountain enters
+   * the same height-field pass a building's blocker already competes in, at
+   * its own absolute elevation, which is what lets it win that competition
+   * and stop a shadow that would otherwise be drawn straight through it.
+   *
+   * Ground elevation and blocking height are the same number here, because
+   * there is nothing built on this triangle to add to it — bare terrain is
+   * exactly as tall as it is tall.
+   */
+  addTerrainFacet(facet: TerrainFacet): void {
+    for (const [lon, lat, heightM] of [facet.a, facet.b, facet.c]) {
+      const [x, y, z] = this.project(lon, lat, heightM);
+      this.blockers.push(x, y, z, heightM, heightM);
     }
   }
 

@@ -160,6 +160,11 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
             <p class="core-line" id="core-frame"></p>
             <p class="core-note" id="core-extent"></p>
             <p class="core-note" id="core-exposure"></p>
+            <!-- Issue #47. Optional and quiet about it: no forecast this far
+                 out, no server behind the published build, or 7Timer simply
+                 not answering all mean the same thing here — nothing to add,
+                 so nothing is shown. -->
+            <p class="core-note" id="core-seeing" hidden></p>
             <p class="core-caveat">Light pollution is not modelled.</p>
           </details>
 
@@ -296,6 +301,43 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                 <button class="ghost" id="note-add" type="button">Add</button>
               </div>
               <p class="note-say" id="note-say"></p>
+
+              <!-- Issue #45. The note above is written once, when the place is
+                   kept; this is written every time you actually go, and is the
+                   only part of the notebook that can say whether a return trip
+                   was any good. -->
+              <p class="note-kept" id="visit-match" hidden></p>
+              <ul class="visit-list" id="visit-list"></ul>
+              <div class="note-add">
+                <input
+                  class="note-url"
+                  id="visit-outcome"
+                  type="text"
+                  maxlength="600"
+                  placeholder="What actually happened? (optional)"
+                  aria-label="What happened on this visit"
+                />
+                <button class="ghost" id="visit-log" type="button">Log this visit</button>
+              </div>
+              <p class="note-say" id="visit-say"></p>
+
+              <!-- Issue #50. A drone survey or LiDAR tile for this one spot,
+                   layered over the free global DEM wherever it covers the
+                   point — sharper ground for the vantage point actually worth
+                   surveying, without touching the terrain anywhere else. -->
+              <p class="note-kept" id="dem-kept"></p>
+              <ul class="visit-list" id="dem-list"></ul>
+              <div class="note-add">
+                <input
+                  class="note-url"
+                  id="dem-file"
+                  type="file"
+                  accept=".tif,.tiff,image/tiff"
+                  aria-label="Upload a GeoTIFF elevation survey"
+                />
+                <button class="ghost" id="dem-add" type="button">Upload</button>
+              </div>
+              <p class="note-say" id="dem-say"></p>
             </div>
           </details>
 
@@ -454,6 +496,20 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
             <button class="chip chip-step" id="aim-core" type="button">At the core</button>
           </div>
           <p class="slab-note" id="frame-lens">—</p>
+
+          <!-- Depth of field: the same rectangle from `frame.ts`, asked what is
+               sharp in it rather than what is in it. Aperture and focus distance
+               belong to this exposure and not to the lens, but there is nowhere
+               else on the page for them to live. -->
+          <div class="frame-row">
+            <label class="frame-field" for="frame-aperture"><span>Aperture</span>
+              <select id="frame-aperture"></select>
+            </label>
+            <label class="frame-field" for="frame-focus"><span>Focus distance</span>
+              <select id="frame-focus"></select>
+            </label>
+          </div>
+          <p class="slab-note" id="frame-dof">—</p>
         </div>
 
         <!-- Can I see it from here? Bare earth only, and it says so. -->
@@ -474,6 +530,52 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
           <input id="slab-height" type="range" min="1" max="200" step="1" value="10" />
           <p class="slab-note">Drag the slab on the map. Its shadow is the one on this page with no guessing in it.</p>
         </div>
+
+        <!-- These two calculators do not touch the map at all — no coordinate,
+             no sun. Kept alongside the ones that do because there is nowhere
+             else on the page for them to live. -->
+        <details class="fold" id="fold-nd">
+          <summary>Long exposure</summary>
+          <div class="slab">
+            <div class="frame-row">
+              <label class="frame-field" for="nd-base"><span>Base shutter</span>
+                <select id="nd-base"></select>
+              </label>
+              <label class="frame-field" for="nd-filter"><span>ND filter</span>
+                <select id="nd-filter"></select>
+              </label>
+            </div>
+            <p class="slab-note" id="nd-result">—</p>
+            <button class="wide" id="nd-start" type="button">Start countdown</button>
+            <p class="nd-countdown" id="nd-countdown" hidden>—</p>
+          </div>
+        </details>
+
+        <details class="fold" id="fold-timelapse">
+          <summary>Time-lapse</summary>
+          <div class="slab">
+            <label class="slab-row" for="tl-length">
+              <span>Clip length</span>
+              <output id="tl-length-out">10 s</output>
+            </label>
+            <input id="tl-length" type="range" min="1" max="60" step="1" value="10" />
+            <div class="frame-row">
+              <label class="frame-field" for="tl-fps"><span>Frame rate</span>
+                <select id="tl-fps"></select>
+              </label>
+              <label class="frame-field" for="tl-interval"><span>Shooting interval</span>
+                <select id="tl-interval"></select>
+              </label>
+            </div>
+            <label class="slab-row" for="tl-photosize">
+              <span>File size per photo</span>
+              <output id="tl-photosize-out">30 MB</output>
+            </label>
+            <input id="tl-photosize" type="range" min="5" max="100" step="5" value="30" />
+            <p class="slab-note" id="tl-result">—</p>
+          </div>
+        </details>
+
         <p class="layers-head">This view</p>
         <button class="wide" id="open-month" type="button">The month, hour by hour</button>
         <button class="wide" id="export" type="button">Save as an image</button>
@@ -690,7 +792,11 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   }
 
   /* One surface for every floating thing, so the page reads as a set rather
-     than as a pile of separate panels. */
+     than as a pile of separate panels — pills and cards alike lift off the
+     map on the same soft shadow rather than sitting flush with it. Issue #23
+     asked for this explicitly: every one of these was already a pill or a
+     rounded card, the shadow was the one thing missing that would make them
+     read as floating chrome rather than as flat labels stuck to the glass. */
   .panel,
   .layers,
   .sheet,
@@ -701,6 +807,8 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     background: color-mix(in oklab, var(--bg) 86%, #000);
     border: 1px solid var(--border);
     backdrop-filter: blur(10px);
+    box-shadow: 0 6px 20px -6px color-mix(in oklab, black 45%, transparent),
+      0 1px 3px color-mix(in oklab, black 20%, transparent);
   }
 
   .scout-hint {
@@ -1436,7 +1544,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     border-radius: 8px;
     padding: 0.35rem 0.5rem;
   }
-  #note-add {
+  #note-add, #visit-log, #dem-add {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: transparent;
@@ -1447,7 +1555,33 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     text-transform: uppercase;
     padding: 0 0.7rem;
     cursor: pointer;
+    white-space: nowrap;
   }
+
+  /* Issue #45: the visit log, styled as a lighter, textual cousin of the
+     photo list beside it rather than as something new. */
+  .visit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+  .visit-list :global(li) {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+  .visit-list :global(.visit-date) { color: var(--fg); flex: none; }
+  .visit-list :global(.visit-detail) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .visit-list :global(.drop-visit) {
+    flex: none;
+    background: none;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0 0.2rem;
+  }
+  .visit-list :global(.drop-visit:hover) { color: #e0603a; }
   /* Elements built at runtime are outside Astro's scoping, so anything the
      script creates needs :global() or it falls back to the UA stylesheet. */
   .note-photos :global(.drop-photo) {
@@ -1718,6 +1852,16 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   .slab-row output { color: var(--fg); font-variant-numeric: tabular-nums; }
   .slab input[type='range'] { width: 100%; accent-color: var(--fg); }
   .slab-note { margin: 0.35rem 0 0; font-family: var(--font-label); font-size: 0.56rem; line-height: 1.5; color: var(--muted); }
+
+  .nd-countdown {
+    margin: 0.5rem 0 0;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.4rem;
+    color: var(--fg);
+  }
+  .nd-countdown[hidden] { display: none; }
+  .nd-countdown.done { color: var(--accent, var(--fg)); }
 
   .frame-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
   .frame-field { flex: 1; display: grid; gap: 0.2rem; font-family: var(--font-label); font-size: 0.56rem; color: var(--muted); }
@@ -2181,12 +2325,18 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     place-items: center;
   }
   .scout-map :global(.pin:active) { cursor: grabbing; }
+  /* A diamond already, not a stock teardrop — issue #23 asked for a "soft
+     marker" and this shape was most of the way there. What it was missing
+     was softness in the literal sense: a hairline border sharp enough to read
+     as a UI glyph rather than an object standing on the map, and no shadow to
+     lift it off the ground the way every other mark on the page now has one. */
   .scout-map :global(.pin i) {
-    width: 15px;
-    height: 15px;
-    background: #f2efe8;
-    border: 2px solid rgba(0, 0, 0, 0.7);
-    border-radius: 3px;
+    width: 16px;
+    height: 16px;
+    background: #f7f3ea;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
     transform: rotate(45deg);
     display: block;
   }

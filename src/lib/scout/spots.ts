@@ -18,7 +18,7 @@
  */
 
 import type { LatLon } from './geo';
-import type { Orientation } from './frame';
+import { angleDelta, type Orientation } from './frame';
 
 /**
  * The lens, as it was set when the spot was kept.
@@ -56,6 +56,32 @@ export interface SpotPhoto {
   source?: string;
 }
 
+/**
+ * What the sky was actually doing, logged at the moment someone chose to log
+ * it — the realised half of a spot that "note" alone never captured, because
+ * a note is written once, when the place is kept, and says nothing about
+ * whether any given return trip was any good.
+ *
+ * The condition fields are a snapshot of what Scout had already computed for
+ * the slider's date and hour, not a re-measurement — this is a record of what
+ * the plan said at the time, which is the only version of "what it was like"
+ * a tool with no sensor of its own can honestly keep.
+ */
+export interface SpotVisit {
+  /** Epoch millis of the date and hour on the slider when this was logged. */
+  at: number;
+  sunAltitude: number;
+  sunAzimuth: number;
+  /** 0–1, when the moon calculation had run. */
+  moonFraction?: number;
+  /** `cloudStructure(hour).note`, verbatim — whatever the weather panel already said. */
+  cloud?: string;
+  /** `weatherCondition(hour.weatherCode).label`, verbatim. */
+  weather?: string;
+  /** What actually happened. Free text, the same budget as the spot's own note. */
+  outcome?: string;
+}
+
 export interface SavedSpot {
   name: string;
   lat: number;
@@ -70,6 +96,8 @@ export interface SavedSpot {
   /** The stated height of the monolith, when one was placed. */
   slabHeightM?: number;
   photos?: SpotPhoto[];
+  /** Logged trips to this spot, most recent first. */
+  visits?: SpotVisit[];
 }
 
 /**
@@ -87,13 +115,13 @@ export const MAX_SPOTS = 24;
  * and a reverse lookup, so saving "Calton Hill" twice from two routes gives one
  * entry rather than two that look identical and are not.
  */
-const SAME_SPOT_M = 50;
+export const SAME_SPOT_M = 50;
 
 const EARTH_R = 6_371_000;
 const RAD = Math.PI / 180;
 
-/** Flat-earth distance, fine at the scale that decides "same spot". */
-function metresBetween(a: LatLon, b: LatLon): number {
+/** Flat-earth distance, fine at the scale that decides "same spot". Exported so anything else keyed on spot identity — the DEM upload store, for one — agrees with `indexOfSpot` on what "the same place" means. */
+export function metresBetween(a: LatLon, b: LatLon): number {
   const dLat = (b.lat - a.lat) * RAD;
   const dLon = (b.lon - a.lon) * RAD * Math.cos(((a.lat + b.lat) / 2) * RAD);
   return Math.hypot(dLat, dLon) * EARTH_R;
@@ -109,6 +137,17 @@ export const MAX_NOTE = 600;
  * strip you have to scroll is no longer a glance.
  */
 export const MAX_PHOTOS = 6;
+
+/**
+ * How many visits one spot may carry.
+ *
+ * A log you have to scroll past to find the last entry stops being a quick
+ * "what was it like here" check, which is the whole point of keeping it.
+ */
+export const MAX_VISITS = 12;
+
+/** Longest outcome kept — the same budget as the spot's own note. */
+export const MAX_OUTCOME = MAX_NOTE;
 
 /**
  * A URL safe to put in an `href` or an `img src`.
@@ -189,6 +228,43 @@ export function readPhoto(value: unknown): SpotPhoto | null {
   return photo;
 }
 
+/**
+ * One logged visit, or null when it is not one.
+ *
+ * `at`, `sunAltitude` and `sunAzimuth` are required — a visit that cannot say
+ * when it was or what the sun was doing cannot be matched against a future
+ * forecast, which is the only reason to keep one. Everything else is
+ * whatever Scout happened to have computed at the time, so it enriches a
+ * visit and can never invalidate one, the same rule the notebook fields
+ * already follow.
+ */
+export function readVisit(value: unknown): SpotVisit | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+
+  const at = Number(raw.at);
+  if (!Number.isFinite(at) || at <= 0) return null;
+  const sunAltitude = Number(raw.sunAltitude);
+  if (!Number.isFinite(sunAltitude) || Math.abs(sunAltitude) > 90) return null;
+  const sunAzimuth = Number(raw.sunAzimuth);
+  if (!Number.isFinite(sunAzimuth)) return null;
+
+  const visit: SpotVisit = { at, sunAltitude, sunAzimuth: ((sunAzimuth % 360) + 360) % 360 };
+
+  const moonFraction = Number(raw.moonFraction);
+  if (Number.isFinite(moonFraction) && moonFraction >= 0 && moonFraction <= 1) {
+    visit.moonFraction = moonFraction;
+  }
+  const cloud = readText(raw.cloud, 200);
+  if (cloud) visit.cloud = cloud;
+  const weather = readText(raw.weather, 60);
+  if (weather) visit.weather = weather;
+  const outcome = readText(raw.outcome, MAX_OUTCOME);
+  if (outcome) visit.outcome = outcome;
+
+  return visit;
+}
+
 /** One entry, or null when it is not one. */
 export function readSpot(value: unknown): SavedSpot | null {
   if (!value || typeof value !== 'object') return null;
@@ -231,6 +307,15 @@ export function readSpot(value: unknown): SavedSpot | null {
       .filter((photo): photo is SpotPhoto => photo !== null)
       .slice(0, MAX_PHOTOS);
     if (photos.length) spot.photos = photos;
+  }
+
+  if (Array.isArray(raw.visits)) {
+    const visits = raw.visits
+      .map(readVisit)
+      .filter((visit): visit is SpotVisit => visit !== null)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, MAX_VISITS);
+    if (visits.length) spot.visits = visits;
   }
 
   return spot;
@@ -284,6 +369,7 @@ export function addSpot(spots: SavedSpot[], spot: SavedSpot): SavedSpot[] {
         frame: spot.frame ?? previous.frame,
         slabHeightM: spot.slabHeightM ?? previous.slabHeightM,
         photos: spot.photos ?? previous.photos,
+        visits: spot.visits ?? previous.visits,
       }
     : spot;
   return [merged, ...rest].slice(0, MAX_SPOTS);
@@ -309,6 +395,20 @@ export function updateSpot(
 }
 
 /**
+ * Log a visit against a kept spot, newest first, capped at `MAX_VISITS`.
+ *
+ * Silently does nothing when the spot is not kept — logging a visit to a
+ * place with nowhere to hold it is not an error, it is a button that should
+ * not have been reachable, and the caller is what decides whether to show it.
+ */
+export function addVisit(spots: SavedSpot[], at: LatLon, visit: SpotVisit): SavedSpot[] {
+  const existing = indexOfSpot(spots, at);
+  if (existing === -1) return spots;
+  const visits = [visit, ...(spots[existing].visits ?? [])].slice(0, MAX_VISITS);
+  return updateSpot(spots, at, { visits });
+}
+
+/**
  * The lens as one line, for a list row.
  *
  * Reads as a camera would be set rather than as a record would be stored:
@@ -328,4 +428,73 @@ export function removeSpot(spots: SavedSpot[], at: LatLon): SavedSpot[] {
   const existing = indexOfSpot(spots, at);
   if (existing === -1) return spots;
   return [...spots.slice(0, existing), ...spots.slice(existing + 1)];
+}
+
+/* ── Matching a plan against what actually happened ────────────────────────── */
+
+export interface VisitMatch {
+  visit: SpotVisit;
+  altitudeDiffDeg: number;
+  azimuthDiffDeg: number;
+  note: string;
+}
+
+/**
+ * Which past visit best matches the sun position a forecast is now planning
+ * around, and by how much.
+ *
+ * Ranked on altitude alone, not on a fused distance over altitude and
+ * azimuth together. A fused score would need a weighting between two
+ * different kinds of degree — how much a few degrees of *height* changes the
+ * light against how much a few degrees of *bearing* does — and that
+ * weighting would be a number invented for this function rather than
+ * measured by it, the exact kind of unreproducible score this project
+ * otherwise refuses to publish. Altitude is what actually governs how hard
+ * and how warm the light is; azimuth is reported alongside the pick as
+ * supporting context, not folded into the choice of which visit wins.
+ */
+export function closestVisit(
+  visits: SpotVisit[] | undefined,
+  targetAltitude: number,
+  targetAzimuth: number,
+): VisitMatch | null {
+  if (!visits?.length) return null;
+  let best = visits[0];
+  let bestDiff = Math.abs(best.sunAltitude - targetAltitude);
+  for (const visit of visits.slice(1)) {
+    const diff = Math.abs(visit.sunAltitude - targetAltitude);
+    if (diff < bestDiff) {
+      best = visit;
+      bestDiff = diff;
+    }
+  }
+  const azimuthDiffDeg = Math.abs(angleDelta(best.sunAzimuth, targetAzimuth));
+  return {
+    visit: best,
+    altitudeDiffDeg: bestDiff,
+    azimuthDiffDeg,
+    note: describeVisitMatch(best, bestDiff, azimuthDiffDeg),
+  };
+}
+
+/** "3 Jun 2025" — a visit's own date, in the reader's locale. */
+export function formatVisitDate(at: number): string {
+  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(
+    new Date(at),
+  );
+}
+
+function describeVisitMatch(visit: SpotVisit, altitudeDiffDeg: number, azimuthDiffDeg: number): string {
+  const closeness =
+    altitudeDiffDeg < 3
+      ? 'nearly the same height'
+      : altitudeDiffDeg < 10
+        ? `${altitudeDiffDeg.toFixed(0)}° different in height`
+        : `${altitudeDiffDeg.toFixed(0)}° off in height — not that close a match`;
+  const conditions = [visit.weather, visit.cloud].filter(Boolean).join(', ');
+  const outcome = visit.outcome ? ` "${visit.outcome}"` : ' No outcome was logged.';
+  return (
+    `Closest logged visit: ${formatVisitDate(visit.at)}, sun ${closeness}, ` +
+    `${azimuthDiffDeg.toFixed(0)}° round in bearing.${conditions ? ` ${conditions}.` : ''}${outcome}`
+  );
 }

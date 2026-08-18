@@ -43,9 +43,20 @@ const CACHE_MS = 30 * 60 * 1000;
 /** The details call takes a batch of titles; 50 is comfortably inside the API's limit. */
 const BATCH = 50;
 
+/** Whether an accolade's own request answered, independent of what it found. */
+export interface TierStatus {
+  accolade: Accolade;
+  ok: boolean;
+}
+
+export interface PhotoSearch {
+  photos: RawPhoto[];
+  tiers: TierStatus[];
+}
+
 interface Entry {
   at: number;
-  photos: RawPhoto[];
+  result: PhotoSearch;
 }
 const cache = new Map<string, Entry>();
 
@@ -82,14 +93,16 @@ const serverGetJson: JsonTransport = async (url) => {
  * That is the honest answer: "nobody has made a picture worth reviewing here"
  * is a real finding, and padding it out with snapshots would bury it.
  */
-export async function fetchCommonsPhotos(query: SpotSearch): Promise<RawPhoto[]> {
+export async function fetchCommonsPhotos(query: SpotSearch): Promise<PhotoSearch> {
   const key = `${query.centre.lat.toFixed(4)},${query.centre.lon.toFixed(4)},${Math.round(query.radiusM)},${query.limit}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.photos;
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.result;
 
-  const photos = await collectCommonsPhotos(query, serverGetJson);
-  cache.set(key, { at: Date.now(), photos });
-  return photos;
+  const result = await collectCommonsPhotos(query, serverGetJson);
+  // A search where every tier failed is not worth caching for half an hour —
+  // that would turn one bad moment for Commons into thirty minutes of it.
+  if (result.tiers.some((t) => t.ok)) cache.set(key, { at: Date.now(), result });
+  return result;
 }
 
 /**
@@ -106,20 +119,31 @@ export async function collectCommonsPhotos(
   query: SpotSearch,
   getJson: JsonTransport,
   urlOptions?: UrlOptions,
-): Promise<RawPhoto[]> {
+): Promise<PhotoSearch> {
   const tiers: Accolade[] = ['featured', 'quality', 'valued', 'contest'];
 
   // One search per tier, run together. Each is allowed to fail on its own:
-  // losing a tier is a thinner answer, not a failed search. Note what that
-  // costs — a tier that returns nothing because it is *broken* looks exactly
-  // like one that returns nothing because the place is unphotographed, which is
-  // how the valued tier stayed empty unnoticed. See `ACCOLADES`.
+  // losing a tier is a thinner answer, not a failed search. But losing one is
+  // not nothing, either — `tierOk` keeps whether the tier's own request
+  // answered at all, so a broken tier and an honestly empty one stop looking
+  // identical to whoever called this. See `ACCOLADES` for how the valued tier
+  // stayed silently broken until that distinction existed.
+  const tierOk = new Map<Accolade, boolean>();
+
   const found = await inParallel(tiers, 4, (accolade) =>
     getJson(assessedSearchUrl(query, accolade, urlOptions)).then(
-      (payload) => ({ accolade, titles: parseSearchTitles(payload) }),
-      () => ({ accolade, titles: [] as string[] }),
+      (payload) => {
+        tierOk.set(accolade, true);
+        return { accolade, titles: parseSearchTitles(payload) };
+      },
+      () => {
+        tierOk.set(accolade, false);
+        return { accolade, titles: [] as string[] };
+      },
     ),
   );
+
+  const tierStatus = () => tiers.map((accolade) => ({ accolade, ok: tierOk.get(accolade) ?? false }));
 
   // Best standing wins where a file holds more than one — most featured
   // pictures are also quality images.
@@ -127,7 +151,7 @@ export async function collectCommonsPhotos(
   for (const { accolade, titles } of found) {
     for (const title of titles) if (!standing.has(title)) standing.set(title, accolade);
   }
-  if (!standing.size) return [];
+  if (!standing.size) return { photos: [], tiers: tierStatus() };
 
   const byTier = new Map<Accolade, string[]>();
   for (const [title, accolade] of standing) {
@@ -135,7 +159,9 @@ export async function collectCommonsPhotos(
   }
 
   // Details are fetched per tier, because the tier is what the response is
-  // stamped with and a mixed batch would lose it.
+  // stamped with and a mixed batch would lose it. A details call that fails
+  // costs that tier its answer just as losing the search would — the titles
+  // were found, but nothing about them could be confirmed.
   const jobs: Array<{ accolade: Accolade; titles: string[] }> = [];
   for (const [accolade, titles] of byTier) {
     for (let i = 0; i < titles.length && i < MAX_PHOTOS; i += BATCH) {
@@ -147,7 +173,10 @@ export async function collectCommonsPhotos(
     await inParallel(jobs, 3, (job) =>
       getJson(photoDetailsUrl(job.titles, 320, urlOptions)).then(
         (payload) => parsePhotoDetails(payload, job.accolade),
-        () => [] as RawPhoto[],
+        () => {
+          tierOk.set(job.accolade, false);
+          return [] as RawPhoto[];
+        },
       ),
     )
   )
@@ -155,7 +184,7 @@ export async function collectCommonsPhotos(
     .sort(byStanding)
     .slice(0, MAX_PHOTOS);
 
-  return photos;
+  return { photos, tiers: tierStatus() };
 }
 
 /** Map with a ceiling on how many are in flight. Order of results is preserved. */

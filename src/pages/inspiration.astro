@@ -526,11 +526,30 @@ const hasItems = manifest.count > 0;
      the centre, with a dot at the chosen hue and saturation. A pair of
      numbers is arithmetic; seeing the dot sitting low-saturation
      in the greens tells you everything. */
-  :global(.mx-wheelrow) { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 1.1rem; }
-  :global(.mx-cw) { text-align: center; }
+  /* One large "active" wheel plus two small ones, mirroring Lightroom's
+     single-wheel view — not a flat row of four equal wheels. Global lives
+     behind its own toggle below, exactly as in Lightroom, rather than
+     sitting in the row as a fourth range. */
+  :global(.mx-gradebox) { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; }
+  :global(.mx-wheelcluster) { display: flex; align-items: center; justify-content: center; gap: 1.2rem; }
+  :global(.mx-wheelcluster[hidden]) { display: none; }
+  :global(.mx-wheelsmalls) { display: flex; flex-direction: column; gap: 0.9rem; }
+  :global(.mx-wheelglobalbox) { display: flex; justify-content: center; }
+  :global(.mx-globaltoggle) {
+    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.3rem 0.8rem; cursor: pointer; transition: color 140ms, border-color 140ms;
+  }
+  :global(.mx-globaltoggle:hover) { color: var(--fg); border-color: var(--fg); }
+  :global(.mx-globaltoggle[aria-pressed="true"]) { color: var(--fg); border-color: var(--fg); }
+  :global(.mx-cw) { text-align: center; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: default; }
+  :global(button.mx-cw) { cursor: pointer; }
+  :global(button.mx-cw:hover .disc) { border-color: var(--fg); }
+  :global(.mx-cw-lg .disc) { width: 9rem; }
+  :global(.mx-cw-sm .disc) { width: 5rem; }
   :global(.mx-cw .disc) {
-    position: relative; width: 100%; max-width: 8rem; aspect-ratio: 1; margin: 0 auto 0.55rem;
-    border-radius: 50%; border: 1px solid var(--border);
+    position: relative; margin: 0 auto 0.55rem;
+    aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--border);
     /* Desaturating toward a NEUTRAL grey, not toward the page background —
        the centre of the wheel means "no colour", which has to look like grey
        rather than like a hole. Saturation then reads as distance from centre,
@@ -985,6 +1004,11 @@ const hasItems = manifest.count > 0;
   let current: any = null;
   let preview: MatchPreview | null = null;
 
+  /** Which Colour Grading wheel is drawn large, and whether Global — reached
+   *  by a separate toggle, as in Lightroom — is showing instead of the
+   *  Shadows/Midtones/Highlights cluster. */
+  const gradeUi = { active: 'midtones' as 'shadows' | 'midtones' | 'highlights', showGlobal: false };
+
   // ── Opening ────────────────────────────────────────────────────────────
   document.getElementById('board')?.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('.cell-match');
@@ -1349,6 +1373,23 @@ const hasItems = manifest.count > 0;
     if (btn?.dataset.tab) showTab(btn.dataset.tab);
   });
 
+  // ── Colour Grading wheel cluster ─────────────────────────────────────────
+  // Delegated because renderValues() replaces mx-colour's innerHTML on every
+  // strength-slider move.
+  $('mx-colour').addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const rangeBtn = target.closest<HTMLElement>('[data-range]');
+    if (rangeBtn?.dataset.range) {
+      gradeUi.active = rangeBtn.dataset.range as typeof gradeUi.active;
+      renderValues();
+      return;
+    }
+    if (target.closest('#mx-globaltoggle')) {
+      gradeUi.showGlobal = !gradeUi.showGlobal;
+      renderValues();
+    }
+  });
+
   // ── Badges ─────────────────────────────────────────────────────────────
   function renderBadges(data: any) {
     const s = data.solution;
@@ -1415,7 +1456,7 @@ const hasItems = manifest.count > 0;
    * saturation runs centre-to-edge, so the dot's position alone tells you what
    * the grade is doing — which "163° / 15" never does.
    */
-  function wheel(name: string, g: { hue: number; sat: number }): string {
+  function wheel(name: string, g: { hue: number; sat: number }, size: 'lg' | 'sm' = 'lg', range?: string): string {
     const on = g.sat >= 0.5;
     const rad = (g.hue * Math.PI) / 180;
     const r = Math.min(1, g.sat / 100) * 40; // percent of the disc's half-width
@@ -1424,11 +1465,13 @@ const hasItems = manifest.count > 0;
     const dot = on
       ? `<span class="dot" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%;background:hsl(${Math.round(g.hue)} ${Math.max(22, Math.round(g.sat))}% 55%)"></span>`
       : '';
-    return `<div class="mx-cw${on ? '' : ' off'}">
+    const tag = range ? 'button' : 'div';
+    const attrs = range ? ` type="button" data-range="${esc(range)}"` : '';
+    return `<${tag} class="mx-cw mx-cw-${size}${on ? '' : ' off'}"${attrs}>
         <div class="disc">${dot}</div>
         <span class="nm">${esc(name)}</span>
         <span class="v">${on ? `${Math.round(g.hue)}° · ${Math.round(g.sat)}` : '—'}</span>
-      </div>`;
+      </${tag}>`;
   }
 
   function renderValues(adj?: Adjustments) {
@@ -1477,12 +1520,31 @@ const hasItems = manifest.count > 0;
         ])
       : '';
 
+    // Lightroom shows Shadows/Midtones/Highlights as a 3-way cluster — one
+    // large "active" wheel plus two small ones — and reaches Global through a
+    // separate toggle rather than a fourth wheel in the row. The active range
+    // defaults to whichever one the preset actually moved, so the biggest
+    // move is what greets you; a click on a small wheel promotes it, and that
+    // choice sticks across strength-slider re-renders via `gradeUi`.
+    const ranges = { shadows: a.grading.shadows, midtones: a.grading.midtones, highlights: a.grading.highlights };
+    const rangeLabel = { shadows: 'Shadows', midtones: 'Midtones', highlights: 'Highlights' } as const;
+    const rangeKeys = ['shadows', 'midtones', 'highlights'] as const;
+    const activeKey =
+      gradeUi.active ?? rangeKeys.slice().sort((x, y) => ranges[y].sat - ranges[x].sat)[0] ?? 'midtones';
+    const smallKeys = rangeKeys.filter((k) => k !== activeKey);
+
     const grading = group('Colour Grading', [
-      `<div class="mx-wheelrow">
-         ${wheel('Global', a.grading.global)}
-         ${wheel('Shadows', a.grading.shadows)}
-         ${wheel('Midtones', a.grading.midtones)}
-         ${wheel('Highlights', a.grading.highlights)}
+      `<div class="mx-gradebox">
+         <div class="mx-wheelcluster"${gradeUi.showGlobal ? ' hidden' : ''}>
+           <div class="mx-wheelhero">${wheel(rangeLabel[activeKey], ranges[activeKey], 'lg', activeKey)}</div>
+           <div class="mx-wheelsmalls">
+             ${smallKeys.map((k) => wheel(rangeLabel[k], ranges[k], 'sm', k)).join('')}
+           </div>
+         </div>
+         ${gradeUi.showGlobal ? `<div class="mx-wheelglobalbox">${wheel('Global', a.grading.global, 'lg')}</div>` : ''}
+         <button type="button" class="mx-globaltoggle" id="mx-globaltoggle" aria-pressed="${gradeUi.showGlobal}">
+           ${gradeUi.showGlobal ? '‹ Shadows · Midtones · Highlights' : 'Global ›'}
+         </button>
        </div>`,
       rowIf('Balance', a.grading.balance),
       row('Blending', String(Math.round(a.grading.blending))),

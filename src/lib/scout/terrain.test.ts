@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DEFAULT_HORIZON_RADIUS_M,
   EARTH_CIRCUMFERENCE_M,
   TILE_SIZE,
   chooseZoom,
@@ -10,12 +11,14 @@ import {
   decodeTerrarium,
   decodeTerrariumTile,
   elevationAt,
+  horizonReachM,
   latToTileY,
   loadHeightField,
   lonToTileX,
   maskToRGBA,
   metresPerSample,
   sampleAt,
+  terrainFacets,
   terrainHorizon,
   terrainShadowAt,
   terrainShadowMask,
@@ -553,6 +556,91 @@ describe('terrainHorizon', () => {
     const horizon = terrainHorizon(field, 179, 0, { stepDeg: 10 });
     assert.equal(horizon.elevationM, null);
     assert.equal(horizon.peakAltitude, 0);
+  });
+
+  it('defaults to a radius wide enough for issue #52 — a real ridge, not just a hill', () => {
+    // horizonReachM(1500) itself is the honest justification for the number;
+    // this just holds the default to it, so the two cannot quietly drift apart.
+    assert.ok(DEFAULT_HORIZON_RADIUS_M >= horizonReachM(1500));
+  });
+});
+
+describe('horizonReachM', () => {
+  it('agrees with terrainHorizon\'s own ray march about where a peak crosses the horizon', async () => {
+    // The independent cross-check: build a wall at exactly the distance
+    // `horizonReachM` predicts for its height, and ask the ray march — which
+    // knows nothing about this function — what apparent altitude it measures
+    // there. If the two disagree, one of them is wrong.
+    const height = 40;
+    const at = Math.round(horizonReachM(height) / SAMPLE_M);
+    const field = await landscape(wall(at, height, 3));
+    const lon = tileXToLon(MIN_X + 0.5 / TILE_SIZE, ZOOM);
+    const lat = tileYToLat(MIN_Y + 128.5 / TILE_SIZE, ZOOM);
+    const horizon = terrainHorizon(field, lon, lat, { stepDeg: 1 });
+    assert.ok(
+      Math.abs(horizon.altitudes[90]) < 0.3,
+      `expected near 0° at the computed crossing, got ${horizon.altitudes[90]}°`,
+    );
+  });
+
+  it('grows with the square root of the height, not with the height itself', () => {
+    // sqrt(2RH): quadrupling the height only doubles the distance.
+    const base = horizonReachM(100);
+    const quadrupled = horizonReachM(400);
+    assert.ok(Math.abs(quadrupled / base - 2) < 1e-9);
+  });
+
+  it('is zero for a peak at or below the observer\'s own height', () => {
+    assert.equal(horizonReachM(0), 0);
+    assert.equal(horizonReachM(-50), 0);
+  });
+});
+
+describe('terrainFacets', () => {
+  it('covers the field in two triangles a cell, at the requested stride', async () => {
+    const field = await landscape(flat);
+    const stride = 8;
+    const facets = terrainFacets(field, stride);
+    const cellsAcross = Math.floor((field.width - 1) / stride);
+    const cellsDown = Math.floor((field.height - 1) / stride);
+    assert.equal(facets.length, cellsAcross * cellsDown * 2);
+  });
+
+  it('carries each corner\'s own height, not the cell\'s average', async () => {
+    const field = await landscape(wall(64, 500, 8));
+    const facets = terrainFacets(field, 8);
+    const onTheWall = facets.filter((f) => [f.a[2], f.b[2], f.c[2]].some((h) => h === 500));
+    const offIt = facets.filter((f) => [f.a[2], f.b[2], f.c[2]].every((h) => h === 0));
+    assert.ok(onTheWall.length > 0, 'some facet should touch the wall');
+    assert.ok(offIt.length > 0, 'some facet should miss it entirely');
+  });
+
+  it('places each corner where sampleAt says that cell actually is', async () => {
+    const field = await landscape(wall(100, 300, 1));
+    const facets = terrainFacets(field, 16);
+    for (const facet of facets) {
+      for (const [lon, lat, heightM] of [facet.a, facet.b, facet.c]) {
+        const { col, row } = sampleAt(field, lon, lat);
+        const nearestCol = Math.round(col);
+        const nearestRow = Math.round(row);
+        assert.equal(heightM, field.heights[nearestRow * field.width + nearestCol]);
+      }
+    }
+  });
+
+  it('is empty rather than broken for a field too small to hold a stride', async () => {
+    const field = await landscape(flat, { west: 0.01, east: 0.011, south: 0.02, north: 0.021 });
+    assert.deepEqual(terrainFacets(field, 220_000), []);
+  });
+
+  it('coarsens smoothly: a wider stride never grows the triangle count', async () => {
+    const field = await landscape(flat);
+    let previous = terrainFacets(field, 2).length;
+    for (const stride of [4, 8, 16, 32]) {
+      const count = terrainFacets(field, stride).length;
+      assert.ok(count <= previous, `stride ${stride} gave ${count}, more than the previous ${previous}`);
+      previous = count;
+    }
   });
 });
 

@@ -34,9 +34,15 @@ export const inkColour = (basemap: Basemap): [number, number, number] =>
  * information it carries. So the contrast goes underneath instead: the same
  * path, wider and darker, doing for the arc what a drop shadow does for a
  * label. On dark and satellite bases it separates the arc from a busy image.
+ *
+ * The light figure was raised from 0.38 for issue #23: on the paper basemap
+ * the ring was reading as one of several fine marks rather than as the
+ * dominant one, and 0.38 of a near-black under a near-white arc was simply
+ * not enough contrast to carry that. This is still the same mechanism, not a
+ * new one — just turned up to do the job it was already meant to.
  */
 export const liftColour = (basemap: Basemap): RGBA =>
-  basemap === 'light' ? [0.08, 0.09, 0.11, 0.38] : [0, 0, 0, 0.5];
+  basemap === 'light' ? [0.08, 0.09, 0.11, 0.55] : [0, 0, 0, 0.5];
 
 /**
  * The frame wedge's ink.
@@ -73,13 +79,24 @@ export const rgbOf = (hex: string): [number, number, number] => [
 // and a literal type here narrows the default of `ridePath`'s `width` to 3.8, so
 // the one caller that draws the moon at 2.6 stops compiling.
 export const WIDTH = {
-  arc: 3.8,
+  // Issue #23: the loudest mark on the page needed to actually read as one at
+  // a glance, on the basemap that gave it the least contrast to work with.
+  arc: 4.6,
   ray: 3.0,
   plumb: 1.4,
   horizon: 2.6,
   solstice: 1.8,
   moon: 2.6,
   ground: 2.2,
+  /**
+   * Issue #48: the frame's own rectangle, overlaid on the dome. Quieter than
+   * the sun's arc — it is a reference mark about the lens, not about the
+   * light — but not below 2: `DomeGeometry.path` only adds the sprites that
+   * give a mark its weight at 2px and up, and anything under that silently
+   * degrades to WebGL's own one-pixel aliased hairline, which is the exact
+   * failure issue #23 already spent a whole mechanism fixing for the arc.
+   */
+  frameOverlay: 2.4,
   /** How much wider the lift stroke is than the mark it sits under. */
   lift: 3.4,
 };

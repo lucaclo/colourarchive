@@ -111,8 +111,50 @@ export function extractEmbeddedJpeg(buf: Buffer): Buffer | null {
   return best;
 }
 
+let librawAvailableP: Promise<boolean> | null = null;
+/** Is LibRaw's `dcraw_emu` sample CLI on PATH? Checked once per process —
+ *  running it with no arguments always exits non-zero (it prints usage), so
+ *  the only thing distinguishing "not installed" is the exec itself failing
+ *  with ENOENT rather than a normal non-zero exit. */
+const librawAvailable = (): Promise<boolean> =>
+  (librawAvailableP ??= run('dcraw_emu', [])
+    .then(() => true)
+    .catch((err: unknown) => (err as NodeJS.ErrnoException)?.code !== 'ENOENT'));
+
+/**
+ * Decode via LibRaw's `dcraw_emu` sample CLI.
+ *
+ * For most cameras LibRaw's `cam_xyz` matrix is the same as Adobe DNG
+ * Converter's `ColorMatrix2` — `adobe_coeff()` was originally derived FROM
+ * Adobe's own tables — so this lands materially closer to Lightroom's own
+ * baseline than macOS Image I/O's Apple colour science does. `-o 1` requests
+ * sRGB output (this module's rule #2, above); `-w` uses the as-shot white
+ * balance, the same starting point Lightroom opens a RAW at; `-q 3` is AHD
+ * interpolation — a solid demosaic, not a claim of matching Adobe's own
+ * (undocumented) algorithm exactly. Real .dng files pull their matrix from
+ * the file's own `ColorMatrix2` tag rather than `adobe_coeff`, so this closes
+ * most but not all of the gap to Lightroom, camera-dependently.
+ *
+ * dcraw_emu writes its output next to the source file rather than accepting
+ * an explicit destination path across every LibRaw version, so the produced
+ * file is moved into place afterward.
+ */
+async function librawDecode(srcPath: string, outPath: string): Promise<void> {
+  // 60MP RAWs are genuinely slow to decode; allow generous headroom.
+  await run('dcraw_emu', ['-T', '-o', '1', '-w', '-q', '3', srcPath], {
+    timeout: 180_000,
+    maxBuffer: 1 << 24,
+  });
+  // Appends '.tiff' to the whole filename (`src.ARW` -> `src.ARW.tiff`) —
+  // it does NOT replace the source extension, confirmed against the actual
+  // binary rather than assumed from docs.
+  const produced = `${srcPath}.tiff`;
+  await fs.rename(produced, outPath);
+}
+
 /** Decode via macOS Image I/O. Handles every RAW format the OS knows, plus
- *  HEIC, with no third-party dependency. Output is lossless TIFF in sRGB. */
+ *  HEIC, with no third-party dependency. Output is lossless TIFF in sRGB.
+ *  The fallback decoder — see `librawDecode` for why it isn't the default. */
 async function sipsDecode(srcPath: string, outPath: string): Promise<void> {
   const profile = await findSrgbProfile();
   const args = ['-s', 'format', 'tiff'];
@@ -120,6 +162,32 @@ async function sipsDecode(srcPath: string, outPath: string): Promise<void> {
   args.push(srcPath, '--out', outPath);
   // 60MP RAWs are genuinely slow to decode; allow generous headroom.
   await run('sips', args, { timeout: 180_000, maxBuffer: 1 << 24 });
+}
+
+/**
+ * Decode a RAW file to a lossless sRGB TIFF, preferring LibRaw over macOS
+ * Image I/O — see `librawDecode`'s comment for why. Falls back to `sips`
+ * (macOS only) when LibRaw isn't installed, or when it fails on a specific
+ * file it can't handle: a lower-fidelity decode beats no decode at all, but
+ * the caller is told so it can pass the note on rather than claiming the
+ * closer-to-Lightroom baseline silently.
+ */
+async function decodeRaw(srcPath: string, outPath: string): Promise<{ note?: string }> {
+  if (await librawAvailable()) {
+    try {
+      await librawDecode(srcPath, outPath);
+      return {};
+    } catch {
+      // A file this LibRaw build can't handle, or a broken install — sips is
+      // still worth trying rather than failing the whole request.
+    }
+  }
+  await sipsDecode(srcPath, outPath);
+  return {
+    note:
+      'Decoded with macOS Image I/O rather than LibRaw, which renders closer to Lightroom. ' +
+      'Install LibRaw (e.g. `brew install libraw`) for a more accurate baseline.',
+  };
 }
 
 /**
@@ -174,9 +242,11 @@ export async function toWorkingImage(
         const srcPath = path.join(dir, `src${path.extname(filename) || '.raw'}`);
         await fs.writeFile(srcPath, buf);
         workPath = path.join(dir, 'work.tiff');
-        await sipsDecode(srcPath, workPath);
+        const decoded = await decodeRaw(srcPath, workPath);
         baseline = 'macos';
-        note = 'No usable preview was embedded in this RAW, so it was decoded on this Mac instead.';
+        note = ['No usable preview was embedded in this RAW, so it was decoded on this Mac instead.', decoded.note]
+          .filter(Boolean)
+          .join(' ');
       }
     } else {
       // 'macos' or an 'export' claim on a RAW (which is a contradiction — an
@@ -184,13 +254,14 @@ export async function toWorkingImage(
       const srcPath = path.join(dir, `src${path.extname(filename) || '.raw'}`);
       await fs.writeFile(srcPath, buf);
       workPath = path.join(dir, 'work.tiff');
-      await sipsDecode(srcPath, workPath);
+      const decoded = await decodeRaw(srcPath, workPath);
       baseline = 'macos';
-      if (requested === 'export') {
-        note =
-          'This is a RAW file, so it was decoded here rather than treated as a ' +
-          'Lightroom export. For exact numbers, export a JPEG from Lightroom with every slider reset.';
-      }
+      const exportNote =
+        requested === 'export'
+          ? 'This is a RAW file, so it was decoded here rather than treated as a ' +
+            'Lightroom export. For exact numbers, export a JPEG from Lightroom with every slider reset.'
+          : undefined;
+      note = [exportNote, decoded.note].filter(Boolean).join(' ') || undefined;
     }
 
     const meta = await sharp(workPath).metadata();
@@ -208,9 +279,12 @@ export async function toWorkingImage(
   }
 }
 
-/** Is `sips` usable here? Lets the API report a clear reason rather than
- *  throwing an exec error at the user when running off a Mac. */
+/** Is a RAW decoder usable here — LibRaw or, failing that, macOS `sips`?
+ *  Lets the API report a clear reason rather than throwing an exec error at
+ *  the user. LibRaw being cross-platform is what actually drops the
+ *  macOS-only constraint this function used to embed. */
 export async function canDecodeRaw(): Promise<boolean> {
+  if (await librawAvailable()) return true;
   try {
     await run('sips', ['--formats'], { timeout: 10_000, maxBuffer: 1 << 22 });
     return true;
