@@ -1662,6 +1662,22 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   }
   .core-note { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--fg); }
   .core-note:empty { display: none; }
+
+  /* The one line in this fold that names what is actually overhead, rather
+     than qualifying an answer above it — same violet #bd99f2 the night
+     button and the core's own arc already carry, so the panel and the dome
+     read as one system rather than a plain note sitting under a coloured
+     control. The same callout shape `.spot` already uses for its own
+     highest-value line, not a new pattern. */
+  #core-stars-note:not(:empty) {
+    padding: 0.5rem 0.6rem;
+    margin: 0.4rem 0 0;
+    background: color-mix(in oklab, #bd99f2 12%, transparent);
+    border-left: 2px solid #bd99f2;
+    border-radius: 0 9px 9px 0;
+    color: var(--fg);
+  }
+
   /* Never hidden and never :empty — it is a standing limit on every answer
      above it, not a footnote to whichever one is on screen. */
   .core-caveat {
@@ -2519,6 +2535,11 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     .week :global(button) { min-height: 44px; }
     .chip { min-height: 44px; }
     .round { min-width: 44px; min-height: 44px; }
+    /* The layers panel's own checkbox rows were the one list on this page
+       that never got the pass the rest of it did — 34px, same guess-and-tap
+       problem as everything above, on a list that now also carries the
+       Milky Way mode's own "Stars & constellations" row. */
+    .toggle { min-height: 44px; }
     .datesheet input[type='date'] { min-height: 44px; font-size: 16px; }
     #framebox input[type='range'],
     #sightbox input[type='range'] { min-height: 44px; }

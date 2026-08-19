@@ -5663,6 +5663,10 @@ export async function startScout(): Promise<void> {
       startBearing = m.getBearing();
       startPitch = m.getPitch();
       canvas.setPointerCapture(e.pointerId);
+      // grab → grabbing on press is the standard pannable-canvas affordance
+      // (Google Maps, Figma) — the open hand becomes a closed one for
+      // exactly as long as something is actually being held.
+      canvas.style.cursor = 'grabbing';
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging) return;
@@ -5672,6 +5676,7 @@ export async function startScout(): Promise<void> {
     };
     const onUp = (e: PointerEvent) => {
       dragging = false;
+      canvas.style.cursor = 'grab';
       if (pendingFrame) {
         cancelAnimationFrame(pendingFrame);
         pendingFrame = 0;
