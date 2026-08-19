@@ -507,6 +507,11 @@ export async function startScout(): Promise<void> {
       style: STYLES.light,
       center: [0, 25],
       zoom: 1.4,
+      // Above MapLibre's default of 60 — the everyday 3D view only asks for
+      // 55, but the Milky Way mode leans further toward the horizon than
+      // that, and the camera cannot tilt any further up than the horizon
+      // permits regardless: 90 would be looking exactly along the ground.
+      maxPitch: 80,
       attributionControl: { compact: true },
       // Kept so the view can be exported as an image — see "Save as an image".
       //
@@ -5170,12 +5175,53 @@ export async function startScout(): Promise<void> {
   let nightTurnedOn: Array<keyof typeof shown> = [];
 
   /**
+   * The map view's own bearing, pitch and 2D/3D mode from just before Milky
+   * Way mode turned the camera to face the core, so leaving the mode puts the
+   * view back rather than snapping it to some default. Null while the mode is
+   * off, which also doubles as "nothing to restore".
+   */
+  let preNightView: { bearing: number; pitch: number; view: ViewMode } | null = null;
+
+  /**
+   * How far toward the horizon the view leans while Milky Way mode is on —
+   * past the everyday 3D pitch (55°), because this is the one view on the page
+   * meant to evoke looking *up*, not looking *across* a townscape. 90 would be
+   * looking exactly along the ground; MapLibre cannot tilt past that, so this
+   * is as close to "look at the sky" as a top-down map renderer gets.
+   */
+  const NIGHT_PITCH = 72;
+
+  /**
+   * Turn the map view itself to face where the core will be — bearing at its
+   * azimuth, pitched toward the horizon rather than the everyday top-down-ish
+   * 3D angle — so the screen shows roughly what the photograph will, instead
+   * of an unrelated angle on the terrain the frame wedge is drawn over.
+   *
+   * A courtesy on top of `aimAt`, not a replacement for it: `aimAt` sets the
+   * simulated lens the framing maths and the wedge on the ground are drawn
+   * from, which is a different "camera" from the one this function turns.
+   */
+  function lookMapAtSky(body: { azimuth: number; altitude: number } | null) {
+    if (!map || !body) return;
+    if (view !== '3d') {
+      view = '3d';
+      for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+      applyView();
+    }
+    const bearing = ((body.azimuth % 360) + 360) % 360;
+    map.easeTo({ bearing, pitch: NIGHT_PITCH, duration: 900 });
+  }
+
+  /**
    * The whole Milky Way answer, in one press.
    *
-   * It sets four things that had to be found separately before: the arc on the
+   * It sets five things that had to be found separately before: the arc on the
    * sky dome, the frame layer (which is what the *framing* half of the answer is
-   * gated on), the panel section opened, and the camera pointed at where the
-   * core will be at its best.
+   * gated on), the panel section opened, the simulated lens pointed at where
+   * the core will be at its best, and — new — the map view itself turned to
+   * face that same direction, tilted toward the horizon, so the screen looks
+   * roughly like what the photograph will rather than an arbitrary angle on
+   * the terrain.
    *
    * What it deliberately does **not** do is move the time slider. The obvious
    * next step — jump to the best moment — crosses a date boundary whenever that
@@ -5212,12 +5258,26 @@ export async function startScout(): Promise<void> {
     fold.open = on;
     if (on) {
       // Aim before the fold is read, so the framing lines are already the
-      // answer for a camera pointed at the core rather than for whatever the
-      // lens happened to be doing.
+      // answer for a lens pointed at the core rather than for whatever it
+      // happened to be doing.
       aimAt(coreAim);
+      if (map && !preNightView) {
+        preNightView = { bearing: map.getBearing(), pitch: map.getPitch(), view };
+      }
+      lookMapAtSky(coreAim);
       fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
       refreshCoreLens();
+      if (preNightView) {
+        const back = preNightView;
+        preNightView = null;
+        if (back.view !== view) {
+          view = back.view;
+          for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+          applyView();
+        }
+        map?.easeTo({ bearing: back.bearing, pitch: back.pitch, duration: 700 });
+      }
     }
     save();
   }
