@@ -5454,6 +5454,96 @@ export async function startScout(): Promise<void> {
    *  active, which doubles as the "is it active" flag. */
   let freeLookCleanup: (() => void) | null = null;
 
+  /** Every basemap paint/layout property Milky Way mode has changed, so it
+   *  can be put back to exactly what it was rather than to a guessed
+   *  default — the same reasoning `preNightView` already follows for the
+   *  camera. Null (not merely empty) doubles as "nothing is dimmed". */
+  let dimmedLayers: Array<{ id: string; prop: string; value: unknown }> | null = null;
+
+  /** How much of a basemap layer's own opacity survives while the sky is
+   *  the subject — low enough that roads and land read as a ground the eye
+   *  can still find its way by, not zero: a fully black ground looks like
+   *  missing tiles, not night. */
+  const NIGHT_GROUND_OPACITY = 0.15;
+  /** The background layer's own colour swap — opacity alone leaves whatever
+   *  is *behind* the canvas showing through (the page, not a dark ground),
+   *  so this is set directly rather than dimmed like everything else. */
+  const NIGHT_GROUND_COLOUR = '#050608';
+
+  /**
+   * Turn every basemap layer down for the duration of Milky Way mode —
+   * every fill, line, extrusion and raster the *current* style happens to
+   * have to a shared low opacity, and every label hidden outright. Left to
+   * a per-layer sweep of whatever `map.getStyle()` actually reports rather
+   * than a hard-coded list of layer ids and types: this project's basemaps
+   * come from a style server it does not control, and a list copied out of
+   * today's stylesheet is a silent no-op the day that stylesheet changes.
+   *
+   * Not a `swapStyle()` to the dark basemap, which was tried first: that
+   * reloads the style asynchronously, and the `style.load` handler's own
+   * `applyView()` — reached for the ordinary reason, putting terrain back
+   * after a reload — calls `easeTo({ pitch: 55 })` on however the reload
+   * happens to land, racing the pitch this mode had just set to 82 and
+   * usually winning. Not a CSS filter on the canvas either, which was tried
+   * second: the custom WebGL dome layer paints to that same canvas, so
+   * dimming it dims the stars along with the ground. A paint-property sweep
+   * touches neither the camera nor a pixel of the canvas — only what the
+   * basemap itself draws — so it can race nothing and dim nothing it did
+   * not mean to.
+   */
+  function dimBasemap() {
+    if (!map || dimmedLayers) return;
+    const layers = map.getStyle()?.layers;
+    if (!layers) return;
+    const saved: Array<{ id: string; prop: string; value: unknown }> = [];
+    const remember = (id: string, prop: string, value: unknown) => saved.push({ id, prop, value });
+
+    for (const layer of layers) {
+      // Everything this page draws itself, live at exactly the brightness
+      // it chose — the frame wedge, the shadows, the photo pins. Only the
+      // basemap underneath them is what has to recede.
+      if (layer.id.startsWith('scout-')) continue;
+
+      if (layer.type === 'symbol') {
+        remember(layer.id, 'visibility', map.getLayoutProperty(layer.id, 'visibility') ?? 'visible');
+        map.setLayoutProperty(layer.id, 'visibility', 'none');
+        continue;
+      }
+
+      const prop =
+        layer.type === 'fill' ? 'fill-opacity' :
+        layer.type === 'line' ? 'line-opacity' :
+        layer.type === 'fill-extrusion' ? 'fill-extrusion-opacity' :
+        layer.type === 'raster' ? 'raster-opacity' :
+        layer.type === 'background' ? 'background-opacity' :
+        null;
+      if (!prop) continue; // heatmap, hillshade, circle — none of this style's basemaps use them
+      remember(layer.id, prop, map.getPaintProperty(layer.id, prop) ?? null);
+      map.setPaintProperty(layer.id, prop, NIGHT_GROUND_OPACITY);
+
+      if (layer.type === 'background') {
+        remember(layer.id, 'background-color', map.getPaintProperty(layer.id, 'background-color') ?? null);
+        map.setPaintProperty(layer.id, 'background-color', NIGHT_GROUND_COLOUR);
+      }
+    }
+    dimmedLayers = saved;
+  }
+
+  function undimBasemap() {
+    if (!map || !dimmedLayers) return;
+    for (const { id, prop, value } of dimmedLayers) {
+      try {
+        if (prop === 'visibility') map.setLayoutProperty(id, prop, value as MapLibre.LayerSpecification['layout']);
+        else map.setPaintProperty(id, prop, value);
+      } catch {
+        // The layer is gone — the basemap was switched (light/dark/
+        // satellite) while Milky Way mode was on, which replaces the whole
+        // style. Nothing to put back on a layer that no longer exists.
+      }
+    }
+    dimmedLayers = null;
+  }
+
   /**
    * Milky Way mode's own gesture: the pin stays exactly where it is — no
    * handler here ever touches `center` — and a drag instead orbits the
@@ -5479,6 +5569,7 @@ export async function startScout(): Promise<void> {
     m.boxZoom.disable();
     m.touchZoomRotate.disable();
     m.keyboard.disable();
+    dimBasemap();
 
     // The pin sits dead centre once `lookMapAtSky` has recentred on it, which
     // makes it the single most likely place for a look-around drag to begin.
@@ -5555,6 +5646,7 @@ export async function startScout(): Promise<void> {
   function disableFreeLook() {
     freeLookCleanup?.();
     freeLookCleanup = null;
+    undimBasemap();
     for (const marker of [pin, slabMarker, sightMarker]) {
       marker.setDraggable(true);
       marker.getElement().style.pointerEvents = '';
