@@ -140,6 +140,19 @@ import {
   type CoreNight,
   type CoreSample,
 } from '../galactic';
+import {
+  constellationLines,
+  galacticBandBrightness,
+  galacticPlane,
+  limitingMagnitude,
+  prominentConstellations,
+  starAlpha,
+  starColour,
+  starPositions,
+  starVisibility,
+  type ConstellationEdge,
+  type Star,
+} from '../stars';
 import { describeSeeingPoint, seeingAt, type SeeingForecast } from '../seeing';
 import {
   RESOLUTIONS,
@@ -189,6 +202,7 @@ import {
   type RGBA,
 } from './dome-layer';
 import { createTerrainShadows, type TerrainShadows } from './terrain-shadows';
+import { loadStars } from './stars-loader';
 import {
   cloudStructure,
   blockingCover,
@@ -387,6 +401,49 @@ export async function startScout(): Promise<void> {
    * costs a track nobody asked for on every date change otherwise.
    */
   let coreSamples: CoreSample[] = [];
+  /**
+   * The bundled star catalogue and its computed stick figures.
+   *
+   * Fetched once, lazily, on the first time the layer is switched on — most
+   * sessions never open it, and the catalogue is a real (if small) network
+   * request. `starEdges` is derived from `starCatalog` once and reused every
+   * frame: the constellations a star belongs to do not change with the time
+   * slider, only where they currently sit does.
+   */
+  let starCatalog: Star[] | null = null;
+  let starEdges: ConstellationEdge[] | null = null;
+  /** The faintest magnitude actually present in whatever catalogue loaded —
+   *  read off the data rather than duplicating `fetch-bright-stars.ts`'s own
+   *  MAG_LIMIT as a second constant here, which is exactly the kind of two
+   *  numbers-that-must-agree-and-don't this project keeps single sources of
+   *  truth to avoid. Regenerate the catalogue at a different limit and this
+   *  follows it with no edit needed here. */
+  let starCatalogLimit = 4.0;
+  let starsLoading: Promise<void> | null = null;
+  /** True once a fetch has come back with nothing — a blocked request, a
+   *  static Drop deploy with no `public/data/` asset, whatever the cause.
+   *  Distinct from "still loading": the panel says something different for
+   *  each, rather than the layer just silently doing nothing forever. */
+  let starsUnavailable = false;
+
+  function ensureStarsLoaded(): Promise<void> {
+    if (starCatalog) return Promise.resolve();
+    if (!starsLoading) {
+      starsLoading = loadStars().then((stars) => {
+        if (!stars || !stars.length) {
+          starsUnavailable = true;
+          invalidate({ dome: true });
+          return;
+        }
+        starCatalog = stars;
+        starEdges = constellationLines(stars);
+        starCatalogLimit = stars.reduce((max, s) => Math.max(max, s.mag), -Infinity);
+        invalidate({ dome: true });
+      });
+    }
+    return starsLoading;
+  }
+
   /**
    * Where the core will be at the best moment of the coming night.
    *
@@ -2235,6 +2292,142 @@ export async function startScout(): Promise<void> {
       moving.push([sun], 'points', [lift[0], lift[1], lift[2], lift[3] * 0.9] as RGBA, 16);
       moving.push([sun], 'points', [...lit, 0.95] as RGBA, 26, 3.4);
       moving.push([sun], 'points', core, 13);
+    }
+
+    // The catalogue sky: stars, their constellations, and the galactic
+    // plane's own band — what the core's single arc could never show, which
+    // is the shape of the rest of the night around it. Recomputed every
+    // frame like the sun and moon markers above rather than cached with the
+    // day's static geometry: a star's altitude and azimuth change with
+    // sidereal time exactly as fast as the sun's do, so a figure built once
+    // and left in place would visibly drift out of register as the slider
+    // moved through the night.
+    const instant = currentInstant();
+    const starsNote = $<HTMLElement>('core-stars-note');
+    starsNote.hidden = true;
+    const sayStars = (text: string) => {
+      starsNote.hidden = false;
+      starsNote.textContent = text;
+    };
+    if (shown.stars && starsUnavailable) {
+      sayStars('Star catalogue unavailable — the rest of the page works either way.');
+    }
+    if (shown.stars && starCatalog && instant) {
+      const dark = starVisibility(now.altitude);
+      // Captured once so the closures below (`.flatMap`, `.map`) see a value
+      // TS can still prove is non-null — `centre` is a mutable outer `let`,
+      // and narrowing does not survive into a closure over one.
+      const pin = centre;
+      if (dark <= 0) {
+        // The layer is on and doing nothing, and a control that appears to
+        // have stopped working is worse than one that says plainly why: the
+        // sky is still too bright, not broken.
+        sayStars('Too bright for stars — past civil twilight they start to show.');
+      } else {
+        const moonNow = currentMoon();
+        const limit = limitingMagnitude(
+          now.altitude,
+          moonNow?.altitude ?? -90,
+          moonIllumination(instant).fraction,
+          starCatalogLimit,
+        );
+
+        if (limit <= -2) {
+          sayStars('The moon is too bright right now for any catalogue star to show.');
+        } else {
+          const all = starPositions(starCatalog, pin.lat, pin.lon, instant, -1);
+          const posById = new Map(all.map((p) => [p.star.id, p]));
+          const above = all
+            .map((p) => ({ ...p, alpha: starAlpha(p.apparentMag, limit) }))
+            .filter((p) => p.altitudeApparent > 0 && p.alpha > 0.02);
+
+          const constellations = prominentConstellations(above);
+          // Named stars bright enough to be worth calling out by name rather
+          // than only by the constellation they belong to — most catalogue
+          // entries have no proper name at all, so this is a short list even
+          // when a great deal of the sky is up.
+          const namedStars = above
+            .filter((p) => p.star.name && p.alpha > 0.6)
+            .sort((a, b) => a.star.mag - b.star.mag)
+            .slice(0, 4)
+            .map((p) => p.star.name);
+
+          if (constellations.length) {
+            sayStars(
+              namedStars.length
+                ? `Now overhead: ${constellations.join(', ')}. Brightest up: ${namedStars.join(', ')}.`
+                : `Now overhead: ${constellations.join(', ')}.`,
+            );
+          } else {
+            sayStars('Nothing in the catalogue clears the horizon from here right now.');
+          }
+
+          // The band first, so stars sit over it rather than under it. Three
+          // passes at different galactic latitudes — the plane itself, and a
+          // pass either side of it — for actual visual width rather than a
+          // thread-thin great circle; the outer two are both fainter and
+          // narrower, which is what gives the middle pass the look of a
+          // bright core inside a hazy band rather than three equal rings.
+          const bandLift = liftColour(basemap);
+          const BAND_STEP_DEG = 3;
+          const bandPasses: Array<{ galacticLatitude: number; widthScale: number; alphaScale: number }> = [
+            { galacticLatitude: 0, widthScale: 1, alphaScale: 1 },
+            { galacticLatitude: 6, widthScale: 0.7, alphaScale: 0.55 },
+            { galacticLatitude: -6, widthScale: 0.7, alphaScale: 0.55 },
+          ];
+          for (const pass of bandPasses) {
+            const bandSamples = galacticPlane(pin.lat, pin.lon, instant, BAND_STEP_DEG, pass.galacticLatitude);
+            const bandPath = domePath(pin, bandSamples, radius);
+            const { above: bandAbove } = splitAtHorizon(bandPath);
+            let seen = 0;
+            for (const run of bandAbove) {
+              const from = seen;
+              const brightnessAt = (i: number) => galacticBandBrightness((from + i) * BAND_STEP_DEG) * pass.alphaScale;
+              if (pass.galacticLatitude === 0) {
+                moving.push(
+                  run,
+                  'strip',
+                  (i) => [bandLift[0], bandLift[1], bandLift[2], bandLift[3] * 0.5 * dark * brightnessAt(i)] as RGBA,
+                  WIDTH.moon + WIDTH.lift,
+                );
+              }
+              moving.push(
+                run,
+                'strip',
+                (i) => [0.86, 0.88, 0.95, 0.4 * dark * brightnessAt(i)] as RGBA,
+                WIDTH.moon * pass.widthScale,
+              );
+              seen += run.length;
+            }
+          }
+
+          if (starEdges?.length) {
+            const linePoints: ReturnType<typeof domePosition>[] = [];
+            const lineAlphas: number[] = [];
+            for (const edge of starEdges) {
+              const a = posById.get(edge.a.id);
+              const b = posById.get(edge.b.id);
+              if (!a || !b || a.altitudeApparent <= 0 || b.altitudeApparent <= 0) continue;
+              const edgeAlpha = Math.min(starAlpha(a.apparentMag, limit), starAlpha(b.apparentMag, limit));
+              if (edgeAlpha <= 0.02) continue;
+              linePoints.push(
+                domePosition(pin, a.azimuth, a.altitudeApparent, radius),
+                domePosition(pin, b.azimuth, b.altitudeApparent, radius),
+              );
+              lineAlphas.push(edgeAlpha, edgeAlpha);
+            }
+            moving.push(linePoints, 'lines', (i) => [...ink, 0.28 * lineAlphas[i]] as RGBA, 1);
+          }
+
+          const starPoints = above.map((p) => domePosition(pin, p.azimuth, p.altitudeApparent, radius));
+          moving.push(
+            starPoints,
+            'points',
+            (i) => [...starColour(above[i].star.ci), above[i].alpha] as RGBA,
+            (i) => Math.min(6, Math.max(1, 4.2 - above[i].star.mag * 0.7)),
+          );
+        }
+      }
     }
 
     domeLayer.setGeometry(mergeDomeGeometry(domeStatic, moving.data()));
@@ -4893,6 +5086,7 @@ export async function startScout(): Promise<void> {
       if (key === 'monolith') drawSlab();
       if (key === 'buildings') collectBuildings();
       if (key === 'landform') refreshTerrain();
+      if (key === 'stars' && shown.stars) void ensureStarsLoaded();
       if (key === 'frame') {
         drawFrame();
         renderFraming();
@@ -5175,41 +5369,59 @@ export async function startScout(): Promise<void> {
   let nightTurnedOn: Array<keyof typeof shown> = [];
 
   /**
-   * The map view's own bearing, pitch and 2D/3D mode from just before Milky
-   * Way mode turned the camera to face the core, so leaving the mode puts the
-   * view back rather than snapping it to some default. Null while the mode is
-   * off, which also doubles as "nothing to restore".
+   * The map view's own bearing, pitch, zoom, centre and 2D/3D mode from just
+   * before Milky Way mode moved the camera to face the core, so leaving the
+   * mode puts the view back rather than snapping it to some default. Null
+   * while the mode is off, which also doubles as "nothing to restore".
    */
-  let preNightView: { bearing: number; pitch: number; view: ViewMode } | null = null;
+  let preNightView: {
+    bearing: number;
+    pitch: number;
+    zoom: number;
+    center: MapLibre.LngLatLike;
+    view: ViewMode;
+  } | null = null;
 
   /**
    * How far toward the horizon the view leans while Milky Way mode is on —
    * past the everyday 3D pitch (55°), because this is the one view on the page
    * meant to evoke looking *up*, not looking *across* a townscape. 90 would be
-   * looking exactly along the ground; MapLibre cannot tilt past that, so this
-   * is as close to "look at the sky" as a top-down map renderer gets.
+   * looking exactly along the ground; MapLibre cannot tilt past that, so 78 —
+   * two shy of `maxPitch` — is as close to "look at the sky" as a top-down map
+   * renderer gets without the grazing angle where terrain tiles start to
+   * z-fight.
    */
-  const NIGHT_PITCH = 72;
+  const NIGHT_PITCH = 78;
+
+  /** How much closer the view zooms in for Milky Way mode, added to whatever
+   *  zoom the map was already at — relative rather than a fixed level, so a
+   *  session already zoomed in past this does not zoom back out. Capped well
+   *  short of street level: the point is to feel closer to the pin the sky is
+   *  centred on, not to read building footprints in the dark. */
+  const NIGHT_ZOOM_BOOST = 2.5;
+  const NIGHT_ZOOM_MAX = 17;
 
   /**
    * Turn the map view itself to face where the core will be — bearing at its
    * azimuth, pitched toward the horizon rather than the everyday top-down-ish
-   * 3D angle — so the screen shows roughly what the photograph will, instead
-   * of an unrelated angle on the terrain the frame wedge is drawn over.
+   * 3D angle, zoomed and recentred in on the pin — so the screen shows
+   * roughly what the photograph will, instead of an unrelated angle on
+   * whatever the terrain happened to be showing.
    *
    * A courtesy on top of `aimAt`, not a replacement for it: `aimAt` sets the
    * simulated lens the framing maths and the wedge on the ground are drawn
    * from, which is a different "camera" from the one this function turns.
    */
   function lookMapAtSky(body: { azimuth: number; altitude: number } | null) {
-    if (!map || !body) return;
+    if (!map || !body || !centre) return;
     if (view !== '3d') {
       view = '3d';
       for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
       applyView();
     }
     const bearing = ((body.azimuth % 360) + 360) % 360;
-    map.easeTo({ bearing, pitch: NIGHT_PITCH, duration: 900 });
+    const zoom = Math.min(NIGHT_ZOOM_MAX, map.getZoom() + NIGHT_ZOOM_BOOST);
+    map.easeTo({ bearing, pitch: NIGHT_PITCH, zoom, center: [centre.lon, centre.lat], duration: 900 });
   }
 
   /**
@@ -5232,18 +5444,21 @@ export async function startScout(): Promise<void> {
   function setNightMode(on: boolean) {
     const button = $('night-button');
     button.setAttribute('aria-pressed', String(on));
+    const toggleId = (key: keyof Shown) => LAYER_TOGGLES.find(([, k]) => k === key)?.[0];
 
     if (on) {
-      nightTurnedOn = (['corePath', 'frame'] as const).filter((key) => !shown[key]);
+      nightTurnedOn = (['corePath', 'frame', 'stars'] as const).filter((key) => !shown[key]);
       for (const key of nightTurnedOn) {
         shown[key] = true;
-        const box = $<HTMLInputElement>(key === 'corePath' ? 't-core' : 't-frame');
-        box.checked = true;
+        const id = toggleId(key);
+        if (id) $<HTMLInputElement>(id).checked = true;
       }
+      void ensureStarsLoaded();
     } else {
       for (const key of nightTurnedOn) {
         shown[key] = false;
-        $<HTMLInputElement>(key === 'corePath' ? 't-core' : 't-frame').checked = false;
+        const id = toggleId(key);
+        if (id) $<HTMLInputElement>(id).checked = false;
       }
       nightTurnedOn = [];
     }
@@ -5262,7 +5477,13 @@ export async function startScout(): Promise<void> {
       // happened to be doing.
       aimAt(coreAim);
       if (map && !preNightView) {
-        preNightView = { bearing: map.getBearing(), pitch: map.getPitch(), view };
+        preNightView = {
+          bearing: map.getBearing(),
+          pitch: map.getPitch(),
+          zoom: map.getZoom(),
+          center: map.getCenter(),
+          view,
+        };
       }
       lookMapAtSky(coreAim);
       fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -5276,7 +5497,7 @@ export async function startScout(): Promise<void> {
           for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
           applyView();
         }
-        map?.easeTo({ bearing: back.bearing, pitch: back.pitch, duration: 700 });
+        map?.easeTo({ bearing: back.bearing, pitch: back.pitch, zoom: back.zoom, center: back.center, duration: 700 });
       }
     }
     save();

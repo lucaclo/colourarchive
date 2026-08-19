@@ -48,6 +48,8 @@ export interface Shown {
   photos: boolean;
   frame: boolean;
   sight: boolean;
+  /** The catalogue sky: stars, their constellations, and the galactic plane. */
+  stars: boolean;
 }
 
 export const defaultShown = (): Shown => ({
@@ -62,6 +64,7 @@ export const defaultShown = (): Shown => ({
   photos: true,
   frame: false,
   sight: false,
+  stars: false,
 });
 
 /**
@@ -85,6 +88,7 @@ export const LAYER_TOGGLES: ReadonlyArray<readonly [id: string, key: keyof Shown
   ['t-photos', 'photos'],
   ['t-frame', 'frame'],
   ['t-sight', 'sight'],
+  ['t-stars', 'stars'],
 ] as const;
 
 /** The monolith: a stated height, to check a shadow against a known one. */

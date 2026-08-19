@@ -112,35 +112,32 @@ export function precess(
   };
 }
 
-export interface CorePosition {
+export interface HorizontalPosition {
   /** Degrees clockwise from true north. */
   azimuth: number;
   /** Degrees above the horizon, geometric. */
   altitude: number;
-  /** Lifted by refraction — where the eye would find it. */
-  altitudeApparent: number;
-  /** Precessed to the epoch of date, not J2000. */
-  rightAscension: number;
-  declination: number;
   /** Degrees; negative before transit, zero at it, positive after. */
   hourAngle: number;
 }
 
 /**
- * Where the core is, as seen from a place at an instant.
+ * Equatorial coordinates (already at the epoch of date — precess first if
+ * they came from a catalogue) → the sky as seen from a place at an instant.
  *
- * No parallax term, unlike the moon: at 26,000 light years the earth's radius
- * subtends nothing measurable. The transform is otherwise the same one
- * `moonPosition` uses, and deliberately so — two objects placed by different
+ * No parallax term: right for anything effectively at infinity — the core,
+ * a catalogue star — and wrong for the moon, which has its own transform in
+ * `moon.ts` for exactly that reason. Shared by `corePosition` and
+ * `stars.ts`'s `starPosition` deliberately: two objects placed by different
  * arithmetic would disagree about the sky in ways nobody could unpick.
  */
-export function corePosition(latitude: number, longitude: number, date: Date): CorePosition {
-  const { rightAscension, declination } = precess(
-    CORE_J2000.rightAscension,
-    CORE_J2000.declination,
-    date,
-  );
-
+export function equatorialToHorizontal(
+  rightAscension: number,
+  declination: number,
+  latitude: number,
+  longitude: number,
+  date: Date,
+): HorizontalPosition {
   const hourAngle = norm360(greenwichSiderealTime(date) + longitude - rightAscension);
 
   const x = cos(hourAngle) * cos(declination);
@@ -155,11 +152,47 @@ export function corePosition(latitude: number, longitude: number, date: Date): C
   return {
     azimuth,
     altitude,
+    // Signed the way `sun.ts` reports it: negative on the way up.
+    hourAngle: hourAngle > 180 ? hourAngle - 360 : hourAngle,
+  };
+}
+
+export interface CorePosition extends HorizontalPosition {
+  /** Lifted by refraction — where the eye would find it. */
+  altitudeApparent: number;
+  /** Precessed to the epoch of date, not J2000. */
+  rightAscension: number;
+  declination: number;
+}
+
+/**
+ * Where the core is, as seen from a place at an instant.
+ *
+ * No parallax term, unlike the moon: at 26,000 light years the earth's radius
+ * subtends nothing measurable.
+ */
+export function corePosition(latitude: number, longitude: number, date: Date): CorePosition {
+  const { rightAscension, declination } = precess(
+    CORE_J2000.rightAscension,
+    CORE_J2000.declination,
+    date,
+  );
+
+  const { azimuth, altitude, hourAngle } = equatorialToHorizontal(
+    rightAscension,
+    declination,
+    latitude,
+    longitude,
+    date,
+  );
+
+  return {
+    azimuth,
+    altitude,
     altitudeApparent: altitude + refraction(altitude),
     rightAscension,
     declination,
-    // Signed the way `sun.ts` reports it: negative on the way up.
-    hourAngle: hourAngle > 180 ? hourAngle - 360 : hourAngle,
+    hourAngle,
   };
 }
 

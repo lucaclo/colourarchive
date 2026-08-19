@@ -165,7 +165,12 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                  not answering all mean the same thing here — nothing to add,
                  so nothing is shown. -->
             <p class="core-note" id="core-seeing" hidden></p>
+            <!-- Only meaningful once the star layer has something to name —
+                 hidden the rest of the time rather than printing "—", which
+                 would read as a measurement that came back empty. -->
+            <p class="core-note" id="core-stars-note" hidden></p>
             <p class="core-caveat">Light pollution is not modelled.</p>
+            <p class="core-caveat">Stars to magnitude 4, dimmed for altitude and moonlight but not for cloud. Constellation lines are computed from the catalogue, not the IAU's own figures.</p>
           </details>
 
           <!-- The per-spot answer: not where the shade is, but when the light
@@ -448,6 +453,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
              nothing else. It shared its name with the panel section that holds
              all the text, so ticking it looked like it had done nothing. -->
         <label class="toggle"><input type="checkbox" id="t-core" /> <span>Milky Way arc</span></label>
+        <label class="toggle"><input type="checkbox" id="t-stars" /> <span>Stars &amp; constellations</span></label>
         <label class="toggle"><input type="checkbox" id="t-monolith" /> <span>Monolith</span></label>
         <label class="toggle"><input type="checkbox" id="t-photos" checked /> <span>Photo hotspots</span></label>
         <label class="toggle"><input type="checkbox" id="t-frame" /> <span>Frame</span></label>

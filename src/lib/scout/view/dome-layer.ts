@@ -408,17 +408,18 @@ export class DomeGeometry {
     points: DomePoint[],
     mode: 'strip' | 'lines' | 'points',
     colour: RGBA | ((index: number) => RGBA),
-    size = 1,
+    size: number | ((index: number) => number) = 1,
     glow = 0,
   ): void {
     if (!points.length) return;
     const at = typeof colour === 'function' ? colour : () => colour;
+    const sizeAt = typeof size === 'function' ? size : () => size;
 
     if (mode === 'points') {
       for (let i = 0; i < points.length; i++) {
         const [x, y, z, metres] = this.project(points[i].lon, points[i].lat, points[i].altitudeM);
         const c = at(i);
-        this.points.push(x, y, z, metres, c[0], c[1], c[2], c[3], size, glow);
+        this.points.push(x, y, z, metres, c[0], c[1], c[2], c[3], sizeAt(i), glow);
       }
       return;
     }
@@ -426,11 +427,11 @@ export class DomeGeometry {
     // `lines` is disconnected pairs; `strip` is one continuous run.
     if (mode === 'lines') {
       for (let i = 0; i + 1 < points.length; i += 2) {
-        this.path([points[i], points[i + 1]], (k) => at(i + k), size);
+        this.path([points[i], points[i + 1]], (k) => at(i + k), sizeAt(i));
       }
       return;
     }
-    this.path(points, at, size);
+    this.path(points, at, sizeAt(0));
   }
 
   /**
