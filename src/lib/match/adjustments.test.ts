@@ -27,9 +27,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  atGroupStrength,
   atStrength,
   clamp,
   clampAdjustments,
+  flatGroupStrength,
   identityAdjustments,
   lerpAdjustments,
   zeroHsl,
@@ -545,5 +547,72 @@ describe('atStrength', () => {
 
   it('clamps t above 1 to the same result as t=1', () => {
     assert.deepEqual(atStrength(restrained, faithful, 2), atStrength(restrained, faithful, 1));
+  });
+});
+
+/* ── atGroupStrength ───────────────────────────────────────────────────────── */
+
+describe('atGroupStrength', () => {
+  const restrained = fixtureA();
+  const faithful = fixtureB();
+
+  it('with all three groups equal, matches the single flat atStrength exactly', () => {
+    for (const t of [0, 0.3, 0.5, 0.7, 1]) {
+      assert.deepEqual(
+        atGroupStrength(restrained, faithful, flatGroupStrength(t)),
+        atStrength(restrained, faithful, t),
+        `mismatch at t=${t}`,
+      );
+    }
+  });
+
+  it('lets one panel sit at full strength while another holds back — the case the flat slider cannot express', () => {
+    // Light at 1 (faithful), Colour at 0.5 (restrained), Effects at 0 (identity).
+    const result = atGroupStrength(restrained, faithful, { light: 1, colour: 0.5, effects: 0 });
+    const identity = identityAdjustments(restrained.curve.map((p) => p.x));
+
+    // Light fields track the faithful solution.
+    assert.equal(result.exposure, clampAdjustments(faithful).exposure);
+    assert.equal(result.contrast, clampAdjustments(faithful).contrast);
+    assert.deepEqual(result.curve, clampAdjustments(faithful).curve);
+
+    // Colour fields track the restrained solution.
+    assert.equal(result.temp, clampAdjustments(restrained).temp);
+    assert.equal(result.saturation, clampAdjustments(restrained).saturation);
+    assert.deepEqual(result.hsl, clampAdjustments(restrained).hsl);
+
+    // Effects fields track identity (no change).
+    assert.equal(result.texture, identity.texture);
+    assert.equal(result.grainAmount, identity.grainAmount);
+    assert.equal(result.sharpenAmount, identity.sharpenAmount);
+  });
+
+  it('splits a single mask across panels: exposure/contrast follow Light, temp/tint/saturation follow Colour', () => {
+    const withMasks = (base: Adjustments): Adjustments => ({
+      ...base,
+      masks: [mask({ exposure: 0.8, contrast: 20, temp: 40, tint: -10, saturation: 30 })],
+    });
+    const r = withMasks(restrained);
+    const f = withMasks(faithful);
+
+    const result = atGroupStrength(r, f, { light: 1, colour: 0, effects: 0 });
+    const lightOnly = atStrength(r, f, 1).masks[0];
+    const colourOff = atStrength(r, f, 0).masks[0];
+
+    assert.equal(result.masks.length, 1);
+    assert.equal(result.masks[0].exposure, lightOnly.exposure);
+    assert.equal(result.masks[0].contrast, lightOnly.contrast);
+    assert.equal(result.masks[0].temp, colourOff.temp);
+    assert.equal(result.masks[0].tint, colourOff.tint);
+    assert.equal(result.masks[0].saturation, colourOff.saturation);
+  });
+
+  it('clamps each panel independently, same as atStrength', () => {
+    const result = atGroupStrength(restrained, faithful, { light: -5, colour: 2, effects: 0.5 });
+    assert.deepEqual(
+      { exposure: result.exposure, curve: result.curve },
+      { exposure: atStrength(restrained, faithful, 0).exposure, curve: atStrength(restrained, faithful, 0).curve },
+    );
+    assert.equal(result.temp, atStrength(restrained, faithful, 1).temp);
   });
 });

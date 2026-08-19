@@ -86,18 +86,22 @@ export async function writePreviewAssets(
   };
 }
 
-/** Reference thumbnail shown beside the preview for comparison. */
+/** Reference thumbnail shown beside the preview for comparison. Indexed so a
+ *  match against several references can write one file per reference into the
+ *  same output directory without overwriting each other. */
 export async function writeReferencePreview(
   sourcePath: string,
   outDir: string,
   webBase: string,
+  index = 0,
 ): Promise<string> {
   await fs.mkdir(outDir, { recursive: true });
+  const filename = index === 0 ? 'reference.webp' : `reference-${index}.webp`;
   const buf = await sharp(sourcePath)
     .resize({ width: PREVIEW_EDGE, height: PREVIEW_EDGE, fit: 'inside', withoutEnlargement: true })
     .toColorspace('srgb')
     .webp({ quality: 92 })
     .toBuffer();
-  await fs.writeFile(path.join(outDir, 'reference.webp'), buf);
-  return `${webBase}/reference.webp`;
+  await fs.writeFile(path.join(outDir, filename), buf);
+  return `${webBase}/${filename}`;
 }

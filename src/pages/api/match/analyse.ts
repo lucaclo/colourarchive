@@ -4,16 +4,18 @@ import path from 'node:path';
 import { readInspStore } from '../../../lib/inspiration';
 import { readStore } from '../../../lib/manifest';
 import { INSPIRATION_DIR, PHOTOS_DIR } from '../../../lib/paths';
-import { runMatch, MATCH_STAGE_LABEL } from '../../../lib/match/session';
+import { runMatch, MATCH_STAGE_LABEL, type ReferenceInput } from '../../../lib/match/session';
 import { canDecodeRaw, isRawFilename } from '../../../lib/match/decode';
 import type { BaselineMode } from '../../../lib/match/types';
 
 export const prerender = false;
 
-// Analyse a reference against one of your photos and solve the grade.
+// Analyse one or more references against one of your photos and solve the
+// grade.
 //
-// The reference is an item already on the inspiration board (or in the
-// archive), identified by id; your photo is uploaded per request, since it is
+// Each reference is an item already on the inspiration board (or in the
+// archive), identified by id, with an optional weight alongside it if more
+// than one was picked; your photo is uploaded per request, since it is
 // usually a file you are about to edit rather than something in the archive.
 
 const BASELINES: BaselineMode[] = ['macos', 'export', 'preview', 'native'];
@@ -21,31 +23,37 @@ const BASELINES: BaselineMode[] = ['macos', 'export', 'preview', 'native'];
 export const POST: APIRoute = async ({ request }) => {
   try {
     const form = await request.formData();
-    const refId = String(form.get('ref') || '').trim();
+    const refIds = form.getAll('ref').map((v) => String(v).trim()).filter(Boolean);
+    const rawWeights = form.getAll('weight').map((v) => Number(v));
     const file = form.get('photo');
     const baselineRaw = String(form.get('baseline') || 'macos');
     const baseline: BaselineMode = BASELINES.includes(baselineRaw as BaselineMode)
       ? (baselineRaw as BaselineMode)
       : 'macos';
 
-    if (!refId) return json({ ok: false, error: 'Pick a reference first.' }, 400);
+    if (!refIds.length) return json({ ok: false, error: 'Pick a reference first.' }, 400);
     if (!(file instanceof File)) return json({ ok: false, error: 'No photo received.' }, 400);
 
-    // Find the reference in either collection, and locate its original file —
+    // Find each reference in either collection, and locate its original file —
     // the derivatives are lossy, and measuring a re-encoded copy would fold the
     // encoder's artefacts into the reference's own measurements.
     const [insp, archive] = await Promise.all([readInspStore(), readStore()]);
-    const inspItem = insp.find((p) => p.id === refId);
-    const archiveItem = archive.find((p) => p.id === refId);
-    const ref = inspItem ?? archiveItem;
-    if (!ref) return json({ ok: false, error: 'That reference no longer exists.' }, 404);
-    const refPath = path.join(inspItem ? INSPIRATION_DIR : PHOTOS_DIR, ref.filename);
-
-    let referenceBuf: Buffer;
-    try {
-      referenceBuf = await fs.readFile(refPath);
-    } catch {
-      return json({ ok: false, error: 'The reference original is missing from disk.' }, 410);
+    const references: ReferenceInput[] = [];
+    for (let i = 0; i < refIds.length; i++) {
+      const refId = refIds[i];
+      const inspItem = insp.find((p) => p.id === refId);
+      const archiveItem = archive.find((p) => p.id === refId);
+      const ref = inspItem ?? archiveItem;
+      if (!ref) return json({ ok: false, error: 'That reference no longer exists.' }, 404);
+      const refPath = path.join(inspItem ? INSPIRATION_DIR : PHOTOS_DIR, ref.filename);
+      let buf: Buffer;
+      try {
+        buf = await fs.readFile(refPath);
+      } catch {
+        return json({ ok: false, error: 'A reference original is missing from disk.' }, 410);
+      }
+      const weight = Number.isFinite(rawWeights[i]) && rawWeights[i] > 0 ? rawWeights[i] : 1;
+      references.push({ buf, name: ref.filename, path: refPath, weight });
     }
 
     const myBuf = Buffer.from(await file.arrayBuffer());
@@ -62,22 +70,15 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    const input = {
-      referenceBuf,
-      referenceName: ref.filename,
-      referencePath: refPath,
-      myBuf,
-      myName: file.name,
-      baseline,
-    };
+    const input = { references, myBuf, myName: file.name, baseline };
     const payload = (record: Awaited<ReturnType<typeof runMatch>>) => ({
       ok: true as const,
       id: record.id,
+      references: record.references,
       reference: record.reference,
       mine: record.mine,
       solution: record.solution,
       preview: record.preview,
-      referencePreview: record.referencePreview,
       maskChannels: record.maskChannels,
       referenceName: record.referenceName,
       myName: record.myName,

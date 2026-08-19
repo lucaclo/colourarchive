@@ -117,7 +117,15 @@ const hasItems = manifest.count > 0;
 
     <div class="mx-body">
       <section class="mx-start" id="mx-start">
-        <img class="mx-refthumb" id="mx-refthumb" alt="" />
+        <div class="mx-refcol">
+          <ul class="mx-refs" id="mx-refs"></ul>
+          <div class="mx-addref">
+            <button type="button" class="mx-addref-toggle" id="mx-addref-toggle" aria-expanded="false">
+              + Match against another reference too
+            </button>
+            <ul class="mx-addref-strip" id="mx-addref-strip" hidden></ul>
+          </div>
+        </div>
         <div class="mx-startcol">
           <div class="drop mx-zone" id="mx-zone" tabindex="0" role="button" aria-label="Drop your photo or browse">
             <p class="drop-title">Drop your photo, or <span class="link">browse</span></p>
@@ -173,17 +181,28 @@ const hasItems = manifest.count > 0;
             </figure>
             <figure class="mx-fig">
               <img id="mx-refside" alt="" />
-              <figcaption>The reference</figcaption>
+              <figcaption><span id="mx-refside-caption">The reference</span></figcaption>
             </figure>
           </div>
 
           <div class="mx-bar">
-            <div class="mx-strength">
-              <span class="mx-end">None</span>
-              <input type="range" id="mx-strength" min="0" max="100" value="50" aria-label="Match strength" />
-              <span class="mx-end">Full</span>
+            <div class="mx-strengths" id="mx-strengths">
+              <label class="mx-strength-row">
+                <span class="mx-strength-name">Light</span>
+                <input type="range" id="mx-strength-light" min="0" max="100" value="50" aria-label="Light strength" />
+                <span class="mx-strength-val" id="mx-strength-light-val"></span>
+              </label>
+              <label class="mx-strength-row">
+                <span class="mx-strength-name">Colour</span>
+                <input type="range" id="mx-strength-colour" min="0" max="100" value="50" aria-label="Colour strength" />
+                <span class="mx-strength-val" id="mx-strength-colour-val"></span>
+              </label>
+              <label class="mx-strength-row">
+                <span class="mx-strength-name">Effects</span>
+                <input type="range" id="mx-strength-effects" min="0" max="100" value="50" aria-label="Effects strength" />
+                <span class="mx-strength-val" id="mx-strength-effects-val"></span>
+              </label>
             </div>
-            <p class="mx-strengthlabel" id="mx-strengthlabel"></p>
             <label class="mx-check">
               <input type="checkbox" id="mx-wipe" /><span>Wipe against your original</span>
             </label>
@@ -381,8 +400,33 @@ const hasItems = manifest.count > 0;
      its longest option ("Decode on this Mac — no extra steps, ~95% accurate"),
      and as a flex/grid child with the default min-width:auto it dragged the
      whole start screen out to 522px inside a 390px phone. */
-  .mx-start { display: grid; grid-template-columns: minmax(0, 34%) minmax(0, 1fr); gap: 2rem; align-items: center; padding: var(--edge); width: 100%; min-width: 0; overflow: auto; }
-  .mx-refthumb { width: 100%; max-height: 60vh; object-fit: contain; }
+  .mx-start { display: grid; grid-template-columns: minmax(0, 34%) minmax(0, 1fr); gap: 2rem; align-items: start; padding: var(--edge); width: 100%; min-width: 0; overflow: auto; }
+  .mx-refcol { display: flex; flex-direction: column; gap: 0.7rem; min-width: 0; }
+  .mx-refs { display: flex; flex-direction: column; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+  :global(.mx-ref) { display: flex; align-items: center; gap: 0.6rem; }
+  :global(.mx-ref img) { width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: 2px; flex: 0 0 auto; }
+  :global(.mx-ref .mx-ref-meta) { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1 1 auto; }
+  :global(.mx-ref .mx-ref-name) { font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.mx-ref .mx-ref-weight) { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  :global(.mx-ref .mx-ref-weight input) { width: 4.5rem; accent-color: var(--fg); }
+  :global(.mx-ref-remove) { appearance: none; background: transparent; border: 0; cursor: pointer; color: var(--muted); font-size: 1rem; line-height: 1; padding: 0.2rem; flex: 0 0 auto; }
+  :global(.mx-ref-remove:hover) { color: var(--fg); }
+  .mx-addref-toggle {
+    appearance: none; background: transparent; border: 1px dashed var(--border); color: var(--muted);
+    cursor: pointer; font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 0.5rem 0.7rem; border-radius: 2px; width: 100%; text-align: left;
+    transition: border-color 160ms, color 160ms;
+  }
+  .mx-addref-toggle:hover { border-color: var(--fg); color: var(--fg); }
+  .mx-addref-strip[hidden] { display: none; }
+  .mx-addref-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0 0; padding: 0; list-style: none; max-height: 14rem; overflow-y: auto; }
+  :global(.mx-addref-pick) {
+    appearance: none; background: transparent; border: 1px solid var(--border); cursor: pointer;
+    padding: 0; border-radius: 2px; overflow: hidden; width: 3.4rem; height: 3.4rem; flex: 0 0 auto;
+    transition: border-color 160ms;
+  }
+  :global(.mx-addref-pick:hover) { border-color: var(--fg); }
+  :global(.mx-addref-pick img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .mx-startcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
   .mx-zone { margin: 0; }
   .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
@@ -442,10 +486,11 @@ const hasItems = manifest.count > 0;
     padding: calc(0.45rem + 0.5rem * var(--s)) var(--edge);
     transition: padding 120ms linear;
   }
-  .mx-strength { display: flex; align-items: center; gap: 0.8rem; flex: 1 1 22rem; max-width: 30rem; }
-  .mx-strength input { flex: 1; accent-color: var(--fg); }
-  .mx-end { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); flex: 0 0 auto; }
-  .mx-strengthlabel { font-family: var(--font-label); font-size: 0.66rem; color: var(--muted); margin: 0; flex: 0 1 auto; text-align: center; }
+  .mx-strengths { display: flex; align-items: center; gap: 0.6rem 1.4rem; flex: 1 1 34rem; max-width: 44rem; flex-wrap: wrap; }
+  .mx-strength-row { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 9rem; min-width: 8rem; }
+  .mx-strength-row input { flex: 1; accent-color: var(--fg); min-width: 4rem; }
+  .mx-strength-name { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); flex: 0 0 auto; }
+  .mx-strength-val { font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); flex: 0 0 3.4rem; text-align: right; font-variant-numeric: tabular-nums; }
   .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); flex: 0 0 auto; cursor: pointer; }
 
   /* --- Tabs --------------------------------------------------------------- */
@@ -681,7 +726,7 @@ const hasItems = manifest.count > 0;
     .mx-fig canvas, .mx-fig img { max-height: calc(7vh + 18vh * var(--s)); }
     .mx-cols { grid-template-columns: 1fr; gap: 1.8rem; }
     .mx-bar { gap: 0.5rem 1rem; }
-    .mx-strengthlabel { flex-basis: 100%; }
+    .mx-strengths { flex-basis: 100%; }
     :global(.mx-noterow) { grid-template-columns: 1fr; }
   }
 
@@ -711,7 +756,7 @@ const hasItems = manifest.count > 0;
     .mx-head { padding: 0.8rem 1.1rem 0.7rem; }
     .mx-sub { font-size: 0.68rem; }
     .mx-start { gap: 1.2rem; padding: 1.1rem; align-content: start; }
-    .mx-refthumb { max-height: 26vh; }
+    :global(.mx-ref img) { width: 3.6rem; height: 3.6rem; }
     .mx-zone { padding: 1.8rem 1rem; }
     .mx-workline { flex-wrap: wrap; row-gap: 0.3rem; }
 
@@ -964,10 +1009,10 @@ const hasItems = manifest.count > 0;
   // Style match. A processed module (not is:inline) because it imports the
   // solver's own adjustment blending and the WebGL renderer — the preview is
   // driven by exactly the values shown on screen, never a parallel copy.
-  import { atStrength } from '../lib/match/adjustments';
+  import { atGroupStrength, atStrength, type GroupStrength } from '../lib/match/adjustments';
   import { MatchPreview, deriveRenderSpec } from '../lib/match/preview-render';
   import { HSL_BANDS, REGION_LABEL, REGION_ORDER, BASELINE_LABEL } from '../lib/match/types';
-  import { solveMatch } from '../lib/match/solve';
+  import { mergeReferences, solveMatch } from '../lib/match/solve';
   import { buildPresetFiles } from '../lib/match/xmp';
   import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
   import type { Adjustments } from '../lib/match/adjustments';
@@ -980,16 +1025,30 @@ const hasItems = manifest.count > 0;
   const resultEl = $('mx-result');
   const subEl = $('mx-sub');
   const statusEl = $('mx-status');
-  const refThumb = $<HTMLImageElement>('mx-refthumb');
+  const refsEl = $('mx-refs');
+  const addRefToggle = $<HTMLButtonElement>('mx-addref-toggle');
+  const addRefStrip = $('mx-addref-strip');
   const refSide = $<HTMLImageElement>('mx-refside');
+  const refSideCaption = $('mx-refside-caption');
   const zoneEl = $('mx-zone');
   const fileEl = $<HTMLInputElement>('mx-file');
   const baselineEl = $<HTMLSelectElement>('mx-baseline');
   const canvas = $<HTMLCanvasElement>('mx-canvas');
-  const strengthEl = $<HTMLInputElement>('mx-strength');
-  const strengthLabel = $('mx-strengthlabel');
+  const strengthLightEl = $<HTMLInputElement>('mx-strength-light');
+  const strengthColourEl = $<HTMLInputElement>('mx-strength-colour');
+  const strengthEffectsEl = $<HTMLInputElement>('mx-strength-effects');
+  const strengthLightVal = $('mx-strength-light-val');
+  const strengthColourVal = $('mx-strength-colour-val');
+  const strengthEffectsVal = $('mx-strength-effects-val');
   const wipeEl = $<HTMLInputElement>('mx-wipe');
   const wipeHint = $('mx-wipehint');
+
+  /** Reads the three panel sliders as the GroupStrength atGroupStrength wants. */
+  const currentGroupStrength = (): GroupStrength => ({
+    light: Number(strengthLightEl.value) / 100,
+    colour: Number(strengthColourEl.value) / 100,
+    effects: Number(strengthEffectsEl.value) / 100,
+  });
 
   const esc = (s: unknown) =>
     String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -998,9 +1057,11 @@ const hasItems = manifest.count > 0;
     return (r > 0 ? '+' : '') + r.toFixed(d);
   };
 
-  let refId = '';
-  let refUrl = '';
-  let refName = '';
+  /** One reference photo picked for the match, with its weight against any
+   *  others picked alongside it (issue #41 — "several reference photos share
+   *  the look you're after"). */
+  interface RefPick { id: string; url: string; name: string; weight: number }
+  let refs: RefPick[] = [];
   let current: any = null;
   let preview: MatchPreview | null = null;
 
@@ -1009,15 +1070,104 @@ const hasItems = manifest.count > 0;
    *  Shadows/Midtones/Highlights cluster. */
   const gradeUi = { active: 'midtones' as 'shadows' | 'midtones' | 'highlights', showGlobal: false };
 
+  // ── Reference picking ─────────────────────────────────────────────────
+  //
+  // Opening the panel always starts from exactly one reference — the board
+  // cell that was clicked — because that is by far the common case and it
+  // should stay a single click. `renderAddRefStrip` then offers every OTHER
+  // reference on this same board as an optional addition, so weighted
+  // multi-reference matching (Capture One's "Match Look" against several
+  // photos at once) is available without complicating the common path.
+
+  function renderRefs() {
+    const multi = refs.length > 1;
+    refsEl.replaceChildren(
+      ...refs.map((r, i) => {
+        const li = document.createElement('li');
+        li.className = 'mx-ref';
+        li.innerHTML = `
+          <img src="${esc(r.url)}" alt="" />
+          <span class="mx-ref-meta">
+            <span class="mx-ref-name">${esc(r.name)}</span>
+            ${multi ? `<span class="mx-ref-weight">Weight <input type="number" min="0.1" max="10" step="0.1" value="${r.weight}" data-refweight="${i}" /></span>` : ''}
+          </span>
+          ${multi ? `<button type="button" class="mx-ref-remove" data-refremove="${i}" aria-label="Remove ${esc(r.name)} from this match">×</button>` : ''}
+        `;
+        return li;
+      }),
+    );
+    renderAddRefStrip();
+  }
+
+  refsEl.addEventListener('input', (e) => {
+    const inp = (e.target as HTMLElement).closest<HTMLInputElement>('[data-refweight]');
+    if (!inp) return;
+    const i = Number(inp.dataset.refweight);
+    const w = Number(inp.value);
+    refs[i].weight = Number.isFinite(w) && w > 0 ? w : 1;
+  });
+  refsEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-refremove]');
+    if (!btn || refs.length <= 1) return;
+    refs.splice(Number(btn.dataset.refremove), 1);
+    renderRefs();
+    void loadAlready(refs[0].id);
+  });
+
+  function renderAddRefStrip() {
+    const chosen = new Set(refs.map((r) => r.id));
+    const candidates = [...document.querySelectorAll<HTMLElement>('#board .cell-match')].filter(
+      (btn) => !chosen.has(btn.dataset.match || ''),
+    );
+    addRefStrip.replaceChildren(
+      ...candidates.map((btn) => {
+        const li = document.createElement('li');
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'mx-addref-pick';
+        pick.dataset.pickId = btn.dataset.match || '';
+        pick.dataset.pickUrl = btn.dataset.full || '';
+        pick.dataset.pickName = btn.dataset.name || btn.dataset.match || '';
+        pick.innerHTML = `<img src="${esc(btn.dataset.full || '')}" alt="" />`;
+        li.appendChild(pick);
+        return li;
+      }),
+    );
+    addRefToggle.hidden = candidates.length === 0 && refs.length <= 1;
+    addRefToggle.disabled = candidates.length === 0;
+    addRefToggle.textContent = candidates.length
+      ? '+ Match against another reference too'
+      : 'Every reference on this board is already in this match';
+  }
+
+  addRefToggle.addEventListener('click', () => {
+    const open = addRefStrip.hidden;
+    addRefStrip.hidden = !open;
+    addRefToggle.setAttribute('aria-expanded', String(open));
+  });
+  addRefStrip.addEventListener('click', (e) => {
+    const pick = (e.target as HTMLElement).closest<HTMLElement>('.mx-addref-pick');
+    if (!pick) return;
+    refs.push({
+      id: pick.dataset.pickId || '',
+      url: pick.dataset.pickUrl || '',
+      name: pick.dataset.pickName || pick.dataset.pickId || '',
+      weight: 1,
+    });
+    renderRefs();
+    addRefStrip.hidden = true;
+    addRefToggle.setAttribute('aria-expanded', 'false');
+  });
+
   // ── Opening ────────────────────────────────────────────────────────────
   document.getElementById('board')?.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('.cell-match');
     if (!btn) return;
     e.stopPropagation();
-    refId = btn.dataset.match || '';
-    refUrl = btn.dataset.full || '';
-    refName = btn.dataset.name || refId;
-    refThumb.src = btn.dataset.full || '';
+    refs = [{ id: btn.dataset.match || '', url: btn.dataset.full || '', name: btn.dataset.name || btn.dataset.match || '', weight: 1 }];
+    renderRefs();
+    addRefStrip.hidden = true;
+    addRefToggle.setAttribute('aria-expanded', 'false');
     startEl.hidden = false;
     resultEl.hidden = true;
     statusEl.textContent = '';
@@ -1025,7 +1175,7 @@ const hasItems = manifest.count > 0;
     fileEl.value = '';        // so re-dropping the same file still fires `change`
     subEl.textContent = 'Drop the photo you want to edit.';
     panel.hidden = false;
-    void loadAlready(refId);
+    void loadAlready(refs[0].id);
     // Without this, a scroll that starts outside the report's own scroller
     // moves the board behind the panel instead — the page shifts under a
     // supposedly fixed overlay, which reads as the layout breaking.
@@ -1146,7 +1296,10 @@ const hasItems = manifest.count > 0;
   async function analyse(file: File) {
     statusEl.innerHTML = '';
     const fd = new FormData();
-    fd.append('ref', refId);
+    for (const r of refs) {
+      fd.append('ref', r.id);
+      fd.append('weight', String(r.weight));
+    }
     fd.append('photo', file);
     fd.append('baseline', baselineEl.value);
     fd.append('stream', '1');
@@ -1265,23 +1418,28 @@ const hasItems = manifest.count > 0;
     return result ?? { ok: false, error: 'The measurement ended without a result.' };
   }
 
-  /** Measure both photos here, with no server and no models. */
+  /** Measure every reference and the photo here, with no server and no
+   *  models — masks are unavailable offline, but the blend across several
+   *  references works exactly as it does server-side, since mergeReferences
+   *  and solveMatch are the same isomorphic code either way. */
   async function analyseLocally(file: File) {
-    const [reference, mine] = await Promise.all([
-      analyseReferenceInBrowser(refUrl, refName),
+    const [analyses, mine] = await Promise.all([
+      Promise.all(refs.map((r) => analyseReferenceInBrowser(r.url, r.name))),
       analyseInBrowser(file, file.name, baselineEl.value as any),
     ]);
+    const weighted = refs.map((r, i) => ({ analysis: analyses[i], weight: r.weight }));
+    const reference = mergeReferences(weighted);
     const solution = solveMatch(reference, mine);
     return {
       id: `local-${Date.now()}`,
+      references: refs.map((r, i) => ({ analysis: analyses[i], weight: r.weight, name: r.name, previewUrl: r.url })),
       reference,
       mine,
       solution,
       // The photo is already in memory; no need to round-trip it anywhere.
       preview: { photo: URL.createObjectURL(file), maskTexture: null, maskChannels: [], width: mine.width, height: mine.height },
-      referencePreview: refUrl,
       maskChannels: [],
-      referenceName: refName,
+      referenceName: refs.map((r) => r.name).join(' + '),
       myName: file.name,
     };
   }
@@ -1289,7 +1447,9 @@ const hasItems = manifest.count > 0;
   // ── Result ─────────────────────────────────────────────────────────────
   async function showResult(data: any) {
     subEl.textContent = `${data.myName} · matched to ${data.referenceName}`;
-    refSide.src = data.referencePreview;
+    refSide.src = data.references[0].previewUrl;
+    refSideCaption.textContent =
+      data.references.length > 1 ? `The reference (+${data.references.length - 1} more, blended)` : 'The reference';
     startEl.hidden = true;
     resultEl.hidden = false;
 
@@ -1316,15 +1476,18 @@ const hasItems = manifest.count > 0;
     }
   }
 
+  /** Compact one-line reading for a single panel's strength slider — the full
+   *  restrained/faithful prose lives in the Light/Colour/Details tabs
+   *  themselves now that there are three of these instead of one. */
+  const strengthValLabel = (t: number): string =>
+    t === 0 ? 'None' : t === 0.5 ? 'Restrained' : t === 1 ? 'Faithful' : `${Math.round(t * 100)}%`;
+
   function draw() {
-    const t = Number(strengthEl.value) / 100;
-    const adj = atStrength(current.solution.restrained, current.solution.faithful, t);
-    strengthLabel.textContent =
-      t === 0 ? 'No change' :
-      t < 0.5 ? `${Math.round(t * 200)}% of the restrained grade` :
-      t === 0.5 ? 'Restrained — adopts the reference’s character, protects skin' :
-      t === 1 ? 'Faithful — closes as much of the measured gap as the controls allow' :
-      `${Math.round((t - 0.5) * 200)}% of the way from restrained to faithful`;
+    const t = currentGroupStrength();
+    const adj = atGroupStrength(current.solution.restrained, current.solution.faithful, t);
+    strengthLightVal.textContent = strengthValLabel(t.light);
+    strengthColourVal.textContent = strengthValLabel(t.colour);
+    strengthEffectsVal.textContent = strengthValLabel(t.effects);
     if (preview) {
       const spec = deriveRenderSpec(adj, current.maskChannels ?? []);
       preview.render(spec, wipeEl.checked ? 0.5 : -1);
@@ -1332,7 +1495,9 @@ const hasItems = manifest.count > 0;
     renderValues(adj);
   }
 
-  strengthEl.addEventListener('input', draw);
+  strengthLightEl.addEventListener('input', draw);
+  strengthColourEl.addEventListener('input', draw);
+  strengthEffectsEl.addEventListener('input', draw);
   wipeEl.addEventListener('change', () => {
     wipeHint.textContent = wipeEl.checked ? 'Left: original · Right: graded' : 'Yours, graded';
     draw();
@@ -1475,7 +1640,7 @@ const hasItems = manifest.count > 0;
   }
 
   function renderValues(adj?: Adjustments) {
-    if (!adj) adj = atStrength(current.solution.restrained, current.solution.faithful, Number(strengthEl.value) / 100);
+    if (!adj) adj = atGroupStrength(current.solution.restrained, current.solution.faithful, currentGroupStrength());
     const a = adj;
 
     // ── Light ────────────────────────────────────────────────────────────
@@ -1663,19 +1828,26 @@ const hasItems = manifest.count > 0;
   };
 
   const download = (variant: 'full' | 'safe') => {
-    const t = Number(strengthEl.value) / 100;
+    const t = currentGroupStrength();
     if (!current.local) {
-      saveAs(`/api/match/preset?id=${encodeURIComponent(current.id)}&strength=${t}&variant=${variant}`, '');
+      const q = new URLSearchParams({
+        id: current.id,
+        light: t.light.toFixed(2),
+        colour: t.colour.toFixed(2),
+        effects: t.effects.toFixed(2),
+        variant,
+      });
+      saveAs(`/api/match/preset?${q.toString()}`, '');
       return;
     }
     // Offline: build the preset here. xmp.ts is isomorphic, so this is the same
     // writer the server uses — not a second implementation.
-    const adj = atStrength(current.solution.restrained, current.solution.faithful, t);
+    const adj = atGroupStrength(current.solution.restrained, current.solution.faithful, t);
     const clean = (s: string) => s.replace(/\.[^.]+$/, '').replace(/\.[0-9a-f]{8,}$/i, '');
     const files = buildPresetFiles(adj, {
       name: `${clean(current.myName)} as ${clean(current.referenceName)}`.slice(0, 60),
       group: 'Colour Archive',
-      seed: `${current.myName}:${current.referenceName}:${t.toFixed(2)}`,
+      seed: `${current.myName}:${current.referenceName}:${t.light.toFixed(2)}:${t.colour.toFixed(2)}:${t.effects.toFixed(2)}`,
     });
     const chosen = variant === 'safe' ? files[files.length - 1] : files[0];
     const url = URL.createObjectURL(new Blob([chosen.contents], { type: 'application/rdf+xml' }));
