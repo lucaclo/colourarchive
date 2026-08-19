@@ -8,15 +8,19 @@ import {
   constellationLines,
   extinctionMag,
   galacticBandBrightness,
+  galacticFieldPositions,
+  galacticFieldStars,
   galacticPlane,
   galacticToEquatorial,
   limitingMagnitude,
   moonlightPenalty,
   prominentConstellations,
+  reddenForAirmass,
   starAlpha,
   starColour,
   starPositions,
   starVisibility,
+  twinkle,
   type Star,
 } from './stars';
 
@@ -276,6 +280,35 @@ describe('galacticPlane', () => {
   });
 });
 
+describe('galacticFieldPositions', () => {
+  it('places a field point at (l=0, b=0) exactly where the centreline itself sits', () => {
+    const date = new Date('2026-08-19T22:00:00Z');
+    const [pos] = galacticFieldPositions([{ l: 0, b: 0, mag: 4 }], 51.5, -0.1, date);
+    const [planePos] = galacticPlane(51.5, -0.1, date, 360, 0); // a single sample at l=0
+    assert.ok(Math.abs(pos.azimuth - planePos.azimuth) < 0.01);
+    assert.ok(Math.abs(pos.altitude - planePos.altitude) < 0.01);
+  });
+
+  it('carries the synthetic magnitude through unchanged', () => {
+    const [pos] = galacticFieldPositions(
+      [{ l: 90, b: 5, mag: 4.2 }],
+      40, 10, new Date('2026-01-01T00:00:00Z'),
+    );
+    assert.equal(pos.mag, 4.2);
+  });
+
+  it('returns one position per field star, in order', () => {
+    const field = [
+      { l: 10, b: 1, mag: 4 },
+      { l: 20, b: -1, mag: 4.5 },
+      { l: 30, b: 2, mag: 5 },
+    ];
+    const positions = galacticFieldPositions(field, 0, 0, new Date('2026-06-01T00:00:00Z'));
+    assert.equal(positions.length, 3);
+    assert.deepEqual(positions.map((p) => p.mag), [4, 4.5, 5]);
+  });
+});
+
 describe('CONSTELLATION_NAME', () => {
   it('names all 88 IAU constellations', () => {
     assert.equal(Object.keys(CONSTELLATION_NAME).length, 88);
@@ -349,5 +382,121 @@ describe('starColour', () => {
   it('clamps outside the table rather than extrapolating', () => {
     assert.deepEqual(starColour(-5), starColour(-0.4));
     assert.deepEqual(starColour(5), starColour(1.6));
+  });
+});
+
+describe('galacticFieldStars', () => {
+  it('is fully deterministic for a given seed', () => {
+    const a = galacticFieldStars(500, 7);
+    const b = galacticFieldStars(500, 7);
+    assert.deepEqual(a, b);
+  });
+
+  it('produces a different field for a different seed', () => {
+    const a = galacticFieldStars(500, 7);
+    const b = galacticFieldStars(500, 8);
+    assert.notDeepEqual(a, b);
+  });
+
+  it('returns (up to) the requested count', () => {
+    const stars = galacticFieldStars(200, 1);
+    assert.ok(stars.length > 0 && stars.length <= 200);
+  });
+
+  it('keeps every point within the modelled spread of the plane', () => {
+    const stars = galacticFieldStars(2000, 3);
+    for (const s of stars) {
+      assert.ok(s.b >= -20 && s.b <= 20, `b=${s.b} outside the modelled band`);
+      assert.ok(s.l >= 0 && s.l < 360);
+    }
+  });
+
+  it('packs more points near the galactic centre than the anticentre', () => {
+    const stars = galacticFieldStars(4000, 5);
+    const nearCore = stars.filter((s) => Math.abs(((s.l + 180) % 360) - 180) < 30).length;
+    const nearAnti = stars.filter((s) => Math.abs(s.l - 180) < 30).length;
+    assert.ok(nearCore > nearAnti, `expected more density near l=0 (${nearCore}) than l=180 (${nearAnti})`);
+  });
+
+  it('stays close to the plane on average, not spread evenly to the edges', () => {
+    const stars = galacticFieldStars(3000, 9);
+    const meanAbsB = stars.reduce((sum, s) => sum + Math.abs(s.b), 0) / stars.length;
+    assert.ok(meanAbsB < 6, `expected most points within a few degrees of b=0, mean |b|=${meanAbsB}`);
+  });
+});
+
+describe('twinkle', () => {
+  it('is centred on 1 over time, for a star with meaningful amplitude', () => {
+    // A low-altitude star (high airmass) has amplitude to average out;
+    // sample across a few seconds and check the mean lands near 1.
+    let sum = 0;
+    const n = 400;
+    for (let i = 0; i < n; i++) sum += twinkle(12345, i * 37, 6);
+    assert.ok(Math.abs(sum / n - 1) < 0.05);
+  });
+
+  it('barely moves at the zenith (airmass 1)', () => {
+    let maxDeviation = 0;
+    for (let i = 0; i < 200; i++) {
+      maxDeviation = Math.max(maxDeviation, Math.abs(twinkle(999, i * 50, 1) - 1));
+    }
+    assert.ok(maxDeviation < 0.02, `expected near-zero twinkle at the zenith, got ${maxDeviation}`);
+  });
+
+  it('swings harder near the horizon (high airmass) than overhead', () => {
+    const spread = (id: number, airmassAtStar: number) => {
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < 300; i++) {
+        const v = twinkle(id, i * 41, airmassAtStar);
+        lo = Math.min(lo, v);
+        hi = Math.max(hi, v);
+      }
+      return hi - lo;
+    };
+    assert.ok(spread(42, 8) > spread(42, 1.2));
+  });
+
+  it('is deterministic — the same star at the same instant always twinkles the same amount', () => {
+    assert.equal(twinkle(55, 12345, 5), twinkle(55, 12345, 5));
+  });
+
+  it('gives two different stars independent phases', () => {
+    // Extremely unlikely to coincide across a whole sampled sequence unless
+    // the phase/frequency hash collapsed two different ids together.
+    const a: number[] = [];
+    const b: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      a.push(twinkle(1, i * 97, 6));
+      b.push(twinkle(2, i * 97, 6));
+    }
+    assert.notDeepEqual(a, b);
+  });
+});
+
+describe('reddenForAirmass', () => {
+  it('is the identity at the zenith', () => {
+    const white: [number, number, number] = [0.8, 0.85, 1];
+    assert.deepEqual(reddenForAirmass(white, 1), white);
+  });
+
+  it('shifts warmer (more red, less blue) as airmass climbs', () => {
+    const white: [number, number, number] = [0.8, 0.85, 1];
+    const low = reddenForAirmass(white, 2);
+    const high = reddenForAirmass(white, 10);
+    assert.ok(high[0] >= low[0]); // red channel rises or holds
+    assert.ok(high[2] <= low[2]); // blue channel falls or holds
+    assert.ok(high[0] > white[0]);
+    assert.ok(high[2] < white[2]);
+  });
+
+  it('never overshoots into a channel value outside the original-to-warm range', () => {
+    const rgb: [number, number, number] = [0.6, 0.7, 0.95];
+    const warm = [1, 0.55, 0.3];
+    const result = reddenForAirmass(rgb, 30);
+    for (let i = 0; i < 3; i++) {
+      const lo = Math.min(rgb[i], warm[i]);
+      const hi = Math.max(rgb[i], warm[i]);
+      assert.ok(result[i] >= lo - 1e-9 && result[i] <= hi + 1e-9);
+    }
   });
 });

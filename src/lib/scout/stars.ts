@@ -337,6 +337,37 @@ export function galacticPlane(
 }
 
 /**
+ * `galacticFieldStars`' scattered points, placed in the sky for an instant —
+ * the same (l, b) → equatorial → horizontal pipeline `galacticPlane` uses
+ * for its own centreline, run once per point instead of along a uniform
+ * sweep. Kept here rather than inlined at the call site so the conversion
+ * lives in one place: a page that got this arithmetic fractionally wrong
+ * would draw a band that quietly disagreed with the centreline sitting
+ * right next to it.
+ */
+export function galacticFieldPositions(
+  field: readonly FieldStar[],
+  latitude: number,
+  longitude: number,
+  date: Date,
+): Array<{ azimuth: number; altitude: number; mag: number }> {
+  const out: Array<{ azimuth: number; altitude: number; mag: number }> = [];
+  for (const star of field) {
+    const { rightAscension, declination } = galacticToEquatorial(star.l, star.b);
+    const precessed = precess(rightAscension, declination, date);
+    const { azimuth, altitude } = equatorialToHorizontal(
+      precessed.rightAscension,
+      precessed.declination,
+      latitude,
+      longitude,
+      date,
+    );
+    out.push({ azimuth, altitude, mag: star.mag });
+  }
+  return out;
+}
+
+/**
  * The 88 IAU constellation abbreviations, spelled out — official
  * designations, not a creative work, so unlike the stick figures above there
  * is no dataset to be careful about here: this is the same list any
@@ -437,4 +468,133 @@ export function starColour(ci: number | null): [number, number, number] {
     }
   }
   return [1, 1, 1];
+}
+
+/* ── Making the band and the stars look like more than points and lines ───
+   Everything below is about how the sky *looks* rather than where it is —
+   the geometry above is exact; this is texture. Kept apart because none of
+   it changes an answer this project would ever be asked to defend, the way
+   a position or a magnitude might. */
+
+/** mulberry32 — a small, fast, deterministic PRNG. Seeded so a "random"
+ *  scatter is the same field every time it is generated, not a fresh roll
+ *  of the dice per page load; nothing here calls the platform Math.random. */
+function mulberry32(seed: number): () => number {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A fast integer hash to [0, 1) — every star's own, stable twinkle phase
+ *  and rate come from hashing its catalogue id, so no per-star state has to
+ *  be stored anywhere and the same star always twinkles the same way. */
+function hash01(n: number): number {
+  let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+export interface FieldStar {
+  /** Galactic longitude/latitude, degrees. */
+  l: number;
+  b: number;
+  /** A synthetic brightness for sizing/alpha — not a real magnitude, and
+   *  not a real star behind it either; see the doc comment below. */
+  mag: number;
+}
+
+/** The synthetic magnitude range `galacticFieldStars` draws from — exported
+ *  so the alpha it's rendered at (a function of where a point falls in this
+ *  range) is computed from the same two numbers rather than a second,
+ *  independently-guessed pair that could quietly drift out of step. */
+export const FIELD_STAR_MIN_MAG = 3.6;
+export const FIELD_STAR_MAG_SPREAD = 2.6;
+
+/**
+ * A scattered field of faint, unnamed points around the galactic plane —
+ * what actually makes the Milky Way read as a hazy band instead of a thin
+ * line: millions of ordinary stars too faint for any catalogue, individually
+ * invisible and collectively a glow. Not real stars — a real one would need
+ * a survey catalogue several orders of magnitude larger than this app
+ * bundles, the same reason `scripts/fetch-bright-stars.ts` stops at
+ * magnitude 4 — but a deterministic stand-in for their visual effect, seeded
+ * so the field is identical every session rather than reshuffled per load.
+ *
+ * Density and spread both follow the galaxy's own real shape rather than a
+ * uniform scatter: rejection-sampling longitude against
+ * `galacticBandBrightness` packs more points near the core, the same
+ * weighting the centreline itself brightens by; a Gaussian jitter in
+ * latitude (Box–Muller, not a uniform spread) keeps most points within a
+ * few degrees of the plane with a thinning tail away from it, which is the
+ * actual profile of a galactic disc seen edge-on from inside it.
+ */
+export function galacticFieldStars(count: number, seed = 1): FieldStar[] {
+  const rand = mulberry32(seed);
+  const gaussian = () => {
+    const u1 = Math.max(1e-9, rand());
+    const u2 = rand();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+  const out: FieldStar[] = [];
+  let tries = 0;
+  while (out.length < count && tries < count * 6) {
+    tries++;
+    const l = rand() * 360;
+    if (rand() > galacticBandBrightness(l)) continue; // denser toward the core
+    const b = gaussian() * 4.5; // degrees either side of the plane
+    if (Math.abs(b) > 20) continue;
+    out.push({ l, b, mag: FIELD_STAR_MIN_MAG + rand() * FIELD_STAR_MAG_SPREAD });
+  }
+  return out;
+}
+
+/**
+ * How much a star's brightness should wobble right now, centred on 1 —
+ * atmospheric scintillation, the actual physical cause of "twinkling", not
+ * a decorative flicker invented for the occasion. Two sine terms at a
+ * per-star, golden-ratio-offset frequency pair rather than one: a single
+ * sine reads as a metronome within a few seconds of watching it, and
+ * turbulence is not periodic. Amplitude scales with airmass — real
+ * scintillation is dramatically more noticeable near the horizon, where
+ * starlight crosses far more (and more turbulent) atmosphere, than
+ * overhead, where it barely registers at all.
+ */
+export function twinkle(starId: number, timeMs: number, airmassAtStar: number): number {
+  const phase1 = hash01(starId) * Math.PI * 2;
+  const phase2 = hash01(starId ^ 0x5bd1e995) * Math.PI * 2;
+  const freq1 = 1.1 + hash01(starId * 7) * 1.6; // Hz-ish, per star
+  const freq2 = freq1 * 1.618; // golden ratio — the two terms never realign
+  const t = timeMs / 1000;
+  const wobble =
+    0.6 * Math.sin(t * freq1 * Math.PI * 2 + phase1) + 0.4 * Math.sin(t * freq2 * Math.PI * 2 + phase2);
+  const airmass = Math.min(20, Math.max(1, airmassAtStar));
+  const amount = Math.min(0.35, 0.05 * (airmass - 1));
+  return 1 + wobble * amount;
+}
+
+/**
+ * A star's colour after atmospheric reddening — the same Rayleigh
+ * scattering that turns the sun and the sunset sky orange (`beamColour` in
+ * `basemap.ts` models it for exactly that) does it to starlight too, just
+ * too faint to notice by eye until a rendering exaggerates it a little.
+ * Identity at the zenith (airmass 1) — `starColour`'s own value, untouched —
+ * and blends toward a warm amber as airmass climbs toward the horizon.
+ */
+export function reddenForAirmass(
+  rgb: readonly [number, number, number],
+  airmassAtStar: number,
+): [number, number, number] {
+  const airmass = Math.min(20, Math.max(1, airmassAtStar));
+  const t = clamp((airmass - 1) / 8, 0, 1) * 0.55;
+  const warm: [number, number, number] = [1, 0.55, 0.3];
+  return [
+    rgb[0] + (warm[0] - rgb[0]) * t,
+    rgb[1] + (warm[1] - rgb[1]) * t,
+    rgb[2] + (warm[2] - rgb[2]) * t,
+  ];
 }

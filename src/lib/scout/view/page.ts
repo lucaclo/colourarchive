@@ -141,16 +141,24 @@ import {
   type CoreSample,
 } from '../galactic';
 import {
+  airmass,
   constellationLines,
+  FIELD_STAR_MAG_SPREAD,
+  FIELD_STAR_MIN_MAG,
   galacticBandBrightness,
+  galacticFieldPositions,
+  galacticFieldStars,
   galacticPlane,
   limitingMagnitude,
   prominentConstellations,
+  reddenForAirmass,
   starAlpha,
   starColour,
   starPositions,
   starVisibility,
+  twinkle,
   type ConstellationEdge,
+  type FieldStar,
   type Star,
 } from '../stars';
 import { describeSeeingPoint, seeingAt, type SeeingForecast } from '../seeing';
@@ -426,6 +434,37 @@ export async function startScout(): Promise<void> {
    *  each, rather than the layer just silently doing nothing forever. */
   let starsUnavailable = false;
 
+  /** The unresolved-starlight scatter behind the catalogue, generated once
+   *  from a fixed seed and reused every frame — see `galacticFieldStars`. */
+  let fieldStars: FieldStar[] | null = null;
+  const FIELD_STAR_COUNT = 1400;
+  const FIELD_STAR_SEED = 20260819;
+  /** Below this magnitude a star is bright enough to earn the additive
+   *  bloom pass, roughly the naked-eye first-magnitude stars. */
+  const HALO_MAG_THRESHOLD = 1.2;
+  /** Whether a twinkle repaint is already queued, so a render that finds
+   *  stars still on screen doesn't stack up duplicate timers. */
+  let twinkleScheduled = false;
+
+  /**
+   * Keeps the sky repainting on its own while stars are visibly twinkling,
+   * without needing to be wired into every place stars can turn on or off.
+   * Each call that actually draws stars asks for one more turn of this;
+   * once a render's early-out paths are taken instead — daylight, the mode
+   * switched off, the moon washing everything out — nothing asks again and
+   * the loop lapses on its own.
+   */
+  function scheduleTwinkleFrame(): void {
+    if (twinkleScheduled || prefersReducedMotion()) return;
+    twinkleScheduled = true;
+    // ~16fps: real atmospheric scintillation is a slow shimmer, not fast
+    // enough to need a full 60fps repaint budget spent chasing it.
+    setTimeout(() => {
+      twinkleScheduled = false;
+      if (shown.stars) invalidate({ dome: true });
+    }, 60);
+  }
+
   function ensureStarsLoaded(): Promise<void> {
     if (starCatalog) return Promise.resolve();
     if (!starsLoading) {
@@ -568,9 +607,13 @@ export async function startScout(): Promise<void> {
       // 55, but Milky Way mode leans much further toward the horizon than
       // that, close enough to it that the ground shrinks to a thin band and
       // the sky genuinely dominates the screen, the way looking up actually
-      // feels. 90 would be looking exactly along the ground; 85 is as close
-      // as it gets before terrain tiles start z-fighting at the grazing angle.
-      maxPitch: 85,
+      // feels. 90 would be looking exactly along the ground. This is a global
+      // ceiling — MapLibre's own dragRotate could in principle push the
+      // everyday terrain-on 3D view this steep too — but free-look is the
+      // view that actually lives up here and it turns terrain off entirely
+      // (see enableFreeLook), which is what the z-fighting this used to sit
+      // just under 85 for was ever about.
+      maxPitch: 88,
       attributionControl: { compact: true },
       // Kept so the view can be exported as an image — see "Save as an image".
       //
@@ -2440,13 +2483,75 @@ export async function startScout(): Promise<void> {
             moving.push(linePoints, 'lines', (i) => [...ink, 0.28 * lineAlphas[i]] as RGBA, 1);
           }
 
+          // The unresolved background: millions of ordinary stars too faint
+          // for any catalogue, individually invisible and collectively the
+          // actual haze that makes the band read as a band rather than a
+          // line — see `galacticFieldStars`. Static, not twinkle-modulated:
+          // a real observer does not see any *one* of these flicker, only
+          // the catalogue stars bright enough to resolve individually do.
+          fieldStars ??= galacticFieldStars(FIELD_STAR_COUNT, FIELD_STAR_SEED);
+          const fieldAbove = galacticFieldPositions(fieldStars, pin.lat, pin.lon, instant)
+            .filter((p) => p.altitude > 0);
+          // 0 at the faint end of the synthetic range, 1 at the bright end —
+          // never negative, unlike a bare `(5.2 - mag)` would be for the
+          // fainter half of the range.
+          const fieldT = (i: number) => 1 - (fieldAbove[i].mag - FIELD_STAR_MIN_MAG) / FIELD_STAR_MAG_SPREAD;
+          moving.push(
+            fieldAbove.map((p) => domePosition(pin, p.azimuth, p.altitude, radius)),
+            'points',
+            (i) => [0.82, 0.85, 0.94, dark * (0.1 + fieldT(i) * 0.45)] as RGBA,
+            (i) => 1 + fieldT(i) * 0.8,
+          );
+
+          // Real time, not the scouted instant — scintillation is the
+          // atmosphere moving *now*, unrelated to which moment of the night
+          // the slider is parked on. `airmassAt` is shared with the colour
+          // pass below it so the two stay physically consistent: the same
+          // star at the same altitude gets the same airmass either way.
+          const nowMs = performance.now();
+          const airmassAt = (p: (typeof above)[number]) => airmass(p.altitudeApparent);
           const starPoints = above.map((p) => domePosition(pin, p.azimuth, p.altitudeApparent, radius));
           moving.push(
             starPoints,
             'points',
-            (i) => [...starColour(above[i].star.ci), above[i].alpha] as RGBA,
+            (i) => {
+              const p = above[i];
+              const [r, g, b] = reddenForAirmass(starColour(p.star.ci), airmassAt(p));
+              const flicker = twinkle(p.star.id, nowMs, airmassAt(p));
+              return [r, g, b, Math.min(1, p.alpha * flicker)] as RGBA;
+            },
             (i) => Math.min(6, Math.max(1, 4.2 - above[i].star.mag * 0.7)),
           );
+
+          // A soft additive bloom for the handful of stars bright enough
+          // that the naked eye actually sees them as radiant rather than as
+          // a sharp point — the same treatment the sun and moon already get,
+          // scaled down to something a star's actual brightness earns rather
+          // than borrowing their exact numbers.
+          const brilliant = above.filter((p) => p.star.mag < HALO_MAG_THRESHOLD);
+          if (brilliant.length) {
+            const haloPoints = brilliant.map((p) => domePosition(pin, p.azimuth, p.altitudeApparent, radius));
+            moving.push(
+              haloPoints,
+              'points',
+              (i) => {
+                const p = brilliant[i];
+                const [r, g, b] = reddenForAirmass(starColour(p.star.ci), airmassAt(p));
+                return [r, g, b, Math.min(0.85, p.alpha)] as RGBA;
+              },
+              (i) => Math.min(6, Math.max(1, 4.2 - brilliant[i].star.mag * 0.7)) * 2.6,
+              2.2,
+            );
+          }
+
+          // Self-perpetuating: each call that actually draws a twinkling
+          // sky asks for one more, at a stride well under 60fps because a
+          // slow atmospheric shimmer does not need a browser's full refresh
+          // rate to read as smooth, and stops asking the moment stars are no
+          // longer being drawn at all — daylight, the mode turning off, the
+          // moon washing everything out — rather than needing to be told to
+          // from anywhere else.
+          scheduleTwinkleFrame();
         }
       }
     }
@@ -5404,18 +5509,30 @@ export async function startScout(): Promise<void> {
   } | null = null;
 
   /**
-   * How far toward the horizon the view leans while Milky Way mode is on —
-   * past the everyday 3D pitch (55°), because this is the one view on the page
-   * meant to evoke looking *up*, not looking *across* a townscape. 90 would be
-   * looking exactly along the ground; MapLibre cannot tilt past that, so 82 —
-   * three shy of `maxPitch` — is as close to "look at the sky" as a top-down
-   * map renderer gets without the grazing angle where terrain tiles start to
-   * z-fight. The ground still occupies the bottom of the frame at any pitch
-   * short of 90 — that residual band is what `NIGHT_DOME_RADIUS_M` below is
-   * for, so the sky itself reads as the point of the view rather than the
-   * ground with a decoration floating over it.
+   * How far toward the horizon the view leans on entering Milky Way mode —
+   * past the everyday 3D pitch (55°), because this is the one view on the
+   * page meant to evoke looking *up*, not looking *across* a townscape.
+   *
+   * Deliberately not started at `NIGHT_PITCH_MAX`: the first version opened
+   * at 82 against an 85° ceiling, three degrees of headroom on a control
+   * whose whole point is "look around" — bearing had the full circle to
+   * explore and pitch had almost nothing, which is not free-look, it is a
+   * view that is already nearly where it is going. 68 leaves real room
+   * either side of it, down toward `NIGHT_PITCH_MIN` and up toward the
+   * ceiling, so a drag actually goes somewhere.
    */
-  const NIGHT_PITCH = 82;
+  const NIGHT_PITCH = 68;
+
+  /**
+   * The floor free-look's own drag and arrow-key handlers hold pitch to.
+   * `jumpTo` already clamps the ceiling to the map's own `maxPitch`, but has
+   * no notion of a *minimum* above 0 — left alone, dragging down would walk
+   * the view back toward the everyday top-down-ish 3D angle, and the ground
+   * (dimmed, not erased — see `dimBasemap`) would start reclaiming the frame
+   * from the sky this mode exists to show. Below this, "further down" stops
+   * doing anything rather than slowly undoing the rest of the mode.
+   */
+  const NIGHT_PITCH_MIN = 50;
 
   /** How much closer the view zooms in for Milky Way mode, added to whatever
    *  zoom the map was already at — relative rather than a fixed level, so a
@@ -5649,10 +5766,9 @@ export async function startScout(): Promise<void> {
       if (!dragging) return;
       m.jumpTo({
         bearing: startBearing - (pendingClientX - startX) * LOOK_SENSITIVITY,
-        // No manual clamp: `jumpTo` already clamps pitch to the map's own
-        // [0, maxPitch], so this cannot drive it past the range the rest of
-        // the page already assumes.
-        pitch: startPitch - (pendingClientY - startY) * LOOK_SENSITIVITY,
+        // `jumpTo` clamps the ceiling to the map's own maxPitch on its own;
+        // the floor needs doing by hand — see NIGHT_PITCH_MIN.
+        pitch: Math.max(NIGHT_PITCH_MIN, startPitch - (pendingClientY - startY) * LOOK_SENSITIVITY),
       });
     };
 
@@ -5722,7 +5838,7 @@ export async function startScout(): Promise<void> {
       if (e.key === 'ArrowLeft') bearing = m.getBearing() - step;
       else if (e.key === 'ArrowRight') bearing = m.getBearing() + step;
       else if (e.key === 'ArrowUp') pitch = m.getPitch() + step;
-      else if (e.key === 'ArrowDown') pitch = m.getPitch() - step;
+      else if (e.key === 'ArrowDown') pitch = Math.max(NIGHT_PITCH_MIN, m.getPitch() - step);
       else return;
       e.preventDefault();
       m.jumpTo({ ...(bearing !== null && { bearing }), ...(pitch !== null && { pitch }) });
