@@ -565,10 +565,12 @@ export async function startScout(): Promise<void> {
       center: [0, 25],
       zoom: 1.4,
       // Above MapLibre's default of 60 — the everyday 3D view only asks for
-      // 55, but the Milky Way mode leans further toward the horizon than
-      // that, and the camera cannot tilt any further up than the horizon
-      // permits regardless: 90 would be looking exactly along the ground.
-      maxPitch: 80,
+      // 55, but Milky Way mode leans much further toward the horizon than
+      // that, close enough to it that the ground shrinks to a thin band and
+      // the sky genuinely dominates the screen, the way looking up actually
+      // feels. 90 would be looking exactly along the ground; 85 is as close
+      // as it gets before terrain tiles start z-fighting at the grazing angle.
+      maxPitch: 85,
       attributionControl: { compact: true },
       // Kept so the view can be exported as an image — see "Save as an image".
       //
@@ -1976,7 +1978,7 @@ export async function startScout(): Promise<void> {
     domeStatic = null;
     if (!map || !styleReady || !centre || !day) return;
 
-    const radius = domeRadiusFor(radiusKm * 1000);
+    const radius = shown.stars ? NIGHT_DOME_RADIUS_M : domeRadiusFor(radiusKm * 1000);
     const geometry = new DomeGeometry(projectToMercator);
     const ink = inkColour(basemap);
 
@@ -2203,7 +2205,7 @@ export async function startScout(): Promise<void> {
       return;
     }
 
-    const radius = domeRadiusFor(radiusKm * 1000);
+    const radius = shown.stars ? NIGHT_DOME_RADIUS_M : domeRadiusFor(radiusKm * 1000);
     const moving = new DomeGeometry(projectToMercator);
     const ink = inkColour(basemap);
     const lift = liftColour(basemap);
@@ -5394,12 +5396,15 @@ export async function startScout(): Promise<void> {
    * How far toward the horizon the view leans while Milky Way mode is on —
    * past the everyday 3D pitch (55°), because this is the one view on the page
    * meant to evoke looking *up*, not looking *across* a townscape. 90 would be
-   * looking exactly along the ground; MapLibre cannot tilt past that, so 78 —
-   * two shy of `maxPitch` — is as close to "look at the sky" as a top-down map
-   * renderer gets without the grazing angle where terrain tiles start to
-   * z-fight.
+   * looking exactly along the ground; MapLibre cannot tilt past that, so 82 —
+   * three shy of `maxPitch` — is as close to "look at the sky" as a top-down
+   * map renderer gets without the grazing angle where terrain tiles start to
+   * z-fight. The ground still occupies the bottom of the frame at any pitch
+   * short of 90 — that residual band is what `NIGHT_DOME_RADIUS_M` below is
+   * for, so the sky itself reads as the point of the view rather than the
+   * ground with a decoration floating over it.
    */
-  const NIGHT_PITCH = 78;
+  const NIGHT_PITCH = 82;
 
   /** How much closer the view zooms in for Milky Way mode, added to whatever
    *  zoom the map was already at — relative rather than a fixed level, so a
@@ -5408,6 +5413,18 @@ export async function startScout(): Promise<void> {
    *  centred on, not to read building footprints in the dark. */
   const NIGHT_ZOOM_BOOST = 2.5;
   const NIGHT_ZOOM_MAX = 17;
+
+  /**
+   * The dome's radius while Milky Way mode is on, in place of the everyday
+   * `domeRadiusFor` — which sizes the sun's arc to stay legible *next to* the
+   * terrain it explains, exactly wrong once the terrain is no longer the
+   * subject. A PhotoPills-style galaxy view is mostly sky: the whole point is
+   * for the stars, the band and the frame to fill most of the screen rather
+   * than sit as a small ring over a townscape, so this is a fixed size on its
+   * own scale, not a fraction of the scouting radius the way the everyday
+   * dome is.
+   */
+  const NIGHT_DOME_RADIUS_M = 4000;
 
   /**
    * Turn the map view itself to face where the core will be — bearing at its
@@ -5553,21 +5570,49 @@ export async function startScout(): Promise<void> {
   }
 
   /**
+   * The slider's own position from just before Milky Way mode jumped it to a
+   * dark moment, restored on the way back out — the same give-back-only-what-
+   * it-borrowed principle `preNightView` already follows for the camera. Null
+   * whenever the mode did not need to move the slider (it was already dark).
+   */
+  let preNightTime: { isoDate: string; minute: number } | null = null;
+
+  /**
+   * The middle of the longest astronomically-dark stretch of the coming
+   * night — not the core's own best moment, which needs the core above 10°
+   * *and* the moon down *and* fails outright from most of Europe, and this
+   * is asking a plainer question: is the sky itself dark enough for
+   * anything at all to show. Null when it never gets astronomically dark in
+   * the window at all (a high-latitude summer night), in which case there
+   * is nothing to jump to and saying so is `starVisibility`'s job once the
+   * slider gets there, not this function's to fake.
+   */
+  function bestStargazingMoment(night: CoreNight): Date | null {
+    if (!night.darkness.length) return null;
+    const longest = night.darkness.reduce((a, b) =>
+      b.to.getTime() - b.from.getTime() > a.to.getTime() - a.from.getTime() ? b : a,
+    );
+    return new Date((longest.from.getTime() + longest.to.getTime()) / 2);
+  }
+
+  /**
    * The whole Milky Way answer, in one press.
    *
-   * It sets five things that had to be found separately before: the arc on the
+   * It sets six things that had to be found separately before: the arc on the
    * sky dome, the frame layer (which is what the *framing* half of the answer is
    * gated on), the panel section opened, the simulated lens pointed at where
-   * the core will be at its best, and — new — the map view itself turned to
-   * face that same direction, tilted toward the horizon, so the screen looks
-   * roughly like what the photograph will rather than an arbitrary angle on
-   * the terrain.
+   * the core will be at its best, the map view itself turned to face that same
+   * direction and tilted toward the horizon, and — new — the slider itself,
+   * moved to the darkest stretch of the coming night when the sky on screen
+   * would otherwise still be daylight. A camera turned to face the sky and a
+   * star layer that has nothing to draw because the sun is still up is a
+   * button that looks broken; the slider is the one thing standing between
+   * "turned the camera" and "can actually see the galaxy".
    *
-   * What it deliberately does **not** do is move the time slider. The obvious
-   * next step — jump to the best moment — crosses a date boundary whenever that
-   * moment is after midnight, because the night runs noon to noon while the
-   * slider runs over the solar day. The fold prints the times; the slider is
-   * left where the user put it.
+   * Left alone when the sky is already dark enough — jumping a scrubbed
+   * evening shot out from under someone was the reason this used to leave
+   * the slider untouched at all, and that reason still holds whenever it is
+   * not the thing stopping the view from working.
    */
   function setNightMode(on: boolean) {
     const button = $('night-button');
@@ -5575,6 +5620,18 @@ export async function startScout(): Promise<void> {
     const toggleId = (key: keyof Shown) => LAYER_TOGGLES.find(([, k]) => k === key)?.[0];
 
     if (on) {
+      // Before anything else reads the date or the minute: everything below
+      // (rebuildCore, coreAim, the dome) is about to be built for whichever
+      // one is current, and jumping later would mean doing that work twice.
+      const sunNow = current();
+      if (coreNightCache && (!sunNow || starVisibility(sunNow.altitude) < 1)) {
+        const target = bestStargazingMoment(coreNightCache.night);
+        if (target) {
+          preNightTime = { isoDate, minute };
+          goToInstant(target);
+        }
+      }
+
       nightTurnedOn = (['corePath', 'frame', 'stars'] as const).filter((key) => !shown[key]);
       for (const key of nightTurnedOn) {
         shown[key] = true;
@@ -5595,6 +5652,14 @@ export async function startScout(): Promise<void> {
     rebuildCore();
     drawFrame();
     renderFraming();
+    // The static half of the dome (the horizon ring, the sun/moon/core arcs,
+    // the hour beads) is cached against whatever radius it was last built at
+    // — see `NIGHT_DOME_RADIUS_M`. Toggling `stars` through the layers panel
+    // already forces a rebuild; this path sets `shown.stars` directly rather
+    // than dispatching that checkbox's own change event, so it has to ask for
+    // the rebuild itself or the rings stay sized for the terrain they no
+    // longer share the screen with.
+    domeStatic = null;
     invalidate({ dome: true });
 
     const fold = $<HTMLDetailsElement>('fold-core');
@@ -5618,6 +5683,12 @@ export async function startScout(): Promise<void> {
       fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
       disableFreeLook();
+      if (preNightTime) {
+        const backTime = preNightTime;
+        preNightTime = null;
+        setDate(backTime.isoDate);
+        setMinute(backTime.minute);
+      }
       refreshCoreLens();
       if (preNightView) {
         const back = preNightView;
