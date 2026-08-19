@@ -1401,6 +1401,17 @@ export async function startScout(): Promise<void> {
   });
 
   map?.on('moveend', () => {
+    // Free-look's own `jumpTo` fires this synchronously on every call — no
+    // animation to wait out, so no debounce — which means every pointer
+    // move of a look-around drag was re-querying every loaded building tile
+    // and re-fetching the terrain field. Skipped while free-look is active:
+    // `center` and `zoom` never move during it by construction (see
+    // `enableFreeLook`), only bearing and pitch, and the ground is dimmed
+    // to a fifth of its usual opacity in that mode besides — nobody is
+    // reading the shadows on it. `disableFreeLook`'s own camera restore
+    // ends in a real, single `moveend` once it settles, so both refresh
+    // correctly for wherever the view actually lands.
+    if (freeLookCleanup) return;
     collectBuildings();
     refreshTerrain();
   });
@@ -5571,6 +5582,20 @@ export async function startScout(): Promise<void> {
     m.keyboard.disable();
     dimBasemap();
 
+    // Measured at ~40-90ms a call in this app's own 3D terrain mode —
+    // MapLibre re-solves the camera against the exaggerated DEM on every
+    // bearing/pitch change, and a look-around drag asks for that dozens of
+    // times a second. The ground is dimmed to a fifth of its opacity for
+    // this mode besides (see `dimBasemap`), so its relief was buying nothing
+    // visible for that cost. Turned back on in `disableFreeLook` via
+    // `applyView`, which is the only thing that gets to decide whether
+    // terrain belongs on — not this function guessing at a prior state.
+    try {
+      m.setTerrain(null);
+    } catch {
+      /* no terrain to take off, which is the same as having taken it off */
+    }
+
     // The pin sits dead centre once `lookMapAtSky` has recentred on it, which
     // makes it the single most likely place for a look-around drag to begin.
     // `setDraggable(false)` alone is not enough: the marker is a DOM element
@@ -5595,6 +5620,27 @@ export async function startScout(): Promise<void> {
     let startY = 0;
     let startBearing = 0;
     let startPitch = 0;
+    // A pointer can report movement faster than the map can usefully act on
+    // it — `jumpTo` is not free even with terrain off — so each move only
+    // records where the pointer is *now* and a single rAF callback applies
+    // the latest one once a frame. Without this a fast drag queues jumpTo
+    // calls faster than they drain and the view keeps sliding for a moment
+    // after the hand has already stopped.
+    let pendingFrame = 0;
+    let pendingClientX = 0;
+    let pendingClientY = 0;
+
+    const applyPending = () => {
+      pendingFrame = 0;
+      if (!dragging) return;
+      m.jumpTo({
+        bearing: startBearing - (pendingClientX - startX) * LOOK_SENSITIVITY,
+        // No manual clamp: `jumpTo` already clamps pitch to the map's own
+        // [0, maxPitch], so this cannot drive it past the range the rest of
+        // the page already assumes.
+        pitch: startPitch - (pendingClientY - startY) * LOOK_SENSITIVITY,
+      });
+    };
 
     const onDown = (e: PointerEvent) => {
       dragging = true;
@@ -5606,21 +5652,16 @@ export async function startScout(): Promise<void> {
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging) return;
-      // jumpTo, not easeTo: this runs on every pointer move during a drag,
-      // and queuing an eased animation behind each one would make the view
-      // lag visibly behind the hand driving it. `center` and `zoom` are
-      // deliberately absent — leaving them out is what keeps the pin still,
-      // not a zero passed for them.
-      m.jumpTo({
-        bearing: startBearing - (e.clientX - startX) * LOOK_SENSITIVITY,
-        // No manual clamp: `jumpTo` already clamps pitch to the map's own
-        // [0, maxPitch], so this cannot drive it past the range the rest of
-        // the page already assumes.
-        pitch: startPitch - (e.clientY - startY) * LOOK_SENSITIVITY,
-      });
+      pendingClientX = e.clientX;
+      pendingClientY = e.clientY;
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(applyPending);
     };
     const onUp = (e: PointerEvent) => {
       dragging = false;
+      if (pendingFrame) {
+        cancelAnimationFrame(pendingFrame);
+        pendingFrame = 0;
+      }
       try {
         canvas.releasePointerCapture(e.pointerId);
       } catch {
@@ -5640,6 +5681,7 @@ export async function startScout(): Promise<void> {
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
       canvas.style.cursor = '';
+      if (pendingFrame) cancelAnimationFrame(pendingFrame);
     };
   }
 
@@ -5652,6 +5694,19 @@ export async function startScout(): Promise<void> {
       marker.getElement().style.pointerEvents = '';
     }
     if (!map) return;
+    // Not the whole of `applyView()`: that also eases pitch to the everyday
+    // 3D angle (55°), which would only be immediately overridden by
+    // `setNightMode`'s own camera restore a moment later and shows up as a
+    // visible stutter in between. `view` is still '3d' here regardless of
+    // what it is about to be restored to — that happens after this returns
+    // — so putting terrain back to match it is correct either way: it is
+    // either the final state, or `applyView()` turns it off again once the
+    // view itself reverts to 2D.
+    try {
+      map.setTerrain(view === '3d' ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
+    } catch {
+      /* no terrain to put back, or none to take off */
+    }
     map.dragPan.enable();
     map.dragRotate.enable();
     map.scrollZoom.enable();
