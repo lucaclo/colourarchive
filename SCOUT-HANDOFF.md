@@ -357,6 +357,47 @@ picture*" question, asked of the Milky Way core instead of the sun.
   the arc, and sharing a name with the text section made ticking it look like a no-op.
 - *Known:* the tilt slider stops at 80°, so an Atacama core at 85.6° cannot be centred.
 
+### Light pollution *(issue #46, built 2026-08-19)*
+
+Part 7b's own note used to end here: nothing in `galactic.ts` knew whether the
+pin sat over a national park or a city centre, so a core at 20° over a town
+read identically to the same core over a dark site, and the panel had to warn
+that "the sky is dark" was not the same as "you will see it".
+
+No source of Bortle or SQM data publishes with CORS headers for a live fetch —
+`galactic.ts`'s own note already said so — but light pollution does not need a
+live source at all. It is a property of the place on the timescale of years,
+not of the night, so `scripts/fetch-light-pollution.ts` vendors one static
+raster once (`npm run light-pollution`): the New World Atlas of Artificial
+Night Sky Brightness (Falchi et al. 2016, CC BY-NC 4.0), mosaicked from its
+732-tile KMZ export and reduced to the atlas's own "Light Pollution Zone"
+scale — an ordinal class 0–13, not a continuous brightness, which is why
+`lightPollutionZoneAt` in `src/lib/scout/light-pollution.ts` samples the
+nearest cell rather than interpolating between two zones that do not average
+to a real one in between.
+
+`CORE_DARK_ENOUGH_MAX_ZONE = 8` is not a measurement — the atlas explicitly
+declines to be read as the Bortle scale — but a reasoned anchor: the atlas's
+own colour key puts LPI (artificial-to-natural sky brightness) = 1 at the
+3b/4a boundary, each zone step is defined as ×3 LPI, and zone 9 sits four
+half-steps above that — LPI ≈ 3 — roughly where common astrophotography
+guidance places the core disappearing into skyglow. `coreNight` in
+`galactic.ts` takes the zone as a plain number — the module still touches no
+map and no network — and treats it as a single yes/no gate ahead of the
+moon-window intersection: below the threshold the existing three-way
+intersection stands; at or above it, `visible` comes back empty and the
+refusal names the zone, because "the moon is down" was never the thing
+standing between the core and the sensor.
+
+The fetch, decode and canvas work live in `view/light-pollution-loader.ts`,
+the same pure/impure split as everywhere else in this file — one static
+asset for the whole session, not a per-viewport tile set, since light
+pollution does not move with the map the way elevation does. A missing or
+blocked asset resolves to `null`, not a rejection: the caller's answer
+becomes "no light-pollution data", the same honest gap the rest of this
+module already reports, rather than a page error over what is, after all,
+an optional refinement.
+
 **`frame.ts`'s framing test was only right for a level camera** and had to be fixed
 first. It differenced azimuths and altitudes, which is exact only at tilt zero near the
 horizon. Two things break it: azimuth is not a distance (meridians converge, so aimed 80°

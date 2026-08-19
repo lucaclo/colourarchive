@@ -275,6 +275,7 @@ import { createSearchBox } from './search-box';
 import { pace } from './pacing';
 import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createMonthGrid } from './month-grid';
+import { createInfoTips } from './infotip';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
 export async function startScout(): Promise<void> {
@@ -5263,6 +5264,22 @@ export async function startScout(): Promise<void> {
     const open = panel.hidden;
     panel.hidden = !open;
     $('layers-button').setAttribute('aria-expanded', String(open));
+    // Below 820px the info panel goes full width (see the .panel media rule)
+    // and would sit directly under this one — .panel × .layers in the overlap
+    // audit. Above that width the two never touch, so only a narrow layout
+    // needs the exclusion.
+    if (open && window.innerWidth <= 820) {
+      const info = $<HTMLElement>('panel');
+      info.dataset.open = 'false';
+      const head = $<HTMLButtonElement>('panel-head');
+      head.setAttribute('aria-expanded', 'false');
+      // On a device with a mouse, `data-open` is not the only thing keeping
+      // the body open — the CSS also opens it on `:focus-within`, and this
+      // button just had focus from the click that opened it. Without the
+      // blur, the panel stayed open under the layers panel it was just told
+      // to make room for.
+      if (document.activeElement === head || head.contains(document.activeElement)) head.blur();
+    }
   });
 
   /**
@@ -5432,12 +5449,21 @@ export async function startScout(): Promise<void> {
     const open = panel.dataset.open !== 'true';
     panel.dataset.open = String(open);
     $('panel-head').setAttribute('aria-expanded', String(open));
+    // Mirrors the layers-button handler above: the same narrow-width collision,
+    // approached from the other side.
+    if (open && window.innerWidth <= 820) {
+      const layers = $<HTMLElement>('layers');
+      layers.hidden = true;
+      $('layers-button').setAttribute('aria-expanded', 'false');
+    }
   });
 
   const searchBox = createSearchBox({
     onChoose: (place) => setCentre(place),
     onQueryChanged: () => renderKept(),
   });
+
+  createInfoTips();
 
   /* ── Kept spots ────────────────────────────────────────────────────────
      Scouting is repetitive in a particular way: you find somewhere, check it
