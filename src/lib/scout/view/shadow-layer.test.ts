@@ -47,6 +47,15 @@ const blockerVerts = (data: Float32Array) => {
   return out;
 };
 
+/** Read the packed wall-curtain array back as vertices — same shape as a shadow vertex. */
+const wallVerts = (data: Float32Array) => {
+  const out: Array<{ x: number; y: number; elevM: number; ceiling: number; dark: number }> = [];
+  for (let i = 0; i < data.length; i += 6) {
+    out.push({ x: data[i], y: data[i + 1], elevM: data[i + 3], ceiling: data[i + 4], dark: data[i + 5] });
+  }
+  return out;
+};
+
 describe('ShadowGeometry', () => {
   it('fans a closed ring into triangles, dropping the repeated vertex', () => {
     const geometry = new ShadowGeometry(flat);
@@ -200,6 +209,67 @@ describe('ShadowGeometry', () => {
       geometry.addBlocker(square(), 20, 0);
       geometry.addTerrainFacet(facet);
       assert.equal(geometry.blockerVertices().length / 5, 2 * 3 + 3);
+    });
+  });
+
+  describe('addWallCurtain', () => {
+    it('packs two triangles per edge, six floats a vertex', () => {
+      const geometry = new ShadowGeometry(flat);
+      geometry.addWallCurtain(square(), 0, 30, 10, 0.5);
+      // A square hulls to 4 corners, i.e. 4 edges once closed; 2 triangles
+      // (6 vertices) a wall, 6 floats a vertex.
+      assert.equal(geometry.wallVertices().length, 4 * 6 * 6);
+    });
+
+    it('gives every vertex the one ceiling and darkness it was called with', () => {
+      const geometry = new ShadowGeometry(flat);
+      geometry.addWallCurtain(square(), 0, 30, 12, 0.4);
+      for (const v of wallVerts(geometry.wallVertices())) {
+        assert.ok(Math.abs(v.ceiling - 12) < 1e-6, `${v.ceiling}`);
+        assert.ok(Math.abs(v.dark - 0.4) < 1e-6, `${v.dark}`);
+      }
+    });
+
+    it('alternates each vertex\'s own elevation between the ground and the roof', () => {
+      const geometry = new ShadowGeometry(flat);
+      geometry.addWallCurtain(square(), 5, 25, 15, 0.5);
+      const elevations = new Set(wallVerts(geometry.wallVertices()).map((v) => v.elevM));
+      assert.deepEqual([...elevations].sort((a, b) => a - b), [5, 30]); // ground 5, roof 5+25
+    });
+
+    it('draws nothing once the ceiling reaches the roof — nothing on the building is shaded', () => {
+      const geometry = new ShadowGeometry(flat);
+      geometry.addWallCurtain(square(), 0, 30, 30, 0.5); // ceiling == roof
+      assert.equal(geometry.wallVertices().length, 0);
+      geometry.addWallCurtain(square(), 0, 30, 40, 0.5); // ceiling above roof
+      assert.equal(geometry.wallVertices().length, 0);
+    });
+
+    it('draws the full height when the ceiling is at or below the ground — the whole wall is shaded', () => {
+      const geometry = new ShadowGeometry(flat);
+      geometry.addWallCurtain(square(), 10, 30, 10, 0.5); // ceiling == ground
+      assert.ok(geometry.wallVertices().length > 0);
+    });
+
+    it('draws nothing for a building with no height, or with no darkness left', () => {
+      const noHeight = new ShadowGeometry(flat);
+      noHeight.addWallCurtain(square(), 0, 0, 5, 0.5);
+      assert.equal(noHeight.wallVertices().length, 0);
+
+      const noDark = new ShadowGeometry(flat);
+      noDark.addWallCurtain(square(), 0, 30, 10, 0);
+      assert.equal(noDark.wallVertices().length, 0);
+    });
+
+    it('joins the same buffer shadows and blockers keep entirely separate', () => {
+      const geometry = new ShadowGeometry(flat);
+      const shadow = castShadow(square(), 20, 180, 45)!;
+      geometry.addShadow(shadow.ring, shadow.ceilings, shadow.ring.map(() => 0), 0.5);
+      geometry.addBlocker(square(), 20, 0);
+      geometry.addWallCurtain(square(), 0, 30, 10, 0.5);
+      assert.ok(geometry.shadowVertices().length > 0);
+      assert.ok(geometry.blockerVertices().length > 0);
+      assert.ok(geometry.wallVertices().length > 0);
     });
   });
 });

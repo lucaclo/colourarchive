@@ -753,31 +753,32 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
   wide viewport spends its whole allowance on width and throws away the vertical detail
   it already fetched — 425 m a sample over Hong Kong instead of 283 m.
 
-**Two shadow faults found while fixing the above, both still open:**
+**Two shadow faults found while fixing the above, both closed by issue #51:**
 
-1. **Building shadows are projected at sea level.** Every vertex in
-   `shadow-layer.ts` goes through `scoutGround`, which hard-codes mercator Z to `0.0`;
-   there is no elevation term in the file. In 3D the ground is raised by the DEM
-   (`exaggeration: 1.15`) but the mask is not, so the shadow mask lands where the ground
-   *would* be on a flat earth — offset on screen by an amount that grows with elevation
-   and pitch and shifts as the camera moves. 3D only. The fix is an elevation input to
-   `scoutGround` (mercator units for the flat matrix, metres for the globe radius — the
-   two-units trap `dome-layer.ts` already documents) and a per-vertex DEM lookup when
-   packing `ShadowGeometry`. Note `gl_Position.z` is spoken for by the blocker height, so
-   only the projection's *xy* changes.
-2. **Terrain is not a blocker for building shadows.** The depth-mapped height field holds
-   only building footprints, so a mountain never stops a building's cast shadow, and on a
-   slope building heights are compared as though from a common ground. Fixing it means
-   absolute heights (terrain + building) in both the height field and `castShadow`'s
-   ceilings, which is a semantic change to `shadows.ts`.
+1. **Building shadows were projected at sea level.** Fixed: every vertex in
+   `shadow-layer.ts` now carries its real elevation through `scoutGround`
+   (mercator units for the flat matrix, metres for the globe radius — the
+   two-units trap `dome-layer.ts` already documents), and `ShadowGeometry`
+   packs a per-vertex DEM lookup rather than a flat zero.
+2. **Terrain was not a blocker for building shadows.** Fixed: the depth-mapped
+   height field now carries bare terrain (`terrainFacets`) alongside building
+   footprints, all measured from the same absolute sea-level datum, so a
+   mountain stops a shadow the same way a taller building already did.
 
 **Known modelling limits (documented, acceptable, worth revisiting):**
 
-- Building shadows now land correctly on *roofs* — a roof below the shadow's ceiling
-  takes it, one above stays lit — but they still do not run up **walls**. Those are
-  drawn by MapLibre's own `fill-extrusion` layer, out of reach from a custom layer, so
-  shading them means taking over the extrusion pass. That is the remaining half of
-  proper shadow mapping and a much larger change than the one just made.
+- Building shadows land correctly on *roofs* — a roof below the shadow's ceiling
+  takes it, one above stays lit — and, since issue #51's wall curtains, on
+  **walls** too: a curtain around each shaded building's own outline, base to
+  roof, darkened up to one ceiling sampled at the building's own anchor (the
+  same one-sample-a-building trade `addBlocker` already makes, applied here to
+  the shadow instead of the terrain). It is a building-level approximation,
+  not a per-pixel one — the boundary is a flat band around the whole
+  footprint rather than a shape that varies edge to edge — and it has no
+  depth test against the real 3D scene (2D custom layers do not get one), so
+  a curtain can in principle show through a nearer building that actually
+  hides it from that angle. Both are the same class of tradeoff the rest of
+  this file already accepts under pitch, not a new one.
 - The shadow ceiling falls from the footprint's *down-sun extreme*, which slightly
   overstates it for parts of a shadow thrown by a nearer edge. It errs towards drawing
   a shadow rather than withholding one, which is the same direction the convex hull

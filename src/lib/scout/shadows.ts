@@ -102,6 +102,19 @@ export interface ShadowResult {
    */
   anchorLon: number;
   anchorLat: number;
+  /**
+   * The four numbers `shadowCeilingAt` needs to evaluate the ceiling formula
+   * at a point that is not one of `ring`'s own vertices — issue #51's wall
+   * curtains, which sample at a building's own anchor rather than wherever
+   * this shadow's hull happens to have a vertex. Exposed rather than
+   * recomputed so a caller checking many buildings against one shadow pays
+   * for the trig once, not once per building.
+   */
+  alongCoefLon: number;
+  alongCoefLat: number;
+  baseMax: number;
+  perMetre: number;
+  heightM: number;
 }
 
 /**
@@ -244,7 +257,61 @@ export function castShadow(
     clipped: full > maxLengthM,
     anchorLon: anchor[0],
     anchorLat: anchor[1],
+    alongCoefLon: mPerLon * east,
+    alongCoefLat: mPerLat * north,
+    baseMax,
+    perMetre,
+    heightM,
   };
+}
+
+/**
+ * Point-in-convex-polygon, by the sign of the cross product along every edge.
+ *
+ * `hull`'s rings are exactly what `convexHull` produces — CCW or CW, but
+ * consistently one or the other — so a point is inside whenever it is on the
+ * same side of every edge. A point exactly on an edge (cross product zero)
+ * is counted in rather than excluded, since a wall corner that lands exactly
+ * on the shadow's own outline should still read as shaded.
+ */
+export function pointInConvexRing(ring: Ring, lon: number, lat: number): boolean {
+  const n = ring.length - 1; // closed: last vertex repeats the first
+  if (n < 3) return false;
+  let sign = 0;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[i + 1];
+    const cross = (x2 - x1) * (lat - y1) - (y2 - y1) * (lon - x1);
+    if (cross === 0) continue;
+    const s = cross > 0 ? 1 : -1;
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+  }
+  return true;
+}
+
+/**
+ * A shadow's ceiling at an arbitrary point, rather than only at `ring`'s own
+ * vertices — what a wall needs, since a neighbouring building's footprint
+ * essentially never lands exactly on this shadow's outline.
+ *
+ * Returns null outside the shadow's own footprint: there the point is not
+ * merely far from being shaded, it is not this shadow's business at all, and
+ * null keeps that distinct from a ceiling of zero (shaded from the ground up)
+ * — a caller combining several shadows must not let an uninvolved one drag a
+ * `Math.max` down to zero.
+ *
+ * Relative to the shadow's own source building's base, exactly like
+ * `ceilings` — converting to a sea-level absolute is the caller's job, same
+ * as it already is for every other vertex this file hands out (see
+ * `page.ts`'s `groundElevationAt`).
+ */
+export function shadowCeilingAt(shadow: ShadowResult, lon: number, lat: number): number | null {
+  if (!pointInConvexRing(shadow.ring, lon, lat)) return null;
+  const along =
+    (lon - shadow.anchorLon) * shadow.alongCoefLon + (lat - shadow.anchorLat) * shadow.alongCoefLat;
+  const drop = Math.max(0, along - shadow.baseMax) * shadow.perMetre;
+  return Math.min(shadow.heightM, Math.max(0, shadow.heightM - drop));
 }
 
 /**
@@ -310,16 +377,9 @@ export interface Bounds {
   north: number;
 }
 
-/**
- * Does this footprint touch the box at all?
- *
- * Needed because OpenMapTiles merges buildings into enormous MultiPolygons —
- * a single feature over Shibuya carries nearly twelve thousand sub-polygons,
- * spanning whole tiles. Casting all of them costs a fifth of a second and draws
- * tens of thousands of shapes nobody can see. A bounding-box test first turns
- * that into the few hundred that are actually on screen.
- */
-export function ringIntersects(ring: Ring, bounds: Bounds): boolean {
+/** A ring's own bounding box, computed once and reused rather than walked
+ *  again every time it needs testing against something else. */
+export function ringBounds(ring: Ring): Bounds {
   let west = Infinity;
   let south = Infinity;
   let east = -Infinity;
@@ -330,7 +390,26 @@ export function ringIntersects(ring: Ring, bounds: Bounds): boolean {
     if (lat < south) south = lat;
     if (lat > north) north = lat;
   }
-  return !(east < bounds.west || west > bounds.east || north < bounds.south || south > bounds.north);
+  return { west, south, east, north };
+}
+
+/** Do two boxes touch at all? The one comparison every bbox prune here — a
+ *  footprint against a viewport, a building against a shadow — reduces to. */
+export function boundsOverlap(a: Bounds, b: Bounds): boolean {
+  return !(a.east < b.west || a.west > b.east || a.north < b.south || a.south > b.north);
+}
+
+/**
+ * Does this footprint touch the box at all?
+ *
+ * Needed because OpenMapTiles merges buildings into enormous MultiPolygons —
+ * a single feature over Shibuya carries nearly twelve thousand sub-polygons,
+ * spanning whole tiles. Casting all of them costs a fifth of a second and draws
+ * tens of thousands of shapes nobody can see. A bounding-box test first turns
+ * that into the few hundred that are actually on screen.
+ */
+export function ringIntersects(ring: Ring, bounds: Bounds): boolean {
+  return boundsOverlap(ringBounds(ring), bounds);
 }
 
 /**
