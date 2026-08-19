@@ -5424,6 +5424,108 @@ export async function startScout(): Promise<void> {
     map.easeTo({ bearing, pitch: NIGHT_PITCH, zoom, center: [centre.lon, centre.lat], duration: 900 });
   }
 
+  /** Cleans up the free-look pointer listeners and puts MapLibre's own
+   *  gesture handlers back — set only while Milky Way mode's free-look is
+   *  active, which doubles as the "is it active" flag. */
+  let freeLookCleanup: (() => void) | null = null;
+
+  /**
+   * Milky Way mode's own gesture: the pin stays exactly where it is — no
+   * handler here ever touches `center` — and a drag instead orbits the
+   * camera around it, the way turning your own head does. Ordinary MapLibre
+   * dragging pans, which is exactly wrong once the whole point of the view is
+   * to stay planted on the pin and look around from it.
+   *
+   * Built by hand rather than reached for `dragRotate` (MapLibre's own
+   * look-around handler) because that one is bound to the right mouse button
+   * or Ctrl+drag — discoverable to nobody — and there is no supported way to
+   * rebind it to a plain drag. Every gesture that could otherwise carry the
+   * pin away (pan, scroll-zoom, box-zoom, double-click-zoom, the keyboard's
+   * arrow-pan, touch pan/pinch) is disabled for the same reason: leaving even
+   * one of them live is one way back to "wait, where did the pin go".
+   */
+  function enableFreeLook() {
+    if (!map || freeLookCleanup) return;
+    const m = map;
+    m.dragPan.disable();
+    m.dragRotate.disable();
+    m.scrollZoom.disable();
+    m.doubleClickZoom.disable();
+    m.boxZoom.disable();
+    m.touchZoomRotate.disable();
+    m.keyboard.disable();
+
+    const canvas = m.getCanvas();
+    // Degrees of bearing/pitch per pixel dragged. Chosen so a full sweep of a
+    // typical viewport's width turns you most of the way round — enough to
+    // feel like a real turn of the head, not a twitch.
+    const LOOK_SENSITIVITY = 0.25;
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startBearing = 0;
+    let startPitch = 0;
+
+    const onDown = (e: PointerEvent) => {
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startBearing = m.getBearing();
+      startPitch = m.getPitch();
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      // jumpTo, not easeTo: this runs on every pointer move during a drag,
+      // and queuing an eased animation behind each one would make the view
+      // lag visibly behind the hand driving it. `center` and `zoom` are
+      // deliberately absent — leaving them out is what keeps the pin still,
+      // not a zero passed for them.
+      m.jumpTo({
+        bearing: startBearing - (e.clientX - startX) * LOOK_SENSITIVITY,
+        // No manual clamp: `jumpTo` already clamps pitch to the map's own
+        // [0, maxPitch], so this cannot drive it past the range the rest of
+        // the page already assumes.
+        pitch: startPitch - (e.clientY - startY) * LOOK_SENSITIVITY,
+      });
+    };
+    const onUp = (e: PointerEvent) => {
+      dragging = false;
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released — Safari does this on its own past a certain gesture length */
+      }
+    };
+
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onUp);
+    canvas.style.cursor = 'grab';
+
+    freeLookCleanup = () => {
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onUp);
+      canvas.style.cursor = '';
+    };
+  }
+
+  function disableFreeLook() {
+    freeLookCleanup?.();
+    freeLookCleanup = null;
+    if (!map) return;
+    map.dragPan.enable();
+    map.dragRotate.enable();
+    map.scrollZoom.enable();
+    map.doubleClickZoom.enable();
+    map.boxZoom.enable();
+    map.touchZoomRotate.enable();
+    map.keyboard.enable();
+  }
+
   /**
    * The whole Milky Way answer, in one press.
    *
@@ -5486,8 +5588,10 @@ export async function startScout(): Promise<void> {
         };
       }
       lookMapAtSky(coreAim);
+      enableFreeLook();
       fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
+      disableFreeLook();
       refreshCoreLens();
       if (preNightView) {
         const back = preNightView;
