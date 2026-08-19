@@ -89,6 +89,7 @@ import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-u
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
 import { itineraryReport, shootPlan } from '../report';
 import {
+  boundsOverlap,
   buildingHeight,
   castPrisms,
   castShadow,
@@ -98,8 +99,11 @@ import {
   maxShadowLength,
   buildingSetSignature,
   padBounds,
+  ringBounds,
   ringIntersects,
+  shadowCeilingAt,
   squareFootprint,
+  type Bounds,
   type Ring,
 } from '../shadows';
 import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-layer';
@@ -140,6 +144,8 @@ import {
   type CoreNight,
   type CoreSample,
 } from '../galactic';
+import { lightPollutionZoneAt, ZONE_COUNT, type LightPollutionField } from '../light-pollution';
+import { loadLightPollution } from './light-pollution-loader';
 import { describeSeeingPoint, seeingAt, type SeeingForecast } from '../seeing';
 import {
   RESOLUTIONS,
@@ -269,6 +275,7 @@ import { createSearchBox } from './search-box';
 import { pace } from './pacing';
 import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createMonthGrid } from './month-grid';
+import { createInfoTips } from './infotip';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
 export async function startScout(): Promise<void> {
@@ -420,6 +427,24 @@ export async function startScout(): Promise<void> {
   let seeingForecast: SeeingForecast | null = null;
   let seeingKey: string | null = null;
   /**
+   * The bundled light-pollution raster — issue #46. One static asset for the
+   * whole session rather than a per-pin fetch, since `loadLightPollution`
+   * itself caches the decode; this just remembers whether it has resolved
+   * yet so `renderCoreDay` has something to sample.
+   *
+   * Kicked off here rather than on the first pin — a global asset has no
+   * pin to wait for, and starting the fetch now means it is very likely
+   * already decoded by the time anyone reaches the core panel, rather than
+   * racing it. `renderCoreDay` reads whatever `lightPollutionField` holds at
+   * the moment it runs; this callback exists only to redraw the panel if it
+   * was already showing an answer computed before the raster arrived.
+   */
+  let lightPollutionField: LightPollutionField | null = null;
+  void loadLightPollution().then((field) => {
+    lightPollutionField = field;
+    if (coreNightCache) renderCoreDay();
+  });
+  /**
    * The forecast where the sunrise or sunset light passes low over the ground —
    * three hundred kilometres away, in the sun's own direction. Kept beside the
    * pin's forecast rather than merged into it, because they are answers to
@@ -507,7 +532,15 @@ export async function startScout(): Promise<void> {
       style: STYLES.light,
       center: [0, 25],
       zoom: 1.4,
-      attributionControl: { compact: true },
+      // The light-pollution raster (issue #46) is not a map source — it is
+      // sampled from a bundled PNG, never drawn as a layer — so it has no
+      // other way into this control. CC BY-NC 4.0 requires attribution;
+      // this is where every other data credit already surfaces.
+      attributionControl: {
+        compact: true,
+        customAttribution:
+          'Light pollution: World Atlas of Artificial Night Sky Brightness (Falchi et al. 2016), CC BY-NC 4.0',
+      },
       // Kept so the view can be exported as an image — see "Save as an image".
       //
       // Nested, because MapLibre v5 moved the WebGL context attributes under
@@ -551,7 +584,22 @@ export async function startScout(): Promise<void> {
     Object.assign(window as unknown as Record<string, unknown>, {
       scout: {
         map: () => map,
-        state: () => ({ centre, radiusKm, minute, isoDate, timeZone, view, basemap, shown }),
+        state: () => ({
+          centre,
+          radiusKm,
+          minute,
+          isoDate,
+          timeZone,
+          view,
+          basemap,
+          shown,
+          // Issue #46: the raster's own answer at the pin, read the same way
+          // `renderCoreDay` does, so a smoke test can check the real asset
+          // decoded and classified correctly rather than trusting the unit
+          // tests' hand-built fixture to also describe the shipped PNG.
+          lightPollutionZone:
+            centre && lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null,
+        }),
         terrain: () => terrainShadows?.state(),
         // What is actually being cast, which is the only honest scale for a
         // timing run: the count of buildings in the vector tiles says nothing
@@ -2360,7 +2408,7 @@ export async function startScout(): Promise<void> {
    * the blocker depth map — because both used to derive it per building per
    * frame. See `ShadowOptions.hull`.
    */
-  let castable: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring }> = [];
+  let castable: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
   /**
    * The box `castable` was collected from.
    *
@@ -2457,7 +2505,7 @@ export async function startScout(): Promise<void> {
     // The same building appears once per tile it touches, so dedupe before
     // casting — otherwise a block on a tile seam gets a doubly dark shadow.
     const seen = new Set<string>();
-    const buildings: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring }> = [];
+    const buildings: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
     const close: typeof buildings = [];
     let estimated = 0;
 
@@ -2519,7 +2567,14 @@ export async function startScout(): Promise<void> {
     // inside `castShadow` — see `ShadowOptions.hull`. Deliberately *after* the
     // signature check: a gather that returns the set we already hold does no
     // work at all, and at a city zoom `sourcedata` brings dozens a second.
-    for (const building of buildings) building.hull = convexHull(building.ring);
+    // The bbox rides along for the same reason and the same reuse: issue #51's
+    // wall curtains bbox-prune every building against every cast shadow on
+    // every recast, and a set of a few thousand is not a shape worth walking
+    // twice a frame when it has not actually changed.
+    for (const building of buildings) {
+      building.hull = convexHull(building.ring);
+      building.bbox = ringBounds(building.hull);
+    }
 
     castable = buildings;
     shadowStats = { cast: 0, estimated, longestM: 0, omitted, tooFar: false };
@@ -2556,6 +2611,7 @@ export async function startScout(): Promise<void> {
     if (!now || now.altitude <= 0 || !shown.buildings || !castable.length) {
       source.setData({ type: 'FeatureCollection', features: [] });
       shadowLayer.setShadows(EMPTY_GEOMETRY);
+      shadowLayer.setWalls(EMPTY_GEOMETRY);
       map.triggerRepaint();
       shadowStats.cast = 0;
       shadowStats.longestM = 0;
@@ -2586,6 +2642,11 @@ export async function startScout(): Promise<void> {
     if (glShadows) {
       const result = castPrisms(castable, now.azimuth, now.altitude, options);
       const geometry = new ShadowGeometry(projectFlat);
+      // Issue #51's wall curtains bbox-prune every building against every
+      // cast shadow below, so each prism's own box and re-based anchor
+      // elevation are worth keeping alongside it rather than recomputed once
+      // per candidate building that survives the prune.
+      const prismInfo: Array<{ bounds: Bounds; baseElevM: number; darkness: number }> = [];
       for (const prism of result.prisms) {
         // Issue #51: the ceiling castShadow returns is relative to the
         // building's own base — exactly right for its shape, silent about
@@ -2598,12 +2659,9 @@ export async function startScout(): Promise<void> {
         const baseElevM = groundElevationAt(prism.anchorLon, prism.anchorLat);
         const absoluteCeilings = prism.ceilings.map((c) => baseElevM + c);
         const groundM = prism.ring.map(([lon, lat]) => groundElevationAt(lon, lat));
-        geometry.addShadow(
-          prism.ring,
-          absoluteCeilings,
-          groundM,
-          shadowDarkness(prism.lengthM, now.altitude),
-        );
+        const darkness = shadowDarkness(prism.lengthM, now.altitude);
+        geometry.addShadow(prism.ring, absoluteCeilings, groundM, darkness);
+        prismInfo.push({ bounds: ringBounds(prism.ring), baseElevM, darkness });
       }
 
       // The monolith joins the same pass rather than keeping its own layer.
@@ -2621,8 +2679,50 @@ export async function startScout(): Promise<void> {
         );
       }
 
+      // Issue #51: wall curtains — one shaded band around each building's own
+      // outline, base to roof, rather than the shadow stopping dead at the
+      // roofline the way the ground/roof mask alone leaves it.
+      //
+      // One ceiling sample per building, at the same anchor `ensureBlockers`
+      // already samples for its blocker — the same trade that function's own
+      // comment already makes ("a building is small next to the DEM grid it
+      // sits on"), applied here to the shadow ceiling instead of the terrain.
+      // Bbox-pruned against every candidate shadow first: testing a building
+      // against a shadow whose box does not even reach it would be most of
+      // this loop's cost for none of its answer, on a view that can hold a
+      // few thousand of each.
+      if (result.prisms.length) {
+        for (const building of castable) {
+          if (!(building.height > 0) || !building.hull || !building.bbox) continue;
+          const [anchorLon, anchorLat] = building.ring[0];
+          let bestCeiling: number | null = null;
+          let bestDarkness = 0;
+          for (let i = 0; i < result.prisms.length; i++) {
+            const prism = result.prisms[i];
+            // A building never shades its own wall — the ceiling formula
+            // already answers that with "exactly the roof" on its own
+            // footprint (see shadowCeilingAt), but skipping the self pair
+            // outright is cheaper than evaluating it to find that out.
+            if (prism.anchorLon === anchorLon && prism.anchorLat === anchorLat) continue;
+            const info = prismInfo[i];
+            if (!boundsOverlap(building.bbox, info.bounds)) continue;
+            const relCeiling = shadowCeilingAt(prism, anchorLon, anchorLat);
+            if (relCeiling === null) continue;
+            const absCeiling = info.baseElevM + relCeiling;
+            if (bestCeiling === null || absCeiling > bestCeiling) {
+              bestCeiling = absCeiling;
+              bestDarkness = info.darkness;
+            }
+          }
+          if (bestCeiling === null) continue;
+          const groundM = groundElevationAt(anchorLon, anchorLat);
+          geometry.addWallCurtain(building.hull, groundM, building.height, bestCeiling, bestDarkness);
+        }
+      }
+
       ensureBlockers();
       shadowLayer.setShadows(geometry.shadowVertices());
+      shadowLayer.setWalls(geometry.wallVertices());
       map.triggerRepaint();
       shadowStats.cast = result.cast;
       shadowStats.longestM = result.longestM;
@@ -3311,7 +3411,8 @@ export async function startScout(): Promise<void> {
     const window = nightWindow();
     if (!centre || !window) return;
 
-    const night = coreNight(centre.lat, centre.lon, window.from, window.to);
+    const zone = lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null;
+    const night = coreNight(centre.lat, centre.lon, window.from, window.to, undefined, undefined, zone);
     coreNightCache = { night, window };
     const clock = (date: Date) => formatClock(date, timeZone);
     const { core } = night;
@@ -3340,8 +3441,14 @@ export async function startScout(): Promise<void> {
           .join(' · ')
       : '—';
 
+    // The zone rides along even on a good night — issue #46's point is not
+    // only to refuse a bright sky but to say, on a night that does work, how
+    // dark that "works" actually is. A window found at zone 8 of 13 is real
+    // but marginal, and a reader planning a drive should be able to tell that
+    // apart from zone 1.
+    const zoneNote = zone === null ? '' : ` (light-pollution zone ${zone} of ${ZONE_COUNT - 1})`;
     $('core-note').textContent = night.best
-      ? `Best at ${clock(night.best.at)}, ${night.best.altitude.toFixed(0)}° up.`
+      ? `Best at ${clock(night.best.at)}, ${night.best.altitude.toFixed(0)}° up.${zoneNote}`
       : night.refusal;
 
     renderCoreLens(night, window);
@@ -5157,6 +5264,22 @@ export async function startScout(): Promise<void> {
     const open = panel.hidden;
     panel.hidden = !open;
     $('layers-button').setAttribute('aria-expanded', String(open));
+    // Below 820px the info panel goes full width (see the .panel media rule)
+    // and would sit directly under this one — .panel × .layers in the overlap
+    // audit. Above that width the two never touch, so only a narrow layout
+    // needs the exclusion.
+    if (open && window.innerWidth <= 820) {
+      const info = $<HTMLElement>('panel');
+      info.dataset.open = 'false';
+      const head = $<HTMLButtonElement>('panel-head');
+      head.setAttribute('aria-expanded', 'false');
+      // On a device with a mouse, `data-open` is not the only thing keeping
+      // the body open — the CSS also opens it on `:focus-within`, and this
+      // button just had focus from the click that opened it. Without the
+      // blur, the panel stayed open under the layers panel it was just told
+      // to make room for.
+      if (document.activeElement === head || head.contains(document.activeElement)) head.blur();
+    }
   });
 
   /**
@@ -5326,12 +5449,21 @@ export async function startScout(): Promise<void> {
     const open = panel.dataset.open !== 'true';
     panel.dataset.open = String(open);
     $('panel-head').setAttribute('aria-expanded', String(open));
+    // Mirrors the layers-button handler above: the same narrow-width collision,
+    // approached from the other side.
+    if (open && window.innerWidth <= 820) {
+      const layers = $<HTMLElement>('layers');
+      layers.hidden = true;
+      $('layers-button').setAttribute('aria-expanded', 'false');
+    }
   });
 
   const searchBox = createSearchBox({
     onChoose: (place) => setCentre(place),
     onQueryChanged: () => renderKept(),
   });
+
+  createInfoTips();
 
   /* ── Kept spots ────────────────────────────────────────────────────────
      Scouting is repetitive in a particular way: you find somewhere, check it

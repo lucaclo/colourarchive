@@ -26,6 +26,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import sharp from 'sharp';
+import { ZONE_COUNT } from '../src/lib/scout/light-pollution.ts';
 
 // `fileURLToPath`, not `url.pathname`: this project lives in a directory with a
 // space in its name, and a pathname hands that back percent-encoded — which
@@ -679,6 +680,51 @@ describe('/scout: a spot, from a link', () => {
     assert.deepEqual(trouble, []);
   });
 
+});
+
+/* ── Light pollution (issue #46) ─────────────────────────────────────────────
+   Everything `light-pollution.test.ts` checks is arithmetic against a
+   hand-built 4x2 fixture; none of it proves the *shipped* PNG actually
+   decodes in a browser and lands the right class at a real coordinate. This
+   is that other half — a known light-flooded capital and a place picked for
+   having none, read back through `window.scout.state()` exactly the way
+   `renderCoreDay` reads it, from the real `/data/light-pollution.png` the
+   dev server serves. */
+describe('/scout: light pollution (issue #46)', () => {
+  const TOKYO = { lat: 35.6595, lon: 139.7005 };
+  // Central Australian outback — no dependence on the Atacama fixture
+  // `galactic.test.ts` already owns, so a failure in one cannot be mistaken
+  // for a failure in the other.
+  const OUTBACK = { lat: -25.3444, lon: 131.0369 };
+
+  async function zoneAt(place: { lat: number; lon: number }): Promise<number | null> {
+    const page = await openPage();
+    const trouble = watchForTrouble(page);
+    const url = `/scout?at=${place.lat},${place.lon}&d=${DATE}&t=${NOON}&tz=UTC&r=5&n=x`;
+    await page.goto(`${origin}${url}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#panel:not([hidden])');
+    // The raster is fetched independently of the pin, so it can still be
+    // mid-flight the instant the panel appears — give it a moment to resolve
+    // rather than reading a `null` that would otherwise be a false negative.
+    await page.waitForFunction(`window.scout.state().lightPollutionZone !== null`, null, {
+      timeout: READY_MS,
+    });
+    const zone = (await page.evaluate(`window.scout.state().lightPollutionZone`)) as number | null;
+    assert.deepEqual(trouble, []);
+    await page.close();
+    return zone;
+  }
+
+  it('reads a capital city as the atlas\'s own brightest class', async () => {
+    const zone = await zoneAt(TOKYO);
+    assert.equal(zone, ZONE_COUNT - 1, `Tokyo read as zone ${zone}, expected the brightest class`);
+  });
+
+  it('reads a remote desert as the atlas\'s own darkest class', async () => {
+    const zone = await zoneAt(OUTBACK);
+    assert.equal(zone, 0, `the outback read as zone ${zone}, expected the darkest class`);
+  });
 });
 
 /* ── The alignment finder ──────────────────────────────────────────────────

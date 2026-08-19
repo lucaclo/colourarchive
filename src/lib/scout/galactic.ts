@@ -21,16 +21,21 @@
  * altitude as the middle of something much larger than the number's precision
  * suggests.
  *
- * **What is not modelled: light pollution.** Nothing here knows whether the sky
- * above the pin is a national park or a city centre, and a core at 20° over a
- * town is invisible while the same core over a dark site is the photograph. The
- * issue this was written for deliberately left Bortle and SQM data out — no
- * source of it publishes with CORS headers — so the module says when the *sky*
- * is dark, and the panel must not let that be read as "you will see it".
+ * **Light pollution.** The issue this was originally written for deliberately
+ * left Bortle and SQM data out — no source of it publishes with CORS headers
+ * for a live fetch — so for a while this module could only say when the *sky*
+ * was dark, and the panel had to warn that this was not the same as "you will
+ * see it". Issue #46 closed that gap without a live dependency at all: light
+ * pollution barely moves night to night, so `light-pollution.ts` bundles one
+ * static raster instead. `coreNight` below takes the zone as a plain number —
+ * this module still touches no map and no network — leaving the fetch and
+ * decode to `view/light-pollution-loader.ts`, same as every other pure/impure
+ * split in this project.
  */
 
 import { julianDay, refraction, SUN_ALTITUDE, sunPosition } from './sun';
 import { greenwichSiderealTime, moonPosition, MOONRISE_ALTITUDE } from './moon';
+import { lightPollutionDarkEnough, ZONE_COUNT } from './light-pollution';
 
 const RAD = Math.PI / 180;
 const DEG = 180 / Math.PI;
@@ -341,6 +346,13 @@ export interface CoreNight {
   visible: Interval[];
   /** Highest the core gets while it is visible, and when. Null if never. */
   best: { at: Date; altitude: number } | null;
+  /**
+   * The atlas zone this night was checked against, or null when the caller
+   * had no answer (the raster failed to load, or nobody asked) — in which
+   * case light pollution plays no part in `visible` or `refusal` at all,
+   * exactly as if issue #46 had never landed.
+   */
+  lightPollutionZone: number | null;
   /** Why there is nothing, when there is nothing. Empty when `visible` is not. */
   refusal: string;
 }
@@ -348,11 +360,19 @@ export interface CoreNight {
 /**
  * The whole question, for one window — normally the night either side of a date.
  *
- * The three conditions are computed separately and intersected, so a caller can
- * show *which* of them failed. That distinction is the useful part: "the core
- * never rises here" is a reason to go somewhere else, "the moon is up all
- * night" is a reason to come back in a fortnight, and they are the same empty
- * list if you only report the intersection.
+ * The conditions are computed separately and intersected, so a caller can show
+ * *which* of them failed. That distinction is the useful part: "the core never
+ * rises here" is a reason to go somewhere else, "the moon is up all night" is a
+ * reason to come back in a fortnight, and they are the same empty list if you
+ * only report the intersection.
+ *
+ * `lightPollutionZone` is not a window like the other three — a place's sky
+ * brightness does not turn on and off in one night — so it does not get its
+ * own `Interval[]`. It is a single yes/no gate on the whole answer: below
+ * `CORE_DARK_ENOUGH_MAX_ZONE`, moon-free darkness with the core up is real;
+ * at or above it, `visible` is empty regardless of what the moon is doing,
+ * because "the moon is down" was never the thing standing between the core
+ * and the sensor.
  */
 export function coreNight(
   latitude: number,
@@ -361,6 +381,7 @@ export function coreNight(
   to: Date,
   minAltitude = CORE_USABLE_ALTITUDE,
   stepMinutes = 5,
+  lightPollutionZone: number | null = null,
 ): CoreNight {
   const core = coreTimes(latitude, longitude, from, to, stepMinutes);
 
@@ -384,7 +405,8 @@ export function coreNight(
   );
 
   const moonFree = intersect(darkness, moonDown);
-  const visible = intersect(moonFree, coreUp);
+  const darkEnough = lightPollutionZone === null || lightPollutionDarkEnough(lightPollutionZone);
+  const visible = darkEnough ? intersect(moonFree, coreUp) : [];
 
   let best: CoreNight['best'] = null;
   const step = stepMinutes * 60_000;
@@ -395,7 +417,15 @@ export function coreNight(
     }
   }
 
-  return { core, darkness, moonFree, visible, best, refusal: refusalFor({ core, darkness, moonFree, coreUp, visible, minAltitude }) };
+  return {
+    core,
+    darkness,
+    moonFree,
+    visible,
+    best,
+    lightPollutionZone,
+    refusal: refusalFor({ core, darkness, moonFree, coreUp, visible, minAltitude, lightPollutionZone, darkEnough }),
+  };
 }
 
 /**
@@ -413,8 +443,18 @@ function refusalFor(state: {
   coreUp: Interval[];
   visible: Interval[];
   minAltitude: number;
+  lightPollutionZone: number | null;
+  darkEnough: boolean;
 }): string {
   if (state.visible.length) return '';
+  // Checked ahead of the latitude/rise conditions below: like them, this is
+  // a fact about the place rather than about tonight, and unlike them it
+  // makes every other condition moot at once — there is no point telling
+  // someone the core clears 10° and the moon sets early when the sky itself
+  // will still swallow it.
+  if (state.lightPollutionZone !== null && !state.darkEnough) {
+    return `The sky here is too bright for the core regardless of the moon (zone ${state.lightPollutionZone} of ${ZONE_COUNT - 1}).`;
+  }
   if (state.core.alwaysDown) return 'The core never rises here.';
   if (!state.coreUp.length) {
     return `The core does not clear ${state.minAltitude}° here tonight — it peaks at ${state.core.peakAltitude.toFixed(0)}°.`;

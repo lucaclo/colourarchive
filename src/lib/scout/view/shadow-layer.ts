@@ -31,12 +31,31 @@
  * shadows take the darkest rather than the sum, and the whole mask is composited
  * over the map in one pass. That is the pooling gone, exactly, and for free.
  *
- * What it still does not do is climb *walls*. Those are drawn by MapLibre's own
- * fill-extrusion layer, out of reach from here, so a shadow crossing a low roof
- * is drawn on the roof but does not run up the side of the building it climbed.
- * Doing that properly means taking over the extrusion pass, which is a much
- * larger change than this one — reconsidered for issue #51 and left exactly
- * where it was: still out of reach, for the same reason.
+ * ## Walls
+ *
+ * MapLibre's own fill-extrusion layer draws the walls, out of reach of this
+ * one, so climbing them cannot mean testing a wall's real pixels against the
+ * private height field above — nothing here ever sees where MapLibre put
+ * them on screen. What it means instead: a fourth pass, `WALL_VERTEX`, that
+ * places a curtain around a shaded building's own outline using
+ * `GLSL_PROJECT_ELEVATED` — genuine 3D placement, base to roof, matching
+ * where the extrusion pass draws that same footprint — and darkens each
+ * fragment below a ceiling baked onto its vertices in JavaScript rather than
+ * read back from a texture, because the ceiling this curtain wants is a
+ * single number for the whole building (`page.ts` samples it once, at the
+ * anchor `addBlocker` already uses), not the kind of pixel-by-pixel field
+ * pass 1 and 2 exist to compute for roofs whose shape actually varies across
+ * the footprint. One sample a building is the same trade `addBlocker`
+ * already makes for the same reason, and it turns "test this curtain's own
+ * varying height against a texture lookup" into "compare two varyings",
+ * which is why this pass draws straight onto the map rather than through
+ * the private framebuffer the first three use.
+ *
+ * Left open even so: a curtain has no depth test against the real scene
+ * (2D custom layers do not get one — see the depth-range note below), so a
+ * building's own curtain can show through a nearer one that actually hides
+ * it from this angle. Rare in practice, and the same class of approximation
+ * the ground mask already accepts under pitch.
  *
  * ## Issue #51: absolute elevation, both ways
  *
@@ -64,6 +83,7 @@ import type maplibregl from 'maplibre-gl';
 import { convexHull, type Ring } from '../shadows';
 import type { TerrainFacet } from '../terrain';
 import {
+  GLSL_PROJECT_ELEVATED,
   GLSL_PROJECT_GROUND,
   NO_PRELUDE,
   PROJECTION_UNIFORMS,
@@ -89,6 +109,11 @@ const MAX_HEIGHT_M = 12_000;
 const SHADOW_STRIDE = 6;
 /** x, y, elevMercZ, elevM, height — 5 floats a vertex. */
 const BLOCKER_STRIDE = 5;
+/** x, y, elevMercZ, elevM, ceiling, dark — same shape as a shadow vertex,
+ *  since a wall curtain is also "a position, its own elevation, and the
+ *  ceiling to compare it against" — it just places that position with
+ *  `GLSL_PROJECT_ELEVATED` rather than `GLSL_PROJECT_GROUND`. */
+const WALL_STRIDE = 6;
 
 export interface ShadowLayer extends maplibregl.CustomLayerInterface {
   /**
@@ -124,6 +149,13 @@ export interface ShadowLayer extends maplibregl.CustomLayerInterface {
    * recast would push a few hundred kilobytes at the GPU each frame for nothing.
    */
   setBlockers(vertices: Float32Array): void;
+  /**
+   * Wall curtains, packed by `ShadowGeometry.addWallCurtain`. Changes with the
+   * shadows, not the buildings — the ceiling baked onto each one is a
+   * function of the sun, so this is rebuilt every recast alongside
+   * `setShadows` rather than held with `setBlockers`.
+   */
+  setWalls(vertices: Float32Array): void;
 }
 
 /**
@@ -198,6 +230,52 @@ const SHADOW_FRAGMENT = `
   void main() {
     if (v_beyond > 1.0) discard;
     gl_FragColor = vec4(v_dark);
+  }`;
+
+/**
+ * A curtain around one shaded building's outline, base to roof.
+ *
+ * `a_elevM` is this VERTEX's own absolute elevation — ground at the bottom of
+ * the curtain, ground-plus-height at the top — not a building height read
+ * off a shared depth field the way the blocker pass's is. `a_ceiling` is the
+ * one number `page.ts` sampled for the whole building, repeated on every
+ * vertex, so `v_elevM < v_ceiling` in the fragment shader is exactly "is this
+ * point on the wall below the shadow that fell on it".
+ *
+ * Genuinely elevated (`scoutProject`, not `scoutGround`): this is the one
+ * geometry in the file that has to land where MapLibre's own fill-extrusion
+ * pass draws the same footprint, walls included, rather than flat on the
+ * ground the way every other shape here does.
+ */
+const WALL_VERTEX = (prelude: string, define: string) => `
+  ${prelude}
+  ${define}
+  ${GLSL_PROJECT_ELEVATED}
+  attribute vec2 a_pos;
+  attribute float a_elevMercZ;
+  attribute float a_elevM;
+  attribute float a_ceiling;
+  attribute float a_dark;
+  varying mediump float v_dark;
+  varying mediump float v_elevM;
+  varying mediump float v_ceiling;
+  void main() {
+    gl_Position = scoutProject(a_pos, a_elevMercZ, a_elevM);
+    v_dark = a_dark;
+    v_elevM = a_elevM;
+    v_ceiling = a_ceiling;
+  }`;
+
+const WALL_FRAGMENT = `
+  precision mediump float;
+  uniform vec3 u_tint;
+  uniform float u_opacity;
+  varying mediump float v_dark;
+  varying mediump float v_elevM;
+  varying mediump float v_ceiling;
+  void main() {
+    if (v_elevM >= v_ceiling) discard;
+    gl_FragColor = vec4(u_tint, v_dark * u_opacity);
   }`;
 
 const COMPOSITE_VERTEX = `
@@ -281,10 +359,12 @@ function maxEquation(gl: WebGLRenderingContext): number | null {
 export function createShadowLayer(id: string, onReady?: (ready: boolean) => void): ShadowLayer {
   let blockerProgram: Program | null = null;
   let shadowProgram: Program | null = null;
+  let wallProgram: Program | null = null;
   let compositeProgram: Program | null = null;
 
   let shadowBuffer: WebGLBuffer | null = null;
   let blockerBuffer: WebGLBuffer | null = null;
+  let wallBuffer: WebGLBuffer | null = null;
   let quadBuffer: WebGLBuffer | null = null;
 
   let framebuffer: WebGLFramebuffer | null = null;
@@ -297,6 +377,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
   let ready = false;
   let shadowsDirty = false;
   let blockersDirty = false;
+  let wallsDirty = false;
   /**
    * Which projection the blocker and shadow programs were compiled for.
    *
@@ -307,7 +388,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
    */
   let variant: string | null = null;
 
-  /** (Re)build the two projected programs for `shader`'s projection. */
+  /** (Re)build the projected programs for `shader`'s projection. */
   function compileFor(gl: WebGLRenderingContext, shader: ShaderData): boolean {
     for (const p of [blockerProgram, shadowProgram]) if (p) gl.deleteProgram(p.program);
     blockerProgram = build(
@@ -324,15 +405,29 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
       [...PROJECTION_UNIFORMS],
     );
+    if (wallProgram) gl.deleteProgram(wallProgram.program);
+    // Best-effort, and deliberately not part of `ready`: a driver that
+    // cannot compile this one extra program should still get ground shadows
+    // and roofs rather than none of it. `render` just skips pass 4 when this
+    // is null.
+    wallProgram = build(
+      gl,
+      WALL_VERTEX(shader.vertexShaderPrelude, shader.define),
+      WALL_FRAGMENT,
+      ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
+      [...PROJECTION_UNIFORMS, 'u_tint', 'u_opacity'],
+    );
     variant = shader.variantName;
     return Boolean(blockerProgram && shadowProgram);
   }
 
   let shadows: Float32Array = new Float32Array(0);
   let blockers: Float32Array = new Float32Array(0);
+  let walls: Float32Array = new Float32Array(0);
   /** Vertices, not floats. */
   let shadowCount = 0;
   let blockerCount = 0;
+  let wallCount = 0;
 
   /**
    * A colour texture and a depth attachment the size of the drawing buffer.
@@ -405,6 +500,12 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       blockersDirty = true;
     },
 
+    setWalls(vertices: Float32Array) {
+      walls = vertices;
+      wallCount = vertices.length / WALL_STRIDE;
+      wallsDirty = true;
+    },
+
     onAdd(_map: maplibregl.Map, gl: WebGLRenderingContext) {
       maxBlend = maxEquation(gl);
       // Compiled against the plain mercator prelude, which is enough to prove
@@ -423,6 +524,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
 
       shadowBuffer = gl.createBuffer();
       blockerBuffer = gl.createBuffer();
+      wallBuffer = gl.createBuffer();
       quadBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -433,6 +535,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       // even though nothing about it changed.
       shadowsDirty = true;
       blockersDirty = true;
+      wallsDirty = true;
 
       ready = Boolean(maxBlend && compiled && compositeProgram);
       // Said now rather than at first paint, so the caller can put the old fill
@@ -441,16 +544,16 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
     },
 
     onRemove(_map: maplibregl.Map, gl: WebGLRenderingContext) {
-      for (const p of [blockerProgram, shadowProgram, compositeProgram]) {
+      for (const p of [blockerProgram, shadowProgram, wallProgram, compositeProgram]) {
         if (p) gl.deleteProgram(p.program);
       }
-      for (const b of [shadowBuffer, blockerBuffer, quadBuffer]) if (b) gl.deleteBuffer(b);
+      for (const b of [shadowBuffer, blockerBuffer, wallBuffer, quadBuffer]) if (b) gl.deleteBuffer(b);
       if (texture) gl.deleteTexture(texture);
       if (depth) gl.deleteRenderbuffer(depth);
       if (framebuffer) gl.deleteFramebuffer(framebuffer);
-      blockerProgram = shadowProgram = compositeProgram = null;
+      blockerProgram = shadowProgram = wallProgram = compositeProgram = null;
       variant = null;
-      shadowBuffer = blockerBuffer = quadBuffer = framebuffer = texture = depth = null;
+      shadowBuffer = blockerBuffer = wallBuffer = quadBuffer = framebuffer = texture = depth = null;
       targetWidth = targetHeight = 0;
       ready = false;
     },
@@ -536,6 +639,11 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
         gl.bufferData(gl.ARRAY_BUFFER, blockers, gl.STATIC_DRAW);
         blockersDirty = false;
       }
+      if (wallsDirty && wallBuffer) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, wallBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, walls, gl.DYNAMIC_DRAW);
+        wallsDirty = false;
+      }
 
       // Pass 1 — the height field. Colour is masked off; all this pass leaves
       // behind is a depth buffer saying how tall the world is at each pixel.
@@ -615,6 +723,39 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       gl.vertexAttribPointer(compositeProgram.attributes.a_pos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.disableVertexAttribArray(compositeProgram.attributes.a_pos);
+
+      // Pass 4 — wall curtains, straight onto the map at the same blend state
+      // pass 3 just set up (depth test already off, alpha already the normal
+      // over-blend). Unlike the mask, each of these already carries its own
+      // final ceiling test baked in — see WALL_VERTEX — so there is no private
+      // texture to render into first and no pooling to worry about: a wall
+      // belongs to exactly one building, and page.ts already reduced however
+      // many shadows reach it to the one number that matters before this ever
+      // reached the GPU.
+      if (wallCount && wallProgram) {
+        gl.useProgram(wallProgram.program);
+        setProjectionUniforms(gl, wallProgram.uniforms, projection);
+        gl.uniform3fv(wallProgram.uniforms.u_tint, this.tint);
+        gl.uniform1f(wallProgram.uniforms.u_opacity, Math.max(0, Math.min(1, this.opacity)));
+        gl.bindBuffer(gl.ARRAY_BUFFER, wallBuffer);
+        const wallStride = WALL_STRIDE * 4;
+        gl.enableVertexAttribArray(wallProgram.attributes.a_pos);
+        gl.vertexAttribPointer(wallProgram.attributes.a_pos, 2, gl.FLOAT, false, wallStride, 0);
+        gl.enableVertexAttribArray(wallProgram.attributes.a_elevMercZ);
+        gl.vertexAttribPointer(wallProgram.attributes.a_elevMercZ, 1, gl.FLOAT, false, wallStride, 8);
+        gl.enableVertexAttribArray(wallProgram.attributes.a_elevM);
+        gl.vertexAttribPointer(wallProgram.attributes.a_elevM, 1, gl.FLOAT, false, wallStride, 12);
+        gl.enableVertexAttribArray(wallProgram.attributes.a_ceiling);
+        gl.vertexAttribPointer(wallProgram.attributes.a_ceiling, 1, gl.FLOAT, false, wallStride, 16);
+        gl.enableVertexAttribArray(wallProgram.attributes.a_dark);
+        gl.vertexAttribPointer(wallProgram.attributes.a_dark, 1, gl.FLOAT, false, wallStride, 20);
+        gl.drawArrays(gl.TRIANGLES, 0, wallCount);
+        gl.disableVertexAttribArray(wallProgram.attributes.a_pos);
+        gl.disableVertexAttribArray(wallProgram.attributes.a_elevMercZ);
+        gl.disableVertexAttribArray(wallProgram.attributes.a_elevM);
+        gl.disableVertexAttribArray(wallProgram.attributes.a_ceiling);
+        gl.disableVertexAttribArray(wallProgram.attributes.a_dark);
+      }
 
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       gl.bindTexture(gl.TEXTURE_2D, null);
@@ -757,11 +898,59 @@ export class ShadowGeometry {
     }
   }
 
+  private readonly walls: number[] = [];
+
+  /**
+   * Issue #51: a curtain around one shaded building's own outline, base to
+   * roof, so a shadow that only reaches partway up a wall shows exactly that
+   * instead of stopping dead at the roofline the way the ground/roof mask
+   * alone does.
+   *
+   * `ceilingM` is one absolute number for the whole building, sampled once
+   * by the caller — see `WALL_VERTEX`'s own comment for why that is the
+   * right amount of precision here, the same trade `addBlocker` already
+   * makes for the same reason. Skipped entirely when the ceiling is at or
+   * above the roof: nothing on this building is shaded, and a curtain whose
+   * every fragment discards itself is pure waste.
+   *
+   * `outline` should be the same hull `addBlocker` was given for this
+   * building — the shape a shadow can climb is the shape it is cast against,
+   * and letting the two disagree would let a wall stick out past its own
+   * roof or fall short of it.
+   */
+  addWallCurtain(outline: Ring, groundM: number, heightM: number, ceilingM: number, darkness: number): void {
+    if (!(heightM > 0) || darkness <= 0) return;
+    if (ceilingM >= groundM + heightM) return;
+    const n = outline.length - 1; // closed ring: last vertex repeats the first
+    if (n < 3) return;
+    const roofM = groundM + heightM;
+    for (let i = 0; i < n; i++) {
+      const [lon1, lat1] = outline[i];
+      const [lon2, lat2] = outline[(i + 1) % n];
+      const base1 = this.project(lon1, lat1, groundM);
+      const top1 = this.project(lon1, lat1, roofM);
+      const base2 = this.project(lon2, lat2, groundM);
+      const top2 = this.project(lon2, lat2, roofM);
+      // Two triangles, wound the same way as every other fan in this file.
+      this.walls.push(base1[0], base1[1], base1[2], groundM, ceilingM, darkness);
+      this.walls.push(base2[0], base2[1], base2[2], groundM, ceilingM, darkness);
+      this.walls.push(top1[0], top1[1], top1[2], roofM, ceilingM, darkness);
+
+      this.walls.push(base2[0], base2[1], base2[2], groundM, ceilingM, darkness);
+      this.walls.push(top2[0], top2[1], top2[2], roofM, ceilingM, darkness);
+      this.walls.push(top1[0], top1[1], top1[2], roofM, ceilingM, darkness);
+    }
+  }
+
   shadowVertices(): Float32Array {
     return new Float32Array(this.shadows);
   }
 
   blockerVertices(): Float32Array {
     return new Float32Array(this.blockers);
+  }
+
+  wallVertices(): Float32Array {
+    return new Float32Array(this.walls);
   }
 }

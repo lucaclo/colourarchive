@@ -148,7 +148,7 @@ date, scrub a time slider, and see how the sun and moon light it — including
 real cast shadows from buildings and terrain. `src/lib/scout/` holds it, and
 `SCOUT-HANDOFF.md` is the long version.
 
-Three recent additions, all in the same refuse-rather-than-guess spirit:
+Four recent additions, all in the same refuse-rather-than-guess spirit:
 
 **The frame** (`frame.ts`) — a sensor, a focal length, an aim and a tilt. The
 wedge on the map is where the frame lands on the ground; the panel answers the
@@ -180,6 +180,18 @@ rather than subtracted from the line (same picture, more honest one), with the
 same 7/6 refraction allowance the horizon uses, and the answer is "you are
 eleven metres short at the ridge 1.9 km out" rather than a yes or no. Bare earth
 only — trees and buildings are not in it, and it says so every time it appears.
+
+**How dark is dark enough** — the galactic-core planner used to say only when
+the *sky* was dark, and had to warn that this was not the same as "you will
+see it": nothing in it knew whether the pin sat over a national park or a
+city centre. `scripts/fetch-light-pollution.ts` vendors a single static
+raster, the New World Atlas of Artificial Night Sky Brightness, because
+light pollution barely moves night to night — it is a property of the place,
+not of tonight. Below the atlas's own zone 8 the night is dark enough to be
+worth the drive and the existing moon-window answer stands; at or above it,
+the sky itself is doing the blocking regardless of the moon, and the core
+planner says so by name rather than leaving a reader to notice the skyglow
+on their own.
 
 ### Scout is published; Inspiration is not
 

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  boundsOverlap,
   buildingHeight,
   buildingSetSignature,
   castPrisms,
@@ -11,7 +12,10 @@ import {
   heightIsEstimated,
   maxShadowLength,
   padBounds,
+  pointInConvexRing,
+  ringBounds,
   ringIntersects,
+  shadowCeilingAt,
   squareFootprint,
   type Ring,
 } from './shadows.ts';
@@ -235,6 +239,81 @@ describe('the shadow ceiling', () => {
     const result = castShadow(square(), 20, 210, 35)!;
     assert.equal(result.ceilings.length, result.ring.length);
     assert.equal(result.ceilings[0], result.ceilings[result.ceilings.length - 1]);
+  });
+});
+
+describe('pointInConvexRing', () => {
+  it('holds for the centroid of a square', () => {
+    assert.equal(pointInConvexRing(square(), 0.0001, 0.0001), true);
+  });
+
+  it('fails for a point well outside it', () => {
+    assert.equal(pointInConvexRing(square(), 1, 1), false);
+  });
+
+  it('counts a point exactly on an edge as inside', () => {
+    assert.equal(pointInConvexRing(square(), 0.0001, 0), true);
+  });
+
+  it('refuses a degenerate ring rather than guessing', () => {
+    assert.equal(pointInConvexRing([[0, 0], [1, 1]], 0.5, 0.5), false);
+  });
+});
+
+describe('ringBounds and boundsOverlap', () => {
+  it('reduces a ring to its own bounding box', () => {
+    const b = ringBounds(square(0, 0, 0.0002));
+    assert.deepEqual(b, { west: 0, south: 0, east: 0.0002, north: 0.0002 });
+  });
+
+  it('agrees with ringIntersects on the same pairs', () => {
+    const box = { west: 0, south: 0, east: 0.001, north: 0.001 };
+    for (const ring of [square(0.0002, 0.0002), square(0.01, 0.01)]) {
+      assert.equal(boundsOverlap(ringBounds(ring), box), ringIntersects(ring, box));
+    }
+  });
+
+  it('touching edges count as overlap, same as ringIntersects does', () => {
+    assert.equal(
+      boundsOverlap({ west: 0, south: 0, east: 1, north: 1 }, { west: 1, south: 1, east: 2, north: 2 }),
+      true,
+    );
+  });
+});
+
+describe('shadowCeilingAt', () => {
+  it('matches castShadow’s own per-vertex ceiling, evaluated at that vertex', () => {
+    const result = castShadow(square(), 30, 200, 25)!;
+    for (const [i, [lon, lat]] of result.ring.entries()) {
+      const c = shadowCeilingAt(result, lon, lat);
+      assert.ok(c !== null, `vertex ${i} of the shadow's own ring read as outside it`);
+      assert.ok(Math.abs(c! - result.ceilings[i]) < 1e-6, `${c} vs ${result.ceilings[i]}`);
+    }
+  });
+
+  it('is null well outside the shadow’s own footprint', () => {
+    const result = castShadow(square(), 30, 200, 25)!;
+    assert.equal(shadowCeilingAt(result, 5, 5), null);
+  });
+
+  it('is exactly the building height on its own footprint, so a building never shades its own wall', () => {
+    const result = castShadow(square(), 30, 180, 45)!;
+    const c = shadowCeilingAt(result, 0.0001, 0.0001); // the footprint's own centroid
+    assert.ok(c !== null);
+    assert.ok(Math.abs(c! - 30) < 1e-9, `${c}`);
+  });
+
+  it('only ever falls moving further down-sun, never rises', () => {
+    // Sun due south (azimuth 180) throws the shadow north, so latitude alone
+    // tracks "further down-sun" here without needing the bearing math.
+    const result = castShadow(square(), 30, 180, 20)!;
+    const samples = [0.0002, 0.0006, 0.0012, 0.002]
+      .map((lat) => shadowCeilingAt(result, 0.0001, lat))
+      .filter((c): c is number => c !== null);
+    assert.ok(samples.length >= 2, 'need at least two in-footprint samples to compare');
+    for (let i = 1; i < samples.length; i++) {
+      assert.ok(samples[i] <= samples[i - 1] + 1e-9, `${samples[i]} rose above ${samples[i - 1]}`);
+    }
   });
 });
 

@@ -357,6 +357,47 @@ picture*" question, asked of the Milky Way core instead of the sun.
   the arc, and sharing a name with the text section made ticking it look like a no-op.
 - *Known:* the tilt slider stops at 80°, so an Atacama core at 85.6° cannot be centred.
 
+### Light pollution *(issue #46, built 2026-08-19)*
+
+Part 7b's own note used to end here: nothing in `galactic.ts` knew whether the
+pin sat over a national park or a city centre, so a core at 20° over a town
+read identically to the same core over a dark site, and the panel had to warn
+that "the sky is dark" was not the same as "you will see it".
+
+No source of Bortle or SQM data publishes with CORS headers for a live fetch —
+`galactic.ts`'s own note already said so — but light pollution does not need a
+live source at all. It is a property of the place on the timescale of years,
+not of the night, so `scripts/fetch-light-pollution.ts` vendors one static
+raster once (`npm run light-pollution`): the New World Atlas of Artificial
+Night Sky Brightness (Falchi et al. 2016, CC BY-NC 4.0), mosaicked from its
+732-tile KMZ export and reduced to the atlas's own "Light Pollution Zone"
+scale — an ordinal class 0–13, not a continuous brightness, which is why
+`lightPollutionZoneAt` in `src/lib/scout/light-pollution.ts` samples the
+nearest cell rather than interpolating between two zones that do not average
+to a real one in between.
+
+`CORE_DARK_ENOUGH_MAX_ZONE = 8` is not a measurement — the atlas explicitly
+declines to be read as the Bortle scale — but a reasoned anchor: the atlas's
+own colour key puts LPI (artificial-to-natural sky brightness) = 1 at the
+3b/4a boundary, each zone step is defined as ×3 LPI, and zone 9 sits four
+half-steps above that — LPI ≈ 3 — roughly where common astrophotography
+guidance places the core disappearing into skyglow. `coreNight` in
+`galactic.ts` takes the zone as a plain number — the module still touches no
+map and no network — and treats it as a single yes/no gate ahead of the
+moon-window intersection: below the threshold the existing three-way
+intersection stands; at or above it, `visible` comes back empty and the
+refusal names the zone, because "the moon is down" was never the thing
+standing between the core and the sensor.
+
+The fetch, decode and canvas work live in `view/light-pollution-loader.ts`,
+the same pure/impure split as everywhere else in this file — one static
+asset for the whole session, not a per-viewport tile set, since light
+pollution does not move with the map the way elevation does. A missing or
+blocked asset resolves to `null`, not a rejection: the caller's answer
+becomes "no light-pollution data", the same honest gap the rest of this
+module already reports, rather than a page error over what is, after all,
+an optional refinement.
+
 **`frame.ts`'s framing test was only right for a level camera** and had to be fixed
 first. It differenced azimuths and altitudes, which is exact only at tilt zero near the
 horizon. Two things break it: azimuth is not a distance (meridians converge, so aimed 80°
@@ -753,31 +794,32 @@ Left: the layers menu is a plain list and could be a proper sheet on mobile.
   wide viewport spends its whole allowance on width and throws away the vertical detail
   it already fetched — 425 m a sample over Hong Kong instead of 283 m.
 
-**Two shadow faults found while fixing the above, both still open:**
+**Two shadow faults found while fixing the above, both closed by issue #51:**
 
-1. **Building shadows are projected at sea level.** Every vertex in
-   `shadow-layer.ts` goes through `scoutGround`, which hard-codes mercator Z to `0.0`;
-   there is no elevation term in the file. In 3D the ground is raised by the DEM
-   (`exaggeration: 1.15`) but the mask is not, so the shadow mask lands where the ground
-   *would* be on a flat earth — offset on screen by an amount that grows with elevation
-   and pitch and shifts as the camera moves. 3D only. The fix is an elevation input to
-   `scoutGround` (mercator units for the flat matrix, metres for the globe radius — the
-   two-units trap `dome-layer.ts` already documents) and a per-vertex DEM lookup when
-   packing `ShadowGeometry`. Note `gl_Position.z` is spoken for by the blocker height, so
-   only the projection's *xy* changes.
-2. **Terrain is not a blocker for building shadows.** The depth-mapped height field holds
-   only building footprints, so a mountain never stops a building's cast shadow, and on a
-   slope building heights are compared as though from a common ground. Fixing it means
-   absolute heights (terrain + building) in both the height field and `castShadow`'s
-   ceilings, which is a semantic change to `shadows.ts`.
+1. **Building shadows were projected at sea level.** Fixed: every vertex in
+   `shadow-layer.ts` now carries its real elevation through `scoutGround`
+   (mercator units for the flat matrix, metres for the globe radius — the
+   two-units trap `dome-layer.ts` already documents), and `ShadowGeometry`
+   packs a per-vertex DEM lookup rather than a flat zero.
+2. **Terrain was not a blocker for building shadows.** Fixed: the depth-mapped
+   height field now carries bare terrain (`terrainFacets`) alongside building
+   footprints, all measured from the same absolute sea-level datum, so a
+   mountain stops a shadow the same way a taller building already did.
 
 **Known modelling limits (documented, acceptable, worth revisiting):**
 
-- Building shadows now land correctly on *roofs* — a roof below the shadow's ceiling
-  takes it, one above stays lit — but they still do not run up **walls**. Those are
-  drawn by MapLibre's own `fill-extrusion` layer, out of reach from a custom layer, so
-  shading them means taking over the extrusion pass. That is the remaining half of
-  proper shadow mapping and a much larger change than the one just made.
+- Building shadows land correctly on *roofs* — a roof below the shadow's ceiling
+  takes it, one above stays lit — and, since issue #51's wall curtains, on
+  **walls** too: a curtain around each shaded building's own outline, base to
+  roof, darkened up to one ceiling sampled at the building's own anchor (the
+  same one-sample-a-building trade `addBlocker` already makes, applied here to
+  the shadow instead of the terrain). It is a building-level approximation,
+  not a per-pixel one — the boundary is a flat band around the whole
+  footprint rather than a shape that varies edge to edge — and it has no
+  depth test against the real 3D scene (2D custom layers do not get one), so
+  a curtain can in principle show through a nearer building that actually
+  hides it from that angle. Both are the same class of tradeoff the rest of
+  this file already accepts under pitch, not a new one.
 - The shadow ceiling falls from the footprint's *down-sun extreme*, which slightly
   overstates it for parts of a shadow thrown by a nearer edge. It errs towards drawing
   a shadow rather than withholding one, which is the same direction the convex hull

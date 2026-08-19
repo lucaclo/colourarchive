@@ -25,6 +25,7 @@ import {
   precess,
 } from './galactic';
 import { greenwichSiderealTime } from './moon';
+import { CORE_DARK_ENOUGH_MAX_ZONE, ZONE_COUNT } from './light-pollution';
 
 const DAY_MS = 86_400_000;
 const norm360 = (d: number) => ((d % 360) + 360) % 360;
@@ -261,6 +262,58 @@ describe('the galactic core: a night', () => {
       assert.ok(inside(result.darkness), 'inside astronomical darkness');
       assert.ok(inside(result.moonFree), 'and inside a moon-free stretch');
     }
+  });
+});
+
+describe('the galactic core: light pollution (issue #46)', () => {
+  // The Atacama fixture above and this exact window are already established
+  // (by the "a night" tests) to produce a real, non-empty `visible` window
+  // and no refusal when nothing is said about the sky's own brightness.
+  const from = new Date('2026-08-14T22:00:00Z');
+  const to = new Date('2026-08-15T11:00:00Z');
+
+  it('leaves a working night untouched when nothing is known about the sky (null zone)', () => {
+    const withZone = coreNight(ATACAMA.lat, ATACAMA.lon, from, to, 10, 5, null);
+    const withoutZone = coreNight(ATACAMA.lat, ATACAMA.lon, from, to);
+    assert.deepEqual(withZone, withoutZone);
+    assert.equal(withZone.lightPollutionZone, null);
+  });
+
+  it('leaves a working night working at and below the dark-enough threshold', () => {
+    const result = coreNight(ATACAMA.lat, ATACAMA.lon, from, to, 10, 5, CORE_DARK_ENOUGH_MAX_ZONE);
+    assert.ok(result.visible.length > 0);
+    assert.equal(result.refusal, '');
+    assert.equal(result.lightPollutionZone, CORE_DARK_ENOUGH_MAX_ZONE);
+  });
+
+  it('empties an otherwise-working night once the zone crosses the threshold', () => {
+    const result = coreNight(ATACAMA.lat, ATACAMA.lon, from, to, 10, 5, CORE_DARK_ENOUGH_MAX_ZONE + 1);
+    assert.deepEqual(result.visible, []);
+    assert.equal(result.best, null);
+    assert.match(result.refusal, /too bright for the core/);
+    assert.match(result.refusal, new RegExp(`zone ${CORE_DARK_ENOUGH_MAX_ZONE + 1} of ${ZONE_COUNT - 1}`));
+  });
+
+  it('reports the light-pollution refusal even though the moon-free/altitude conditions all hold', () => {
+    // The point of the whole feature: a bright-sky night must not be
+    // reported as though the moon were the problem, because it is not.
+    const bright = coreNight(ATACAMA.lat, ATACAMA.lon, from, to, 10, 5, ZONE_COUNT - 1);
+    const dark = coreNight(ATACAMA.lat, ATACAMA.lon, from, to, 10, 5, 0);
+    assert.deepEqual(bright.darkness, dark.darkness);
+    assert.deepEqual(bright.moonFree, dark.moonFree);
+    assert.notDeepEqual(bright.visible, dark.visible);
+    assert.equal(bright.visible.length, 0);
+    assert.ok(dark.visible.length > 0);
+  });
+
+  it('takes priority over every other refusal reason, being the most permanent fact about the place', () => {
+    // Edinburgh already refuses on altitude alone; a bad zone there should
+    // report the sky, not the altitude, since fixing the altitude would
+    // still leave the sky too bright to matter.
+    const edinburghFrom = new Date('2026-08-07T18:00:00Z');
+    const edinburghTo = new Date('2026-08-08T06:00:00Z');
+    const result = coreNight(EDINBURGH.lat, EDINBURGH.lon, edinburghFrom, edinburghTo, 10, 5, ZONE_COUNT - 1);
+    assert.match(result.refusal, /too bright for the core/);
   });
 });
 
