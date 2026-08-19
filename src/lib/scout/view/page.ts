@@ -2416,7 +2416,7 @@ export async function startScout(): Promise<void> {
       return;
     }
 
-    let features: GeoJSON.Feature[] = [];
+    let features: GeoJSON.Feature[];
     try {
       features = map.querySourceFeatures('openmaptiles', { sourceLayer: 'building' });
     } catch {

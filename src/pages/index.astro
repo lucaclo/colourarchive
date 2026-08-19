@@ -968,7 +968,7 @@ const roman = (n: number) =>
   const jumpChapter = (dir) => {
     const y = window.scrollY + 4;
     const tops = gaps.map((g) => g.offsetTop);
-    let target = null;
+    let target;
     if (dir > 0) target = tops.find((t) => t > y + 8);
     else { const prev = tops.filter((t) => t < y - 8); target = prev.length ? prev[prev.length - 1] : 0; }
     if (target == null) return;

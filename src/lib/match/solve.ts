@@ -504,7 +504,7 @@ function solveOne(
   sharedCurveX: number[] | null,
 ): Build {
   const notes: MatchNote[] = [];
-  let colourResidual = 0;
+  let colourResidual: number;
   const state = initialState(mine);
   const adj = identityAdjustments();
   const damp = restrained ? RESTRAINED_DAMP : 1;
