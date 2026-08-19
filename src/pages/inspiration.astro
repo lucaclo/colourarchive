@@ -1049,6 +1049,22 @@ const hasItems = manifest.count > 0;
   /** The reference the last request went out for, so a stale reply is dropped. */
   let alreadyFor = '';
 
+  /** Shape of `/api/match/resemble`'s response — see that route for the fields. */
+  interface ResembleMatch {
+    id: string;
+    note: string;
+    thumb: string | null;
+    placeholder: string;
+    distance: number;
+    partsText: string;
+  }
+  interface ResembleResponse {
+    ok: boolean;
+    matches?: ResembleMatch[];
+    considered?: number;
+    archiveSize?: number;
+  }
+
   async function loadAlready(id: string) {
     alreadyFor = id;
     alreadyEl.hidden = true;
@@ -1056,7 +1072,7 @@ const hasItems = manifest.count > 0;
     $('already-sub').textContent = 'Measuring…';
     $('already-note').textContent = '';
 
-    let data: any;
+    let data: ResembleResponse;
     try {
       const response = await fetch(`/api/match/resemble?ref=${encodeURIComponent(id)}`);
       data = await response.json();
@@ -1070,7 +1086,7 @@ const hasItems = manifest.count > 0;
     // as the match itself having gone wrong.
     if (!data?.ok) return;
 
-    const matches: any[] = data.matches ?? [];
+    const matches = data.matches ?? [];
     alreadyEl.hidden = false;
     if (!matches.length) {
       $('already-sub').textContent = 'Nothing in the archive measures like this one.';
@@ -1098,7 +1114,7 @@ const hasItems = manifest.count > 0;
       }),
     );
 
-    const short = data.considered < data.archiveSize;
+    const short = (data.considered ?? 0) < (data.archiveSize ?? 0);
     $('already-note').textContent = [
       'Ranked on the grade only — tone curve, cast, saturation, contrast, split toning. Nothing here can see what the photograph is of.',
       short

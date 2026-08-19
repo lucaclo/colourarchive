@@ -160,7 +160,7 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
   try {
     const t0 = Date.now();
     const scene = await getScene();
-    const out = (await scene(image)) as Array<{ label: string; mask: any }>;
+    const out = (await scene(image)) as Array<{ label: string; mask: { data: Uint8Array } }>;
     for (const seg of out) {
       const label = String(seg.label).toLowerCase();
       if (label === 'person') {
@@ -168,25 +168,27 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
         continue;
       }
       const group = SCENE_GROUPS.find((g) => g.labels.includes(label));
-      if (group) unionInto(ensure(group.key), seg.mask.data as Uint8Array);
+      if (group) unionInto(ensure(group.key), seg.mask.data);
     }
     timings.scene = (Date.now() - t0) / 1000;
-  } catch (e: any) {
-    warnings.push(`Scene segmentation unavailable (${e?.message ?? 'unknown error'}). Sky, foliage, water, buildings and ground were not measured.`);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'unknown error';
+    warnings.push(`Scene segmentation unavailable (${message}). Sky, foliage, water, buildings and ground were not measured.`);
   }
 
   // --- People -----------------------------------------------------------------
   try {
     const t0 = Date.now();
     const people = await getPeople();
-    const out = (await people(image)) as Array<{ label: string; mask: any }>;
+    const out = (await people(image)) as Array<{ label: string; mask: { data: Uint8Array } }>;
     for (const seg of out) {
       const group = PEOPLE_GROUPS.find((g) => g.labels.includes(String(seg.label)));
-      if (group) unionInto(ensure(group.key), seg.mask.data as Uint8Array);
+      if (group) unionInto(ensure(group.key), seg.mask.data);
     }
     timings.people = (Date.now() - t0) / 1000;
-  } catch (e: any) {
-    warnings.push(`Human parsing unavailable (${e?.message ?? 'unknown error'}). Skin, hair and clothing were not measured separately.`);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'unknown error';
+    warnings.push(`Human parsing unavailable (${message}). Skin, hair and clothing were not measured separately.`);
   }
 
   // --- Subject matte ----------------------------------------------------------
@@ -214,7 +216,7 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
     raw.subject = subject;
     raw.background = background;
     timings.matte = (Date.now() - t0) / 1000;
-  } catch (e: any) {
+  } catch (e) {
     // Fall back to the scene model's person class — worse than a real matte,
     // but far better than having no subject/background split at all.
     if (personHint) {
@@ -224,7 +226,8 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
       raw.background = background;
       warnings.push('Subject matte unavailable; fell back to the scene model’s person class for subject/background.');
     } else {
-      warnings.push(`Subject matte unavailable (${e?.message ?? 'unknown error'}). Subject and background were not measured separately.`);
+      const message = e instanceof Error ? e.message : 'unknown error';
+      warnings.push(`Subject matte unavailable (${message}). Subject and background were not measured separately.`);
     }
   }
 
