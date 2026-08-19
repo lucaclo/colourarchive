@@ -1404,6 +1404,14 @@ export async function startScout(): Promise<void> {
   });
 
   map?.on('click', (event) => {
+    // Milky Way mode's free-look turns dragPan off, and MapLibre's own
+    // suppression of the click that would otherwise follow a drag is tied to
+    // dragPan noticing the movement — with it disabled, every look-around
+    // drag still ends in an ordinary 'click' event at wherever the pointer
+    // came up. Nothing below this point is a click a person meant to make,
+    // and letting it through relocated the pin mid-orbit, which is exactly
+    // the thing free-look exists to prevent.
+    if (freeLookCleanup) return;
     // Nowhere chosen yet. A tap can choose the first spot, but only once the map
     // is close enough in for a fingertip to mean something — see
     // `placeFirstSpotAt`, which is also the only way in when there is no server
@@ -5455,6 +5463,20 @@ export async function startScout(): Promise<void> {
     m.touchZoomRotate.disable();
     m.keyboard.disable();
 
+    // The pin sits dead centre once `lookMapAtSky` has recentred on it, which
+    // makes it the single most likely place for a look-around drag to begin.
+    // `setDraggable(false)` alone is not enough: the marker is a DOM element
+    // layered over the canvas, not a child of it, so a pointerdown landing on
+    // its icon never reaches the canvas listeners below at all — draggable or
+    // not, it simply swallows the gesture. Letting pointer events pass
+    // through it is what actually hands that gesture to the canvas. The
+    // monolith and sightline markers get the same treatment for the same
+    // reason, on the chance either happens to be up at the same time.
+    for (const marker of [pin, slabMarker, sightMarker]) {
+      marker.setDraggable(false);
+      marker.getElement().style.pointerEvents = 'none';
+    }
+
     const canvas = m.getCanvas();
     // Degrees of bearing/pitch per pixel dragged. Chosen so a full sweep of a
     // typical viewport's width turns you most of the way round — enough to
@@ -5516,6 +5538,10 @@ export async function startScout(): Promise<void> {
   function disableFreeLook() {
     freeLookCleanup?.();
     freeLookCleanup = null;
+    for (const marker of [pin, slabMarker, sightMarker]) {
+      marker.setDraggable(true);
+      marker.getElement().style.pointerEvents = '';
+    }
     if (!map) return;
     map.dragPan.enable();
     map.dragRotate.enable();
