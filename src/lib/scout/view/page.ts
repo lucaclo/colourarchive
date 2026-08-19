@@ -5034,7 +5034,7 @@ export async function startScout(): Promise<void> {
     } catch {
       /* terrain unsupported — the rest still works */
     }
-    map.easeTo({ pitch: three ? 55 : 0, duration: 700 });
+    map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
     // Turning terrain on and off moves the ground the dome stands on — in 2D
     // the ground *is* the plane at zero, in 3D it is the exaggerated DEM — so
     // the day's geometry has to be rebuilt against the new base.
@@ -5448,6 +5448,14 @@ export async function startScout(): Promise<void> {
    * simulated lens the framing maths and the wedge on the ground are drawn
    * from, which is a different "camera" from the one this function turns.
    */
+  /** A camera sweep is functional here, not decorative — it is what shows a
+   *  reader *where* the new view is relative to the old one — but someone
+   *  who has told their system to reduce motion still should not be swept
+   *  through 82° of pitch and however many degrees of bearing against their
+   *  own preference. Cut to the destination instead of easing to it. */
+  const prefersReducedMotion = () =>
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   function lookMapAtSky(body: { azimuth: number; altitude: number } | null) {
     if (!map || !body || !centre) return;
     if (view !== '3d') {
@@ -5457,7 +5465,13 @@ export async function startScout(): Promise<void> {
     }
     const bearing = ((body.azimuth % 360) + 360) % 360;
     const zoom = Math.min(NIGHT_ZOOM_MAX, map.getZoom() + NIGHT_ZOOM_BOOST);
-    map.easeTo({ bearing, pitch: NIGHT_PITCH, zoom, center: [centre.lon, centre.lat], duration: 900 });
+    map.easeTo({
+      bearing,
+      pitch: NIGHT_PITCH,
+      zoom,
+      center: [centre.lon, centre.lat],
+      duration: prefersReducedMotion() ? 0 : 900,
+    });
   }
 
   /** Cleans up the free-look pointer listeners and puts MapLibre's own
@@ -5675,11 +5689,47 @@ export async function startScout(): Promise<void> {
     canvas.addEventListener('pointercancel', onUp);
     canvas.style.cursor = 'grab';
 
+    // The drag above has no keyboard equivalent otherwise — this mode turns
+    // off the map's own arrow-key panning along with everything else that
+    // could carry the pin away (see the disabled handlers above), which
+    // would leave a keyboard user with no way to look around at all, not
+    // even the ordinary panning they lost. Arrow keys orbit the same way a
+    // drag would; Escape leaves the mode entirely, since a gesture that
+    // replaces normal map interaction needs an equally normal way out.
+    const KEY_STEP_DEG = 5;
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Whatever has focus gets the arrow keys and Escape first — a date
+      // input or a search box being typed into is not asking to orbit the
+      // sky. Free-look disables the map's own gestures but has no business
+      // reaching past an unrelated focused control to do it.
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target as HTMLElement | null)?.isContentEditable) {
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setNightMode(false);
+        return;
+      }
+      const step = e.shiftKey ? KEY_STEP_DEG * 3 : KEY_STEP_DEG;
+      let bearing: number | null = null;
+      let pitch: number | null = null;
+      if (e.key === 'ArrowLeft') bearing = m.getBearing() - step;
+      else if (e.key === 'ArrowRight') bearing = m.getBearing() + step;
+      else if (e.key === 'ArrowUp') pitch = m.getPitch() + step;
+      else if (e.key === 'ArrowDown') pitch = m.getPitch() - step;
+      else return;
+      e.preventDefault();
+      m.jumpTo({ ...(bearing !== null && { bearing }), ...(pitch !== null && { pitch }) });
+    };
+    document.addEventListener('keydown', onKeyDown);
+
     freeLookCleanup = () => {
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
+      document.removeEventListener('keydown', onKeyDown);
       canvas.style.cursor = '';
       if (pendingFrame) cancelAnimationFrame(pendingFrame);
     };
@@ -5845,7 +5895,13 @@ export async function startScout(): Promise<void> {
           for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
           applyView();
         }
-        map?.easeTo({ bearing: back.bearing, pitch: back.pitch, zoom: back.zoom, center: back.center, duration: 700 });
+        map?.easeTo({
+          bearing: back.bearing,
+          pitch: back.pitch,
+          zoom: back.zoom,
+          center: back.center,
+          duration: prefersReducedMotion() ? 0 : 700,
+        });
       }
     }
     save();
