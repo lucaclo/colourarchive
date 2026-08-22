@@ -60,11 +60,36 @@ const builtAt = new Date();
 const builtLabel = builtAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
 const titleFg = (L: number) => (L > 0.62 ? '#0a0a0a' : '#f6f6f4');
+// Seeds --accent before any scroll happens — otherwise the topbar/cover sit
+// at the neutral default until the scroll tracker (index.astro's inline
+// script) takes over and starts overwriting it per chapter.
+const initialAccent = manifest.chapters[0]
+  ? oklchCss({ L: 0.78, C: Math.min(manifest.chapters[0].oklch.C, 0.11), H: manifest.chapters[0].oklch.H })
+  : undefined;
 const roman = (n: number) =>
   ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI'][n] ?? String(n + 1);
+// The aurora behind the cover title is built from every chapter's own hue —
+// a conic sweep around the archive's real palette, not an invented gradient.
+// It never touches a photograph (grain header rule: "the photograph is the
+// only event"), so it's confined to the cover, which is otherwise empty.
+const auroraCss = hasPhotos
+  ? `conic-gradient(from 0deg, ${manifest.chapters.map((ch, ci) => `${oklchCss(ch.oklch)} ${(ci / manifest.chapters.length) * 360}deg`).join(', ')}, ${oklchCss(manifest.chapters[0].oklch)} 360deg)`
+  : undefined;
 ---
 
-<Layout title={SITE_TITLE}>
+<Layout title={SITE_TITLE} accent={initialAccent}>
+  {/* A persistent 3px reading-progress rail across the very top edge — the
+      archive's real chapter colours, dim until you've scrolled into or past
+      them. Independent of the side/foot spectrum scrubber (that one jumps to
+      a chapter); this one only reports where you already are, and stays
+      visible even while the topbar itself is auto-hidden. */}
+  {hasPhotos && (
+    <div class="progress-rail" id="progress-rail" aria-hidden="true">
+      {manifest.chapters.map((ch, ci) => (
+        <span class="pr-seg" data-ci={ci} style={`background:${oklchCss(ch.oklch)};flex-grow:${Math.max(1, ch.photos.length)}`} />
+      ))}
+    </div>
+  )}
   <header class="topbar" id="topbar">
     <button type="button" class="brand" id="to-top" aria-label="Back to the cover">{SITE_TITLE}</button>
     {showMediumToggle && (
@@ -103,6 +128,7 @@ const roman = (n: number) =>
   </header>
 
   <section class="cover">
+    {auroraCss && <div class="cover-aurora" aria-hidden="true" style={`--aurora:${auroraCss}`} />}
     <p class="cover-kicker">
       {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapters` : 'In colour'}
     </p>
@@ -130,7 +156,16 @@ const roman = (n: number) =>
                 class="chapter-gap"
                 style={`--chapter-bg:${bg};--chapter-fg:${fg};color:${fg}`}
                 aria-label={`Chapter ${ch.name}`}
+                data-ci={ci}
+                data-wash={oklchCss({ L: Math.min(0.16, ch.oklch.L), C: ch.oklch.C * 0.45, H: ch.oklch.H })}
+                data-accent={oklchCss({ L: 0.78, C: Math.min(ch.oklch.C, 0.11), H: ch.oklch.H })}
               >
+                {/* The chapter's own name, repeated to fill the width behind
+                    the title. Purely typographic: no imagery competes with
+                    the photograph, per the file header's own rule above. */}
+                <div class="chapter-marquee" aria-hidden="true">
+                  <div class="cm-track">{Array.from({ length: 6 }).map(() => <span>{ch.name}</span>)}</div>
+                </div>
                 <p class="chapter-index">Chapter {roman(ci)}</p>
                 <h2 class="chapter-title">{ch.name}</h2>
                 <span class="chapter-swatch" style={`background:${bg}`} />
@@ -173,6 +208,7 @@ const roman = (n: number) =>
                       data-set={avifSet}
                       data-orig={STATIC ? '' : `/api/original/${p.id}`}
                       data-wash={oklchCss({ L: Math.min(0.16, ch.oklch.L), C: ch.oklch.C * 0.45, H: ch.oklch.H })}
+                      data-accent={oklchCss({ L: 0.78, C: Math.min(ch.oklch.C, 0.11), H: ch.oklch.H })}
                       data-ratio={(p.height / p.width).toFixed(4)}
                       {...exifAttrs}
                     >
@@ -265,7 +301,7 @@ const roman = (n: number) =>
                 <li>
                   <span class="sw" style={`background:${oklchCss(ch.oklch)}`} />
                   <span class="lbl">{ch.name}</span>
-                  <span class="barwrap"><span class="bar" style={`width:${(ch.photos.length / insights.maxChapter) * 100}%;background:${oklchCss(ch.oklch)}`} /></span>
+                  <span class="barwrap"><span class="bar" data-w={(ch.photos.length / insights.maxChapter) * 100} style={`background:${oklchCss(ch.oklch)}`} /></span>
                   <span class="num">{ch.photos.length}</span>
                 </li>
               ))}
@@ -277,7 +313,7 @@ const roman = (n: number) =>
               <h3>Year <span class="only">digital</span></h3>
               <ul class="stat">
                 {insights.years.map(([k, n]) => (
-                  <li><span class="lbl">{k}</span><span class="barwrap"><span class="bar" style={`width:${(n / Math.max(...insights.years.map((y) => y[1]))) * 100}%`} /></span><span class="num">{n}</span></li>
+                  <li><span class="lbl">{k}</span><span class="barwrap"><span class="bar" data-w={(n / Math.max(...insights.years.map((y) => y[1]))) * 100} /></span><span class="num">{n}</span></li>
                 ))}
               </ul>
             </section>
@@ -337,6 +373,29 @@ const roman = (n: number) =>
   // Own scroll restoration so a reload always lands on the cover (see restorePos).
   try { history.scrollRestoration = 'manual'; } catch (e) {}
 
+  // --- Cover title: a light cursor-parallax, mouse-driven devices only ----
+  (function () {
+    const h1 = document.querySelector('.cover h1');
+    if (!h1 || !matchMedia('(hover: hover)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // The entrance animation (titleIn) uses fill-mode: both, which keeps
+    // pinning `transform: none` even after it finishes — animations with a
+    // forwards fill outrank inline styles for as long as they're attached, so
+    // without this the parallax below would set style.transform and nothing
+    // would ever move. Clearing animation-name once it ends hands transform
+    // back to the ordinary cascade (the transition + this script's inline style).
+    h1.addEventListener('animationend', () => { h1.style.animation = 'none'; }, { once: true });
+    let raf = 0, nx = 0, ny = 0;
+    const apply = () => {
+      h1.style.transform = `perspective(900px) rotateY(${nx * 5}deg) rotateX(${-ny * 5}deg)`;
+      raf = 0;
+    };
+    addEventListener('mousemove', (e) => {
+      nx = (e.clientX / innerWidth - 0.5) * 2;
+      ny = (e.clientY / innerHeight - 0.5) * 2;
+      if (!raf) raf = requestAnimationFrame(apply);
+    }, { passive: true });
+  })();
+
   // --- One scroll listener for the page, coalesced into a single frame -----
   // The top bar, the ambient wash and the position-save each used to listen
   // separately, so a single scroll ran three callbacks on three different
@@ -376,11 +435,22 @@ const roman = (n: number) =>
   //     drive the ambient background wash from it. Also used by `i` and `f`. --
   let current = null;
   const specSegs = Array.from(document.querySelectorAll('#spectrum .spectrum-seg'));
+  const prSegs = Array.from(document.querySelectorAll('#progress-rail .pr-seg'));
   const setAmbient = (f) => {
     if (!f) return;
     if (f.dataset.wash) document.body.style.backgroundColor = f.dataset.wash;
+    // --accent is a fixed-lightness tint of the chapter's own hue (not the dark
+    // wash colour above) — legible mixed into --fg/--hair at low percentage
+    // regardless of how dark or light the chapter's photos actually run. See
+    // --accent-mix/--accent-hair in global.css: chrome never reads --accent raw.
+    if (f.dataset.accent) document.documentElement.style.setProperty('--accent', f.dataset.accent);
     const ci = f.dataset.ci;                       // mark the current chapter on the scrubber
     for (const s of specSegs) s.classList.toggle('active', s.dataset.jump === ci);
+    // The top progress rail lights up every chapter reached so far, not just
+    // the current one — a persistent "how far in" read, unlike the scrubber's
+    // single active marker.
+    const ciNum = Number(ci);
+    for (const s of prSegs) s.classList.toggle('passed', Number(s.dataset.ci) <= ciNum);
   };
   const frameEls = Array.from(document.querySelectorAll('.frame'));
   // Frames currently passing the filter. Kept as a list rather than testing
@@ -420,7 +490,10 @@ const roman = (n: number) =>
   const visibility = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (entry.isIntersecting) onScreen.add(entry.target);
+        // "Develops" a frame the first time it comes on screen — see .reveal
+        // in global.css. One-way (never removed on scroll-out): a photograph
+        // that has developed stays developed, the same way film does.
+        if (entry.isIntersecting) { onScreen.add(entry.target); entry.target.classList.add('reveal'); }
         else onScreen.delete(entry.target);
       }
       // A frame can enter or leave the viewport without the page scrolling — a
@@ -436,6 +509,27 @@ const roman = (n: number) =>
 
   scrollTasks.push(trackCurrent);
   trackCurrent();
+
+  // --- Chapter-gap entrance: sync the ambient wash the instant the gap
+  // itself scrolls into view, and reveal its title as an event. Previously
+  // the wash only updated once a photo from the new chapter's collage was
+  // centred — so the gap's own (already fully-coloured) background and the
+  // page's peripheral wash disagreed for however long it took to reach the
+  // first photo after it. Fires once per gap: a chapter title doesn't need
+  // to replay every time you scroll past it again. ---
+  const gapEnter = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const g = entry.target;
+        setAmbient(g);
+        g.classList.add('enter');
+        gapEnter.unobserve(g);
+      }
+    },
+    { threshold: 0.35 },
+  );
+  for (const g of document.querySelectorAll('.chapter-gap')) gapEnter.observe(g);
 
   // ======================================================================
   //  Aspect-balanced masonry — contiguous-run columns (preserves gradient)
@@ -742,6 +836,11 @@ const roman = (n: number) =>
     lb.hidden = false;
     lockScroll();
     requestAnimationFrame(() => lb.classList.add('show'));
+    // A one-shot pop, only on the initial open — not on next/prev stepping
+    // through showAt(), which would turn a quiet arrow-key press into a flash.
+    lbImg.classList.remove('pop-in');
+    void lbImg.offsetWidth;
+    lbImg.classList.add('pop-in');
     captureFocus(lb, document.getElementById('lb-close'));
     syncUrl(true);   // a history entry, so Back / edge-swipe closes the photo
   }
@@ -1016,7 +1115,16 @@ const roman = (n: number) =>
     if (!insightsEl || insightsOpen()) return;
     insightsEl.hidden = false;
     lockScroll();
-    requestAnimationFrame(() => insightsEl.classList.add('show'));
+    requestAnimationFrame(() => {
+      insightsEl.classList.add('show');
+      // Bars start at width:0 (see .insights .bar in global.css) and grow to
+      // their real value here, staggered slightly — the same reveal-on-open
+      // treatment the rest of the app gives an entrance, applied to data
+      // instead of a photograph.
+      insightsEl.querySelectorAll('.bar[data-w]').forEach((bar, i) => {
+        setTimeout(() => { bar.style.width = bar.dataset.w + '%'; }, i * 12);
+      });
+    });
     captureFocus(insightsEl, document.getElementById('insights-close'));
   };
   const closeInsights = () => {
@@ -1024,7 +1132,12 @@ const roman = (n: number) =>
     insightsEl.classList.remove('show');
     unlockScroll();
     releaseFocus();
-    setTimeout(() => { insightsEl.hidden = true; }, 200);
+    setTimeout(() => {
+      insightsEl.hidden = true;
+      // Reset for next time — without this, re-opening would find every bar
+      // already at its target width and skip straight past the reveal.
+      insightsEl.querySelectorAll('.bar[data-w]').forEach((bar) => { bar.style.width = '0'; });
+    }, 200);
   };
   document.getElementById('insights-btn')?.addEventListener('click', openInsights);
   document.getElementById('insights-close')?.addEventListener('click', closeInsights);
@@ -1091,8 +1204,16 @@ const roman = (n: number) =>
   const genreBtn = document.getElementById('genre-btn');
   const genreMenu = document.getElementById('genre-menu');
   const genreCurrent = document.getElementById('genre-current');
-  const openGenre = () => { if (!genreMenu) return; genreMenu.hidden = false; genreBtn?.setAttribute('aria-expanded', 'true'); genreDrop?.classList.add('open'); };
-  const closeGenre = () => { if (!genreMenu) return; genreMenu.hidden = true; genreBtn?.setAttribute('aria-expanded', 'false'); genreDrop?.classList.remove('open'); };
+  const openGenre = () => {
+    if (!genreMenu) return;
+    genreMenu.hidden = false; genreBtn?.setAttribute('aria-expanded', 'true'); genreDrop?.classList.add('open');
+    requestAnimationFrame(() => genreMenu.classList.add('show'));
+  };
+  const closeGenre = () => {
+    if (!genreMenu || genreMenu.hidden) return;
+    genreMenu.classList.remove('show'); genreBtn?.setAttribute('aria-expanded', 'false'); genreDrop?.classList.remove('open');
+    setTimeout(() => { genreMenu.hidden = true; }, 160);
+  };
   function applyGenre(g, label) {
     genre = g;
     if (archiveEl) {
