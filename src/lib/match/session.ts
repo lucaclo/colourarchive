@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { analysePhoto, analysePhotoDetailed } from './analyze';
+import { analysisOutliers, averageAnalyses } from './group';
 import { writePreviewAssets, writeReferencePreview, type PreviewAssets } from './preview';
 import { solveMatch, type MatchSolution } from './solve';
 import { MATCH_CACHE_DIR, MATCH_KEPT_DIR } from '../paths';
@@ -19,6 +20,10 @@ import type { BaselineMode, PhotoAnalysis, RegionKey } from './types';
 export interface MatchRecord {
   id: string;
   createdAt: string;
+  /** The measurement `solution` was solved against — a single reference's own
+   *  analysis, or (see `group.ts`) the centroid of several. Callers that only
+   *  ever pass one reference can keep treating this as "the reference's
+   *  analysis"; nothing about the shape changes underneath them. */
   reference: PhotoAnalysis;
   mine: PhotoAnalysis;
   solution: MatchSolution;
@@ -31,6 +36,15 @@ export interface MatchRecord {
   referenceName: string;
   myName: string;
   kept: boolean;
+  /** How many references went into `reference`. 1 for an ordinary match. */
+  referenceCount: number;
+  /** Content hashes of every reference submitted, in request order — the
+   *  board resolves these back to thumbnails for the group strip. */
+  referenceIds: string[];
+  /** Which of `referenceIds`, if any, measured like a different edit from
+   *  the rest of the group — see `analysisOutliers`. Always empty below
+   *  three references, which is a refusal to guess, not a clean bill. */
+  outlierIds: string[];
 }
 
 const records = new Map<string, MatchRecord>();
@@ -63,11 +77,15 @@ async function evictOldUnkept(): Promise<void> {
 }
 
 export interface RunMatchInput {
-  referenceBuf: Buffer;
-  referenceName: string;
-  /** Original file on disk, used for the reference preview so it is not
-   *  re-encoded from an already-lossy derivative. */
-  referencePath: string;
+  /** One reference photo, or several meant to share one edit — see group.ts
+   *  for how more than one gets combined before solving. */
+  references: Array<{
+    buf: Buffer;
+    name: string;
+    /** Original file on disk, used for the reference preview so it is not
+     *  re-encoded from an already-lossy derivative. */
+    path: string;
+  }>;
   myBuf: Buffer;
   myName: string;
   baseline: BaselineMode;
@@ -88,9 +106,14 @@ export const MATCH_STAGE_LABEL: Record<MatchStage, string> = {
 export type OnStage = (stage: MatchStage) => void;
 
 export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}): Promise<MatchRecord> {
-  const refHash = createHash('sha256').update(input.referenceBuf).digest('hex').slice(0, 16);
+  const refHashes = input.references.map((r) => createHash('sha256').update(r.buf).digest('hex').slice(0, 16));
   const myHash = createHash('sha256').update(input.myBuf).digest('hex').slice(0, 16);
-  const id = matchId(refHash, myHash, input.baseline);
+  // Sorted so the same group submitted in a different order still hits the
+  // same cache entry — and with exactly one reference this is just that
+  // reference's own hash, so every match cached before this existed is still
+  // found exactly as it always was.
+  const groupKey = [...refHashes].sort().join('+');
+  const id = matchId(groupKey, myHash, input.baseline);
 
   const existing = records.get(id);
   if (existing) { onStage('cached'); return existing; }
@@ -98,10 +121,19 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
   const outDir = path.join(MATCH_CACHE_DIR, id);
   const webBase = `/api/match/asset/${id}`;
 
-  // The reference is always a rendered image — it is something someone already
-  // finished editing — so its baseline is never in question.
+  // Every reference is always a rendered image — each is something someone
+  // already finished editing — so its baseline is never in question.
+  // Independent measurements, so they run in parallel rather than one at a
+  // time: three references is three times the model passes, not three times
+  // the wait.
   onStage('reference');
-  const reference = await analysePhoto(input.referenceBuf, input.referenceName, { baseline: 'native' });
+  const analyses = await Promise.all(
+    input.references.map((r) => analysePhoto(r.buf, r.name, { baseline: 'native' })),
+  );
+  // For one reference this returns that reference's own analysis, unchanged
+  // — see averageAnalyses's own doc comment for why that has to hold exactly.
+  const reference = averageAnalyses(analyses);
+  const outlierIds = [...analysisOutliers(analyses)];
 
   // The user's photo needs its masks and decoded pixels kept alive long enough
   // to write the preview, so it goes through the detailed path.
@@ -122,7 +154,9 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
       outDir,
       webBase,
     );
-    const referencePreview = await writeReferencePreview(input.referencePath, outDir, webBase);
+    // The wipe comparison needs one real photograph to show, not an average
+    // of several — the first reference submitted stands in for the group.
+    const referencePreview = await writeReferencePreview(input.references[0].path, outDir, webBase);
 
     const record: MatchRecord = {
       id,
@@ -133,9 +167,13 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
       preview,
       referencePreview,
       maskChannels: preview.maskChannels,
-      referenceName: input.referenceName,
+      referenceName:
+        input.references.length === 1 ? input.references[0].name : `${input.references.length} references, blended`,
       myName: input.myName,
       kept: false,
+      referenceCount: input.references.length,
+      referenceIds: refHashes,
+      outlierIds,
     };
     records.set(id, record);
     await evictOldUnkept();
@@ -165,6 +203,9 @@ export async function keepMatch(id: string): Promise<MatchRecord | undefined> {
         preview: record.preview,
         referencePreview: record.referencePreview,
         maskChannels: record.maskChannels,
+        referenceCount: record.referenceCount,
+        referenceIds: record.referenceIds,
+        outlierIds: record.outlierIds,
       },
       null,
       2,
@@ -187,7 +228,16 @@ export async function loadKeptMatches(): Promise<void> {
       // The preview assets must still exist on disk, or the report would load
       // with broken images.
       await fs.access(path.join(MATCH_CACHE_DIR, data.id, 'photo.webp'));
-      records.set(data.id, { ...data, kept: true } as MatchRecord);
+      // A report kept before groups existed genuinely was one reference —
+      // default the fields it never had rather than leave them undefined for
+      // whatever reads them next.
+      records.set(data.id, {
+        referenceCount: 1,
+        referenceIds: [],
+        outlierIds: [],
+        ...data,
+        kept: true,
+      } as MatchRecord);
     } catch {
       // A kept report whose assets were cleared is simply skipped.
     }

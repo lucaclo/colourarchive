@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-13T17:05:16.681Z",
-  "count": 5,
+  "generatedAt": "2026-08-21T18:34:00.298Z",
+  "count": 7,
   "chapters": [
     {
       "key": "achromatic",
@@ -50,12 +50,12 @@
       ]
     },
     {
-      "key": "green",
-      "name": "Green",
+      "key": "orange",
+      "name": "Orange",
       "oklch": {
-        "L": 0.616,
-        "C": 0.055,
-        "H": 82.6
+        "L": 0.626,
+        "C": 0.067,
+        "H": 68.8
       },
       "photos": [
         {
@@ -95,34 +95,6 @@
           "addedAt": "2026-07-29T08:24:15.842Z"
         },
         {
-          "id": "5fb880c287a47b42",
-          "filename": "Screenshot-2026-08-13-at-12-16-18.5fb880c287a47b42.png",
-          "ext": "png",
-          "width": 798,
-          "height": 604,
-          "bytes": 1004385,
-          "oklch": {
-            "L": 0.636,
-            "C": 0.097,
-            "H": 63.2
-          },
-          "autoChapter": "orange",
-          "chapter": "orange",
-          "autoMedium": "film",
-          "medium": "film",
-          "autoGenre": "architecture",
-          "genre": "architecture",
-          "placeholder": "data:image/webp;base64,UklGRnYAAABXRUJQVlA4IGoAAABwBQCdASoYABIAPu1or1AppaSiqAqpMB2JQBai+BAdGlcTQ57I/y93cswhmTlLndHhuDkAAP5jCvk6jrbZGgKc5g85Eq5IbSyEjFoAcH0WYm/dFwAvZXkfai8cfe+YQnZzf5AHM8vFMAAA",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/5fb880c287a47b42-640.avif"
-            }
-          ],
-          "exif": {},
-          "addedAt": "2026-08-13T10:18:42.952Z"
-        },
-        {
           "id": "568ab0b23a39eeca",
           "filename": "DSC00672.568ab0b23a39eeca.jpg",
           "ext": "jpg",
@@ -155,6 +127,98 @@
           ],
           "exif": {},
           "addedAt": "2026-07-27T06:31:01.962Z"
+        },
+        {
+          "id": "8bf353c70b064fd0",
+          "filename": "temp_image_D6CA033F-9923-4044-B01C-5C3F65A0C16D.8bf353c70b064fd0.webp",
+          "ext": "webp",
+          "width": 1596,
+          "height": 2108,
+          "bytes": 1171500,
+          "oklch": {
+            "L": 0.658,
+            "C": 0.082,
+            "H": 61.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAABwBQCdASoYACAAPu1kqk4ppaQiMAgBMB2JYgCdMtVAH6mDqo9AYqz3oqIJ3xFBD8bPHVDAAP3sgiHjIqw+NeSNPB7CMdEvACt+0QO4dMhVNaHm3NI22rfCPliFispsqy+MD4lT2yWuqsryVNFeasFSHSQaf/I9/lJbhTrkyPpqgd+qjwJPKYBzmsIv4g0Cz7ywAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/8bf353c70b064fd0-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/8bf353c70b064fd0-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-21T14:21:47.955Z"
+        },
+        {
+          "id": "5fb880c287a47b42",
+          "filename": "Screenshot-2026-08-13-at-12-16-18.5fb880c287a47b42.png",
+          "ext": "png",
+          "width": 798,
+          "height": 604,
+          "bytes": 1004385,
+          "oklch": {
+            "L": 0.636,
+            "C": 0.097,
+            "H": 63.2
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRnYAAABXRUJQVlA4IGoAAABwBQCdASoYABIAPu1or1AppaSiqAqpMB2JQBai+BAdGlcTQ57I/y93cswhmTlLndHhuDkAAP5jCvk6jrbZGgKc5g85Eq5IbSyEjFoAcH0WYm/dFwAvZXkfai8cfe+YQnZzf5AHM8vFMAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/5fb880c287a47b42-640.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-13T10:18:42.952Z"
+        },
+        {
+          "id": "44562b9bdadb5739",
+          "filename": "temp_image_EF929203-ED5C-4459-B4AC-9A2E8E1A9C15.44562b9bdadb5739.webp",
+          "ext": "webp",
+          "width": 1596,
+          "height": 2108,
+          "bytes": 1199570,
+          "oklch": {
+            "L": 0.632,
+            "C": 0.116,
+            "H": 48.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRrAAAABXRUJQVlA4IKQAAACQBQCdASoYACAAPtleo02oJaMiN/qoAQAbCUAXyQN0SQ8Sxlbv2K/K2MuuOiHaKZV6/Er+AAD+hcmqZPtrVmnZB9AuRqtz4eoNBgkiRxf4qXkmhHihD6tLApMgTOXPNrpda3XOwAoiGje+Jdrt45wZjli4ufBR77wn0F8Qm1qv4VU9DguIuoAqMdKLOspY2363kC+/tge7Dw1z+9pHmMTZBKAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/44562b9bdadb5739-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/44562b9bdadb5739-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-21T14:21:49.050Z"
         },
         {
           "id": "4dcc897807f397b8",

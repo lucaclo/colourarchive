@@ -6,9 +6,16 @@ import { oklchCss } from '../lib/color';
 export const prerender = false;
 const manifest = await readInspManifest();
 const hasItems = manifest.count > 0;
+// A static echo of the board's own palette — see Layout's `accent` prop.
+// Inspiration has no scroll narrative to drive this dynamically the way the
+// archive does, so it's one representative hue for the whole page rather
+// than something that changes as you scroll.
+const accent = manifest.chapters[0]
+  ? oklchCss({ L: 0.78, C: Math.min(manifest.chapters[0].oklch.C, 0.11), H: manifest.chapters[0].oklch.H })
+  : undefined;
 ---
 
-<Layout title="Inspiration — Colour Archive">
+<Layout title="Inspiration — Colour Archive" accent={accent}>
   <header class="topbar" id="topbar">
     <span class="brand">Colour Archive</span>
     <span class="topbar-right"><a href="/">Archive</a> <a href="/scout">Scout</a></span>
@@ -72,6 +79,7 @@ const hasItems = manifest.count > 0;
                       <button class="cell-remove" type="button" data-remove={p.id} aria-label="Remove">×</button>
                       <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">≈ similar</button>
                       <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">◐ match</button>
+                      <button class="cell-group" type="button" data-group={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-pressed="false" aria-label="Add to a group of similarly-edited references">+ group</button>
                       {p.source && <figcaption class="src">{p.source}</figcaption>}
                     </figure>
                   );
@@ -86,11 +94,26 @@ const hasItems = manifest.count > 0;
     }
   </main>
 
-  <!-- Split view: reference pinned left, ranked archive matches right. -->
+  <!-- Floating tray: the group of similarly-edited references being built up
+       across the board, one "+ group" tap at a time. Only ever visible with
+       at least one member — see `renderTray()`. -->
+  <div class="group-tray" id="group-tray" hidden role="status">
+    <span class="group-tray-count" id="group-tray-count"></span>
+    <button class="group-tray-clear" id="group-tray-clear" type="button">Clear</button>
+    <button class="group-tray-find" id="group-tray-find" type="button">Find similar</button>
+    <button class="group-tray-find" id="group-tray-match" type="button">Match this look</button>
+  </div>
+
+  <!-- Split view: reference(s) pinned left, ranked archive matches right. A
+       single reference gets the large centred image it always has; two or
+       more switch to a strip so every member of the group is visible, each
+       removable, an outlier from the group's own colour flagged in place. -->
   <div class="sim" id="sim" hidden>
     <button class="lb-close" id="sim-close" aria-label="Close">×</button>
     <div class="sim-left">
       <img id="sim-ref" alt="" />
+      <p class="sim-count" id="sim-count" hidden></p>
+      <div class="sim-strip" id="sim-strip" hidden></div>
       <p class="lb-src" id="sim-src"></p>
       <div class="sim-controls">
         <div class="sim-slider">
@@ -118,6 +141,12 @@ const hasItems = manifest.count > 0;
     <div class="mx-body">
       <section class="mx-start" id="mx-start">
         <img class="mx-refthumb" id="mx-refthumb" alt="" />
+        <!-- Shown instead of the single thumbnail once "Match this look" was
+             opened from the group tray — what's about to be measured, not yet
+             what agrees with what: outliers can only be known once the solve
+             below has actually run each one through analysis. -->
+        <p class="mx-refcount" id="mx-refcount" hidden></p>
+        <div class="mx-refstrip" id="mx-refstrip" hidden></div>
         <div class="mx-startcol">
           <div class="drop mx-zone" id="mx-zone" tabindex="0" role="button" aria-label="Drop your photo or browse">
             <p class="drop-title">Drop your photo, or <span class="link">browse</span></p>
@@ -235,13 +264,13 @@ const hasItems = manifest.count > 0;
 
   .insp-add { margin-bottom: 3.5rem; }
   .drop { border: 1px dashed var(--border); border-radius: 2px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 160ms, background 160ms; background: color-mix(in oklab, var(--fg) 2%, transparent); }
-  .drop:hover, .drop:focus-visible, .drop.over { border-color: var(--fg); background: color-mix(in oklab, var(--fg) 5%, transparent); }
+  .drop:hover, .drop:focus-visible, .drop.over { border-color: var(--accent-mix); background: color-mix(in oklab, var(--accent-mix) 5%, transparent); }
   .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.4rem; margin: 0 0 0.4rem; }
   .drop-sub { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; margin: 0; }
   .link { text-decoration: underline; text-underline-offset: 3px; }
   .urlrow { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.8rem; flex-wrap: wrap; }
   .urlrow input { flex: 1 1 12rem; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-label); font-size: 0.8rem; padding: 0.6rem 0.8rem; border-radius: 2px; }
-  .urlrow input:focus-visible { outline: none; border-color: var(--fg); }
+  .urlrow input:focus-visible { outline: none; border-color: var(--accent-mix); }
   .urlrow .or { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; flex: 0 0 auto; }
   .urlrow button { flex: 0 0 auto; background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.62rem 1rem; border-radius: 2px; }
   .status { margin-top: 1rem; } .bar { height: 2px; background: var(--border); overflow: hidden; } .bar-fill { height: 100%; width: 0; background: var(--fg); transition: width 200ms; }
@@ -265,7 +294,7 @@ const hasItems = manifest.count > 0;
   .insp-frame .src {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
     font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.04em;
-    color: #fff; padding: 0.5rem 0.6rem; line-height: 1.4;
+    color: #fff; padding: 0.5rem 0.6rem 0.5rem 2.1rem; line-height: 1.4;
     background: linear-gradient(to top, color-mix(in oklab, #000 78%, transparent), transparent);
     opacity: 0; transition: opacity 160ms var(--ease);
   }
@@ -276,6 +305,74 @@ const hasItems = manifest.count > 0;
   .cell-remove.armed { background: #c0392b; opacity: 1; }
   .insp-empty { color: var(--muted); }
 
+  /* The group tray: what's been marked "+ group" so far, floating over the
+     board rather than living in a panel — it has to stay visible while you
+     keep scrolling and tapping more tiles, which a panel that opens and
+     closes would not. */
+  .group-tray {
+    position: fixed; left: 50%; bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px)); z-index: 40;
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.5rem 0.55rem 0.5rem 1rem; border-radius: 999px;
+    background: color-mix(in oklab, var(--bg) 90%, #000); border: 1px solid var(--accent-hair);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 24px -8px color-mix(in oklab, black 55%, transparent), 0 1px 3px color-mix(in oklab, black 30%, transparent);
+    opacity: 0; transform: translate(-50%, 12px); pointer-events: none;
+    transition: opacity 200ms var(--ease), transform 200ms var(--ease);
+  }
+  .group-tray[hidden] { display: none; }
+  .group-tray.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  @media (prefers-reduced-motion: reduce) { .group-tray { transition: opacity 120ms linear; transform: translate(-50%, 0); } }
+  .group-tray-count { font-family: var(--font-label); font-size: 0.66rem; color: var(--fg); white-space: nowrap; padding-right: 0.1rem; }
+  .group-tray-count b { font-variant-numeric: tabular-nums; }
+  .group-tray button { border: 0; cursor: pointer; font-family: var(--font-label); border-radius: 999px; white-space: nowrap; }
+  .group-tray-find { background: var(--fg); color: var(--bg); padding: 0.48rem 0.9rem; font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .group-tray-find:hover { background: color-mix(in oklab, var(--fg) 85%, var(--accent)); }
+  .group-tray-clear { background: transparent; color: var(--muted); padding: 0.48rem 0.4rem; font-size: 0.6rem; }
+  .group-tray-clear:hover { color: var(--fg); }
+
+  /* Overlay entrance: a quick scale+fade, matching the archive's own lightbox
+     — these three full-screen panels used to snap open instantly with no
+     transition at all, the one real inconsistency between this page and the
+     rest of the app. Modals stay centre-anchored (no transform-origin at a
+     trigger) since none of the three are anchored to one particular button. */
+  .insp-lb, .sim, .mx { opacity: 0; transition: opacity 220ms var(--ease); }
+  .insp-lb.show, .sim.show, .mx.show { opacity: 1; }
+  .insp-lb :is(img, .lb-src), .sim-left, .sim-right, .mx-head, .mx-body {
+    transition: transform 220ms var(--ease);
+    transform: scale(0.97);
+  }
+  .insp-lb.show :is(img, .lb-src), .sim.show .sim-left, .sim.show .sim-right,
+  .mx.show .mx-head, .mx.show .mx-body { transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .insp-lb, .sim, .mx { transition: opacity 120ms linear; }
+    .insp-lb :is(img, .lb-src), .sim-left, .sim-right, .mx-head, .mx-body { transition: none; transform: none; }
+  }
+
+  /* Press feedback: nothing on this page confirmed a tap was heard before now
+     — the archive's photo grid and topbar links already do (scale/colour on
+     press), this board and workbench never did. See Layout.astro for the
+     iOS touchstart shim that makes :active fire reliably on a phone/iPad,
+     which this whole page is designed to be used on. */
+  .drop, .urlrow button, .cell-remove, .cell-similar, .cell-match, .cell-group,
+  .mx-check, .mx-stop, .mx-tabs button, button.mx-cw, .mx-actions button, #mx-close, #addurl,
+  .group-tray-find, .group-tray-clear {
+    transition: transform 120ms ease-out, border-color 160ms var(--ease), background 160ms var(--ease), opacity 140ms;
+  }
+  .drop:active, .urlrow button:active, .cell-remove:active, .cell-similar:active, .cell-match:active, .cell-group:active,
+  .mx-stop:active, .mx-tabs button:active, button.mx-cw:active, .mx-actions button:active, #mx-close:active, #addurl:active,
+  .group-tray-find:active, .group-tray-clear:active {
+    transform: scale(0.96);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drop, .urlrow button, .cell-remove, .cell-similar, .cell-match, .cell-group,
+    .mx-stop, .mx-tabs button, button.mx-cw, .mx-actions button, #mx-close, #addurl,
+    .group-tray-find, .group-tray-clear { transition: none; }
+    .drop:active, .urlrow button:active, .cell-remove:active, .cell-similar:active, .cell-match:active, .cell-group:active,
+    .mx-stop:active, .mx-tabs button:active, button.mx-cw:active, .mx-actions button:active, #mx-close:active, #addurl:active,
+    .group-tray-find:active, .group-tray-clear:active {
+      transform: none;
+    }
+  }
   .insp-lb { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; background: color-mix(in oklab, var(--bg) 96%, #000); }
   .insp-lb[hidden] { display: none; }
   .insp-lb img { max-width: 92vw; max-height: 82vh; object-fit: contain; }
@@ -293,11 +390,60 @@ const hasItems = manifest.count > 0;
   .insp-frame:hover .cell-similar, .insp-frame:focus-within .cell-similar { opacity: 1; }
   .cell-similar:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
 
+  /* Add to a group of similarly-edited references, for a sharper match than
+     any one of them gives alone — see similar.ts's `rankSimilarGroup`.
+     Icon-only and 26px, matching `.cell-remove`'s weight rather than the text
+     pills: the bottom-left corner sits directly over the caption, and a full
+     "+ group" label would collide with it far more than a small circle does. */
+  .cell-group {
+    position: absolute; left: 6px; bottom: 6px; z-index: 3;
+    width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
+    background: color-mix(in oklab, #000 55%, transparent); color: #fff;
+    font-size: 15px; line-height: 26px; text-align: center;
+    opacity: 0; transition: opacity 140ms, background 140ms, color 140ms;
+    backdrop-filter: blur(6px);
+  }
+  .insp-frame:hover .cell-group, .insp-frame:focus-within .cell-group { opacity: 1; }
+  .cell-group:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
+  /* Selected reads as a filled swatch, the same idiom `.cell-remove.armed`
+     already uses for "this state is active, not just hovered." */
+  .cell-group[aria-pressed='true'] { opacity: 1; background: var(--fg); color: var(--bg); }
+  /* Inset, not `outline` — `.insp-frame` clips overflow, and an outline drawn
+     outside the box would be clipped away with whatever hangs past it. */
+  .insp-frame.in-group { box-shadow: inset 0 0 0 2px var(--fg); }
+
   /* Split view */
   .sim { position: fixed; inset: 0; z-index: 82; display: grid; grid-template-columns: 42% 58%; background: color-mix(in oklab, var(--bg) 97%, #000); }
   .sim[hidden] { display: none; }
-  .sim-left { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem; padding: var(--edge); border-right: 1px solid var(--hair); }
+  .sim-left { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem; padding: var(--edge); border-right: 1px solid var(--accent-hair); }
   .sim-left img { max-width: 100%; max-height: 58vh; object-fit: contain; }
+  /* A group's reference strip — replaces the single centred image once there
+     is more than one. Each tile stays a real, tappable photograph rather
+     than shrinking into a swatch, because "which one of these is dragging
+     the match off" is a question you answer by looking at the photo, not a
+     colour chip. */
+  .sim-count { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .sim-strip { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-height: 40vh; overflow-y: auto; width: 100%; }
+  .sim-strip[hidden] { display: none; }
+  :global(.sim-strip figure) { position: relative; width: 84px; margin: 0; cursor: zoom-in; border-radius: 6px; overflow: hidden; background: var(--border); }
+  /* Overrides `.sim-left img` above — same specificity, later in the
+     cascade, deliberately: a thumbnail this small wants to fill its square,
+     not shrink to fit inside one. */
+  :global(.sim-strip img) { width: 100%; height: 84px; object-fit: cover; display: block; max-width: none; max-height: none; }
+  :global(.sim-strip .rm) {
+    position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
+    border: 0; cursor: pointer; background: color-mix(in oklab, #000 60%, transparent); color: #fff;
+    font-size: 12px; line-height: 20px; text-align: center; backdrop-filter: blur(4px);
+  }
+  :global(.sim-strip .rm:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
+  /* The one thing this whole feature exists to surface: a submitted photo
+     whose colours don't actually agree with the rest of the group, which
+     would otherwise silently drag the centroid — and the match — off target. */
+  :global(.sim-strip .outlier) {
+    position: absolute; left: 3px; bottom: 3px; width: 18px; height: 18px; border-radius: 50%;
+    background: #e0603a; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+    box-shadow: 0 0 0 2px color-mix(in oklab, #000 40%, transparent);
+  }
   .sim-controls { width: min(100%, 26rem); }
   .sim-slider { display: flex; align-items: center; gap: 0.8rem; font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
   .sim-slider input { flex: 1; accent-color: var(--fg); }
@@ -309,7 +455,7 @@ const hasItems = manifest.count > 0;
   :global(.sim-cell img) { width: 100%; display: block; opacity: 0; transition: opacity 300ms var(--ease); }
   :global(.sim-cell img.on) { opacity: 1; }
   :global(.sim-cell .pct) { position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent); padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(4px); }
-  @media (max-width: 1100px) { .sim { grid-template-columns: 1fr; grid-template-rows: 42% 58%; } .sim-left { border-right: 0; border-bottom: 1px solid var(--hair); } :global(.sim-grid) { columns: 4; } }
+  @media (max-width: 1100px) { .sim { grid-template-columns: 1fr; grid-template-rows: 42% 58%; } .sim-left { border-right: 0; border-bottom: 1px solid var(--accent-hair); } :global(.sim-grid) { columns: 4; } }
   #lb { z-index: 88; } /* enlarge sits above the split view */
 
   /* --- Style match ---------------------------------------------------- */
@@ -333,8 +479,8 @@ const hasItems = manifest.count > 0;
   /* `pointer: coarse` as well as `hover: none`: an iPad with a Magic Keyboard
      reports hover, but it is still a screen you reach out and touch. */
   @media (hover: none), (pointer: coarse) {
-    .cell-match, .cell-similar, .cell-remove { opacity: 0.9; }
-    .cell-match::after, .cell-similar::after, .cell-remove::after {
+    .cell-match, .cell-similar, .cell-remove, .cell-group { opacity: 0.9; }
+    .cell-match::after, .cell-similar::after, .cell-remove::after, .cell-group::after {
       content: ''; position: absolute; inset: -12px;
     }
     /* Held 12px off each edge, not 6: `.insp-frame` clips its overflow, so an
@@ -344,6 +490,10 @@ const hasItems = manifest.count > 0;
     /* Three corners. Stacked 28px apart, two 44px targets overlap — and a
        mis-tap here starts a twenty-second measurement. */
     .cell-match { top: auto; left: auto; bottom: 12px; right: 12px; }
+    /* The fourth corner. Same reasoning as `.cell-match` above — a fourth
+       stacked at top-left would overlap `.cell-similar`'s grown hit area
+       just as a third once did. */
+    .cell-group { left: 12px; bottom: 12px; }
     /* The credit is hover-revealed too, and on touch that means never. */
     .insp-frame .src { opacity: 1; padding-right: 5.5rem; }
 
@@ -368,7 +518,7 @@ const hasItems = manifest.count > 0;
 
   .mx { position: fixed; inset: 0; z-index: 84; display: flex; flex-direction: column; background: color-mix(in oklab, var(--bg) 98%, #000); }
   .mx[hidden] { display: none; }
-  .mx-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem var(--edge) 0.85rem; border-bottom: 1px solid var(--hair); flex: 0 0 auto; }
+  .mx-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem var(--edge) 0.85rem; border-bottom: 1px solid var(--accent-hair); flex: 0 0 auto; }
   .mx-kicker { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0; }
   .mx-sub { font-family: var(--font-label); font-size: 0.76rem; color: var(--fg); margin: 0.28rem 0 0; }
   .mx-close { position: static; flex: 0 0 auto; }
@@ -383,6 +533,16 @@ const hasItems = manifest.count > 0;
      whole start screen out to 522px inside a 390px phone. */
   .mx-start { display: grid; grid-template-columns: minmax(0, 34%) minmax(0, 1fr); gap: 2rem; align-items: center; padding: var(--edge); width: 100%; min-width: 0; overflow: auto; }
   .mx-refthumb { width: 100%; max-height: 60vh; object-fit: contain; }
+  .mx-refcount {
+    margin: 0.5rem 0 0; font-family: var(--font-label); font-size: 0.6rem;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  }
+  .mx-refstrip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0.5rem; }
+  .mx-refstrip[hidden] { display: none; }
+  :global(.mx-refstrip img) {
+    width: 56px; height: 56px; object-fit: cover; border-radius: 4px;
+    background: var(--border); display: block;
+  }
   .mx-startcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
   .mx-zone { margin: 0; }
   .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
@@ -411,7 +571,7 @@ const hasItems = manifest.count > 0;
     text-transform: uppercase; color: var(--muted); padding: 0;
     border-bottom: 1px solid transparent; transition: color 180ms, border-color 180ms;
   }
-  .mx-stop:hover { color: var(--fg); border-bottom-color: currentColor; }
+  .mx-stop:hover { color: var(--accent-mix); border-bottom-color: currentColor; }
 
   /* --- Stage ------------------------------------------------------------
      `--s` runs 1 (expanded) to 0 (collapsed) and is set from the report's
@@ -419,8 +579,8 @@ const hasItems = manifest.count > 0;
      pictures give their space back to the reading area as you scroll rather
      than permanently occupying half the screen. */
   .mx-result { --s: 1; display: flex; flex-direction: column; width: 100%; overflow: hidden; }
-  .mx-stage { flex: 0 0 auto; border-bottom: 1px solid var(--hair); background: var(--bg); }
-  .mx-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); }
+  .mx-stage { flex: 0 0 auto; border-bottom: 1px solid var(--accent-hair); background: var(--bg); }
+  .mx-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--accent-hair); }
   .mx-fig { margin: 0; position: relative; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 0; }
   .mx-fig canvas, .mx-fig img {
     max-width: 100%;
@@ -449,7 +609,7 @@ const hasItems = manifest.count > 0;
   .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); flex: 0 0 auto; cursor: pointer; }
 
   /* --- Tabs --------------------------------------------------------------- */
-  .mx-tabs { flex: 0 0 auto; display: flex; gap: 0.2rem; padding: 0 var(--edge); border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
+  .mx-tabs { flex: 0 0 auto; display: flex; gap: 0.2rem; padding: 0 var(--edge); border-bottom: 1px solid var(--accent-hair); overflow-x: auto; scrollbar-width: none; }
   .mx-tabs::-webkit-scrollbar { display: none; }
   .mx-tabs button {
     position: relative; background: transparent; border: 0; cursor: pointer; color: var(--muted);
@@ -457,7 +617,7 @@ const hasItems = manifest.count > 0;
     padding: 0.78rem 0.95rem 0.7rem; white-space: nowrap; transition: color 140ms;
   }
   .mx-tabs button::after { content: ''; position: absolute; left: 0.95rem; right: 0.95rem; bottom: -1px; height: 1px; background: transparent; transition: background 140ms; }
-  .mx-tabs button:hover { color: var(--fg); }
+  .mx-tabs button:hover { color: var(--accent-mix); }
   .mx-tabs button.on { color: var(--fg); }
   .mx-tabs button.on::after { background: var(--fg); }
   .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.56rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
@@ -540,11 +700,11 @@ const hasItems = manifest.count > 0;
     color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 999px;
     padding: 0.3rem 0.8rem; cursor: pointer; transition: color 140ms, border-color 140ms;
   }
-  :global(.mx-globaltoggle:hover) { color: var(--fg); border-color: var(--fg); }
+  :global(.mx-globaltoggle:hover) { color: var(--accent-mix); border-color: var(--accent-mix); }
   :global(.mx-globaltoggle[aria-pressed="true"]) { color: var(--fg); border-color: var(--fg); }
   :global(.mx-cw) { text-align: center; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: default; }
   :global(button.mx-cw) { cursor: pointer; }
-  :global(button.mx-cw:hover .disc) { border-color: var(--fg); }
+  :global(button.mx-cw:hover .disc) { border-color: var(--accent-mix); }
   :global(.mx-cw-lg .disc) { width: 9rem; }
   :global(.mx-cw-sm .disc) { width: 5rem; }
   :global(.mx-cw .disc) {
@@ -591,7 +751,7 @@ const hasItems = manifest.count > 0;
 
   .mx-actions {
     flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 0.6rem;
-    padding: 0.85rem var(--edge); border-top: 1px solid var(--hair);
+    padding: 0.85rem var(--edge); border-top: 1px solid var(--accent-hair);
     background: color-mix(in oklab, var(--bg) 96%, #000);
   }
   .mx-actions button { background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.66rem 1.1rem; border-radius: 2px; }
@@ -606,7 +766,7 @@ const hasItems = manifest.count > 0;
   .already[hidden] { display: none; }
   .already {
     grid-column: 1 / -1;
-    border-top: 1px solid var(--hair);
+    border-top: 1px solid var(--accent-hair);
     padding-top: 1.2rem;
     min-width: 0;
   }
@@ -650,7 +810,7 @@ const hasItems = manifest.count > 0;
     width: 100%;
     aspect-ratio: 3 / 2;
     object-fit: cover;
-    background: var(--hair);
+    background: var(--accent-hair);
   }
   :global(.already-dist) {
     display: block;
@@ -705,7 +865,7 @@ const hasItems = manifest.count > 0;
        screens of board to reach the fifth reference. */
     .insp-collage { columns: 2; column-gap: 4px; }
     .insp-frame { margin-bottom: 4px; }
-    .insp-frame .src { font-size: 0.54rem; padding: 0.4rem 0.45rem; }
+    .insp-frame .src { font-size: 0.54rem; padding: 0.4rem 0.45rem 0.4rem 1.9rem; }
 
     /* Match panel */
     .mx-head { padding: 0.8rem 1.1rem 0.7rem; }
@@ -772,6 +932,74 @@ const hasItems = manifest.count > 0;
   const statusText = document.getElementById('status-text');
   const results = document.getElementById('results');
 
+  // --- The group: similarly-edited references marked with "+ group" -------
+  // A `Map` rather than a `Set` of ids: `findSimilarGroup` needs each
+  // member's large derivative and source line to render the strip and the
+  // single-reference view, and re-reading the board for them stops working
+  // once you're inside the split view looking at a different photo.
+  // Persisted to sessionStorage — the same tab, the same visit — so leaving
+  // to look at something else and coming back doesn't lose what you built.
+  const GROUP_KEY = 'insp-group';
+  let group = new Map();
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(GROUP_KEY) || '[]');
+    group = new Map(saved.map((g) => [g.id, g]));
+  } catch (err) { /* private mode, or nothing saved */ }
+
+  function saveGroup() {
+    try { sessionStorage.setItem(GROUP_KEY, JSON.stringify([...group.values()])); }
+    catch (err) { /* private mode */ }
+  }
+
+  /** A group member's large derivative + source, from the cache or (for a
+   *  photo never added to the group — the plain "≈ similar" tap) straight
+   *  off its own board button, which carries the same two attributes. */
+  function refInfo(id) {
+    const cached = group.get(id);
+    if (cached) return cached;
+    const btn = document.querySelector(`.cell-similar[data-similar="${CSS.escape(id)}"]`);
+    return btn ? { id, full: btn.dataset.full, source: btn.dataset.source } : null;
+  }
+
+  const tray = document.getElementById('group-tray');
+  const trayCount = document.getElementById('group-tray-count');
+
+  function renderTray() {
+    const n = group.size;
+    trayCount.innerHTML = n ? `<b>${n}</b> reference${n === 1 ? '' : 's'} selected` : '';
+    tray.hidden = n === 0;
+    if (n > 0) requestAnimationFrame(() => tray.classList.add('show'));
+    else tray.classList.remove('show');
+    document.querySelectorAll('.cell-group').forEach((btn) => {
+      const on = group.has(btn.dataset.group);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.textContent = on ? '✓' : '+';
+      btn.closest('.insp-frame')?.classList.toggle('in-group', on);
+    });
+  }
+
+  function toggleGroupMember(id, full, source) {
+    if (group.has(id)) group.delete(id);
+    else group.set(id, { id, full, source });
+    saveGroup();
+    renderTray();
+  }
+
+  // Read-only bridge to the "Match this look" workbench below, which is a
+  // separate `type=module` script (it imports the solver and the WebGL
+  // renderer) and so does not share this script's closure — `group` itself
+  // is a `let`, which even a classic script never attaches to `window`.
+  window.getGroupIds = () => [...group.keys()];
+
+  document.getElementById('group-tray-find').addEventListener('click', () => {
+    if (group.size) findSimilarGroup([...group.keys()]);
+  });
+  document.getElementById('group-tray-clear').addEventListener('click', () => {
+    group.clear();
+    saveGroup();
+    renderTray();
+  });
+
   zone.addEventListener('click', () => file.click());
   zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } });
   file.addEventListener('change', () => uploadFiles(file.files));
@@ -813,7 +1041,12 @@ const hasItems = manifest.count > 0;
       data.results.forEach(row);
       statusText.textContent = `${data.added} added.`;
       file.value = '';
-      if (data.added > 0) reloadKeepingPlace();
+      // Several images dropped in together are exactly the case the group
+      // match exists for — carried through the reload so they can be
+      // pre-selected, rather than making you go find and re-tap what you
+      // just added.
+      const addedIds = data.results.filter((r) => r.status === 'added' && r.id).map((r) => r.id);
+      if (data.added > 0) reloadKeepingPlace(addedIds);
     } catch (err) { statusText.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
   }
 
@@ -822,9 +1055,9 @@ const hasItems = manifest.count > 0;
   // not honest was throwing away where you were and what you had typed: the
   // credit field emptied itself and the page jumped to the top, every time.
   const RESUME_KEY = 'insp-resume';
-  function reloadKeepingPlace() {
+  function reloadKeepingPlace(newIds) {
     try {
-      sessionStorage.setItem(RESUME_KEY, JSON.stringify({ y: window.scrollY, source: sourceEl.value }));
+      sessionStorage.setItem(RESUME_KEY, JSON.stringify({ y: window.scrollY, source: sourceEl.value, newIds: newIds || [] }));
     } catch (err) { /* private mode — just reload */ }
     setTimeout(() => location.reload(), 650);
   }
@@ -837,7 +1070,17 @@ const hasItems = manifest.count > 0;
     if (!saved) return;
     if (saved.source) sourceEl.value = saved.source;   // the credit still applies to the next batch
     if (saved.y > 0) requestAnimationFrame(() => window.scrollTo(0, saved.y));
+    // One image added alone already has its own "≈ similar" button right on
+    // it — the group is for when there were several, submitted as a set.
+    if (saved.newIds && saved.newIds.length > 1) {
+      for (const id of saved.newIds) {
+        const btn = document.querySelector(`.cell-similar[data-similar="${CSS.escape(id)}"]`);
+        if (btn) group.set(id, { id, full: btn.dataset.full, source: btn.dataset.source });
+      }
+      saveGroup();
+    }
   })();
+  renderTray(); // reflects a group restored above, or one already in sessionStorage from before this load
 
   async function addUrl() {
     const url = urlEl.value.trim(); if (!url) return;
@@ -866,6 +1109,20 @@ const hasItems = manifest.count > 0;
     else img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
   });
 
+  // --- Develop on scroll ---------------------------------------------------
+  // `.frame img.photo` also carries the archive's "develop" filter (arrives
+  // desaturated/blurred, resolves once `.reveal` lands on the frame — see
+  // global.css) because `.insp-frame` is `.frame` too, sharing that rule by
+  // design so the board reads as the same kind of wall. Without this observer
+  // the filter would apply here with nothing ever clearing it — every
+  // reference stuck permanently blurred. One-way, same as the archive: once
+  // developed, a reference stays developed when you scroll back past it.
+  const revealBoard = new IntersectionObserver(
+    (entries) => { for (const e of entries) if (e.isIntersecting) { e.target.classList.add('reveal'); revealBoard.unobserve(e.target); } },
+    { rootMargin: '120px 0px' },
+  );
+  document.querySelectorAll('.insp-frame').forEach((f) => revealBoard.observe(f));
+
   // Remove (two-step confirm)
   let armed = null;
   document.querySelectorAll('.cell-remove').forEach((btn) => {
@@ -891,38 +1148,111 @@ const hasItems = manifest.count > 0;
   const openLb = (full, source) => {
     if (!lb.hidden) return;
     lbImg.src = full; lbSrc.innerHTML = srcHtml(source); lb.hidden = false; lockBoard();
+    requestAnimationFrame(() => lb.classList.add('show'));
   };
-  const closeLb = () => { if (lb.hidden) return; lb.hidden = true; lbImg.src = ''; unlockBoard(); };
+  const closeLb = () => {
+    if (lb.hidden) return;
+    lb.classList.remove('show'); unlockBoard();
+    setTimeout(() => { lb.hidden = true; lbImg.src = ''; }, 220);
+  };
   document.getElementById('lb-close').addEventListener('click', closeLb);
   lb.addEventListener('click', (e) => { if (e.target === lb) closeLb(); });
 
   // --- Find similar → split view ----------------------------------------
   const sim = document.getElementById('sim');
   const simRef = document.getElementById('sim-ref');
+  const simCount = document.getElementById('sim-count');
+  const simStrip = document.getElementById('sim-strip');
   const simSrc = document.getElementById('sim-src');
   const simRight = document.getElementById('sim-right');
   const simW = document.getElementById('sim-w');
   const simHint = document.getElementById('sim-hint');
   let simMatches = [];
+  /** The group this open split view is showing — kept so removing one
+   *  member from the strip knows what's left to re-rank against. */
+  let simGroupIds = [];
 
-  async function findSimilar(id, full, source) {
-    simRef.src = full;
-    simSrc.innerHTML = srcHtml(source);
+  /** One reference: the large centred image this view has always shown. */
+  function renderSimSingle(ref) {
+    const local = ref && refInfo(ref.id);
+    simCount.hidden = true;
+    simStrip.hidden = true;
+    simRef.hidden = false;
+    simRef.src = (local && local.full) || (ref ? ref.avif : '');
+    simSrc.hidden = false;
+    simSrc.innerHTML = ref ? srcHtml((local && local.source) || ref.source) : '';
+  }
+  /** Several: a strip, one tile per reference, each removable, an outlier
+   *  from the group's own colour flagged in place — see `groupOutliers`. */
+  function renderSimStrip(refs) {
+    simRef.hidden = true;
+    simSrc.hidden = true;
+    simSrc.innerHTML = '';
+    simCount.hidden = false;
+    simCount.textContent = refs.length + ' references, blended';
+    simStrip.hidden = false;
+    simStrip.innerHTML = refs.map((r) => `
+      <figure data-id="${esc(r.id)}" data-full="${esc(r.avif)}">
+        <img loading="lazy" src="${esc(r.avif)}" alt="">
+        ${r.outlier ? '<span class="outlier" title="Colours differ noticeably from the rest of the group">!</span>' : ''}
+        <button type="button" class="rm" data-remove-ref="${esc(r.id)}" aria-label="Remove from group">×</button>
+      </figure>`).join('');
+  }
+  function renderSimRefs(refs) {
+    if (refs.length <= 1) renderSimSingle(refs[0]);
+    else renderSimStrip(refs);
+  }
+  function describeReadiness(d) {
+    const flagged = (d.refs || []).filter((r) => r.outlier).length;
+    const warn = flagged
+      ? ` ${flagged} reference${flagged === 1 ? '' : 's'} ${flagged === 1 ? 'looks' : 'look'} like a different edit — see the ⚠ mark.`
+      : '';
+    const base = simGroupIds.length > 1
+      ? 'Your closest photographs, ranked against the group as a whole.'
+      : 'Your closest photographs. Drag to weigh colour against composition.';
+    return (d.ready ? base : 'Composition needs analysing — run  npm run reanalyze  once.') + warn;
+  }
+
+  async function findSimilarGroup(ids) {
+    if (!ids.length) return;
+    simGroupIds = ids;
     simRight.innerHTML = '<p style="color:var(--muted);font-size:0.8rem;font-family:var(--font-label)">Ranking…</p>';
-    if (sim.hidden) { sim.hidden = false; lockBoard(); }
+    if (sim.hidden) { sim.hidden = false; lockBoard(); requestAnimationFrame(() => sim.classList.add('show')); }
     try {
-      const res = await fetch('/api/similar?ref=' + encodeURIComponent(id));
+      const qs = ids.map((id) => 'ref=' + encodeURIComponent(id)).join('&');
+      const res = await fetch('/api/similar?' + qs);
       const d = await res.json();
       if (!d.ok) throw new Error(d.error || 'failed');
       simMatches = d.matches || [];
-      simHint.textContent = d.ready
-        ? 'Your closest photographs. Drag to weigh colour against composition.'
-        : 'Composition needs analysing — run  npm run reanalyze  once.';
+      renderSimRefs(d.refs || []);
+      simHint.textContent = describeReadiness(d);
       renderSim();
     } catch (err) {
       simRight.innerHTML = '<p style="color:#e0603a">' + esc(err.message) + '</p>';
     }
   }
+  /** The plain "≈ similar" tap — a group of one, not routed through the
+   *  persisted group tray at all, so trying a quick single match never
+   *  disturbs whatever set you're still building. */
+  function findSimilar(id) { return findSimilarGroup([id]); }
+
+  simStrip.addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-remove-ref]');
+    if (rm) {
+      e.stopPropagation();
+      const id = rm.dataset.removeRef;
+      group.delete(id);
+      saveGroup();
+      renderTray();
+      const remaining = simGroupIds.filter((x) => x !== id);
+      if (remaining.length) findSimilarGroup(remaining);
+      else closeSim();
+      return;
+    }
+    const fig = e.target.closest('figure');
+    if (fig) openLb(fig.dataset.full, '');
+  });
+
   function renderSim() {
     const v = +simW.value / 100; // 0 = pure colour, 1 = pure composition
     const scored = simMatches
@@ -938,14 +1268,20 @@ const hasItems = manifest.count > 0;
     });
   }
   simW.addEventListener('input', renderSim);
-  const closeSim = () => { if (sim.hidden) return; sim.hidden = true; unlockBoard(); };
+  const closeSim = () => {
+    if (sim.hidden) return;
+    sim.classList.remove('show'); unlockBoard();
+    setTimeout(() => { sim.hidden = true; }, 220);
+  };
   document.getElementById('sim-close').addEventListener('click', closeSim);
   sim.addEventListener('click', (e) => { const c = e.target.closest('.sim-cell'); if (c) openLb(c.dataset.full, ''); });
 
-  // --- Board clicks: similar button, remove (handled above), else enlarge -
+  // --- Board clicks: similar/group buttons, remove (handled above), else enlarge -
   document.getElementById('board')?.addEventListener('click', (e) => {
     const simBtn = e.target.closest('.cell-similar');
-    if (simBtn) { e.stopPropagation(); findSimilar(simBtn.dataset.similar, simBtn.dataset.full, simBtn.dataset.source); return; }
+    if (simBtn) { e.stopPropagation(); findSimilar(simBtn.dataset.similar); return; }
+    const groupBtn = e.target.closest('.cell-group');
+    if (groupBtn) { e.stopPropagation(); toggleGroupMember(groupBtn.dataset.group, groupBtn.dataset.full, groupBtn.dataset.source); return; }
     // The match button lives in the processed module script below; ignore it
     // here so it does not also open the lightbox.
     if (e.target.closest('.cell-remove') || e.target.closest('.cell-match')) return;
@@ -982,6 +1318,8 @@ const hasItems = manifest.count > 0;
   const statusEl = $('mx-status');
   const refThumb = $<HTMLImageElement>('mx-refthumb');
   const refSide = $<HTMLImageElement>('mx-refside');
+  const refCountEl = $('mx-refcount');
+  const refStripEl = $('mx-refstrip');
   const zoneEl = $('mx-zone');
   const fileEl = $<HTMLInputElement>('mx-file');
   const baselineEl = $<HTMLSelectElement>('mx-baseline');
@@ -998,7 +1336,12 @@ const hasItems = manifest.count > 0;
     return (r > 0 ? '+' : '') + r.toFixed(d);
   };
 
-  let refId = '';
+  /** Every reference this workbench is open for — one for a plain "◐ match"
+   *  tap, several for "Match this look" from the group tray. `refUrl`/
+   *  `refName` describe the first: what the wipe comparison shows and what
+   *  the offline fallback (which cannot yet measure a group — see
+   *  `analyseLocally`) falls back to. */
+  let refIds: string[] = [];
   let refUrl = '';
   let refName = '';
   let current: any = null;
@@ -1010,14 +1353,33 @@ const hasItems = manifest.count > 0;
   const gradeUi = { active: 'midtones' as 'shadows' | 'midtones' | 'highlights', showGlobal: false };
 
   // ── Opening ────────────────────────────────────────────────────────────
-  document.getElementById('board')?.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLElement>('.cell-match');
-    if (!btn) return;
-    e.stopPropagation();
-    refId = btn.dataset.match || '';
-    refUrl = btn.dataset.full || '';
-    refName = btn.dataset.name || refId;
-    refThumb.src = btn.dataset.full || '';
+
+  /** A board tile's own `.cell-match` attributes, for a reference that isn't
+   *  necessarily the one that was clicked — the group path resolves several
+   *  ids this way at once. */
+  function boardMatchRef(id: string): { full: string; name: string } | null {
+    const btn = document.querySelector<HTMLElement>(`.cell-match[data-match="${CSS.escape(id)}"]`);
+    return btn?.dataset.full ? { full: btn.dataset.full, name: btn.dataset.name || id } : null;
+  }
+
+  function openWorkbench(ids: string[]) {
+    const refs = ids
+      .map((id) => ({ id, ...boardMatchRef(id) }))
+      .filter((r): r is { id: string; full: string; name: string } => Boolean(r.full));
+    if (!refs.length) return;
+    refIds = refs.map((r) => r.id);
+    refUrl = refs[0].full;
+    // Always the *primary* reference's real filename — the only thing this
+    // is ever used for is the offline fallback, which never sees the rest of
+    // the group (see `analyseLocally`), so "blended" here would be a claim
+    // about a measurement that was never taken.
+    refName = refs[0].name;
+    refThumb.src = refUrl;
+    refCountEl.hidden = refs.length <= 1;
+    refCountEl.textContent = refs.length > 1 ? `${refs.length} references, blended` : '';
+    refStripEl.hidden = refs.length <= 1;
+    refStripEl.innerHTML =
+      refs.length > 1 ? refs.map((r) => `<img src="${esc(r.full)}" alt="">`).join('') : '';
     startEl.hidden = false;
     resultEl.hidden = true;
     statusEl.textContent = '';
@@ -1025,11 +1387,26 @@ const hasItems = manifest.count > 0;
     fileEl.value = '';        // so re-dropping the same file still fires `change`
     subEl.textContent = 'Drop the photo you want to edit.';
     panel.hidden = false;
-    void loadAlready(refId);
+    requestAnimationFrame(() => panel.classList.add('show'));
+    void loadAlready(refIds);
     // Without this, a scroll that starts outside the report's own scroller
     // moves the board behind the panel instead — the page shifts under a
     // supposedly fixed overlay, which reads as the layout breaking.
     document.body.style.overflow = 'hidden';
+  }
+
+  document.getElementById('board')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('.cell-match');
+    if (!btn) return;
+    e.stopPropagation();
+    openWorkbench([btn.dataset.match || '']);
+  });
+
+  // The group tray lives in the *other* script on this page (`is:inline`,
+  // sharing no scope with this module) — see `window.getGroupIds` there.
+  document.getElementById('group-tray-match')?.addEventListener('click', () => {
+    const ids = (window as unknown as { getGroupIds?: () => string[] }).getGroupIds?.() ?? [];
+    if (ids.length) openWorkbench(ids);
   });
 
   // ── Already in the archive ─────────────────────────────────────────────
@@ -1046,11 +1423,12 @@ const hasItems = manifest.count > 0;
 
   const alreadyEl = $('already');
   const alreadyStrip = $('already-strip');
-  /** The reference the last request went out for, so a stale reply is dropped. */
+  /** The reference(s) the last request went out for, so a stale reply is dropped. */
   let alreadyFor = '';
 
-  async function loadAlready(id: string) {
-    alreadyFor = id;
+  async function loadAlready(ids: string[]) {
+    const key = ids.join(',');
+    alreadyFor = key;
     alreadyEl.hidden = true;
     alreadyStrip.replaceChildren();
     $('already-sub').textContent = 'Measuring…';
@@ -1058,12 +1436,13 @@ const hasItems = manifest.count > 0;
 
     let data: any;
     try {
-      const response = await fetch(`/api/match/resemble?ref=${encodeURIComponent(id)}`);
+      const qs = ids.map((id) => 'ref=' + encodeURIComponent(id)).join('&');
+      const response = await fetch(`/api/match/resemble?${qs}`);
       data = await response.json();
     } catch {
       data = { ok: false };
     }
-    if (alreadyFor !== id) return;
+    if (alreadyFor !== key) return;
 
     // A failure here is silence, not an error: this is an aside on the way to
     // the feature you opened the panel for, and a red line about it would read
@@ -1090,7 +1469,7 @@ const hasItems = manifest.count > 0;
         // navigating away from a reference you were about to match would lose it.
         item.innerHTML = `
           <a class="already-card" href="/#photo=${esc(match.id)}" target="_blank" rel="noopener" title="${esc(match.note)}">
-            <img src="${esc(match.thumb ?? match.placeholder)}" alt="" />
+            <img src="${esc(match.thumb ?? match.placeholder)}" alt="" onerror="this.onerror=null;this.src='${esc(match.placeholder)}'" />
             <span class="already-dist">${match.distance <= 0.75 ? 'Same treatment' : 'Same territory'}</span>
             <span class="already-parts">${esc(match.partsText)}</span>
           </a>`;
@@ -1110,12 +1489,13 @@ const hasItems = manifest.count > 0;
   }
 
   const close = () => {
-    panel.hidden = true;
+    panel.classList.remove('show');
     document.body.style.overflow = '';
     // Closing the panel stops the waiting too — otherwise the timer kept
     // running against a report nobody was going to see.
     if (abort) abort.abort();
     stopWorking();
+    setTimeout(() => { panel.hidden = true; }, 220);
   };
   $('mx-close').addEventListener('click', close);
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
@@ -1146,7 +1526,7 @@ const hasItems = manifest.count > 0;
   async function analyse(file: File) {
     statusEl.innerHTML = '';
     const fd = new FormData();
-    fd.append('ref', refId);
+    for (const id of refIds) fd.append('ref', id);
     fd.append('photo', file);
     fd.append('baseline', baselineEl.value);
     fd.append('stream', '1');
@@ -1181,8 +1561,9 @@ const hasItems = manifest.count > 0;
 
     // Offline path.
     setStage('Measuring on this device — the Mac is not reachable');
-    statusEl.innerHTML =
-      'Masks are unavailable without the Mac — everything else still applies.';
+    statusEl.innerHTML = refIds.length > 1
+      ? `Masks are unavailable without the Mac, and so is blending a group of references — measuring only the first (${esc(refName)}). Everything else still applies.`
+      : 'Masks are unavailable without the Mac — everything else still applies.';
     try {
       current = { ...(await analyseLocally(file)), local: true };
       stopWorking();
@@ -1399,6 +1780,19 @@ const hasItems = manifest.count > 0;
       [`Your photo read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL]}`, data.mine.baseline === 'preview'],
       ['Slider calibration: estimated', true],
     ];
+    // Only known once the group's own references have actually been
+    // analysed — the start screen (see `openWorkbench`) shows what's about
+    // to be measured, not this, because this can't exist yet at that point.
+    if (data.referenceCount > 1) {
+      const n = (data.outlierIds || []).length;
+      badges.push([`Blended from ${data.referenceCount} references`, false]);
+      if (n) {
+        badges.push([
+          `${n} reference${n === 1 ? '' : 's'} measure${n === 1 ? 's' : ''} like a different edit`,
+          true,
+        ]);
+      }
+    }
     if (data.local) badges.unshift(['Measured on this device — no masks', true]);
     $('mx-badges').innerHTML = badges
       .map(([t, warn]) => `<span class="mx-badge${warn ? ' warn' : ''}">${esc(t)}</span>`)
