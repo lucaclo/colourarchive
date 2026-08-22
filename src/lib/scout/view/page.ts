@@ -49,6 +49,7 @@ import {
 } from '../geo';
 import { shadowBearing, shadowLengthRatio, type SunSample } from '../sun';
 import {
+  BUILDING_EDGE_COLOUR,
   contrastOverrides,
   daylightWash,
   directionalIntensity,
@@ -143,6 +144,7 @@ import {
 import {
   airmass,
   constellationLines,
+  CONSTELLATION_NAME,
   FIELD_STAR_MAG_SPREAD,
   FIELD_STAR_MIN_MAG,
   galacticBandBrightness,
@@ -373,6 +375,9 @@ export async function startScout(): Promise<void> {
     dark: 'https://tiles.openfreemap.org/styles/dark',
   } as const;
 
+  /** The sun altitude the empty globe is lit at, before any place is chosen. */
+  const WELCOME_ALTITUDE = 35;
+
   /**
    * Satellite is the light vector style with imagery slid underneath and the
    * style's own ground fills switched off — so it comes out as a hybrid, with
@@ -437,14 +442,50 @@ export async function startScout(): Promise<void> {
   /** The unresolved-starlight scatter behind the catalogue, generated once
    *  from a fixed seed and reused every frame — see `galacticFieldStars`. */
   let fieldStars: FieldStar[] | null = null;
+  /**
+   * Where the catalogue stars actually visible on the dome last landed, for
+   * tap-to-identify — see `findTappedStar`. Rebuilt every time the star
+   * layer redraws (same cadence as everything else about it), so a tap
+   * always tests against what is genuinely on screen right now rather than
+   * a stale frame's positions.
+   */
+  let visibleStars: Array<{ star: Star; point: { lon: number; lat: number; altitudeM: number } }> = [];
   const FIELD_STAR_COUNT = 1400;
   const FIELD_STAR_SEED = 20260819;
   /** Below this magnitude a star is bright enough to earn the additive
-   *  bloom pass, roughly the naked-eye first-magnitude stars. */
-  const HALO_MAG_THRESHOLD = 1.2;
+   *  bloom pass, roughly the naked-eye first-magnitude stars — 1.5 rather
+   *  than 1.2 so the bloom, the one deliberately non-physical flourish in
+   *  this whole pass, reaches a few more of the stars actually worth making
+   *  radiant instead of just the handful brightest of the bright. */
+  const HALO_MAG_THRESHOLD = 1.5;
+  /**
+   * A presentation-only lift applied to how *visible* the night sky's own
+   * layers are — point size, halo size, and the band and field stars'
+   * opacity — never to a star's magnitude, colour index or the airmass and
+   * moonlight maths that turn those into its actual alpha. A phone screen
+   * at arm's length in a lit room is a dimmer, lower-contrast instrument
+   * than a dark-adapted eye under a real sky, and this is the difference
+   * made up for that — the same star still outshines the same neighbour by
+   * the same margin, just at a size that reads on the screen it is
+   * actually being looked at on.
+   */
+  const NIGHT_VISIBILITY_BOOST = 1.35;
   /** Whether a twinkle repaint is already queued, so a render that finds
    *  stars still on screen doesn't stack up duplicate timers. */
   let twinkleScheduled = false;
+
+  /** `shown.stars` as of the previous `updateDome`, so the moment it flips
+   *  false→true can be told apart from every frame after — see
+   *  `starsFadeStart`. */
+  let starsWereShown = false;
+  /** `performance.now()` from the instant stars most recently turned on, or
+   *  null once they're off. The whole catalogue used to snap in at full
+   *  brightness the instant the mode's time-jump landed on a dark moment —
+   *  jarring next to the eased camera and basemap wash either side of it —
+   *  so `updateDome` ramps every star-related alpha up from here over
+   *  `STAR_FADE_MS` instead of drawing them at full strength immediately. */
+  let starsFadeStart: number | null = null;
+  const STAR_FADE_MS = 900;
 
   /**
    * Keeps the sky repainting on its own while stars are visibly twinkling,
@@ -1408,6 +1449,29 @@ export async function startScout(): Promise<void> {
       BELOW_LABELS,
     );
 
+    // A fixed hairline around every footprint. `fill-extrusion` cannot draw
+    // its own outline, so without this a row of similarly-lit buildings at a
+    // low angle reads as one shape rather than as buildings — see
+    // `BUILDING_EDGE_COLOUR`. Dark theme only, matching `contrastOverrides`:
+    // the light style's own building layer already carries a stock outline.
+    if (themeOf(basemap) === 'dark') {
+      map.addLayer(
+        {
+          id: 'scout-building-edges',
+          type: 'line',
+          source: 'openmaptiles',
+          'source-layer': 'building',
+          minzoom: BUILDING_MIN_ZOOM,
+          paint: {
+            'line-color': BUILDING_EDGE_COLOUR,
+            'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.3, 18, 1],
+            'line-opacity': 0.55,
+          },
+        },
+        BELOW_LABELS,
+      );
+    }
+
     map.addLayer({
       id: 'scout-slab',
       type: 'fill-extrusion',
@@ -1422,8 +1486,11 @@ export async function startScout(): Promise<void> {
 
     // Sky is a root style property in MapLibre v5, not a layer — `addLayer`
     // with `type: 'sky'` is accepted and then silently dropped.
-    // No place, no air, and the sun nominally below the horizon: the ramp.
-    applySky(-90, null);
+    // No place chosen yet, so there is no sun position to compute — this is
+    // not a measurement, it is the same call Google Earth's own default view
+    // makes: a globe lit mid-morning, not one left at the dead of night. A
+    // tab about the sun should not welcome you with a black planet.
+    applySky(WELCOME_ALTITUDE, null);
     addCustomLayer(map, domeLayer);
 
     terrainShadows?.destroy();
@@ -2183,6 +2250,18 @@ export async function startScout(): Promise<void> {
     // spot can ever do — whether a wall shaded now is shaded all year or only
     // until June.
     if (shown.solstice && solsticeDays) {
+      // The one mark on the dome with no lift stroke underneath it at all —
+      // every other path here got one from issue #23 onward, this one was
+      // simply never carried along, and on the paper basemap it was the
+      // easiest of the four to lose entirely. Half the sun arc's lift width,
+      // in keeping with how quiet the solstice paths are meant to stay.
+      //
+      // Both seasons' runs are collected before anything is drawn, then every
+      // lift stroke, then every tint — the same "whole lift first, then the
+      // whole mark" ordering ridePath uses above, so June's tint can never be
+      // painted over by December's lift where the two paths cross.
+      const solsticeLift = liftColour(basemap);
+      const seasonRuns: Array<{ tint: RGBA; runs: ReturnType<typeof splitAtHorizon>['above'] }> = [];
       for (const [season, reference] of [
         ['june', solsticeDays.june],
         ['december', solsticeDays.december],
@@ -2195,7 +2274,20 @@ export async function startScout(): Promise<void> {
           reference.samples.filter((_, i) => i % referenceStep === 0),
           radius,
         );
-        for (const run of splitAtHorizon(path).above) {
+        seasonRuns.push({ tint, runs: splitAtHorizon(path).above });
+      }
+      for (const { runs } of seasonRuns) {
+        for (const run of runs) {
+          geometry.push(
+            run,
+            'strip',
+            [solsticeLift[0], solsticeLift[1], solsticeLift[2], solsticeLift[3] * 0.45] as RGBA,
+            WIDTH.solstice + WIDTH.lift * 0.5,
+          );
+        }
+      }
+      for (const { tint, runs } of seasonRuns) {
+        for (const run of runs) {
           geometry.push(run, 'strip', tint, WIDTH.solstice);
         }
       }
@@ -2211,7 +2303,7 @@ export async function startScout(): Promise<void> {
         coreLift[0],
         coreLift[1],
         coreLift[2],
-        coreLift[3] * 0.5,
+        coreLift[3] * 0.56,
       ]);
     }
 
@@ -2225,7 +2317,7 @@ export async function startScout(): Promise<void> {
         moonLift[0],
         moonLift[1],
         moonLift[2],
-        moonLift[3] * 0.6,
+        moonLift[3] * 0.68,
       ]);
     }
 
@@ -2258,6 +2350,13 @@ export async function startScout(): Promise<void> {
       domeLayer.setGeometry(EMPTY_DOME);
       return;
     }
+
+    if (shown.stars) {
+      if (!starsWereShown) starsFadeStart = performance.now();
+    } else {
+      starsFadeStart = null;
+    }
+    starsWereShown = shown.stars;
 
     const radius = shown.stars ? NIGHT_DOME_RADIUS_M : domeRadiusFor(radiusKm * 1000);
     const moving = new DomeGeometry(projectToMercator);
@@ -2373,11 +2472,26 @@ export async function startScout(): Promise<void> {
       starsNote.hidden = false;
       starsNote.textContent = text;
     };
+    // Reset here, once, rather than in each of the branches below that can
+    // leave the catalogue undrawn (too bright, no catalogue, moon-washed) —
+    // a tap has nothing to find in any of those cases, and a stale list from
+    // whenever stars were last actually up would answer it wrongly instead
+    // of not at all.
+    visibleStars = [];
     if (shown.stars && starsUnavailable) {
       sayStars('Star catalogue unavailable — the rest of the page works either way.');
     }
     if (shown.stars && starCatalog && instant) {
-      const dark = starVisibility(now.altitude);
+      // 0 the instant stars turn on, 1 once `STAR_FADE_MS` has passed — folded
+      // into `dark` below so the band and the field haze ramp up with it, and
+      // multiplied separately wherever a pass (the catalogue stars themselves,
+      // their constellation lines, the brightest stars' bloom) draws at a
+      // strength `dark` does not otherwise touch.
+      const fadeIn =
+        prefersReducedMotion() || starsFadeStart == null
+          ? 1
+          : Math.min(1, (performance.now() - starsFadeStart) / STAR_FADE_MS);
+      const dark = starVisibility(now.altitude) * fadeIn;
       // Captured once so the closures below (`.flatMap`, `.map`) see a value
       // TS can still prove is non-null — `centre` is a mutable outer `let`,
       // and narrowing does not survive into a closure over one.
@@ -2451,14 +2565,20 @@ export async function startScout(): Promise<void> {
                 moving.push(
                   run,
                   'strip',
-                  (i) => [bandLift[0], bandLift[1], bandLift[2], bandLift[3] * 0.5 * dark * brightnessAt(i)] as RGBA,
+                  (i) =>
+                    [
+                      bandLift[0],
+                      bandLift[1],
+                      bandLift[2],
+                      Math.min(1, bandLift[3] * 0.5 * NIGHT_VISIBILITY_BOOST * dark * brightnessAt(i)),
+                    ] as RGBA,
                   WIDTH.moon + WIDTH.lift,
                 );
               }
               moving.push(
                 run,
                 'strip',
-                (i) => [0.86, 0.88, 0.95, 0.4 * dark * brightnessAt(i)] as RGBA,
+                (i) => [0.86, 0.88, 0.95, Math.min(1, 0.4 * NIGHT_VISIBILITY_BOOST * dark * brightnessAt(i))] as RGBA,
                 WIDTH.moon * pass.widthScale,
               );
               seen += run.length;
@@ -2480,7 +2600,7 @@ export async function startScout(): Promise<void> {
               );
               lineAlphas.push(edgeAlpha, edgeAlpha);
             }
-            moving.push(linePoints, 'lines', (i) => [...ink, 0.28 * lineAlphas[i]] as RGBA, 1);
+            moving.push(linePoints, 'lines', (i) => [...ink, 0.28 * lineAlphas[i] * fadeIn] as RGBA, 1);
           }
 
           // The unresolved background: millions of ordinary stars too faint
@@ -2499,9 +2619,35 @@ export async function startScout(): Promise<void> {
           moving.push(
             fieldAbove.map((p) => domePosition(pin, p.azimuth, p.altitude, radius)),
             'points',
-            (i) => [0.82, 0.85, 0.94, dark * (0.1 + fieldT(i) * 0.45)] as RGBA,
-            (i) => 1 + fieldT(i) * 0.8,
+            (i) => [0.82, 0.85, 0.94, Math.min(1, dark * (0.1 + fieldT(i) * 0.45) * NIGHT_VISIBILITY_BOOST)] as RGBA,
+            (i) => (1 + fieldT(i) * 0.8) * NIGHT_VISIBILITY_BOOST,
           );
+
+          // A soft additive haze layered behind the fine dust above — the
+          // same galactic-plane-weighted scatter, thinned out and blown up
+          // through the engine's existing additive halo pass (see `push`'s
+          // `glow` argument, and the sun/moon discs a few passes up, which
+          // are the same trick at a different scale) rather than through
+          // any new machinery. Real positions, not invented cloud shapes: a
+          // long exposure blows a dense field of unresolved starlight into
+          // exactly this kind of glow, and this is that, drawn instead of
+          // photographed. Every point's own alpha stays low on purpose —
+          // what reads as a billowing band is many of these overlapping in
+          // screen space and adding together, the same way the real haze
+          // is millions of individually-invisible stars, not one bright
+          // shape.
+          const PUFF_STRIDE = 5;
+          const puffSource = fieldAbove.filter((_, i) => i % PUFF_STRIDE === 0);
+          if (puffSource.length) {
+            const puffT = (i: number) => 1 - (puffSource[i].mag - FIELD_STAR_MIN_MAG) / FIELD_STAR_MAG_SPREAD;
+            moving.push(
+              puffSource.map((p) => domePosition(pin, p.azimuth, p.altitude, radius)),
+              'points',
+              (i) => [0.86, 0.89, 0.98, Math.min(1, dark * (0.03 + puffT(i) * 0.05) * NIGHT_VISIBILITY_BOOST)] as RGBA,
+              (i) => 14 + puffT(i) * 20,
+              3,
+            );
+          }
 
           // Real time, not the scouted instant — scintillation is the
           // atmosphere moving *now*, unrelated to which moment of the night
@@ -2511,6 +2657,7 @@ export async function startScout(): Promise<void> {
           const nowMs = performance.now();
           const airmassAt = (p: (typeof above)[number]) => airmass(p.altitudeApparent);
           const starPoints = above.map((p) => domePosition(pin, p.azimuth, p.altitudeApparent, radius));
+          visibleStars = above.map((p, i) => ({ star: p.star, point: starPoints[i] }));
           moving.push(
             starPoints,
             'points',
@@ -2518,16 +2665,24 @@ export async function startScout(): Promise<void> {
               const p = above[i];
               const [r, g, b] = reddenForAirmass(starColour(p.star.ci), airmassAt(p));
               const flicker = twinkle(p.star.id, nowMs, airmassAt(p));
-              return [r, g, b, Math.min(1, p.alpha * flicker)] as RGBA;
+              return [r, g, b, Math.min(1, p.alpha * flicker * fadeIn)] as RGBA;
             },
-            (i) => Math.min(6, Math.max(1, 4.2 - above[i].star.mag * 0.7)),
+            // Boosted for visibility (see `NIGHT_VISIBILITY_BOOST`), not for
+            // brightness — this scales the whole clamped curve by the same
+            // factor, so a star that used to draw twice the size of a
+            // fainter neighbour still does; it is just a bigger dot doing
+            // it, not a differently-shaped one.
+            (i) => Math.min(6, Math.max(1, 4.2 - above[i].star.mag * 0.7)) * NIGHT_VISIBILITY_BOOST,
           );
 
           // A soft additive bloom for the handful of stars bright enough
           // that the naked eye actually sees them as radiant rather than as
           // a sharp point — the same treatment the sun and moon already get,
           // scaled down to something a star's actual brightness earns rather
-          // than borrowing their exact numbers.
+          // than borrowing their exact numbers. Already the one deliberately
+          // non-physical layer in this pass, so `NIGHT_VISIBILITY_BOOST`
+          // applies to its alpha as well as its size, not just size like the
+          // sharp point above it.
           const brilliant = above.filter((p) => p.star.mag < HALO_MAG_THRESHOLD);
           if (brilliant.length) {
             const haloPoints = brilliant.map((p) => domePosition(pin, p.azimuth, p.altitudeApparent, radius));
@@ -2537,9 +2692,9 @@ export async function startScout(): Promise<void> {
               (i) => {
                 const p = brilliant[i];
                 const [r, g, b] = reddenForAirmass(starColour(p.star.ci), airmassAt(p));
-                return [r, g, b, Math.min(0.85, p.alpha)] as RGBA;
+                return [r, g, b, Math.min(1, p.alpha * NIGHT_VISIBILITY_BOOST * fadeIn)] as RGBA;
               },
-              (i) => Math.min(6, Math.max(1, 4.2 - brilliant[i].star.mag * 0.7)) * 2.6,
+              (i) => Math.min(6, Math.max(1, 4.2 - brilliant[i].star.mag * 0.7)) * 2.6 * NIGHT_VISIBILITY_BOOST,
               2.2,
             );
           }
@@ -2630,7 +2785,7 @@ export async function startScout(): Promise<void> {
 
     const wash = daylightWash(altitude);
     set('scout-daylight', 'fill-color', wash.colour);
-    set('scout-daylight', 'fill-opacity', wash.opacity);
+    set('scout-daylight', 'fill-opacity', globeWashOpacity(wash.opacity, altitude));
 
     set('scout-hillshade', 'hillshade-illumination-direction', Math.round(azimuth) % 360);
     set('scout-hillshade', 'hillshade-highlight-color', sunPaintColour(altitude, air));
@@ -2655,6 +2810,63 @@ export async function startScout(): Promise<void> {
     applySky(altitude, air);
   }
 
+  /**
+   * How strongly the globe's limb glows, by zoom.
+   *
+   * MapLibre's `atmosphere-blend` is the same idea Google Earth's globe is
+   * built on: a soft halo along the curved edge, not a hard outline against
+   * black. It only reads as atmosphere while the curvature is visible, so it
+   * fades out over the same zoom range the globe itself flattens toward
+   * Mercator — full at world scale, gone by the time a place fills the
+   * screen, where a haze over the buildings would just look like fog.
+   *
+   * Kept low on purpose. `horizon-color` at a high sun is close to true
+   * white — physically correct for the beam colour it is (see `beamColour`),
+   * but the atmosphere shader spreads that colour across the *entire* disc,
+   * not just the limb, so anything past a light touch overexposes the whole
+   * globe at midday. 0.85 did exactly that. This is the same lesson the wash
+   * ramp already had to learn once — a colour that is honest for a beam is
+   * not automatically honest for a wash over everything under it.
+   */
+  const ATMOSPHERE_BLEND: unknown = ['interpolate', ['linear'], ['zoom'], 0, 0.22, 3, 0.12, 6, 0];
+
+  /**
+   * How much darker the night side of the *globe* gets than the same hour
+   * would read at city zoom.
+   *
+   * `daylightWash`'s opacity tops out at 0.5 — tuned for a subtle mood over
+   * a city, where anything stronger would start hiding the buildings and
+   * shadows the page exists to show. A whole planet has no such buildings to
+   * protect, and half-strength black over the stock basemap's midtones reads
+   * as overcast dusk, not midnight — nothing like the stark day/night split
+   * a globe like Google Earth's actually shows. So the globe gets its own,
+   * darker ceiling, faded back to the city's own number over the same zoom
+   * range the atmosphere ring fades out on.
+   */
+  const GLOBE_NIGHT_BOOST = 1.85;
+
+  /**
+   * How much of the night boost applies, 0–1, by altitude.
+   *
+   * Ramped in below the horizon only. The first version of this boosted
+   * *any* wash strong enough to matter, which caught dawn and dusk as well
+   * as midnight — and boosting an already-warm golden-hour wash by nearly
+   * double did not make it a richer sunset, it smeared it into a flat pale
+   * wash over the dark basemap's much darker midtones. Night is where the
+   * wash goes from colour to near-black; that transition is exactly where
+   * the boost should ramp in too, and nowhere else.
+   */
+  function globeNightBoostFactor(altitude: number): number {
+    if (altitude >= 0) return 0;
+    return Math.min(1, -altitude / 18);
+  }
+
+  function globeWashOpacity(baseOpacity: number, altitude: number): unknown {
+    const boost = 1 + (GLOBE_NIGHT_BOOST - 1) * globeNightBoostFactor(altitude);
+    const boosted = Math.min(1, baseOpacity * boost);
+    return ['interpolate', ['linear'], ['zoom'], 0, boosted, 4, baseOpacity];
+  }
+
   function applySky(altitude: number, air: ReturnType<typeof atmosphereNow> | null) {
     if (!map) return;
     try {
@@ -2665,6 +2877,7 @@ export async function startScout(): Promise<void> {
         'sky-horizon-blend': 0.55,
         'horizon-fog-blend': 0.55,
         'fog-ground-blend': 0.08,
+        'atmosphere-blend': ATMOSPHERE_BLEND as never,
       });
     } catch {
       /* older builds without sky support simply go without */
@@ -5134,12 +5347,24 @@ export async function startScout(): Promise<void> {
   function applyView() {
     if (!map || !styleReady) return;
     const three = view === '3d';
-    try {
-      map.setTerrain(three ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
-    } catch {
-      /* terrain unsupported — the rest still works */
+    // Free-look owns terrain and pitch for as long as night mode is active
+    // (see `enableFreeLook`/`lookMapAtSky`) — terrain is deliberately off
+    // there regardless of `view`, and pitch is free-look's own to set, not
+    // the everyday 55°/0° this function would otherwise reassert. This
+    // function can still run while free-look is on: the 2D/3D buttons stay
+    // clickable, and `style.load` fires again on a delayed initial load or a
+    // basemap swap. Without this guard, any of those silently snapped the
+    // camera and terrain back to the everyday view out from under free-look
+    // — the button stayed pressed, but the map looked like night mode had
+    // never turned on.
+    if (!freeLookCleanup) {
+      try {
+        map.setTerrain(three ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
+      } catch {
+        /* terrain unsupported — the rest still works */
+      }
+      map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
     }
-    map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
     // Turning terrain on and off moves the ground the dome stands on — in 2D
     // the ground *is* the plane at zero, in 3D it is the exaggerated DEM — so
     // the day's geometry has to be rebuilt against the new base.
@@ -5147,6 +5372,9 @@ export async function startScout(): Promise<void> {
     invalidate({ dome: true });
     try {
       map.setLayoutProperty('scout-buildings', 'visibility', three ? 'visible' : 'none');
+      if (map.getLayer('scout-building-edges')) {
+        map.setLayoutProperty('scout-building-edges', 'visibility', three ? 'visible' : 'none');
+      }
     } catch {
       /* layer not installed yet — the next style.load will apply the view */
     }
@@ -5205,6 +5433,16 @@ export async function startScout(): Promise<void> {
   for (const [id, key] of LAYER_TOGGLES) {
     on(id, 'change', (event) => {
       shown[key] = (event.target as HTMLInputElement).checked;
+      // A handful of keys have a second box — see `LAYER_TOGGLES` — so
+      // ticking one in the Milky Way dropdown has to be reflected in its
+      // twin back in the Layers panel, and the other way round, or the two
+      // would silently disagree the next time either panel is opened.
+      for (const [otherId, otherKey] of LAYER_TOGGLES) {
+        if (otherKey === key && otherId !== id) {
+          const other = document.getElementById(otherId) as HTMLInputElement | null;
+          if (other) other.checked = shown[key];
+        }
+      }
       applyVisibility();
       if (key === 'moonPath') drawMoon();
       if (key === 'corePath') rebuildCore();
@@ -5482,6 +5720,9 @@ export async function startScout(): Promise<void> {
     const open = panel.hidden;
     panel.hidden = !open;
     $('layers-button').setAttribute('aria-expanded', String(open));
+    // Same corner as `night-panel` — see the reasoning where night mode
+    // closes this one.
+    if (open) $<HTMLElement>('night-panel').hidden = true;
   });
 
   /**
@@ -5518,29 +5759,28 @@ export async function startScout(): Promise<void> {
    * whose whole point is "look around" — bearing had the full circle to
    * explore and pitch had almost nothing, which is not free-look, it is a
    * view that is already nearly where it is going. 68 leaves real room
-   * either side of it, down toward `NIGHT_PITCH_MIN` and up toward the
-   * ceiling, so a drag actually goes somewhere.
+   * either side of it, down toward the ground and up toward the ceiling, so
+   * a drag actually goes somewhere.
    */
   const NIGHT_PITCH = 68;
 
   /**
-   * The floor free-look's own drag and arrow-key handlers hold pitch to.
-   * `jumpTo` already clamps the ceiling to the map's own `maxPitch`, but has
-   * no notion of a *minimum* above 0 — left alone, dragging down would walk
-   * the view back toward the everyday top-down-ish 3D angle, and the ground
-   * (dimmed, not erased — see `dimBasemap`) would start reclaiming the frame
-   * from the sky this mode exists to show. Below this, "further down" stops
-   * doing anything rather than slowly undoing the rest of the mode.
+   * The floor Milky Way mode zooms in to, never zooming back out from
+   * whatever the session was already at past this.
+   *
+   * MapLibre's 3D camera does not sit *at* `center` — it is pulled back from
+   * it by a distance that grows with both pitch and how far out the zoom is,
+   * which is exactly correct for an orbit camera looking at a city and
+   * exactly wrong for a dome of stars meant to be stood inside of. At the
+   * old cap of 17 that pull-back could run to several hundred metres at
+   * `NIGHT_PITCH`, a meaningful fraction of `NIGHT_DOME_RADIUS_M` — enough
+   * that two stars actually aligned in the sky would not read as aligned on
+   * screen, seen from a point off to the side of the dome's own centre
+   * rather than from the centre itself. Near MapLibre's own zoom ceiling
+   * (22) that pull-back shrinks to a few tens of metres, close enough to
+   * the dome's radius to call the vantage point the centre.
    */
-  const NIGHT_PITCH_MIN = 50;
-
-  /** How much closer the view zooms in for Milky Way mode, added to whatever
-   *  zoom the map was already at — relative rather than a fixed level, so a
-   *  session already zoomed in past this does not zoom back out. Capped well
-   *  short of street level: the point is to feel closer to the pin the sky is
-   *  centred on, not to read building footprints in the dark. */
-  const NIGHT_ZOOM_BOOST = 2.5;
-  const NIGHT_ZOOM_MAX = 17;
+  const NIGHT_ZOOM_MIN = 20;
 
   /**
    * The dome's radius while Milky Way mode is on, in place of the everyday
@@ -5553,6 +5793,31 @@ export async function startScout(): Promise<void> {
    * dome is.
    */
   const NIGHT_DOME_RADIUS_M = 4000;
+
+  /**
+   * How far above the ground the free-look pivot floats, in metres —
+   * see `setCenterElevation` in `enableFreeLook`, which is what a pitch past
+   * 90° needs to keep the camera from swinging below ground.
+   *
+   * The point of this mode is standing at the *centre* of a dome of stars,
+   * not hovering somewhere up near its inner surface, so this wants to be as
+   * small as it can be while still guaranteeing the camera never dips
+   * underground — not a generous margin picked for its own sake.
+   *
+   * MapLibre's `cameraToCenterDistance` (the camera's real distance from the
+   * pivot) works out to `1.5 * viewportHeightPx * groundResolution(zoom,
+   * lat)`, and at 180° of pitch the camera sits that whole distance directly
+   * *below* the pivot. Ground resolution at `NIGHT_ZOOM_MIN` (the floor this
+   * mode's zoom never goes under) runs from about 0.15 m/px at the equator
+   * down to less at higher latitudes, so even a generously tall real-world
+   * viewport — 2200 CSS px, past what any phone, laptop or 4K monitor
+   * actually reports — only pulls the camera some 490m below the pivot.
+   * 500m clears that, at the cost of a roughly 7° tilt between the pivot and
+   * the dome's true ground-level centre (arctan of this over
+   * `NIGHT_DOME_RADIUS_M`) — small enough to still read as standing in the
+   * middle of the dome rather than floating above it.
+   */
+  const NIGHT_PIVOT_ELEVATION_M = 500;
 
   /**
    * Turn the map view itself to face where the core will be — bearing at its
@@ -5581,7 +5846,7 @@ export async function startScout(): Promise<void> {
       applyView();
     }
     const bearing = ((body.azimuth % 360) + 360) % 360;
-    const zoom = Math.min(NIGHT_ZOOM_MAX, map.getZoom() + NIGHT_ZOOM_BOOST);
+    const zoom = Math.max(NIGHT_ZOOM_MIN, map.getZoom());
     map.easeTo({
       bearing,
       pitch: NIGHT_PITCH,
@@ -5603,14 +5868,34 @@ export async function startScout(): Promise<void> {
   let dimmedLayers: Array<{ id: string; prop: string; value: unknown }> | null = null;
 
   /** How much of a basemap layer's own opacity survives while the sky is
-   *  the subject — low enough that roads and land read as a ground the eye
-   *  can still find its way by, not zero: a fully black ground looks like
-   *  missing tiles, not night. */
-  const NIGHT_GROUND_OPACITY = 0.15;
+   *  the subject — low enough that the ground still plainly recedes for the
+   *  stars, high enough that roads, water and the city's own shape stay
+   *  legible enough to orient by at a glance. 0.15 (the original figure)
+   *  read as *too* low once free-look could tilt the camera down toward the
+   *  ground on purpose (see `enableFreeLook`'s unrestricted pitch) rather
+   *  than only glimpse it at the screen's bottom edge — close to black felt
+   *  like missing tiles more than like night. */
+  const NIGHT_GROUND_OPACITY = 0.3;
   /** The background layer's own colour swap — opacity alone leaves whatever
    *  is *behind* the canvas showing through (the page, not a dark ground),
-   *  so this is set directly rather than dimmed like everything else. */
-  const NIGHT_GROUND_COLOUR = '#050608';
+   *  so this is set directly rather than dimmed like everything else. Lifted
+   *  slightly off true black alongside `NIGHT_GROUND_OPACITY`, for the same
+   *  reason: still unmistakably night, but with enough of a base tone left
+   *  that open water or an unloaded tile reads as ground rather than as a
+   *  hole in the page. */
+  const NIGHT_GROUND_COLOUR = '#0a0e15';
+
+  /**
+   * How long the basemap takes to wash down to `NIGHT_GROUND_OPACITY` /
+   * `NIGHT_GROUND_COLOUR` and back — set as each paint property's own
+   * `-transition` immediately before the property itself, matching
+   * `lookMapAtSky`'s entrance ease and `preNightView`'s exit ease so the
+   * ground fades in step with the camera turning to face the sky rather
+   * than snapping dark under it. `prefersReducedMotion` still gets the cut,
+   * same as the camera.
+   */
+  const NIGHT_DIM_MS = 900;
+  const NIGHT_UNDIM_MS = 700;
 
   /**
    * Turn every basemap layer down for the duration of Milky Way mode —
@@ -5660,11 +5945,14 @@ export async function startScout(): Promise<void> {
         layer.type === 'background' ? 'background-opacity' :
         null;
       if (!prop) continue; // heatmap, hillshade, circle — none of this style's basemaps use them
+      const duration = prefersReducedMotion() ? 0 : NIGHT_DIM_MS;
       remember(layer.id, prop, map.getPaintProperty(layer.id, prop) ?? null);
+      map.setPaintProperty(layer.id, `${prop}-transition`, { duration });
       map.setPaintProperty(layer.id, prop, NIGHT_GROUND_OPACITY);
 
       if (layer.type === 'background') {
         remember(layer.id, 'background-color', map.getPaintProperty(layer.id, 'background-color') ?? null);
+        map.setPaintProperty(layer.id, 'background-color-transition', { duration });
         map.setPaintProperty(layer.id, 'background-color', NIGHT_GROUND_COLOUR);
       }
     }
@@ -5673,10 +5961,14 @@ export async function startScout(): Promise<void> {
 
   function undimBasemap() {
     if (!map || !dimmedLayers) return;
+    const duration = prefersReducedMotion() ? 0 : NIGHT_UNDIM_MS;
     for (const { id, prop, value } of dimmedLayers) {
       try {
         if (prop === 'visibility') map.setLayoutProperty(id, prop, value as MapLibre.LayerSpecification['layout']);
-        else map.setPaintProperty(id, prop, value);
+        else {
+          map.setPaintProperty(id, `${prop}-transition`, { duration });
+          map.setPaintProperty(id, prop, value);
+        }
       } catch {
         // The layer is gone — the basemap was switched (light/dark/
         // satellite) while Milky Way mode was on, which replaces the whole
@@ -5684,6 +5976,128 @@ export async function startScout(): Promise<void> {
       }
     }
     dimmedLayers = null;
+  }
+
+  /**
+   * Where a dome point — real altitude, not draped on the ground — actually
+   * lands on screen, for tap-to-identify. `map.project()` cannot answer this:
+   * it only knows sea level.
+   *
+   * Reimplements the mercator half of `scoutProject` (see `dome-layer.ts`)
+   * by hand rather than calling into MapLibre for it, because nothing in its
+   * public API exposes an elevation-aware projection — only the shader gets
+   * one. Deliberately *not* the globe half: `domeLayer.getProjection()`
+   * hands back whatever matrix the dome's own last frame actually used, and
+   * free-look only ever runs at `NIGHT_ZOOM_MIN` or above, a zoom at which
+   * MapLibre has already swapped every custom layer's shader over to its
+   * flat-mercator variant (see the "two projections" note atop
+   * `dome-layer.ts`) — the same swap this file's own `variant` cache exists
+   * to track. A tap offered at a globe-scale zoom would have no dome to tap
+   * on in the first place.
+   */
+  function projectToScreen(lon: number, lat: number, altitudeM: number): { x: number; y: number } | null {
+    const projection = domeLayer.getProjection();
+    if (!projection) return null;
+    const m = Array.from(projection.mainMatrix);
+    if (m.length !== 16) return null;
+    // `altitudeM` arrives measured from the ground under the pin — the same
+    // convention `DomePoint.altitudeM` uses everywhere else in this file —
+    // but `MercatorCoordinate` wants height above sea level. `domeBaseM` is
+    // that difference; see `projectToMercator`, which every dome vertex
+    // this is meant to match the screen position of already goes through.
+    const merc = maplibregl.MercatorCoordinate.fromLngLat({ lng: lon, lat }, altitudeM + domeBaseM);
+    const x = merc.x;
+    const y = merc.y;
+    const z = merc.z;
+    // Column-major 4×4, the layout `gl.uniformMatrix4fv(..., false, m)`
+    // already assumes — the same multiply `scoutProject`'s non-globe branch
+    // does in GLSL, just run once in JS instead of once per vertex on the
+    // GPU.
+    const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+    const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+    const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+    // Behind the camera — the same test the vertex shader makes before it
+    // discards a point outright rather than projecting it through infinity.
+    if (cw <= 0) return null;
+    const canvas = map?.getCanvas();
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (cx / cw * 0.5 + 0.5) * rect.width,
+      y: (1 - (cy / cw * 0.5 + 0.5)) * rect.height,
+    };
+  }
+
+  /** How close a tap has to land to a star's projected position to count as
+   *  hitting it, in CSS pixels — generous enough for a fingertip, which is
+   *  thirty-some pixels wide, to find a point sprite that is drawn at a
+   *  handful. */
+  const STAR_TAP_RADIUS_PX = 22;
+
+  /**
+   * The nearest catalogue star to a tap, within `STAR_TAP_RADIUS_PX` — or
+   * null when nothing on screen is close enough, which is most taps, since
+   * a naked-eye sky is mostly empty space between the points worth naming.
+   */
+  function findTappedStar(clientX: number, clientY: number): Star | null {
+    let best: Star | null = null;
+    let bestDistSq = STAR_TAP_RADIUS_PX * STAR_TAP_RADIUS_PX;
+    for (const { star, point } of visibleStars) {
+      const screen = projectToScreen(point.lon, point.lat, point.altitudeM);
+      if (!screen) continue;
+      const dx = screen.x - clientX;
+      const dy = screen.y - clientY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= bestDistSq) {
+        best = star;
+        bestDistSq = distSq;
+      }
+    }
+    return best;
+  }
+
+  /** However a star is actually identified in the catalogue — a proper
+   *  name first, then a Bayer letter, then a Flamsteed number, and only
+   *  once none of those exist a magnitude-and-constellation description —
+   *  most of the catalogue has no name at all, and "unnamed star" on its
+   *  own is not an answer to "what is that". */
+  function starHeadline(star: Star): string {
+    if (star.name) return star.name;
+    if (star.bayer) return star.con ? `${star.bayer} ${star.con}` : star.bayer;
+    if (star.flam) return star.con ? `${star.flam} ${star.con}` : star.flam;
+    return star.con ? `An unnamed star in ${CONSTELLATION_NAME[star.con] ?? star.con}` : 'An unnamed star';
+  }
+
+  function hideStarInfo() {
+    $<HTMLElement>('star-info').hidden = true;
+  }
+
+  /** A tapped star's name, constellation and brightness, in a small card at
+   *  the tap itself — near enough to read as an answer to that specific
+   *  point, not a general panel that happens to have opened. */
+  function showStarInfo(star: Star, clientX: number, clientY: number) {
+    const panel = $<HTMLElement>('star-info');
+    const conName = star.con ? CONSTELLATION_NAME[star.con] ?? star.con : null;
+    const detail = [conName, `mag ${star.mag.toFixed(1)}`].filter(Boolean).join(' · ');
+    const headline = starHeadline(star);
+    $('star-info-name').textContent = headline;
+    $('star-info-detail').textContent = detail;
+    // The card is positioned at the tap, which a screen reader has no way to
+    // have followed — `#say`, the page's one shared live region (see
+    // `announce`), says the same thing in words instead of relying on where
+    // the card happened to land.
+    $('say').textContent = detail ? `${headline}. ${detail}.` : `${headline}.`;
+    panel.hidden = false;
+    // Clamped to the viewport rather than just the canvas: a tap near the
+    // right or bottom edge would otherwise open a card that runs straight
+    // off the screen, which on a phone is most of the useful screen.
+    const cardWidth = panel.offsetWidth || 200;
+    const cardHeight = panel.offsetHeight || 60;
+    const margin = 12;
+    const left = Math.min(Math.max(clientX + 14, margin), window.innerWidth - cardWidth - margin);
+    const top = Math.min(Math.max(clientY - cardHeight - 14, margin), window.innerHeight - cardHeight - margin);
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
   }
 
   /**
@@ -5697,20 +6111,63 @@ export async function startScout(): Promise<void> {
    * look-around handler) because that one is bound to the right mouse button
    * or Ctrl+drag — discoverable to nobody — and there is no supported way to
    * rebind it to a plain drag. Every gesture that could otherwise carry the
-   * pin away (pan, scroll-zoom, box-zoom, double-click-zoom, the keyboard's
-   * arrow-pan, touch pan/pinch) is disabled for the same reason: leaving even
-   * one of them live is one way back to "wait, where did the pin go".
+   * pin away (pan, box-zoom, double-click-zoom, the keyboard's arrow-pan,
+   * touch pan and the rotate half of touch pinch) is disabled for the same
+   * reason: leaving even one of them live is one way back to "wait, where
+   * did the pin go". Zoom itself is the one exception — see below.
    */
   function enableFreeLook() {
     if (!map || freeLookCleanup) return;
     const m = map;
     m.dragPan.disable();
     m.dragRotate.disable();
-    m.scrollZoom.disable();
     m.doubleClickZoom.disable();
     m.boxZoom.disable();
-    m.touchZoomRotate.disable();
+    // Zoom itself stays live — wheel, pinch and the +/- keys below all still
+    // work, see `NIGHT_ZOOM_MIN`. Only the *rotate* half of a two-finger
+    // touch gesture is switched off: that is bearing control by another
+    // name, and would fight the drag handlers below for it exactly the way
+    // `dragRotate` would.
+    //
+    // Both are also pinned to zoom around the map's *centre* rather than
+    // MapLibre's default of the cursor or the pinch midpoint — the whole
+    // reason the pivot is fixed and elevated (see `NIGHT_PIVOT_ELEVATION_M`
+    // below) is so the dome's centre and the camera's centre are the same
+    // point; zooming toward wherever a finger happens to land would walk
+    // them apart again, one scroll or pinch at a time.
+    m.scrollZoom.enable({ around: 'center' });
+    m.touchZoomRotate.enable({ around: 'center' });
+    m.touchZoomRotate.disableRotation();
     m.keyboard.disable();
+    // The map-wide ceiling (see `maxPitch` at the map's own construction) is
+    // there for the everyday terrain-on 3D view, which can still reach this
+    // steep via dragRotate and would z-fight its own DEM past it. Free-look
+    // has already taken terrain off above, so that reason is gone for as
+    // long as this mode is — lifted to MapLibre's actual ceiling (180°, a
+    // full look-around including straight up and past it) rather than left
+    // at a limit that belonged to a different view. Restored in cleanup to
+    // whatever it was, not hard-coded back to the everyday value, in case
+    // something else has its own opinion on the ceiling by the time this
+    // mode ends.
+    const prevMaxPitch = m.getMaxPitch();
+    m.setMaxPitch(180);
+    // A pitch that can now pass 90° looks *behind* the pivot rather than
+    // down at it, which pulls the camera below the pivot's own elevation by
+    // up to roughly `cameraToCenterDistance` — MapLibre's real camera never
+    // actually sits at `center`, only ever some distance from it. With the
+    // pivot sitting at ground level (elevation 0, the default with terrain
+    // off) that puts the camera underground for a good stretch of the newly
+    // opened-up tilt range. `centerClampedToGround` has to come off first —
+    // while it is on, MapLibre keeps snapping the pivot's elevation back to
+    // the terrain (or sea level with none loaded), which is exactly the
+    // behaviour this is working around. See `NIGHT_PIVOT_ELEVATION_M` for
+    // where the clearance number comes from and `NIGHT_ZOOM_MIN` for the
+    // zoom floor its math assumes.
+    const prevCenterClampedToGround = m.getCenterClampedToGround();
+    const prevMinZoom = m.getMinZoom();
+    m.setCenterClampedToGround(false);
+    m.setCenterElevation(NIGHT_PIVOT_ELEVATION_M);
+    m.setMinZoom(NIGHT_ZOOM_MIN);
     dimBasemap();
 
     // Measured at ~40-90ms a call in this app's own 3D terrain mode —
@@ -5728,29 +6185,42 @@ export async function startScout(): Promise<void> {
     }
 
     // The pin sits dead centre once `lookMapAtSky` has recentred on it, which
-    // makes it the single most likely place for a look-around drag to begin.
-    // `setDraggable(false)` alone is not enough: the marker is a DOM element
-    // layered over the canvas, not a child of it, so a pointerdown landing on
-    // its icon never reaches the canvas listeners below at all — draggable or
-    // not, it simply swallows the gesture. Letting pointer events pass
-    // through it is what actually hands that gesture to the canvas. The
-    // monolith and sightline markers get the same treatment for the same
-    // reason, on the chance either happens to be up at the same time.
+    // made it the single most likely place for a look-around drag to begin
+    // back when pitch was floored at 50° and the marker stayed on screen.
+    // Now that a drag can swing pitch all the way down to 0, the marker
+    // would track across the frame with the ground it is anchored to —
+    // exactly the kind of thing "look wherever you like" should not be
+    // fighting. Hidden outright rather than left dim and undraggable: a
+    // marker is a DOM element layered over the canvas, not a child of it, so
+    // even non-draggable it would still swallow a pointerdown meant for the
+    // canvas beneath it. `display: none` sidesteps that along with the
+    // visual clutter in one move. The monolith and sightline markers get the
+    // same treatment for the same reason, on the chance either happens to be
+    // up at the same time.
     for (const marker of [pin, slabMarker, sightMarker]) {
       marker.setDraggable(false);
-      marker.getElement().style.pointerEvents = 'none';
+      marker.getElement().style.display = 'none';
     }
 
     const canvas = m.getCanvas();
-    // Degrees of bearing/pitch per pixel dragged. Chosen so a full sweep of a
-    // typical viewport's width turns you most of the way round — enough to
-    // feel like a real turn of the head, not a twitch.
-    const LOOK_SENSITIVITY = 0.25;
+    // Degrees of pitch per pixel dragged; bearing shares this base rate,
+    // scaled by cos(pitch) below. Lower than a first pass at 0.25 — a
+    // trackpad's pointer events arrive in large, fast-moving bursts, and at
+    // that rate a small hand motion swung the view much further than it
+    // looked like it should. This trades some reach (a full look-around
+    // takes more than one drag to cover) for a rate that tracks the hand
+    // rather than outrunning it.
+    const LOOK_SENSITIVITY = 0.15;
+    const RAD = Math.PI / 180;
     let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    let startBearing = 0;
-    let startPitch = 0;
+    // Position as of the last *applied* frame, not the last pointer event —
+    // deltas are measured from here so a drag is a running sum of small
+    // per-frame steps rather than one offset from wherever the pointer
+    // happened to go down. That is what lets bearing's cos(pitch) scaling
+    // (below) track pitch as it changes mid-drag instead of only at the
+    // start of one.
+    let lastX = 0;
+    let lastY = 0;
     // A pointer can report movement faster than the map can usefully act on
     // it — `jumpTo` is not free even with terrain off — so each move only
     // records where the pointer is *now* and a single rAF callback applies
@@ -5764,20 +6234,53 @@ export async function startScout(): Promise<void> {
     const applyPending = () => {
       pendingFrame = 0;
       if (!dragging) return;
+      const dx = pendingClientX - lastX;
+      const dy = pendingClientY - lastY;
+      lastX = pendingClientX;
+      lastY = pendingClientY;
+      const pitch = m.getPitch();
       m.jumpTo({
-        bearing: startBearing - (pendingClientX - startX) * LOOK_SENSITIVITY,
-        // `jumpTo` clamps the ceiling to the map's own maxPitch on its own;
-        // the floor needs doing by hand — see NIGHT_PITCH_MIN.
-        pitch: Math.max(NIGHT_PITCH_MIN, startPitch - (pendingClientY - startY) * LOOK_SENSITIVITY),
+        // Bearing is a compass heading, not a roll around the view axis —
+        // past 90° of pitch the camera is looking back over its own
+        // shoulder, so the same rightward drag that used to turn the view
+        // clockwise now turns it anticlockwise on screen: a real reversal,
+        // not a feeling. cos(pitch) crosses zero exactly at 90° and goes
+        // negative beyond it, so scaling by it keeps "drag right, view
+        // turns right" true across the whole 0–180° range this mode now
+        // allows, rather than only the first 90° of it. It also tapers
+        // bearing to nothing right at 90°, where a horizontal drag has no
+        // meaningful compass direction to give it anyway — a pause there
+        // reads as a pole, not a stall.
+        bearing: m.getBearing() - dx * LOOK_SENSITIVITY * Math.cos(pitch * RAD),
+        // `jumpTo` clamps both ends on its own — the ceiling to the map's
+        // own maxPitch, the floor to 0 — so a drag can walk pitch across the
+        // whole range, straight overhead to straight down, for a full look
+        // around rather than a lean confined to the horizon.
+        pitch: pitch - dy * LOOK_SENSITIVITY,
       });
     };
 
+    // A tap that hits a star shows what it is — see `findTappedStar` and
+    // `showStarInfo` — without that swallowing every plain look-around drag.
+    // The distinction is the same one a browser's own click makes: down and
+    // up close enough together, in both time and place, that nothing in
+    // between could have been a drag.
+    const TAP_MAX_MOVE_PX = 8;
+    const TAP_MAX_MS = 400;
+    let downX = 0;
+    let downY = 0;
+    let downTime = 0;
+
     const onDown = (e: PointerEvent) => {
       dragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startBearing = m.getBearing();
-      startPitch = m.getPitch();
+      lastX = e.clientX;
+      lastY = e.clientY;
+      downX = e.clientX;
+      downY = e.clientY;
+      downTime = performance.now();
+      // A card left open from the last tap has no business surviving the
+      // next gesture, drag or tap alike.
+      hideStarInfo();
       canvas.setPointerCapture(e.pointerId);
       // grab → grabbing on press is the standard pannable-canvas affordance
       // (Google Maps, Figma) — the open hand becomes a closed one for
@@ -5802,6 +6305,14 @@ export async function startScout(): Promise<void> {
       } catch {
         /* already released — Safari does this on its own past a certain gesture length */
       }
+      if (e.type === 'pointerup') {
+        const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+        if (moved <= TAP_MAX_MOVE_PX && performance.now() - downTime <= TAP_MAX_MS) {
+          const hit = findTappedStar(e.clientX, e.clientY);
+          if (hit) showStarInfo(hit, e.clientX, e.clientY);
+          else hideStarInfo();
+        }
+      }
     };
 
     canvas.addEventListener('pointerdown', onDown);
@@ -5809,15 +6320,29 @@ export async function startScout(): Promise<void> {
     canvas.addEventListener('pointerup', onUp);
     canvas.addEventListener('pointercancel', onUp);
     canvas.style.cursor = 'grab';
+    // MapLibre only sets touch-action: none on the canvas while its own
+    // dragPan/touchZoomRotate handlers are enabled — it toggles that via a
+    // CSS class on enable/disable, not something free-look's pointer
+    // handlers inherit. With those handlers disabled above, the canvas
+    // falls back to the browser's default touch-action: auto, so a
+    // look-around drag on a touchscreen fights native scroll/pull-to-refresh
+    // instead of driving the camera. Set explicitly here; cleared in cleanup
+    // so MapLibre's own class-based rule takes back over once its handlers
+    // are re-enabled.
+    const prevTouchAction = canvas.style.touchAction;
+    canvas.style.touchAction = 'none';
 
     // The drag above has no keyboard equivalent otherwise — this mode turns
     // off the map's own arrow-key panning along with everything else that
     // could carry the pin away (see the disabled handlers above), which
     // would leave a keyboard user with no way to look around at all, not
     // even the ordinary panning they lost. Arrow keys orbit the same way a
-    // drag would; Escape leaves the mode entirely, since a gesture that
+    // drag would, +/- zoom the same way a wheel or pinch would (see
+    // `NIGHT_ZOOM_MIN` — `jumpTo` clamps there on its own, same as it does
+    // for pitch); Escape leaves the mode entirely, since a gesture that
     // replaces normal map interaction needs an equally normal way out.
     const KEY_STEP_DEG = 5;
+    const ZOOM_KEY_STEP = 0.5;
     const onKeyDown = (e: KeyboardEvent) => {
       // Whatever has focus gets the arrow keys and Escape first — a date
       // input or a search box being typed into is not asking to orbit the
@@ -5835,13 +6360,27 @@ export async function startScout(): Promise<void> {
       const step = e.shiftKey ? KEY_STEP_DEG * 3 : KEY_STEP_DEG;
       let bearing: number | null = null;
       let pitch: number | null = null;
-      if (e.key === 'ArrowLeft') bearing = m.getBearing() - step;
-      else if (e.key === 'ArrowRight') bearing = m.getBearing() + step;
+      let zoom: number | null = null;
+      // Same reversal the drag handler corrects for (see its own comment) —
+      // past 90° of pitch, "left" and "right" on the compass swap which way
+      // they turn the view on screen. A flat sign flip rather than the
+      // drag's continuous cos(pitch) scale: a keypress is already a fixed
+      // step, not a distance to taper, so it only needs to know which of
+      // the two directions is currently correct.
+      const bearingSign = Math.cos(m.getPitch() * RAD) >= 0 ? 1 : -1;
+      if (e.key === 'ArrowLeft') bearing = m.getBearing() - step * bearingSign;
+      else if (e.key === 'ArrowRight') bearing = m.getBearing() + step * bearingSign;
       else if (e.key === 'ArrowUp') pitch = m.getPitch() + step;
-      else if (e.key === 'ArrowDown') pitch = Math.max(NIGHT_PITCH_MIN, m.getPitch() - step);
+      else if (e.key === 'ArrowDown') pitch = m.getPitch() - step;
+      else if (e.key === '+' || e.key === '=') zoom = m.getZoom() + ZOOM_KEY_STEP;
+      else if (e.key === '-' || e.key === '_') zoom = m.getZoom() - ZOOM_KEY_STEP;
       else return;
       e.preventDefault();
-      m.jumpTo({ ...(bearing !== null && { bearing }), ...(pitch !== null && { pitch }) });
+      m.jumpTo({
+        ...(bearing !== null && { bearing }),
+        ...(pitch !== null && { pitch }),
+        ...(zoom !== null && { zoom }),
+      });
     };
     document.addEventListener('keydown', onKeyDown);
 
@@ -5852,6 +6391,16 @@ export async function startScout(): Promise<void> {
       canvas.removeEventListener('pointercancel', onUp);
       document.removeEventListener('keydown', onKeyDown);
       canvas.style.cursor = '';
+      canvas.style.touchAction = prevTouchAction;
+      m.touchZoomRotate.enableRotation();
+      m.setMaxPitch(prevMaxPitch);
+      m.setMinZoom(prevMinZoom);
+      m.setCenterClampedToGround(prevCenterClampedToGround);
+      // Not left for `centerClampedToGround` to catch up on its own next
+      // move: that only re-snaps elevation to the terrain (or sea level)
+      // the moment something else nudges the camera, which could be a
+      // visible beat after this runs rather than in the same frame.
+      if (prevCenterClampedToGround) m.setCenterElevation(0);
       if (pendingFrame) cancelAnimationFrame(pendingFrame);
     };
   }
@@ -5859,10 +6408,11 @@ export async function startScout(): Promise<void> {
   function disableFreeLook() {
     freeLookCleanup?.();
     freeLookCleanup = null;
+    hideStarInfo();
     undimBasemap();
     for (const marker of [pin, slabMarker, sightMarker]) {
       marker.setDraggable(true);
-      marker.getElement().style.pointerEvents = '';
+      marker.getElement().style.display = '';
     }
     if (!map) return;
     // Not the whole of `applyView()`: that also eases pitch to the everyday
@@ -5894,6 +6444,21 @@ export async function startScout(): Promise<void> {
    * whenever the mode did not need to move the slider (it was already dark).
    */
   let preNightTime: { isoDate: string; minute: number } | null = null;
+
+  /**
+   * Whether the clock was following the real minute (see `setFollowing`)
+   * just before Milky Way mode took hold of it, restored on the way back
+   * out — same reasoning as `preNightTime`, for the mechanism that would
+   * otherwise fight it. `goToInstant` below picks a specific dark moment on
+   * purpose; left alone, `tickToNow`'s ten-second timer has no idea free-look
+   * exists and would drag the slider straight back toward the real,
+   * probably-daylight `now` — the button stays pressed and the camera stays
+   * turned to the sky, but the moment it is looking at quietly stops being
+   * night. `handsOnTheClock()` is the same "you are not driving the clock
+   * right now" used wherever a person reaches for the slider themselves;
+   * this is night mode reaching for it on their behalf.
+   */
+  let preNightFollowing = false;
 
   /**
    * The middle of the longest astronomically-dark stretch of the coming
@@ -5935,9 +6500,18 @@ export async function startScout(): Promise<void> {
   function setNightMode(on: boolean) {
     const button = $('night-button');
     button.setAttribute('aria-pressed', String(on));
-    const toggleId = (key: keyof Shown) => LAYER_TOGGLES.find(([, k]) => k === key)?.[0];
+    // Plural: `stars`, `corePath` and `frame` each have two boxes now (see
+    // `LAYER_TOGGLES`), and this mode turning them on or off has to be
+    // reflected in both, not just whichever one `.find` happened to see
+    // first.
+    const toggleIds = (key: keyof Shown) => LAYER_TOGGLES.filter(([, k]) => k === key).map(([id]) => id);
 
     if (on) {
+      // Stop the clock driving itself before anything below reads or moves
+      // it — `goToInstant` a few lines down, and any scrub while the mode
+      // stays open, are both meant to stick. See `preNightFollowing`.
+      preNightFollowing = following;
+      handsOnTheClock();
       // Before anything else reads the date or the minute: everything below
       // (rebuildCore, coreAim, the dome) is about to be built for whichever
       // one is current, and jumping later would mean doing that work twice.
@@ -5953,15 +6527,13 @@ export async function startScout(): Promise<void> {
       nightTurnedOn = (['corePath', 'frame', 'stars'] as const).filter((key) => !shown[key]);
       for (const key of nightTurnedOn) {
         shown[key] = true;
-        const id = toggleId(key);
-        if (id) $<HTMLInputElement>(id).checked = true;
+        for (const id of toggleIds(key)) $<HTMLInputElement>(id).checked = true;
       }
       void ensureStarsLoaded();
     } else {
       for (const key of nightTurnedOn) {
         shown[key] = false;
-        const id = toggleId(key);
-        if (id) $<HTMLInputElement>(id).checked = false;
+        for (const id of toggleIds(key)) $<HTMLInputElement>(id).checked = false;
       }
       nightTurnedOn = [];
     }
@@ -5982,7 +6554,14 @@ export async function startScout(): Promise<void> {
 
     const fold = $<HTMLDetailsElement>('fold-core');
     fold.open = on;
+    // The mode's own toggles, open for exactly as long as the mode is — see
+    // `night-panel` in scout.astro. The general Layers panel closes at the
+    // same moment: both are anchored to the same corner, and open together
+    // they would sit on top of each other.
+    $<HTMLElement>('night-panel').hidden = !on;
     if (on) {
+      $<HTMLElement>('layers').hidden = true;
+      $('layers-button').setAttribute('aria-expanded', 'false');
       // Aim before the fold is read, so the framing lines are already the
       // answer for a lens pointed at the core rather than for whatever it
       // happened to be doing.
@@ -5996,8 +6575,22 @@ export async function startScout(): Promise<void> {
           view,
         };
       }
-      lookMapAtSky(coreAim);
+      // `enableFreeLook` first, `lookMapAtSky` second — not the more natural
+      // "frame the sky, then hand off to free-look" order. Several of the
+      // constraints `enableFreeLook` sets (`setMaxPitch`, `setMinZoom`,
+      // `setCenterElevation`) are immediate, non-eased camera mutations
+      // under the hood — MapLibre implements each as roughly `setPitch/
+      // setZoom(currentValue)`, which cancels whatever camera animation is
+      // in flight. Called after `lookMapAtSky`'s own `easeTo`, they were
+      // landing mid-flight and snapping the camera straight back to
+      // whatever it was *before* night mode, using the pre-transition pitch
+      // as "current" — night mode looked like it had turned on (the button
+      // stayed pressed, the dome and dimming were correct) but the camera
+      // never actually turned to face the sky. Doing the constraint setup
+      // first means `lookMapAtSky`'s ease is the last camera call in this
+      // sequence, so nothing after it can cut it off.
       enableFreeLook();
+      lookMapAtSky(coreAim);
       fold.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
       disableFreeLook();
@@ -6006,6 +6599,10 @@ export async function startScout(): Promise<void> {
         preNightTime = null;
         setDate(backTime.isoDate);
         setMinute(backTime.minute);
+      }
+      if (preNightFollowing) {
+        preNightFollowing = false;
+        setFollowing(true);
       }
       refreshCoreLens();
       if (preNightView) {
@@ -6253,18 +6850,13 @@ export async function startScout(): Promise<void> {
         const li = document.createElement('li');
         li.dataset.spot = String(index);
 
-        const drop = document.createElement('button');
-        drop.type = 'button';
-        drop.className = 'drop-spot';
-        drop.dataset.drop = String(index);
-        drop.textContent = '×';
-        drop.title = `Forget ${spot.name}`;
-        li.append(drop);
+        const body = document.createElement('span');
+        body.className = 'result-body';
 
         const name = document.createElement('span');
         name.className = 'nm';
         name.textContent = spot.name;
-        li.append(name);
+        body.append(name);
 
         const detail = document.createElement('span');
         detail.className = 'dt';
@@ -6276,7 +6868,16 @@ export async function startScout(): Promise<void> {
         ]
           .filter(Boolean)
           .join(' — ');
-        li.append(detail);
+        body.append(detail);
+        li.append(body);
+
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'drop-spot';
+        drop.dataset.drop = String(index);
+        drop.textContent = '×';
+        drop.title = `Forget ${spot.name}`;
+        li.append(drop);
         return li;
       }),
     );
@@ -7343,9 +7944,16 @@ export async function startScout(): Promise<void> {
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('.searchbox') && !target.closest('#search-button')) searchBox.closeResults();
-    if (!target.closest('.layers') && !target.closest('#layers-button')) {
+    // `#layers` and `#night-panel` both carry the `.layers` class for their
+    // shared panel styling, so closing either on outside-click has to check
+    // its own id rather than that shared class — `.closest('.layers')`
+    // would count a click inside one as "not outside" the other too.
+    if (!target.closest('#layers') && !target.closest('#layers-button')) {
       $<HTMLElement>('layers').hidden = true;
       $('layers-button').setAttribute('aria-expanded', 'false');
+    }
+    if (!target.closest('#night-panel') && !target.closest('#night-button')) {
+      $<HTMLElement>('night-panel').hidden = true;
     }
     if (!target.closest('.datesheet') && !target.closest('#chip-date')) {
       $<HTMLElement>('datesheet').hidden = true;

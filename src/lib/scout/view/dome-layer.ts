@@ -55,6 +55,7 @@ import {
   PROJECTION_UNIFORMS,
   readProjection,
   setProjectionUniforms,
+  type ProjectionData,
   type ShaderData,
 } from './projection';
 
@@ -91,6 +92,13 @@ export interface DomeGeometryData {
 
 export interface DomeLayer extends maplibregl.CustomLayerInterface {
   setGeometry(data: DomeGeometryData): void;
+  /**
+   * The projection data the most recent frame was drawn with, for code
+   * outside this layer that needs to answer "where on screen did that point
+   * land" the same way the shader itself would — tap-to-identify a star,
+   * for instance. Null before the first frame has rendered.
+   */
+  getProjection(): ProjectionData | null;
 }
 
 export const LINE_STRIDE = 8;
@@ -240,6 +248,7 @@ export function createDomeLayer(id: string): DomeLayer {
 
   let data: DomeGeometryData = { lines: new Float32Array(0), runs: [], points: new Float32Array(0) };
   let dirty = false;
+  let lastProjection: ProjectionData | null = null;
 
   /** Compile for `shader`'s projection, discarding whatever was up before. */
   function compileFor(gl: WebGLRenderingContext, shader: ShaderData): void {
@@ -271,6 +280,10 @@ export function createDomeLayer(id: string): DomeLayer {
       dirty = true;
     },
 
+    getProjection() {
+      return lastProjection;
+    },
+
     onAdd(_map: maplibregl.Map, gl: WebGLRenderingContext) {
       // Programs are not built here: the projection is not known until a frame
       // is drawn, and it changes afterwards anyway.
@@ -291,6 +304,7 @@ export function createDomeLayer(id: string): DomeLayer {
       const read = readProjection(args);
       if (!read) return;
       const { projection, shader } = read;
+      lastProjection = projection;
       // A canvas with no size has nothing to draw into, and the ribbon shader
       // divides by half of it. Belt as well as the shader's braces.
       if (!gl.drawingBufferWidth || !gl.drawingBufferHeight) return;

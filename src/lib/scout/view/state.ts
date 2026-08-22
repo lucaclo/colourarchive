@@ -75,6 +75,14 @@ export const defaultShown = (): Shown => ({
  * separately. A layer added to one and not the other gets a toggle that works
  * and does not survive a reload, or a box that comes back ticked and controls
  * nothing.
+ *
+ * A key can appear more than once — `corePath`, `solstice`, `monolith`,
+ * `photos`, `frame` and `stars` each have a second box in the Milky Way
+ * dropdown alongside their original one in the Layers panel, so the same
+ * six layers can be reached from whichever panel is already open. Nothing
+ * about the wiring assumes one id per key: both boxes are found by scanning
+ * for their shared key and kept in sync (see `on(id, 'change', …)` in
+ * `page.ts`), so a key with two ids just means two switches on one light.
  */
 export const LAYER_TOGGLES: ReadonlyArray<readonly [id: string, key: keyof Shown]> = [
   ['t-buildings', 'buildings'],
@@ -89,6 +97,12 @@ export const LAYER_TOGGLES: ReadonlyArray<readonly [id: string, key: keyof Shown
   ['t-frame', 'frame'],
   ['t-sight', 'sight'],
   ['t-stars', 'stars'],
+  ['t-moonpath-night', 'moonPath'],
+  ['t-core-night', 'corePath'],
+  ['t-solstice-night', 'solstice'],
+  ['t-monolith-night', 'monolith'],
+  ['t-frame-night', 'frame'],
+  ['t-stars-night', 'stars'],
 ] as const;
 
 /** The monolith: a stated height, to check a shadow against a known one. */

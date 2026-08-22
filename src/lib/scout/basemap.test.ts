@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   ambientColour,
+  BUILDING_EDGE_COLOUR,
   buildingColours,
   contrastOverrides,
   contrastRatio,
@@ -302,5 +303,58 @@ describe('contrast overrides', () => {
         assert.ok(isHex(override.value), `${override.layerId}/${override.property}: ${override.value}`);
       }
     }
+  });
+
+  it('gives the road hierarchy more than two steps', () => {
+    const withMoreRoads = contrastOverrides([
+      ...layers,
+      { id: 'highway_trunk', type: 'line', 'source-layer': 'transportation' },
+      { id: 'highway_primary', type: 'line', 'source-layer': 'transportation' },
+      { id: 'highway_secondary', type: 'line', 'source-layer': 'transportation' },
+      { id: 'highway_tertiary', type: 'line', 'source-layer': 'transportation' },
+      { id: 'highway_service', type: 'line', 'source-layer': 'transportation' },
+    ]);
+    const find2 = (layerId: string) =>
+      withMoreRoads.find((o) => o.layerId === layerId && o.property === 'line-color')?.value as string;
+    const background = find('background', 'background-color');
+    // Descending, one grey-blue family throughout — the point is the steps
+    // between them, not any one of the colours.
+    const steps = [
+      'highway_motorway',
+      'highway_trunk',
+      'highway_primary',
+      'highway_secondary',
+      'highway_tertiary',
+      'highway_minor',
+      'highway_service',
+    ].map((id) => contrastRatio(find2(id), background));
+    for (let i = 1; i < steps.length; i++) {
+      assert.ok(steps[i] <= steps[i - 1], `step ${i} (${steps[i]}) is not below step ${i - 1} (${steps[i - 1]})`);
+    }
+    // Not every id can share a value with its neighbour, or it is not a step.
+    assert.ok(new Set(steps).size > 3, 'too many of the steps collapsed onto the same colour');
+  });
+
+  it('gives ground cover more than one flat colour', () => {
+    const withMoreGround = contrastOverrides([
+      ...layers,
+      { id: 'landuse_park', type: 'fill', 'source-layer': 'landuse' },
+      { id: 'landuse_industrial', type: 'fill', 'source-layer': 'landuse' },
+      { id: 'landuse_cemetery', type: 'fill', 'source-layer': 'landuse' },
+      { id: 'landuse_residential', type: 'fill', 'source-layer': 'landuse' },
+    ]);
+    const colours = new Set(
+      ['landcover_wood', 'landuse_park', 'landuse_industrial', 'landuse_cemetery', 'landuse_residential'].map(
+        (id) => withMoreGround.find((o) => o.layerId === id && o.property === 'fill-color')?.value,
+      ),
+    );
+    assert.ok(colours.size > 1, 'every ground class still resolves to the same one colour');
+  });
+});
+
+describe('building edge colour', () => {
+  it('is a valid colour, distinct from the flat building fill', () => {
+    assert.ok(isHex(BUILDING_EDGE_COLOUR));
+    assert.notEqual(BUILDING_EDGE_COLOUR, '#24262c');
   });
 });
