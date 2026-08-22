@@ -1,8 +1,13 @@
 /* ============================================================================
-   Colour Archive — base + theme presets.
+   Colour Archive — base + tokens.
    The photograph is the only event. One piece of type: chapter titles.
-   Themes are driven by [data-theme] on <html>; each sets font + palette +
-   title treatment tokens. WCAG AA contrast held in every preset.
+   This used to be six switchable EXHIBITION presets behind [data-theme] —
+   noir/plate/column/didone/fraunces/whisper — with the plan, from the start,
+   to pick one and drop the switcher once it was clear which one was right.
+   Whisper won: warm archival ground, Fraunces italic, ultra-quiet. It was
+   also the only preset whose fonts actually shipped in public/fonts — the
+   other five would have silently fallen back to Georgia the moment anyone
+   switched to them. Baked in below; the other five and the switcher are gone.
    ========================================================================== */
 
 /* ============================================================================
@@ -117,24 +122,28 @@
 html, body { margin: 0; padding: 0; }
 
 :root {
-  --bg: #111112;
-  --fg: #ededed;
-  --muted: #7d7d82;
-  --border: #262629;
-  --font-display: 'Playfair Display', Georgia, serif;
+  /* Whisper, baked in: warm selenium-toned near-black + a soft paper white —
+     a fine-print feel. Was one of six switchable presets; see the file
+     header for why this is the one that stayed. */
+  --bg: #100f0e;
+  --fg: #ece9e3;
+  --muted: #83807a;
+  --border: #201f1d;
+  --font-display: 'Fraunces', Georgia, serif;   /* display cut w/ optical sizing */
   --font-label: 'JetBrains Mono', ui-monospace, monospace;
 
-  --title-size: clamp(3rem, 10vw, 9rem);
-  --title-weight: 700;
-  --title-tracking: -0.02em;
+  --title-size: clamp(2rem, 5vw, 4rem);
+  --title-weight: 500;
+  --title-tracking: 0.005em;
   --title-transform: none;
-  --title-style: normal;
-  --title-leading: 0.95;
+  --title-style: italic;
+  --title-leading: 1.06;
   --title-align: center;      /* flex align: center | flex-start */
   --title-text-align: center; /* text-align: center | left */
 
-  /* Chapter swatch — dot by default; variants reshape or hide it. */
-  --swatch-display: block;
+  /* Chapter swatch — Whisper hides it; kept as a token rather than deleted
+     outright in case a future chapter treatment wants it back. */
+  --swatch-display: none;
   --swatch-w: 2.2rem;
   --swatch-h: 2.2rem;
   --swatch-radius: 50%;
@@ -143,7 +152,7 @@ html, body { margin: 0; padding: 0; }
   --gap: 100svh;              /* the held breath between chapters */
   --fade: 620ms;              /* photo entrance */
 
-  --grain-opacity: 0.11;      /* a little bit of grain; variants can raise it */
+  --grain-opacity: 0.12;      /* a little bit of grain */
 
   --cols: 3;                  /* collage columns */
   --gutter: 3px;              /* space between collage tiles */
@@ -151,76 +160,22 @@ html, body { margin: 0; padding: 0; }
   /* Refined design tokens (shared) */
   --edge: clamp(1.4rem, 4vw, 3rem);        /* page inset */
   --hair: color-mix(in oklab, var(--fg) 12%, transparent);  /* delicate rule */
-  --accent: var(--fg);                      /* per-chapter colour overrides this */
+  /* --accent starts equal to --fg, so anything reading it before JS runs
+     (or with JS disabled) gets today's neutral chrome unchanged. The scroll
+     tracker overwrites it per-frame with the current chapter's hue at low
+     chroma — see setAmbient() in index.astro. Never read raw: always through
+     one of the two mixes below, so accent chrome can't fall below the
+     contrast the plain neutral chrome already held. */
+  --accent: var(--fg);
+  --accent-mix: color-mix(in oklab, var(--accent) 45%, var(--fg));    /* hover/active text */
+  --accent-hair: color-mix(in oklab, var(--accent) 30%, var(--hair)); /* accent-aware hairline */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);    /* soft "out-expo" */
   --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
   --label-size: 0.66rem;
   --label-track: 0.34em;                    /* airy mono labels */
-}
 
-/* ==== Six variations on EXHIBITION ======================================= */
-
-/* 1 — Noir: the baseline. Near-black, Playfair 700, sentence case, centred. */
-[data-theme='ex-noir'] {
-  --bg: #111112; --fg: #ededed; --muted: #7d7d82; --border: #262629;
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-label: 'JetBrains Mono', ui-monospace, monospace;
-  --title-weight: 700; --title-tracking: -0.02em; --title-transform: none;
-  --title-size: clamp(3rem, 10vw, 9rem); --title-leading: 0.95;
-}
-
-/* 2 — Plate: inverted to a light museum wall label. Fine Playfair, rule swatch. */
-[data-theme='ex-plate'] {
-  --bg: #f4f3ef; --fg: #16161a; --muted: #6c6a63; --border: #e0ddd4;
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-label: 'JetBrains Mono', ui-monospace, monospace;
-  --title-weight: 500; --title-tracking: 0em; --title-transform: none;
-  --title-size: clamp(2.6rem, 7.5vw, 6.5rem); --title-leading: 1;
-  --swatch-w: 3rem; --swatch-h: 1px; --swatch-radius: 0; --swatch-mt: 2.4rem;
-}
-
-/* 3 — Column: asymmetric. Title hard left, Playfair 900 oversized, breaking. */
-[data-theme='ex-column'] {
-  --bg: #0f0f10; --fg: #f0f0ee; --muted: #77777c; --border: #232326;
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-label: 'JetBrains Mono', ui-monospace, monospace;
-  --title-weight: 900; --title-tracking: -0.03em; --title-transform: none;
-  --title-size: clamp(3.4rem, 12vw, 11rem); --title-leading: 0.9;
-  --title-align: flex-start; --title-text-align: left;
-  --swatch-w: 1.6rem; --swatch-h: 1.6rem;
-}
-
-/* 4 — Didone: Libre Bodoni, uppercase, stark high contrast. Space Mono. */
-[data-theme='ex-didone'] {
-  --bg: #121213; --fg: #efefef; --muted: #7c7c80; --border: #252528;
-  --font-display: 'Libre Bodoni', Georgia, serif;
-  --font-label: 'Space Mono', ui-monospace, monospace;
-  --title-weight: 700; --title-tracking: 0.02em; --title-transform: uppercase;
-  --title-size: clamp(2.8rem, 9vw, 8rem); --title-leading: 1;
-  --swatch-w: 3rem; --swatch-h: 2px; --swatch-radius: 0; --swatch-mt: 2.2rem;
-}
-
-/* 5 — Fraunces: warm near-black, Fraunces italic, softer modern didone. */
-[data-theme='ex-fraunces'] {
-  --bg: #14110f; --fg: #f0ebe4; --muted: #857b70; --border: #262019;
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-label: 'JetBrains Mono', ui-monospace, monospace;
-  --title-weight: 600; --title-tracking: -0.01em; --title-transform: none;
-  --title-style: italic;
-  --title-size: clamp(2.8rem, 8.5vw, 7.5rem); --title-leading: 0.98;
-}
-
-/* 6 — Whisper: ultra-quiet. Fraunces display italic, warm archival ground. */
-[data-theme='ex-whisper'] {
-  /* Warm selenium-toned near-black + a soft paper white — a fine-print feel. */
-  --bg: #100f0e; --fg: #ece9e3; --muted: #83807a; --border: #201f1d;
-  --font-display: 'Fraunces', Georgia, serif;   /* display cut w/ optical sizing */
-  --font-label: 'JetBrains Mono', ui-monospace, monospace;
-  --title-weight: 500; --title-tracking: 0.005em; --title-transform: none;
-  --title-style: italic;
-  --title-size: clamp(2rem, 5vw, 4rem); --title-leading: 1.06;
-  --swatch-display: none;
-  --grain-opacity: 0.12;
+  --wipe: 900ms;                            /* chapter-to-chapter colour handoff */
+  --cover-title-size: clamp(3.2rem, 10vw, 8.5rem);
 }
 
 body {
@@ -230,7 +185,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-variant-numeric: tabular-nums;      /* aligned figures in labels/counts */
-  transition: background-color 900ms var(--ease); /* ambient wash toward chapter colour */
+  transition: background-color var(--wipe) var(--ease); /* ambient wash toward chapter colour */
 }
 @media (prefers-reduced-motion: reduce) { body { transition: none; } }
 
@@ -291,6 +246,27 @@ body {
 .frame img.loaded { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .frame img { transform: none; transition: opacity 120ms linear; }
+}
+/* --- Develop: a photograph arrives desaturated, blurred and slightly large,
+   then resolves into full colour and focus the moment it's actually on
+   screen — a literal print developing, which is what this whole archive is
+   organised around. One-way: `.reveal` is added once by the visibility
+   IntersectionObserver already tracking frames for the ambient wash (see
+   index.astro) and never removed, so scrolling back up doesn't re-blur a
+   photograph that already resolved. */
+.frame img.photo {
+  filter: grayscale(0.85) blur(6px) brightness(0.8) saturate(0.55);
+  transition: opacity var(--fade) var(--ease), transform 900ms var(--ease), filter 900ms var(--ease);
+}
+.frame.reveal img.photo { filter: none; transform: none; }
+@media (hover: hover) {
+  .frame { transition: box-shadow 420ms var(--ease); }
+  .frame.reveal img.photo { transition: opacity var(--fade) var(--ease), transform 480ms var(--ease), filter 900ms var(--ease); }
+  .frame.reveal:hover img.photo { transform: scale(1.035); filter: saturate(1.08); }
+  .frame.reveal:hover { box-shadow: 0 22px 60px -14px color-mix(in oklab, var(--accent) 35%, black 65%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frame img.photo { filter: none; }
 }
 /* Blurred placeholder sits under the image until it fades in. */
 .frame .ph {
@@ -357,6 +333,16 @@ body {
   padding: 14vh var(--edge);
   color: var(--chapter-fg, var(--fg));
   background: var(--chapter-bg, var(--bg));
+  overflow: hidden; /* clips the marquee below */
+}
+/* The chapter's own name, set faintly behind the title. Purely typographic:
+   the chapter's own name is the only "decoration," never a borrowed image. */
+.chapter-marquee { position: absolute; inset: 0; z-index: 0; display: flex; pointer-events: none; }
+.cm-track { display: flex; flex-shrink: 0; align-items: center; }
+.cm-track span {
+  font-family: var(--font-display); font-style: italic; font-weight: 600;
+  font-size: clamp(5rem, 18vw, 16rem); line-height: 1;
+  color: currentColor; opacity: 0.06; white-space: nowrap; padding: 0 0.25em;
 }
 .chapter-title {
   position: relative;
@@ -391,6 +377,20 @@ body {
   margin: 0 0 1.7rem;
   font-weight: 500;
 }
+/* Chapter entrance: title and index rise in the instant the gap itself
+   scrolls into view (see the IntersectionObserver in index.astro), rather
+   than the divider simply appearing static and already-coloured. The 0%
+   keyframe + `both` fill-mode hides each element only for the (brief) window
+   between the gap entering the DOM's visible range and the observer firing —
+   if JS never fires at all, no animation ever applies and both sit at their
+   plain resting opacity instead of vanishing. */
+@keyframes chapterIndexIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 0.55; transform: none; } }
+@keyframes chapterTitleIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.chapter-gap.enter .chapter-index { animation: chapterIndexIn 650ms var(--ease) 20ms both; }
+.chapter-gap.enter .chapter-title { animation: chapterTitleIn 750ms var(--ease) 110ms both; }
+@media (prefers-reduced-motion: reduce) {
+  .chapter-gap.enter .chapter-index, .chapter-gap.enter .chapter-title { animation: none; }
+}
 .chapter-swatch {
   display: var(--swatch-display);
   width: var(--swatch-w); height: var(--swatch-h);
@@ -423,6 +423,35 @@ body {
 .meta .hint { color: var(--muted); font-size: 0.68rem; margin-top: 0.4rem; }
 
 /* --- Top bar: editorial, hairline-light. Auto-hides on scroll down. ------ */
+/* --- Progress rail: a persistent 3px strip of the archive's real chapter
+   colours across the very top edge, dim until reached, full once passed.
+   Independent of the topbar (stays visible even while it auto-hides) and of
+   the side/foot spectrum scrubber (that one navigates; this one only
+   reports). See setAmbient() in index.astro for the .passed toggle. */
+.progress-rail { position: fixed; top: 0; left: 0; right: 0; z-index: 56; height: 3px; display: flex; pointer-events: none; }
+.pr-seg { flex: 0 0 auto; opacity: 0.14; transition: opacity 600ms var(--ease); }
+.pr-seg.passed { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pr-seg { transition: opacity 200ms linear; } }
+
+/* --- Cursor ring: a hairline circle tinted to the in-view chapter's colour,
+   difference-blended so it stays visible over any photograph or background.
+   Desktop/mouse only — hidden outright on touch, where a synthetic cursor
+   has nothing to follow. */
+.cursor-ring {
+  position: fixed; top: 0; left: 0; z-index: 9998; pointer-events: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--accent-mix);
+  transform: translate(-100px, -100px);
+  transition: width 220ms var(--ease), height 220ms var(--ease), opacity 220ms var(--ease), background 220ms var(--ease);
+  opacity: 0;
+  mix-blend-mode: difference;
+}
+.cursor-ring.show { opacity: 1; }
+.cursor-ring.hover { width: 54px; height: 54px; background: color-mix(in oklab, var(--accent-mix) 22%, transparent); }
+.cursor-ring.down { width: 20px; height: 20px; }
+@media (hover: none), (pointer: coarse) { .cursor-ring { display: none; } }
+@media (prefers-reduced-motion: reduce) { .cursor-ring { transition: opacity 150ms linear; } }
+
 .topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
   display: flex; align-items: center; justify-content: space-between;
@@ -440,9 +469,12 @@ body {
   color: var(--muted);
   transition: color 200ms var(--ease);
 }
-.topbar .brand:hover { color: var(--fg); }   /* it returns you to the cover */
+.topbar .brand:hover, .topbar .brand:focus-visible { color: var(--accent-mix); }   /* it returns you to the cover */
 /* Links & the Insights button read as quiet text with a hairline underline on
-   hover — no heavy pills. */
+   hover — no heavy pills. Hover/focus colour carries a hint of whichever
+   chapter is in view (--accent-mix), so the chrome and the archive tint
+   together instead of the chrome staying inert while the page washes colour
+   around it. */
 .topbar a, .topbar .ghost {
   appearance: none; background: transparent; border: 0; cursor: pointer;
   color: var(--fg); text-decoration: none;
@@ -451,11 +483,28 @@ body {
   padding: 0.3rem 0; position: relative;
   transition: color 200ms var(--ease);
 }
+.topbar a:hover, .topbar .ghost:hover,
+.topbar a:focus-visible, .topbar .ghost:focus-visible { color: var(--accent-mix); }
+/* Press feedback: confirms the tap landed before the click handler (and any
+   network request it triggers) has had a chance to respond. iOS needs a
+   touch listener present somewhere in the document for :active to fire at
+   all — see the shim in Layout.astro. */
+.topbar .brand, .topbar a, .topbar .ghost, .view-toggle button, .genre-btn {
+  transition: color 200ms var(--ease), transform 120ms ease-out;
+}
+.topbar .brand:active, .topbar a:active, .topbar .ghost:active,
+.view-toggle button:active, .genre-btn:active { transform: scale(0.96); }
+.genre-menu li:active { transform: scale(0.98); }
+@media (prefers-reduced-motion: reduce) {
+  .topbar .brand:active, .topbar a:active, .topbar .ghost:active,
+  .view-toggle button:active, .genre-btn:active, .genre-menu li:active { transform: none; }
+}
 .topbar a::after, .topbar .ghost::after {
   content: ''; position: absolute; left: 0; right: 100%; bottom: 0; height: 1px;
   background: currentColor; transition: right 260ms var(--ease);
 }
-.topbar a:hover::after, .topbar .ghost:hover::after { right: 0; }
+.topbar a:hover::after, .topbar .ghost:hover::after,
+.topbar a:focus-visible::after, .topbar .ghost:focus-visible::after { right: 0; }
 .topbar-right { display: flex; align-items: center; gap: 1.6rem; }
 
 /* Insights overlay */
@@ -479,10 +528,14 @@ body {
 .insights .sw { width: 0.9rem; height: 0.9rem; border-radius: 50%; flex: 0 0 auto; }
 .insights .lbl { flex: 1 1 auto; min-width: 6rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .insights .barwrap { flex: 2 1 auto; height: 6px; background: color-mix(in oklab, var(--fg) 8%, transparent); border-radius: 999px; overflow: hidden; }
-.insights .bar { display: block; height: 100%; background: var(--fg); border-radius: 999px; }
+.insights .bar {
+  display: block; height: 100%; width: 0; background: var(--fg); border-radius: 999px;
+  transition: width 700ms var(--ease);
+}
+@media (prefers-reduced-motion: reduce) { .insights .bar { transition: none; } }
 .insights .num { flex: 0 0 auto; color: var(--muted); min-width: 2rem; text-align: right; }
-.insights-close { position: fixed; top: var(--edge); right: var(--edge); width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--hair); background: transparent; color: var(--fg); font-size: 1.2rem; cursor: pointer; opacity: 0.55; transition: opacity 240ms var(--ease), border-color 240ms var(--ease); }
-.insights-close:hover { opacity: 1; border-color: color-mix(in oklab, var(--fg) 40%, transparent); }
+.insights-close { position: fixed; top: var(--edge); right: var(--edge); width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--accent-hair); background: transparent; color: var(--fg); font-size: 1.2rem; cursor: pointer; opacity: 0.55; transition: opacity 240ms var(--ease), border-color 240ms var(--ease); }
+.insights-close:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
 
 /* Film / Digital / All view toggle — a clean text row, active one underlined. */
 .view-toggle { display: flex; align-items: center; gap: 1.3rem; }
@@ -492,7 +545,7 @@ body {
   text-transform: uppercase; padding: 0.3rem 0; position: relative;
   transition: color 200ms var(--ease);
 }
-.view-toggle button:hover { color: var(--fg); }
+.view-toggle button:hover, .view-toggle button:focus-visible { color: var(--accent-mix); }
 .view-toggle button[aria-pressed='true'] { color: var(--fg); }
 .view-toggle button[aria-pressed='true']::after {
   content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: currentColor;
@@ -516,17 +569,28 @@ body {
   text-transform: uppercase; padding: 0.3rem 0; display: inline-flex; align-items: center; gap: 0.5rem;
   transition: color 200ms var(--ease);
 }
-.genre-btn:hover, .genre-drop.open .genre-btn { color: var(--fg); }
+.genre-btn:hover, .genre-btn:focus-visible, .genre-drop.open .genre-btn { color: var(--accent-mix); }
 .genre-caret { transition: transform 220ms var(--ease); opacity: 0.75; }
 .genre-drop.open .genre-caret { transform: rotate(180deg); }
 .genre-menu {
-  position: absolute; top: calc(100% + 0.7rem); left: 50%; transform: translateX(-50%);
+  position: absolute; top: calc(100% + 0.7rem); left: 50%;
   margin: 0; padding: 0.4rem; list-style: none; z-index: 60;
   background: rgba(18, 17, 16, 0.96); border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 11px; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); min-width: 9.5rem;
+  /* Origin-aware: it drops from the button that opened it, not from its own
+     centre. Used the same JS `.show`-after-rAF pattern as every other overlay
+     in the app rather than a new mechanism. */
+  transform-origin: top center;
+  transform: translateX(-50%) scale(0.95);
+  opacity: 0;
+  transition: transform 160ms var(--ease), opacity 140ms var(--ease);
 }
+.genre-menu.show { transform: translateX(-50%) scale(1); opacity: 1; }
 .genre-menu[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .genre-menu { transition: opacity 100ms linear; transform: translateX(-50%); }
+}
 .genre-menu li {
   font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--muted); cursor: pointer; white-space: nowrap;
@@ -542,7 +606,28 @@ body {
   display: flex; flex-direction: column; justify-content: center; align-items: center;
   text-align: center; padding: 12vh var(--edge); gap: 1.5rem;
   position: relative;
+  overflow: hidden; /* clips the aurora, which is deliberately oversized */
 }
+/* The aurora: a conic sweep built from every chapter's real OKLCH hue (see
+   --aurora, set inline from the manifest in index.astro) — not an invented
+   gradient. Oversized + blurred + screen-blended so it reads as ambient light
+   behind the title on the warm near-black ground, never as a competing image;
+   the file header's "the photograph is the only event" rule is about imagery,
+   and this is the archive's own colour data, nothing borrowed. */
+.cover-aurora {
+  position: absolute; top: 50%; left: 50%;
+  width: 150vmax; height: 150vmax;
+  transform: translate(-50%, -50%);
+  background: var(--aurora);
+  filter: blur(9vw) saturate(0.65);
+  opacity: 0.4;
+  mix-blend-mode: screen;
+  animation: auroraSpin 100s linear infinite;
+  pointer-events: none;
+}
+.cover > .cover-aurora { z-index: 0; }  /* more specific than `.cover > *`'s z-index: 1 above */
+@keyframes auroraSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cover-aurora { animation: none; } }
 /* Kicker with flanking hairlines — a plate/frontispiece feel. */
 .cover-kicker {
   font-family: var(--font-label);
@@ -551,7 +636,7 @@ body {
   display: inline-flex; align-items: center; gap: 1.1rem;
 }
 .cover-kicker::before, .cover-kicker::after {
-  content: ''; width: 2.2rem; height: 1px; background: var(--hair);
+  content: ''; width: 2.2rem; height: 1px; background: var(--accent-hair);
 }
 .cover h1 {
   font-family: var(--font-display);            /* same face as chapter titles */
@@ -560,15 +645,19 @@ body {
   font-style: var(--title-style);
   font-weight: 600;                             /* slightly bolder, to stand out */
   letter-spacing: var(--title-tracking);        /* match the chapters' tracking */
-  font-size: clamp(3rem, 9vw, 7.5rem); line-height: 0.98; margin: 0;
+  font-size: var(--cover-title-size); line-height: 0.98; margin: 0;
+  transform-style: preserve-3d;
+  transition: transform 250ms ease-out;         /* smooths the cursor-parallax set by JS */
 }
 .cover-sub {
   font-family: var(--font-label); color: var(--muted);
   font-size: var(--label-size); letter-spacing: 0.16em; text-transform: uppercase; margin: 0;
 }
-/* Frontispiece spectrum — the archive's real chapter colours, in order. */
+/* Frontispiece spectrum — the archive's real chapter colours, in order.
+   Thickened from a 4px line to a real band: this is the one place the
+   cover shows the whole archive's palette at once, so it earns the room. */
 .cover-spectrum {
-  display: flex; width: min(88vw, 30rem); height: 4px; margin: 0.6rem 0 0;
+  display: flex; width: min(90vw, 34rem); height: 7px; margin: 0.9rem 0 0;
   border-radius: 999px; overflow: hidden;
 }
 .cover-spectrum .cs-seg {
@@ -576,7 +665,7 @@ body {
   min-width: 2px; transition: transform 260ms var(--ease), filter 200ms var(--ease);
   transform-origin: center;
 }
-.cover-spectrum .cs-seg:hover { filter: brightness(1.25); transform: scaleY(2.4); }
+.cover-spectrum .cs-seg:hover { filter: brightness(1.3); transform: scaleY(2.6); }
 /* Elegant scroll cue: a thin travelling line. */
 .scroll-hint {
   position: absolute; bottom: 4vh; left: 50%; transform: translateX(-50%);
@@ -593,17 +682,27 @@ body {
 @keyframes scrolldrop { 0% { transform: scaleY(0); opacity: 0; } 40% { opacity: 0.6; } 100% { transform: scaleY(1); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .scroll-hint::after { animation: none; opacity: 0.4; } }
 
-/* First-load reveal: the frontispiece rises and settles, staggered. */
-@keyframes riseIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-.cover > * { animation: riseIn 900ms var(--ease) both; }
-.cover-kicker { animation-delay: 60ms; }
-.cover h1 { animation-delay: 170ms; }
-.cover-sub { animation-delay: 320ms; }
+/* First-load reveal: the frontispiece rises and settles, staggered — an
+   unfurling rather than a fade, so the cover reads as an event rather than
+   content simply appearing. */
+@keyframes riseIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+.cover > * { animation: riseIn 1000ms var(--ease) both; }
+.cover-kicker { animation-delay: 80ms; }
+/* The title gets a touch of scale alongside the rise — the one place in the
+   cover that carries real weight, so it is the one place that moves with it. */
+@keyframes titleIn { from { opacity: 0; transform: translateY(22px) scale(0.97); } to { opacity: 1; transform: none; } }
+.cover h1 { animation-name: titleIn; animation-delay: 220ms; }
+.cover-sub { animation-delay: 420ms; }
 /* The spectrum draws itself in (rather than rising) — a line being struck. */
-.cover-spectrum { animation-name: drawIn; animation-delay: 440ms; transform-origin: center; }
+.cover-spectrum { animation-name: drawIn; animation-delay: 620ms; transform-origin: center; }
 @keyframes drawIn { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
-.scroll-hint { animation-delay: 640ms; }
-@media (prefers-reduced-motion: reduce) { .cover > * { animation: none; } }
+.scroll-hint { animation-delay: 860ms; }
+/* .cover h1 is named explicitly, not just caught by `.cover > *`: its own
+   rule above sets animation-name/-delay directly and is more specific
+   (0-1-1 vs 0-1-0), so without a matching override here the title would
+   keep its 220ms animation-delay under reduced motion — invisible, then
+   popping in, rather than simply static from the start. */
+@media (prefers-reduced-motion: reduce) { .cover > *, .cover h1 { animation: none; } }
 
 /* --- Colour-spectrum scrubber (right edge) ------------------------------- */
 .spectrum {
@@ -657,6 +756,15 @@ body {
 }
 .lb-stage img.zoomed { cursor: grab; }
 .lb-stage img.grabbing { cursor: grabbing; transition: none; }
+/* A one-shot pop on the initial open only (see openLightbox in index.astro —
+   next/prev stepping through showAt() never adds this class). A CSS animation
+   outranks JS's own inline transform for its own duration regardless of
+   specificity, so this plays even though resetZoom() sets style.transform in
+   the same tick; once it ends the two end states agree (both effectively
+   scale(1), no translate), so there's no visible handoff jump. */
+@keyframes lbPopIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+.lightbox.show .lb-stage img.pop-in { animation: lbPopIn 380ms var(--ease-io) both; }
+@media (prefers-reduced-motion: reduce) { .lb-stage img.pop-in { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .lb-stage img { transition: none; } }
 /* `.lb-close` is used on its own by the inspiration board's three overlays
    (enlarge, split view, match panel), and clustered with `.lb-tool` in the
@@ -665,7 +773,7 @@ body {
 .lb-tool, .lb-close, .lb-nav {
   position: relative; z-index: 81; appearance: none; cursor: pointer;
   background: transparent; color: var(--fg);
-  border: 1px solid var(--hair);
+  border: 1px solid var(--accent-hair);
   font-size: 1.2rem; line-height: 1; width: 46px; height: 46px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   opacity: 0.55;
@@ -675,8 +783,12 @@ body {
 /* A standalone close pins itself to the corner; one inside the archive's tool
    cluster is laid out by that row instead. */
 .lb-close:not(.lb-tool) { position: fixed; top: var(--edge); right: var(--edge); }
-.lb-tool:hover, .lb-close:hover, .lb-nav:hover { opacity: 1; border-color: color-mix(in oklab, var(--fg) 40%, transparent); background: color-mix(in oklab, var(--fg) 6%, transparent); }
-.lb-tool[aria-pressed='true'] { opacity: 1; border-color: color-mix(in oklab, var(--fg) 40%, transparent); }
+.lb-tool:hover, .lb-close:hover, .lb-nav:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); background: color-mix(in oklab, var(--accent-mix) 8%, transparent); }
+.lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: scale(0.92); }
+@media (prefers-reduced-motion: reduce) {
+  .lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: none; }
+}
+.lb-tool[aria-pressed='true'] { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
 /* Info reads as the `i` key it mirrors. */
 #lb-info { font-family: var(--font-display); font-style: italic; font-size: 1.05rem; }
 /* One icon, two states — the slideshow button shows what pressing it does. */
@@ -723,6 +835,22 @@ body {
 
 /* --- Visible keyboard focus everywhere ----------------------------------- */
 :focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+
+/* --- Reduced transparency ------------------------------------------------ */
+/* prefers-reduced-transparency: every floating surface across all four pages
+   (topbar, meta panel, lightbox tools, insights, genre menu, Inspiration's
+   overlay buttons and Style Match panel, Upload's cell controls, Scout's
+   panels/sheets/chips) uses backdrop-filter for legibility over whatever's
+   behind it — frosted glass is a decoration; solid is the accessible
+   equivalent. One rule here covers every instance in one place rather than
+   14 scattered ones, since global.css loads on every page. The backgrounds
+   underneath are already opaque enough (82-98% throughout) that dropping the
+   blur alone gets to "frostier/solid" without hand-tuning each one.
+   !important matches the codebase's own existing use of it under an
+   accessibility media query (see the reduced-motion block in scout.astro). */
+@media (prefers-reduced-transparency: reduce) {
+  * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}
 
 /* While the lightbox or Insights is open, the archive behind must not scroll.
    Touch drags used to move the page under the overlay, so closing it dropped
