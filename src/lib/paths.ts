@@ -50,6 +50,10 @@ export const SCOUT_SEEING_DIR = path.join(SCOUT_CACHE_DIR, 'seeing');
 // tide-client.ts's header for why.
 export const SCOUT_TIDE_STATION_DIR = path.join(SCOUT_CACHE_DIR, 'tide-station');
 export const SCOUT_TIDE_DAY_DIR = path.join(SCOUT_CACHE_DIR, 'tide-day');
+// Real-time space weather (Kp, Bz, solar wind speed) from NOAA SWPC. One
+// file, not one per coordinate: unlike weather, this reading does not vary
+// with where the pin is — see aurora-client.ts's own note. See AURORA_TTL_MS.
+export const SCOUT_AURORA_DIR = path.join(SCOUT_CACHE_DIR, 'aurora');
 
 /** Web path (as served) for a derivative file. */
 export const imgUrl = (name: string): string => `/img/${name}`;

@@ -6,10 +6,13 @@
  * real, the User-Agent is honest, and answers are cached to disk across visits.
  *
  * The published archive is a static build with no server behind it, so the same
- * page has to reach the same services directly. Two of the three can be reached
+ * page has to reach the same services directly. Most of them can be reached
  * that way and one cannot:
  *
  *   - **Open-Meteo** sends `access-control-allow-origin: *`. Straight through.
+ *   - **NOAA SWPC** — Kp, Bz, solar wind speed — sends the same
+ *     `access-control-allow-origin: *`, verified against the live host rather
+ *     than assumed. See `fetchSpaceWeatherDirect` below.
  *   - **Wikimedia Commons** sends nothing by default and needs `origin=*`, its
  *     documented opt-in for an anonymous cross-origin read. See `wikimedia.ts`.
  *   - **Nominatim** sends no CORS header at all and cannot be called from a page
@@ -27,6 +30,7 @@ import { parseForecast, type WeatherReport } from '../weather';
 import { airQualityUrl, parseAirQuality, type AirReport } from '../air';
 import { collectCommonsPhotos, toHotspots, type Hotspot, type TierStatus } from '../sources/photo-client';
 import { MAX_PHOTOS, PHOTO_SEARCH_RADIUS_M, type SpotSearch } from '../sources/types';
+import { parseKpIndex, parseRealtimeReading, type SpaceWeather } from '../aurora';
 
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
 /** Verified to send the same `access-control-allow-origin: *` as the forecast
@@ -166,6 +170,54 @@ export async function fetchAirQualityDirect(
   if (!report.hours.length) throw new Error('The aerosol forecast came back empty.');
   airCache.set(key, { at: Date.now(), report });
   return report;
+}
+
+/* ── Space weather ─────────────────────────────────────────────────────────── */
+
+const NOAA_KP = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json';
+const NOAA_WIND = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json';
+const NOAA_MAG = 'https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json';
+
+/** Five minutes, matching `AURORA_TTL_MS` on the server — the two paths
+ *  should go stale on the same clock. One entry, not one per coordinate: see
+ *  `aurora-client.ts`'s own note on why this reading has no coordinate at all. */
+const AURORA_TTL_MS = 5 * 60_000;
+let auroraCache: { at: number; reading: SpaceWeather } | null = null;
+
+/**
+ * The direct-fetch twin of `fetchSpaceWeather` on the server.
+ *
+ * Same shape as `fetchHorizonPairDirect`: three independent fetches, Kp
+ * load-bearing and the other two individually allowed to fail — see
+ * `aurora.ts`'s own note on why a missing Kp is refused rather than read as
+ * a quiet night.
+ */
+export async function fetchSpaceWeatherDirect(): Promise<SpaceWeather> {
+  if (auroraCache && Date.now() - auroraCache.at < AURORA_TTL_MS) return auroraCache.reading;
+
+  const [kpResult, windResult, magResult] = await Promise.allSettled([
+    getJson(NOAA_KP),
+    getJson(NOAA_WIND),
+    getJson(NOAA_MAG),
+  ]);
+
+  if (kpResult.status === 'rejected') throw kpResult.reason;
+  const kp = parseKpIndex(kpResult.value);
+  if (!kp) throw new Error('The K-index feed came back empty.');
+
+  const wind = windResult.status === 'fulfilled' ? parseRealtimeReading(windResult.value, 'proton_speed') : null;
+  const mag = magResult.status === 'fulfilled' ? parseRealtimeReading(magResult.value, 'bz_gsm') : null;
+
+  const reading: SpaceWeather = {
+    kp: kp.kp,
+    kpAtMs: kp.atMs,
+    bzNt: mag?.value ?? null,
+    windSpeedKmS: wind?.value ?? null,
+    measuredAtMs: wind?.atMs ?? mag?.atMs ?? null,
+    fetchedAt: Date.now(),
+  };
+  auroraCache = { at: Date.now(), reading };
+  return reading;
 }
 
 export interface HorizonPairDirect {
