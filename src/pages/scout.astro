@@ -293,6 +293,10 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
             <div class="gaps">
               <div class="gap-controls">
                 <button class="ghost" id="gap-run" type="button">Find opportunities</button>
+                <!-- Issue #67: weighs the dates above against this week's
+                     forecast and re-ranks by confirmed-soonest. A separate
+                     press because it is a separate fetch. -->
+                <button class="ghost" id="gap-weather" type="button" disabled>Check weather</button>
               </div>
               <ol class="gap-list" id="gap-list"></ol>
               <p id="gap-note"></p>
@@ -1536,7 +1540,8 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
   /* ── Missing colours ──────────────────────────────────────────────────── */
 
   .gaps { display: flex; flex-direction: column; gap: 0.45rem; }
-  .gap-controls { display: flex; }
+  .gap-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .gap-controls button:disabled { opacity: 0.4; cursor: default; }
   .gap-list {
     margin: 0;
     padding: 0;
@@ -1555,6 +1560,10 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
   .gap-list :global(.gap-row.gap-highlight) {
     background: color-mix(in oklab, var(--accent-mix) 22%, transparent);
   }
+  .gap-list :global(.gap-row.gap-confirmed) {
+    background: color-mix(in oklab, #f0b866 20%, transparent);
+  }
+  .gap-list :global(.gap-occ.gap-occ-confirmed) { color: #f0b866; font-weight: 600; }
   .gap-list :global(.gap-head) {
     margin: 0;
     font-size: 0.7rem;

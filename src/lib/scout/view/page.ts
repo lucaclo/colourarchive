@@ -266,6 +266,7 @@ import {
 import { TIMELAPSE_FRAME_RATES, TIMELAPSE_INTERVALS_S, formatStorage, timelapse } from '../timelapse';
 import {
   fetchAirQualityDirect,
+  fetchForecastDirect,
   fetchHistoricalWeatherDirect,
   fetchHorizonPairDirect,
   fetchPhotosDirect,
@@ -7269,6 +7270,16 @@ export async function startScout(): Promise<void> {
     timeZone: () => timeZone,
     from: () => day?.dayStart ?? new Date(),
     goTo: goToInstant,
+    // No bearing: a gap shoot has no target to look past, only the sky
+    // overhead — the same reason `directLightFractionFor` alone (not
+    // `horizonReading`) is what #67 checks against.
+    fetchWeather: async () => {
+      if (!centre) return null;
+      if (STATIC) return fetchForecastDirect(centre.lat, centre.lon).catch(() => null);
+      const query = new URLSearchParams({ lat: String(centre.lat), lon: String(centre.lon) });
+      const data = await fetch(`/api/scout/weather?${query}`).then((response) => response.json());
+      return data.ok ? (data.report ?? null) : null;
+    },
   });
 
   /** The forecast pair for a kept spot's own bearing — same branch
