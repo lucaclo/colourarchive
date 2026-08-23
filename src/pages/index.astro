@@ -7,6 +7,7 @@ import { findColourGaps } from '../lib/gaps';
 import { looksFor, photoLookRequest, type LookRequest } from '../lib/match/looks';
 import { chapterDna } from '../lib/match/chapter-dna';
 import { groupPhotosByLens, gearPresets, type GearPreset } from '../lib/match/gear-dna';
+import { shadowHeadroom } from '../lib/match/shadow-headroom';
 
 // Prerenderable: `astro build` bakes a static snapshot of the archive (from the
 // current manifest) into dist/client — hostable read-only anywhere — while the
@@ -230,6 +231,13 @@ const auroraCss = hasPhotos
                   const avifSet = p.derivatives.map((d) => `${d.avif} ${d.width}w`).join(', ');
                   // EXIF is shown only for DIGITAL photos — film scans carry the
                   // scanner's EXIF (wrong camera, wrong date, no real location).
+                  // Shadow-recovery headroom — issue #70. A diagnostic derived
+                  // from ISO and (when recognised) the camera body, not a
+                  // measurement of this particular frame's own pixels — see
+                  // shadow-headroom.ts's header for the model and its limits.
+                  // Refuses (empty string, same as every other missing field
+                  // here) below its own stated minimum: no ISO on record.
+                  const shadow = p.exif.iso ? shadowHeadroom(p.exif.iso, p.exif.camera) : null;
                   const exifAttrs = p.medium === 'digital' ? {
                     'data-captured': p.exif.capturedAt ?? '',
                     'data-camera': p.exif.camera ?? '',
@@ -238,6 +246,7 @@ const auroraCss = hasPhotos
                     'data-aperture': p.exif.aperture ?? '',
                     'data-shutter': p.exif.shutter ?? '',
                     'data-iso': p.exif.iso ? String(p.exif.iso) : '',
+                    'data-shadow': shadow ? shadow.sentence : '',
                     'data-location': p.exif.location ? `${p.exif.location.lat}, ${p.exif.location.lon}` : '',
                   } : { 'data-camera': FILM_CAMERA }; // film: label the real camera, hide scanner EXIF
                   return (
@@ -722,6 +731,7 @@ const auroraCss = hasPhotos
     ['file', 'File'], ['chapter', 'Chapter'], ['captured', 'Captured'],
     ['camera', 'Camera'], ['lens', 'Lens'], ['focal', 'Focal length'],
     ['aperture', 'Aperture'], ['shutter', 'Shutter'], ['iso', 'ISO'],
+    ['shadow', 'Shadow headroom (estimated)'],
     ['location', 'Location'], ['oklch', 'Dominant colour'],
   ];
   const mapLink = (coords) => {
