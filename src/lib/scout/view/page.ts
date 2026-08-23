@@ -300,6 +300,8 @@ import { getScoutJson, type Place } from './scout-api';
 import { createSearchBox } from './search-box';
 import { pace } from './pacing';
 import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
+import { createGapPanel } from './gap-panel';
+import type { ColourGap } from '../../gaps';
 import { createMonthGrid } from './month-grid';
 import { createInfoTips } from './infotip';
 
@@ -4711,6 +4713,10 @@ export async function startScout(): Promise<void> {
     rebuildDay();
     renderPanel();
     redrawEverything();
+    // The missing-colours search runs against `centre`, which just moved —
+    // same reasoning as the alignment finder restating when its own inputs
+    // move, just triggered by a different one.
+    gapPanel.restate();
     if (refit) frameRing();
     void loadWeather();
     void loadPhotos();
@@ -4728,6 +4734,7 @@ export async function startScout(): Promise<void> {
     renderPanel();
     rebuildDay({ keepMinute: true });
     redrawEverything();
+    gapPanel.restate();
     void loadWeather();
     void loadPhotos();
     nameSpot(next, reverseToken);
@@ -7237,6 +7244,30 @@ export async function startScout(): Promise<void> {
     // Same fallback the "keep this spot" star already uses — a name if one
     // was found, otherwise the coordinates, never a blank LOCATION field.
     locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
+  });
+
+  /** The `#gap-data` script tag `scout.astro`'s frontmatter bakes — see the
+   *  comment over it. Absent or malformed reads as no gaps, not an error:
+   *  the panel then just says every colour is covered, which is wrong only
+   *  in the sense that the true answer is unknown, and there is no page
+   *  state that distinguishes "none missing" from "couldn't tell" worth
+   *  building for a script tag that ships with every page. */
+  function readGapData(): ColourGap[] {
+    const raw = document.getElementById('gap-data')?.textContent;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const gapPanel = createGapPanel(readGapData(), {
+    centre: () => centre,
+    timeZone: () => timeZone,
+    from: () => day?.dayStart ?? new Date(),
+    goTo: goToInstant,
   });
 
   on('open-month', 'click', () => {

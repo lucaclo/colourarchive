@@ -1,6 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { readManifest } from '../lib/manifest';
+import { findColourGaps } from '../lib/gaps';
 
 // Prerendered, so /scout ships in the static publish alongside the archive.
 // Nothing above this line reads anything server-side: the page is an empty shell
@@ -14,6 +16,11 @@ export const prerender = true;
 // publish. The archive's own topbar already drops the link there; this page has
 // to do the same, or its Inspiration link is a 404 on the published site.
 const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
+
+// The one server-side read on this page (see the note over `#gap-data`
+// below): which hue anchors the archive is missing, baked at build/request
+// time from the manifest the same way `index.astro` bakes its chapters.
+const colourGaps = findColourGaps((await readManifest()).chapters);
 ---
 
 <Layout
@@ -256,6 +263,24 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                 <span>Moon at least <output id="align-phase-out">0%</output> lit</span>
                 <input id="align-phase" type="range" min="0" max="100" step="5" value="0" />
               </label>
+            </div>
+          </details>
+
+          <!-- ── Missing colours ──────────────────────────────────────────
+               The archive's own gap analysis (issue #59), inverted: instead
+               of checking a place and reading off the light, this starts
+               from a colour the archive has never shot and asks the sun
+               engine when *here* would produce it. The gap list itself is
+               baked at build time from the manifest — see `gap-data` below
+               — only the search against the place on screen runs live. -->
+          <details class="fold" id="fold-gaps">
+            <summary>Missing colours</summary>
+            <div class="gaps">
+              <div class="gap-controls">
+                <button class="ghost" id="gap-run" type="button">Find opportunities</button>
+              </div>
+              <ol class="gap-list" id="gap-list"></ol>
+              <p id="gap-note"></p>
             </div>
           </details>
 
@@ -748,6 +773,15 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
       </div>
 
       <a id="download" hidden aria-hidden="true"></a>
+
+      <!-- Which hue anchors the archive has never filled, or barely has —
+           baked from the manifest at build time (see the frontmatter above),
+           the same kind of snapshot `index.astro` already bakes for its own
+           chapters. Not a runtime fetch: the page stays the "everything
+           arrives in the browser" shell for coordinates, forecasts and
+           photographs, but the archive's own colour coverage is a fact about
+           the archive, not about wherever the map happens to be pointed. -->
+      <script type="application/json" id="gap-data" is:inline set:html={JSON.stringify(colourGaps)} />
     </div>
   </main>
 </Layout>
@@ -1441,6 +1475,78 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     font-size: 0.56rem;
     color: var(--muted);
   }
+
+  /* ── Missing colours ──────────────────────────────────────────────────── */
+
+  .gaps { display: flex; flex-direction: column; gap: 0.45rem; }
+  .gap-controls { display: flex; }
+  .gap-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  /* Built by the page script — same reason `.align-list`'s children leave
+     this component's scope to be reached. */
+  .gap-list :global(.gap-row) {
+    padding: 0.35rem 0.4rem;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--border) 22%, transparent);
+  }
+  .gap-list :global(.gap-row.gap-highlight) {
+    background: color-mix(in oklab, var(--accent-mix) 22%, transparent);
+  }
+  .gap-list :global(.gap-head) {
+    margin: 0;
+    font-size: 0.7rem;
+    line-height: 1.3;
+  }
+  .gap-list :global(.gap-detail) {
+    margin: 0.15rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+  .gap-list :global(.gap-occurrences) {
+    margin: 0.3rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .gap-list :global(.gap-occ) {
+    width: 100%;
+    padding: 0.2rem 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.4;
+    color: #f0b866;
+    transition: color 140ms;
+  }
+  .gap-list :global(.gap-occ:hover),
+  .gap-list :global(.gap-occ:focus-visible) { color: var(--fg); outline: none; }
+  .gap-list :global(.gap-more) {
+    margin: 0.15rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    color: var(--muted);
+  }
+  #gap-note {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.56rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  #gap-note:empty { display: none; }
 
   /* ── The day plan ─────────────────────────────────────────────────────── */
 

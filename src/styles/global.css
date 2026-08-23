@@ -534,6 +534,11 @@ body {
 }
 @media (prefers-reduced-motion: reduce) { .insights .bar { transition: none; } }
 .insights .num { flex: 0 0 auto; color: var(--muted); min-width: 2rem; text-align: right; }
+.insights .gap-link {
+  flex: 0 0 auto; color: var(--muted); font-size: 0.78em; text-decoration: none;
+  white-space: nowrap; transition: color 200ms var(--ease);
+}
+.insights .gap-link:hover, .insights .gap-link:focus-visible { color: var(--accent-mix); }
 .insights-close { position: fixed; top: var(--edge); right: var(--edge); width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--accent-hair); background: transparent; color: var(--fg); font-size: 1.2rem; cursor: pointer; opacity: 0.55; transition: opacity 240ms var(--ease), border-color 240ms var(--ease); }
 .insights-close:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
 

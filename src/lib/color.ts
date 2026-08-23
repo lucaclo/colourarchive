@@ -56,8 +56,8 @@ export const ACHROMATIC_KEY = 'achromatic';
 // arc, blues cluster tight). Anchors are FIXED, so a photo lands in the same
 // chapter forever (stable as the archive grows — never re-fit like k-means).
 // Empty anchors simply never become chapters.
-interface Anchor { slug: string; name: string; H: number }
-const ANCHORS: Anchor[] = [
+export interface Anchor { slug: string; name: string; H: number }
+export const ANCHORS: Anchor[] = [
   { slug: 'red',     name: 'Red',     H: 28 },
   { slug: 'orange',  name: 'Orange',  H: 62 },
   { slug: 'yellow',  name: 'Yellow',  H: 100 },

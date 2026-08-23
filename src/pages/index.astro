@@ -3,6 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { readManifest } from '../lib/manifest';
 import { oklchCss } from '../lib/color';
 import { GENRES, GENRE_LABEL } from '../lib/types';
+import { findColourGaps } from '../lib/gaps';
 
 // Prerenderable: `astro build` bakes a static snapshot of the archive (from the
 // current manifest) into dist/client — hostable read-only anywhere — while the
@@ -47,6 +48,12 @@ const insights = {
     .sort((a, b) => Number(a[0]) - Number(b[0])),
   maxChapter: Math.max(1, ...manifest.chapters.map((c) => c.photos.length)),
 };
+
+// Hue anchors the archive has never filled, or has barely filled — see
+// gaps.ts. Swatched at a fixed lightness/chroma rather than any real photo's,
+// because a gap has no photo to draw one from: this is the anchor's own hue,
+// not a measurement.
+const colourGaps = findColourGaps(manifest.chapters);
 
 // The stamp at the foot of the scroll. This page is prerendered, so on the
 // published site this is the moment the build ran — which is the moment it was
@@ -307,6 +314,22 @@ const auroraCss = hasPhotos
               ))}
             </ul>
           </section>
+
+          {colourGaps.length > 0 && (
+            <section>
+              <h3>Missing colours</h3>
+              <ul class="stat">
+                {colourGaps.map((gap) => (
+                  <li>
+                    <span class="sw" style={`background:${oklchCss({ L: 0.65, C: 0.14, H: gap.targetHue })}`} />
+                    <span class="lbl">{gap.anchorName}</span>
+                    <span class="num">{gap.kind === 'missing' ? 'never shot' : `${gap.photoCount} only`}</span>
+                    <a class="gap-link" href={`/scout?gap=${gap.anchorKey}`} title={gap.note}>Scout it →</a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {insights.years.length > 0 && (
             <section>
