@@ -241,6 +241,7 @@ import {
 import { TIMELAPSE_FRAME_RATES, TIMELAPSE_INTERVALS_S, formatStorage, timelapse } from '../timelapse';
 import {
   fetchAirQualityDirect,
+  fetchHistoricalWeatherDirect,
   fetchHorizonPairDirect,
   fetchPhotosDirect,
 } from '../browser/sources';
@@ -643,6 +644,10 @@ export async function startScout(): Promise<void> {
           renderSight();
           alignPanel.restate();
         },
+        // Issue #58: a smoke test cannot read localStorage's own write timing
+        // reliably, and this is the one place the in-memory list — the thing
+        // `addVisit`/`renderNotebook` actually act on — is already held.
+        keptSpots: () => keptSpots,
       },
     });
   }
@@ -4793,9 +4798,49 @@ export async function startScout(): Promise<void> {
 
   on('photos-close', 'click', closePhotoSheet);
 
+  /**
+   * A date already gone, in the pin's own zone — issue #58. `lighting.ts`,
+   * the moon and the shadows are all pure maths and already work on any
+   * date; the live forecast is the one part of this page that only ever
+   * knew "now through a week out". Below this branch the cloud read for a
+   * pinned photograph's own capture date comes from Open-Meteo's historical
+   * archive instead, through the same `WeatherReport` shape and the same
+   * `renderWeather()` — the panel does not need to know which source it read.
+   */
+  async function loadHistoricalWeather(at: LatLon) {
+    try {
+      const report = STATIC
+        ? await fetchHistoricalWeatherDirect(at.lat, at.lon, isoDate)
+        : await fetch(
+            `/api/scout/weather?${new URLSearchParams({
+              lat: String(at.lat),
+              lon: String(at.lon),
+              date: isoDate,
+              tz: timeZone,
+            })}`,
+          )
+            .then((response) => response.json())
+            .then((data) => (data.ok ? (data.report as WeatherReport) : null));
+      if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
+      weather = report;
+      // A gate/horizon sample is a forecast of what stands between here and
+      // the horizon *today* — not a question a past date can be asked.
+      horizonGate = null;
+      gateEvent = null;
+      gateBearing = 0;
+    } catch {
+      weather = null;
+      horizonGate = null;
+      gateEvent = null;
+    }
+    renderWeather();
+    applySunLight();
+  }
+
   async function loadWeather() {
     if (!centre) return;
     const at = centre;
+    if (isoDate && isoDate < todayHere()) return loadHistoricalWeather(at);
     // Two forecasts in one request: here, and the sky the low light has to come
     // through. The second is optional — if it fails the horizon reading says it
     // does not know, and everything else on the row is unaffected.
@@ -5963,14 +6008,20 @@ export async function startScout(): Promise<void> {
   on('visit-log', 'click', () => {
     const spot = keptHere();
     const sun = current();
-    if (!centre || !spot || !sun) return;
-
-    const visit: SpotVisit = { at: Date.now(), sunAltitude: sun.altitude, sunAzimuth: sun.azimuth };
-
     const instant = currentInstant();
-    if (instant) visit.moonFraction = moonIllumination(instant).fraction;
+    if (!centre || !spot || !sun || !instant) return;
 
-    if (weather && instant) {
+    // The slider's own instant, not the moment the button was pressed — the
+    // doc comment above has always said so, and issue #58 is the case where
+    // the two genuinely differ: reconstructing a pinned photo means driving
+    // the whole page to that photo's own past date first, then logging what
+    // Scout now says about it. `Date.now()` here would have stamped a
+    // reconstructed 2019 evening with today's date and silently discarded
+    // the one fact that made the entry worth keeping.
+    const visit: SpotVisit = { at: +instant, sunAltitude: sun.altitude, sunAzimuth: sun.azimuth };
+    visit.moonFraction = moonIllumination(instant).fraction;
+
+    if (weather) {
       const hour = hourAt(weather, instant);
       if (hour) {
         visit.weather = weatherCondition(hour.weatherCode).label;

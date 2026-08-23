@@ -239,9 +239,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                   <button type="button" data-body="moon">Moon</button>
                 </div>
                 <button class="ghost" id="align-run" type="button">Find dates</button>
-                <button class="ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">
-                  Add to calendar
-                </button>
+                <button class="ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">Add to calendar</button>
               </div>
               <p class="align-basis" id="align-basis">—</p>
               <ol class="align-list" id="align-list"></ol>
@@ -329,7 +327,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                   placeholder="What actually happened? (optional)"
                   aria-label="What happened on this visit"
                 />
-                <button class="ghost" id="visit-log" type="button">Log this visit</button>
+                <button class="ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider — set it to a past photo's own capture time to log a reconstruction instead of today">Log this visit</button>
               </div>
               <p class="note-say" id="visit-say"></p>
 

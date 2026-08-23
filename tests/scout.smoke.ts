@@ -903,6 +903,89 @@ describe('/scout: the alignment finder', () => {
   });
 });
 
+/* ── Retroactive light reconstruction ───────────────────────────────────────
+   Issue #58. Two things no unit test can see: whether a date set on the real
+   `#date-input` actually routes the weather row to Open-Meteo's historical
+   archive instead of the live forecast, and whether "Log this visit" — fixed
+   in this same change to stamp the slider's own instant rather than
+   `Date.now()` — really does write back the date being reconstructed and not
+   the date the test happened to run on. */
+describe('/scout: retroactive light reconstruction (#58)', () => {
+  let page: Page;
+  let trouble: string[];
+
+  before(async () => {
+    page = await openPage();
+    trouble = watchForTrouble(page);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#panel:not([hidden])');
+
+    // Same fix as the alignment finder's own setup: the panel body opens by
+    // animating `max-height`, and this tab's rAF is suspended, so the
+    // transition never advances and every click below would land on the head.
+    await page.addStyleTag({ content: '* { transition: none !important }' });
+    await page.click('#panel-head');
+    await page.waitForFunction(
+      `document.getElementById('panel').dataset.open === 'true'
+       && document.getElementById('star').getBoundingClientRect().height > 0`,
+      null,
+      { timeout: READY_MS },
+    );
+  });
+
+  after(async () => {
+    await page.close();
+  });
+
+  it('routes a past date to historical weather, and logs a visit against that date, not today', async () => {
+    // Keep the spot first — the notebook fold, "Log this visit" included,
+    // stays hidden until the current spot is one of the kept ones.
+    await page.click('#star');
+    await page.waitForFunction(
+      `document.getElementById('star').getAttribute('aria-pressed') === 'true'`,
+    );
+    await page.evaluate(`document.getElementById('fold-note').open = true`);
+
+    // A date well behind the live forecast's own week-out reach — if the
+    // weather row were still asking the live endpoint, this would come back
+    // empty rather than the recorded past.
+    const PAST_DATE = '2019-06-15';
+    await page.evaluate(
+      `(() => {
+         const input = document.getElementById('date-input');
+         input.value = ${JSON.stringify(PAST_DATE)};
+         input.dispatchEvent(new Event('change', { bubbles: true }));
+       })()`,
+    );
+    // wx-label is empty until loadWeather()'s fetch resolves and renders —
+    // the one DOM signal that the historical round trip actually completed.
+    await page.waitForFunction(
+      `document.getElementById('wx-label').textContent.trim() !== ''`,
+      null,
+      { timeout: READY_MS },
+    );
+
+    const wxNote = (await page.textContent('#wx-sum')) ?? '';
+    assert.notEqual(wxNote.trim(), '', 'the historical weather row rendered nothing');
+
+    await page.click('#visit-log');
+    const visit = (await page.evaluate(
+      `(() => { const spots = window.scout.keptSpots(); const v = spots[0]?.visits?.[0]; return v ? { at: v.at, hasWeather: !!v.weather } : null; })()`,
+    )) as { at: number; hasWeather: boolean } | null;
+
+    assert.ok(visit, 'no visit was logged against the kept spot');
+    const loggedIso = new Date(visit!.at).toISOString().slice(0, 10);
+    assert.equal(
+      loggedIso,
+      PAST_DATE,
+      `the visit was stamped ${loggedIso}, not the slider's own ${PAST_DATE} — Date.now() leaked back in`,
+    );
+    assert.ok(visit!.hasWeather, 'the historical cloud read did not make it into the logged visit');
+    assert.deepEqual(trouble, []);
+  });
+});
+
 /* ── On a phone ─────────────────────────────────────────────────────────────
    Everything here is a geometry failure that no unit test can see and that the
    desktop viewport hides completely, because the bottom of this page is four

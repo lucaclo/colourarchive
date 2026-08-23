@@ -29,6 +29,9 @@ import { collectCommonsPhotos, toHotspots, type Hotspot, type TierStatus } from 
 import { MAX_PHOTOS, PHOTO_SEARCH_RADIUS_M, type SpotSearch } from '../sources/types';
 
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
+/** Verified to send the same `access-control-allow-origin: *` as the forecast
+ *  and air-quality hosts — issue #58's historical read, direct from the page. */
+const OPEN_METEO_HISTORICAL = 'https://archive-api.open-meteo.com/v1/archive';
 
 /**
  * Shorter than the server's eight seconds.
@@ -94,6 +97,40 @@ export async function fetchForecastDirect(
   const report = parseForecast(await getJson(url.toString()), Date.now());
   if (!report.hours.length) throw new Error('The forecast came back empty.');
   weatherCache.set(key, { at: Date.now(), report });
+  return report;
+}
+
+/**
+ * The direct-fetch twin of `fetchHistoricalWeather` on the server — issue
+ * #58. Cached for the visit only, same as `fetchForecastDirect` above and
+ * for the same reason: there is no disk to hold a cache on this path, only
+ * the length of the tab being open.
+ */
+const historicalCache = new Map<string, WeatherReport>();
+
+export async function fetchHistoricalWeatherDirect(
+  latitude: number,
+  longitude: number,
+  isoDate: string,
+): Promise<WeatherReport> {
+  const key = `${weatherKey(latitude, longitude)}_${isoDate}`;
+  const hit = historicalCache.get(key);
+  if (hit) return hit;
+
+  const url = new URL(OPEN_METEO_HISTORICAL);
+  url.searchParams.set('latitude', latitude.toFixed(4));
+  url.searchParams.set('longitude', longitude.toFixed(4));
+  url.searchParams.set('start_date', isoDate);
+  url.searchParams.set('end_date', isoDate);
+  url.searchParams.set(
+    'hourly',
+    'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high',
+  );
+  url.searchParams.set('timezone', 'UTC');
+
+  const report = parseForecast(await getJson(url.toString()), Date.now());
+  if (!report.hours.length) throw new Error('No historical weather on record for that date and place.');
+  historicalCache.set(key, report);
   return report;
 }
 
