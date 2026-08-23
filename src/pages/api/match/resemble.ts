@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import { readInspStore } from '../../../lib/inspiration';
 import { readStore } from '../../../lib/manifest';
-import { INSPIRATION_DIR, IMG_DIR, PHOTOS_DIR, imgUrl } from '../../../lib/paths';
-import { looksFor, measureLook } from '../../../lib/match/looks';
+import { INSPIRATION_DIR, PHOTOS_DIR, imgUrl } from '../../../lib/paths';
+import { looksFor, measureLook, photoLookRequest } from '../../../lib/match/looks';
 import { TOO_FAR, describeParts, rankResemblance, trimSignature } from '../../../lib/match/resemble';
 import { averageRegions } from '../../../lib/match/group';
 import type { Photo } from '../../../lib/types';
@@ -51,7 +51,7 @@ export const GET: APIRoute = async ({ url }) => {
 
     const [signatures, archiveLooks] = await Promise.all([
       Promise.all(refPaths.map((r) => measureLook(r.id, r.path))),
-      looksFor(archive.map(sourceFor).filter((r): r is { id: string; imagePath: string } => r != null)),
+      looksFor(archive.map(photoLookRequest).filter((r): r is { id: string; imagePath: string } => r != null)),
     ]);
     // Several references rank the archive against their shared grade, not
     // any one of them — same reasoning as the solve path in group.ts:
@@ -108,22 +108,6 @@ export const GET: APIRoute = async ({ url }) => {
     return json({ ok: false, error: 'Could not compare against the archive.' }, 500);
   }
 };
-
-/**
- * Where to measure an archive photo from.
- *
- * The smallest derivative that is still big enough to give a smooth percentile
- * curve. Photos with no derivative at all — legacy records, a half-finished
- * ingest — are skipped rather than measured from the original: reading a 50 MB
- * RAW here would turn a two-second scan into a very long one, and the point of
- * this route is that it answers while you are still looking at the reference.
- */
-function sourceFor(photo: Photo): { id: string; imagePath: string } | null {
-  const derivative = [...photo.derivatives].sort((a, b) => a.width - b.width).find((d) => d.width >= 640)
-    ?? [...photo.derivatives].sort((a, b) => b.width - a.width)[0];
-  if (!derivative) return null;
-  return { id: photo.id, imagePath: path.join(IMG_DIR, path.basename(derivative.avif)) };
-}
 
 /** Smallest derivative, for the thumbnail strip. */
 function thumbFor(photo: Photo): string | null {

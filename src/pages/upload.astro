@@ -116,7 +116,7 @@ const accent = manifest.chapters[0]
      not apply to them. */
   .results { list-style: none; margin: 1.4rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
   :global(.results li) {
-    display: flex; align-items: center; gap: 0.8rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.86rem;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem 0.8rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.86rem;
     /* Same shape as .just-added below — a result arriving is the same kind of
        event as a cell arriving, so it gets the same entrance rather than a
        second, slightly different one. */
@@ -128,6 +128,11 @@ const accent = manifest.chapters[0]
   :global(.results .ch) { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; }
   :global(.results .skip) { color: var(--muted); font-style: italic; }
   :global(.results .err) { color: #e0603a; }
+  /* Issue #61 — a chapter-fit verdict, on its own line under the row it
+     belongs to (flex-basis 100% wraps it there without a second list item). */
+  :global(.results .fit) { flex-basis: 100%; font-size: 0.74rem; color: var(--muted); }
+  :global(.results .fit-keeps) { color: color-mix(in oklab, var(--fg) 70%, transparent); }
+  :global(.results .fit-new-look) { color: #e0a63a; }
 
   .manage { margin-top: 4rem; }
   .manage-head { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.7rem; margin: 0 0 0.3rem; display: flex; align-items: baseline; gap: 0.6rem; }
@@ -431,9 +436,21 @@ const accent = manifest.chapters[0]
     } else if (r.status === 'unsupported' || r.status === 'error') {
       li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch err">${esc(r.error || r.status)}</span>`;
     } else {
-      li.innerHTML = `<span class="sw" style="background:${r.swatch}"></span><span class="fn">${esc(r.filename)}</span><span class="ch">${esc(r.medium)} · ${esc(r.chapterName)}</span>`;
+      // Issue #61: how this photo's own measured look sits against the
+      // chapter it just landed in — absent when the chapter has too few
+      // other photos yet to have a settled look worth comparing to.
+      const fit = r.chapterFit
+        ? `<span class="fit fit-${esc(r.chapterFit.verdict)}">${esc(fitLabel(r.chapterFit.verdict))}</span>`
+        : '';
+      li.innerHTML = `<span class="sw" style="background:${r.swatch}"></span><span class="fn">${esc(r.filename)}</span><span class="ch">${esc(r.medium)} · ${esc(r.chapterName)}</span>${fit}`;
     }
     return li;
+  }
+
+  function fitLabel(verdict) {
+    if (verdict === 'keeps') return 'keeps the chapter’s look';
+    if (verdict === 'new-look') return 'starts a new look here';
+    return 'between this chapter’s look and a new one';
   }
 
   const GENRE_ORDER = ['street', 'portrait', 'landscape', 'architecture'];

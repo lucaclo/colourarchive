@@ -5,6 +5,9 @@ import { addPhotos, readStore, readOverrides } from '../../lib/manifest';
 import { defaultChapterName, oklchCss } from '../../lib/color';
 import { mapPool } from '../../lib/pool';
 import type { Photo } from '../../lib/types';
+import { looksFor, photoLookRequest, type LookRequest } from '../../lib/match/looks';
+import { MIN_CHAPTER_PHOTOS, chapterDna, scoreAgainstChapter } from '../../lib/match/chapter-dna';
+import type { LookSignature } from '../../lib/match/resemble';
 
 export const prerender = false;
 
@@ -35,6 +38,11 @@ export const POST: APIRoute = async ({ request }) => {
       // it used to need a full page reload before a new photo could be
       // relabelled or removed.
       thumb?: string; placeholder?: string; genre?: string;
+      // Issue #61: how this photo's own measured look sits against the
+      // chapter it just landed in. `null` means the chapter has too few
+      // *other* photos yet to have a settled look worth comparing to —
+      // refused rather than guessed at, not an error.
+      chapterFit?: { verdict: 'keeps' | 'borderline' | 'new-look'; distance: number; note: string } | null;
     };
 
     const processed = await mapPool(files, CONCURRENCY, async (file): Promise<{ result: Result; photo?: Photo }> => {
@@ -69,7 +77,10 @@ export const POST: APIRoute = async ({ request }) => {
 
     // One store write / rebuild for the whole batch (parallel-safe).
     const photos = processed.map((p) => p.photo).filter((p): p is Photo => Boolean(p));
-    if (photos.length > 0) await addPhotos(photos);
+    if (photos.length > 0) {
+      const manifest = await addPhotos(photos);
+      await attachChapterFits(processed, photos, manifest.chapters);
+    }
 
     const results = processed.map((p) => p.result);
     return json({
@@ -82,6 +93,53 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
   }
 };
+
+/**
+ * Score every just-added photo against the chapter it landed in — issue #61.
+ *
+ * One DNA per chapter actually touched by this batch, not per photo: two
+ * photos landing in the same chapter (the common case for a batch from one
+ * shoot) share it rather than paying for the same measurement twice. The DNA
+ * excludes every photo in *this* batch, including ones bound for the same
+ * chapter — a chapter's "settled look" is what was already there, not what a
+ * handful of new arrivals happen to agree with each other about.
+ */
+async function attachChapterFits(
+  processed: Array<{ result: { status: string; chapterFit?: unknown }; photo?: Photo }>,
+  newPhotos: Photo[],
+  chapters: { key: string; photos: Photo[] }[],
+): Promise<void> {
+  const newIds = new Set(newPhotos.map((p) => p.id));
+  const chapterByKey = new Map(chapters.map((ch) => [ch.key, ch]));
+  const dnaCache = new Map<string, LookSignature | null>();
+
+  async function dnaFor(chapterKey: string): Promise<LookSignature | null> {
+    if (dnaCache.has(chapterKey)) return dnaCache.get(chapterKey) ?? null;
+    const others = (chapterByKey.get(chapterKey)?.photos ?? []).filter((p) => !newIds.has(p.id));
+    const dna =
+      others.length < MIN_CHAPTER_PHOTOS
+        ? null
+        : chapterDna((await looksFor(others.map(photoLookRequest).filter((r): r is LookRequest => r != null))).signatures);
+    dnaCache.set(chapterKey, dna);
+    return dna;
+  }
+
+  const { signatures } = await looksFor(newPhotos.map(photoLookRequest).filter((r): r is LookRequest => r != null));
+  const signatureById = new Map(signatures.map((s) => [s.id, s]));
+
+  for (const entry of processed) {
+    if (entry.result.status !== 'added' || !entry.photo) continue;
+    const signature = signatureById.get(entry.photo.id);
+    const dna = await dnaFor(entry.photo.chapter);
+    entry.result.chapterFit =
+      dna && signature
+        ? (() => {
+            const fit = scoreAgainstChapter(signature, dna);
+            return { verdict: fit.verdict, distance: Number(fit.resemblance.distance.toFixed(3)), note: fit.note };
+          })()
+        : null;
+  }
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

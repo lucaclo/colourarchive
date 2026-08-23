@@ -2,10 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 
-import { MATCH_CACHE_DIR } from '../paths';
+import { IMG_DIR, MATCH_CACHE_DIR } from '../paths';
 import { measureRegionsFromPixels } from './stats-core';
 import { NO_MASKS } from './types';
 import { LOOK_REGIONS, trimSignature, type LookSignature } from './resemble';
+import type { Photo } from '../types';
 
 /**
  * Look signatures for the archive — the measurement side of "which of my photos
@@ -106,6 +107,22 @@ export interface LookRequest {
   id: string;
   /** Absolute path to the file to measure. */
   imagePath: string;
+}
+
+/**
+ * Where to measure an archive photo from — the smallest derivative that is
+ * still big enough to give a smooth percentile curve. A photo with no
+ * derivative at all (a legacy record, a half-finished ingest) has nothing
+ * to measure and is skipped rather than read from its original: the whole
+ * reason this module exists is that reading a 50 MB RAW for every archive
+ * photo would turn a scan into a very long one.
+ */
+export function photoLookRequest(photo: Photo): LookRequest | null {
+  const derivative =
+    [...photo.derivatives].sort((a, b) => a.width - b.width).find((d) => d.width >= 640) ??
+    [...photo.derivatives].sort((a, b) => b.width - a.width)[0];
+  if (!derivative) return null;
+  return { id: photo.id, imagePath: path.join(IMG_DIR, path.basename(derivative.avif)) };
 }
 
 /**
