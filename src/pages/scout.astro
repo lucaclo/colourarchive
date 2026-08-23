@@ -239,6 +239,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                   <button type="button" data-body="moon">Moon</button>
                 </div>
                 <button class="ghost" id="align-run" type="button">Find dates</button>
+                <button class="ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">
+                  Add to calendar
+                </button>
               </div>
               <p class="align-basis" id="align-basis">—</p>
               <ol class="align-list" id="align-list"></ol>
@@ -1286,7 +1289,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   /* ── The alignment finder ─────────────────────────────────────────────── */
 
   .align { display: flex; flex-direction: column; gap: 0.45rem; }
-  .align-controls { display: flex; align-items: stretch; gap: 0.4rem; }
+  .align-controls { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0.4rem; }
+  .align-controls #align-ics { flex: 0 0 auto; }
+  .align-controls #align-ics:disabled { opacity: 0.4; cursor: default; }
   .align-controls .seg { flex: 1; }
   .align-controls .seg button { flex: 1; }
   .align-basis {

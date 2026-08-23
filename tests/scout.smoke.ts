@@ -858,6 +858,27 @@ describe('/scout: the alignment finder', () => {
     assert.deepEqual(trouble, []);
   });
 
+  it('offers every meeting pass as a downloadable calendar file (#63)', async () => {
+    const enabled = (await page.evaluate(`!document.getElementById('align-ics').disabled`)) as boolean;
+    assert.ok(enabled, 'the calendar button should enable once at least one pass meets');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('#align-ics'),
+    ]);
+    assert.match(download.suggestedFilename(), /-sun-alignments\.ics$/, download.suggestedFilename());
+
+    const path = await download.path();
+    assert.ok(path, 'the download produced no file');
+    const fs = await import('node:fs/promises');
+    const contents = await fs.readFile(path!, 'utf8');
+    assert.match(contents, /BEGIN:VCALENDAR\r\n/, 'not a well-formed .ics file');
+    assert.match(contents, /BEGIN:VEVENT\r\n/);
+    assert.match(contents, /DTSTART:\d{8}T\d{6}Z\r\n/);
+    assert.match(contents, /SUMMARY:Sun (sets|rises) behind the target/);
+    assert.deepEqual(trouble, []);
+  });
+
   it('marks an answer stale rather than emptying the list under a reader', async () => {
     // The ring moved after the search ran. Clearing would take away the thing
     // being read; saying nothing would let an old bearing pass for the current

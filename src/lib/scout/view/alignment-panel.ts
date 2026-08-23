@@ -36,6 +36,7 @@ import {
 import { formatClock, formatDayLabel, isoDateIn } from '../daylight';
 import { angleDelta } from '../frame';
 import { initialBearing, type LatLon } from '../geo';
+import { buildIcs, type IcsEvent } from '../ics';
 import { MOON_PHASE_LABEL } from '../moon';
 import { $, on } from './dom';
 
@@ -62,6 +63,9 @@ export interface AlignmentPorts {
   from(): Date;
   /** Put the page on an instant. */
   goTo(instant: Date): void;
+  /** The place's name, for the .ics export's filename and LOCATION field —
+   *  whatever the panel itself already shows as this spot's name. */
+  locationLabel(): string;
 }
 
 export interface AlignmentPanel {
@@ -150,6 +154,44 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
     return withMoonPhase([event])[0];
   }
 
+  /**
+   * Every meeting pass, as calendar events — issue #63. One `VEVENT` per date
+   * in a pass's own `window`, mirroring the "also" sub-rows already rendered
+   * below the closest date: each is a real evening the shot is on, not just
+   * the single nearest one.
+   *
+   * No new astronomy here — `alignment.ts` already computed all of this; this
+   * only writes it out. The near-miss fallback row (`rowsFor`'s `closest`)
+   * is deliberately left off a calendar: it is "the nearest one that did not
+   * meet", and a calendar entry reads as a claim that something happens.
+   */
+  function icsEventsFor(events: Alignment[], aim: number, locationLabel: string): IcsEvent[] {
+    const out: IcsEvent[] = [];
+    for (const event of events) {
+      const moon = moonRow(event);
+      const verb = event.descending ? 'sets' : 'rises';
+      const bodyLabel = body === 'sun' ? 'Sun' : 'Moon';
+      const phase = moon ? ` · ${Math.round(moon.fraction * 100)}% ${MOON_PHASE_LABEL[moon.phase].toLowerCase()}` : '';
+      for (const crossing of event.window) {
+        const isBest = crossing.at.getTime() === event.best.at.getTime();
+        const clearance = `${round1(Math.abs(crossing.clearanceDeg))}° off`;
+        out.push({
+          uid: `scout-align-${body}-${Math.round(aim * 10)}-${crossing.at.getTime()}@colour-archive.local`,
+          at: crossing.at,
+          summary: `${bodyLabel} ${verb} behind the target — ${locationLabel}`,
+          description: `${clearance}${isBest ? phase : ''}${isBest ? '' : ' (also within the same pass as the closest date)'}. ${event.note}`,
+          location: locationLabel,
+        });
+      }
+    }
+    return out;
+  }
+
+  function updateIcsButton() {
+    const button = $<HTMLButtonElement>('align-ics');
+    button.disabled = !search || !search.events.some((event) => event.meets);
+  }
+
   function render() {
     const aim = bearing();
     const horizon = aim === null ? null : ports.horizon(aim);
@@ -164,6 +206,7 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
 
     const phaseRow = $<HTMLElement>('align-phase-row');
     phaseRow.hidden = body !== 'moon';
+    updateIcsButton();
 
     if (!search) {
       list().replaceChildren();
@@ -297,6 +340,26 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
     const row = (event.target as HTMLElement).closest<HTMLElement>('[data-at]');
     if (!row) return;
     ports.goTo(new Date(Number(row.dataset.at)));
+  });
+
+  on('align-ics', 'click', () => {
+    if (!search) return;
+    const aim = bearing();
+    if (aim === null) return;
+    const met = search.events.filter((event) => event.meets);
+    if (!met.length) return;
+    const locationLabel = ports.locationLabel();
+    const events = icsEventsFor(met, aim, locationLabel);
+    const ics = buildIcs(events, { calendarName: `${locationLabel} — Scout ${body} alignments` });
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(locationLabel || 'scout').replace(/[^\w-]+/g, '-').toLowerCase()}-${body}-alignments.ics`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   });
 
   render();

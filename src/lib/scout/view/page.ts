@@ -5711,6 +5711,9 @@ export async function startScout(): Promise<void> {
     timeZone: () => timeZone,
     from: () => day?.dayStart ?? new Date(),
     goTo: goToInstant,
+    // Same fallback the "keep this spot" star already uses — a name if one
+    // was found, otherwise the coordinates, never a blank LOCATION field.
+    locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
   });
 
   on('open-month', 'click', () => {
