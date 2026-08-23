@@ -661,6 +661,32 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
           </div>
         </details>
 
+        <!-- ── A light sweep, exported ───────────────────────────────────
+             Issue #65: the dome and the Play scrubber already draw every
+             instant of a day — this bakes a run of them into a video
+             instead of something only visible live. Frame-by-frame canvas
+             capture, not new rendering: every frame is exactly what the
+             scrubber would have shown standing on it by hand. -->
+        <details class="fold" id="fold-sweep">
+          <summary>Export a light sweep</summary>
+          <div class="slab">
+            <div class="seg" id="sweep-span">
+              <button type="button" data-span="day" class="on">This day</button>
+              <button type="button" data-span="season">Solstice to solstice</button>
+            </div>
+            <label class="slab-row" for="sweep-length">
+              <span>Clip length</span>
+              <output id="sweep-length-out">6 s</output>
+            </label>
+            <input id="sweep-length" type="range" min="4" max="30" step="1" value="6" />
+            <label class="frame-field" for="sweep-fps"><span>Frame rate</span>
+              <select id="sweep-fps"></select>
+            </label>
+            <button class="wide" id="sweep-run" type="button">Render and download</button>
+            <p class="slab-note" id="sweep-note"></p>
+          </div>
+        </details>
+
         <p class="layers-head">This view</p>
         <button class="wide" id="open-month" type="button">The month, hour by hour</button>
         <button class="wide" id="export" type="button">Save as an image</button>

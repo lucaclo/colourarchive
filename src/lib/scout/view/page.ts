@@ -304,6 +304,7 @@ import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
 import type { ColourGap } from '../../gaps';
 import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
+import { createSweepExport } from './sweep-export';
 import { createMonthGrid } from './month-grid';
 import { createInfoTips } from './infotip';
 
@@ -7317,6 +7318,25 @@ export async function startScout(): Promise<void> {
       if (spot.radiusKm) setRadius(spot.radiusKm, { refit: true });
     },
     goToInstant,
+  });
+
+  createSweepExport({
+    canvas: () => map?.getCanvas() ?? null,
+    // Same signal the PNG export already trusts for a complete, not
+    // half-drawn, frame.
+    waitForFrame: () =>
+      new Promise<void>((resolve) => {
+        if (!map) {
+          resolve();
+          return;
+        }
+        map.once('idle', () => resolve());
+        map.triggerRepaint();
+      }),
+    goToInstant,
+    dayStart: () => day?.dayStart ?? new Date(),
+    now: () => currentInstant() ?? new Date(),
+    locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
   });
 
   on('open-month', 'click', () => {
