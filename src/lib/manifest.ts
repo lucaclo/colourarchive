@@ -284,7 +284,7 @@ function groupChapters(photos: Photo[], overrides: Overrides): Array<{ key: stri
     const medium = ov?.medium ?? raw.autoMedium ?? raw.medium ?? 'digital';
     const genre = ov?.genre ?? raw.autoGenre ?? raw.genre;
     // Keep the heavy similarity signatures OUT of the rendered manifest.
-    const { embedding, colourGrid, ...rest } = raw;
+    const { embedding, colourGrid, clipEmbedding, ...rest } = raw;
     const photo: Photo = { ...rest, chapter: base, medium, genre };
     if (!byBase.has(base)) byBase.set(base, []);
     byBase.get(base)!.push(photo);

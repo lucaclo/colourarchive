@@ -12,6 +12,7 @@
     "manifest": "tsx scripts/build-manifest.ts",
     "reanalyze": "tsx scripts/reanalyze.ts",
     "backfill:genre": "tsx scripts/backfill-genre.ts",
+    "backfill:clip": "tsx scripts/backfill-clip.ts",
     "deploy:site": "tsx scripts/deploy-site.ts",
     "drift": "tsx scripts/deploy-site.ts --check",
     "check:photos": "tsx scripts/check-photos.ts",
