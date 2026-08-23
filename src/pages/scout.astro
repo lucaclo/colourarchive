@@ -361,6 +361,44 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
               </div>
               <p class="note-say" id="note-say"></p>
 
+              <!-- Issue #66. Crowd-verified light: a photo — yours, or one
+                   that arrived on a shared link from someone else — claimed
+                   for a specific instant, and cross-checked against Scout's
+                   own computed geometry for that same moment rather than
+                   taken on faith. Opt-in and self-contained: nothing here
+                   touches a server, a proof only travels because a link
+                   carrying it was actually sent. -->
+              <ul class="note-photos" id="proof-list"></ul>
+              <div class="note-add">
+                <input
+                  class="note-url"
+                  id="proof-url"
+                  type="url"
+                  inputmode="url"
+                  placeholder="Link the photo"
+                  aria-label="Proof photo URL"
+                />
+                <input
+                  class="note-url proof-when"
+                  id="proof-when"
+                  type="datetime-local"
+                  aria-label="When it was taken"
+                />
+              </div>
+              <div class="note-add">
+                <input
+                  class="note-url"
+                  id="proof-claim"
+                  type="text"
+                  maxlength="200"
+                  placeholder="What does it show? e.g. “sun clears the ridge here”"
+                  aria-label="What this photo is evidence of"
+                />
+                <button class="ghost" id="proof-add" type="button">Add proof</button>
+              </div>
+              <p class="note-say" id="proof-say"></p>
+              <button class="wide" id="proof-copy-link" type="button">Copy a link with these proofs</button>
+
               <!-- Issue #45. The note above is written once, when the place is
                    kept; this is written every time you actually go, and is the
                    only part of the notebook that can say whether a return trip
@@ -1960,7 +1998,7 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     border-radius: 8px;
     padding: 0.35rem 0.5rem;
   }
-  #note-add, #visit-log, #dem-add {
+  #note-add, #visit-log, #dem-add, #proof-add {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: transparent;
@@ -1974,7 +2012,12 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     white-space: nowrap;
     transition: transform 110ms ease-out;
   }
-  #note-add:active, #visit-log:active, #dem-add:active { transform: scale(0.95); }
+  #note-add:active, #visit-log:active, #dem-add:active, #proof-add:active { transform: scale(0.95); }
+  /* A datetime-local field reads its own width from the UA — it never needs
+     the full flex share a URL field does. */
+  .proof-when { flex: 0 0 auto; width: auto; }
+  .note-photos :global(.proof-claim) { font-style: italic; }
+  .note-photos :global(.proof-check) { color: var(--muted); }
 
   /* Issue #45: the visit log, styled as a lighter, textual cousin of the
      photo list beside it rather than as something new. */

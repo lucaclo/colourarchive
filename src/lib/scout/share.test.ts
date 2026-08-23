@@ -96,3 +96,41 @@ describe('the validators', () => {
     assert.equal(isCalendarDate('1 Aug 2026'), false);
   });
 });
+
+describe('proofs in a link — issue #66', () => {
+  const PROOF = { url: 'https://example.org/a.jpg', capturedAt: 1_700_000_000_000, claim: 'sun clears the ridge here' };
+
+  it('round-trips proof photos through the link', () => {
+    const query = encodeScoutLink({ centre: EDINBURGH, proofs: [PROOF] });
+    const back = decodeScoutLink(query)!;
+    assert.equal(back.proofs?.length, 1);
+    assert.equal(back.proofs?.[0].url, PROOF.url);
+    assert.equal(back.proofs?.[0].claim, PROOF.claim);
+  });
+
+  it('caps proofs carried in a link, shorter than storage would allow', () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ ...PROOF, url: `https://example.org/${i}.jpg` }));
+    const query = encodeScoutLink({ centre: EDINBURGH, proofs: many });
+    const back = decodeScoutLink(query)!;
+    assert.ok((back.proofs?.length ?? 0) < many.length);
+  });
+
+  it('drops an unreadable proof from a hand-edited link without losing the spot', () => {
+    const query = `at=55.95325%2C-3.18827&pf=${encodeURIComponent(JSON.stringify([{ url: 'javascript:x', capturedAt: 1, claim: 'x' }]))}`;
+    const back = decodeScoutLink(query)!;
+    assert.ok(back);
+    assert.equal(back.proofs, undefined);
+  });
+
+  it('survives malformed JSON in the proofs param entirely', () => {
+    const query = `at=55.95325%2C-3.18827&pf=not-json`;
+    const back = decodeScoutLink(query)!;
+    assert.ok(back);
+    assert.equal(back.proofs, undefined);
+  });
+
+  it('a link with no proofs decodes with the field simply absent', () => {
+    const query = encodeScoutLink({ centre: EDINBURGH });
+    assert.equal(decodeScoutLink(query)?.proofs, undefined);
+  });
+});

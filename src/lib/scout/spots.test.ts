@@ -2,24 +2,30 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  MAX_CLAIM,
   MAX_NOTE,
   MAX_OUTCOME,
   MAX_PHOTOS,
+  MAX_PROOFS,
   MAX_SPOTS,
   MAX_VISITS,
+  addProof,
   addSpot,
   addVisit,
   closestVisit,
   describeFrame,
   formatVisitDate,
   indexOfSpot,
+  mergeProofs,
   readFrame,
   readPhoto,
+  readProof,
   readSpot,
   readSpots,
   readVisit,
   removeSpot,
   updateSpot,
+  type LightProof,
   type SavedSpot,
   type SpotVisit,
 } from './spots.ts';
@@ -440,5 +446,100 @@ describe('describeFrame', () => {
       describeFrame({ ...FRAME, orientation: 'portrait', tiltDeg: 0 }),
       '24 mm · portrait · 270°',
     );
+  });
+});
+
+describe('readProof', () => {
+  it('accepts only http and https, matching readPhoto', () => {
+    assert.ok(readProof({ url: 'https://example.org/a.jpg', capturedAt: 1, claim: 'sunset' }));
+    assert.equal(readProof({ url: 'javascript:alert(1)', capturedAt: 1, claim: 'x' }), null);
+  });
+
+  it('refuses a proof with no capturedAt or no claim', () => {
+    assert.equal(readProof({ url: 'https://example.org/a.jpg', claim: 'x' }), null);
+    assert.equal(readProof({ url: 'https://example.org/a.jpg', capturedAt: 1 }), null);
+    assert.equal(readProof({ url: 'https://example.org/a.jpg', capturedAt: 0, claim: 'x' }), null);
+  });
+
+  it('truncates an overlong claim to MAX_CLAIM rather than refusing it', () => {
+    const proof = readProof({ url: 'https://example.org/a.jpg', capturedAt: 1, claim: 'x'.repeat(500) });
+    assert.equal(proof?.claim.length, MAX_CLAIM);
+  });
+
+  it('keeps the credit it arrived with', () => {
+    const proof = readProof({ url: 'https://example.org/a.jpg', capturedAt: 1, claim: 'x', credit: 'A. Photographer' });
+    assert.equal(proof?.credit, 'A. Photographer');
+  });
+});
+
+describe('readSpot with proofs', () => {
+  it('reads proofs, newest first, capped at MAX_PROOFS', () => {
+    const proofs = Array.from({ length: MAX_PROOFS + 2 }, (_, i) => ({
+      url: `https://example.org/${i}.jpg`,
+      capturedAt: i,
+      claim: `claim ${i}`,
+    }));
+    const read = readSpot({ ...PLACE, proofs });
+    assert.equal(read?.proofs?.length, MAX_PROOFS);
+    assert.equal(read?.proofs?.[0].capturedAt, MAX_PROOFS + 1);
+  });
+
+  it('drops an unreadable proof without losing the good ones', () => {
+    const read = readSpot({
+      ...PLACE,
+      proofs: [{ url: 'not-a-url', capturedAt: 1, claim: 'x' }, { url: 'https://example.org/a.jpg', capturedAt: 2, claim: 'y' }],
+    });
+    assert.equal(read?.proofs?.length, 1);
+    assert.equal(read?.proofs?.[0].url, 'https://example.org/a.jpg');
+  });
+});
+
+describe('addProof', () => {
+  const proof = (url: string, capturedAt: number): LightProof => ({ url, capturedAt, claim: 'x' });
+
+  it('does nothing when the spot is not kept', () => {
+    assert.deepEqual(addProof([], PLACE, proof('https://example.org/a.jpg', 1)), []);
+  });
+
+  it('adds a proof to a kept spot, newest first', () => {
+    const kept = addSpot([], PLACE);
+    const withProof = addProof(kept, PLACE, proof('https://example.org/a.jpg', 1));
+    const withSecond = addProof(withProof, PLACE, proof('https://example.org/b.jpg', 5));
+    assert.equal(withSecond[0].proofs?.[0].url, 'https://example.org/b.jpg');
+    assert.equal(withSecond[0].proofs?.length, 2);
+  });
+
+  it('replaces rather than duplicates when the same URL arrives again', () => {
+    const kept = addSpot([], PLACE);
+    const first = addProof(kept, PLACE, { ...proof('https://example.org/a.jpg', 1), claim: 'old claim' });
+    const second = addProof(first, PLACE, { ...proof('https://example.org/a.jpg', 1), claim: 'new claim' });
+    assert.equal(second[0].proofs?.length, 1);
+    assert.equal(second[0].proofs?.[0].claim, 'new claim');
+  });
+
+  it('caps at MAX_PROOFS, dropping the oldest', () => {
+    let spots = addSpot([], PLACE);
+    for (let i = 0; i < MAX_PROOFS + 2; i++) {
+      spots = addProof(spots, PLACE, proof(`https://example.org/${i}.jpg`, i));
+    }
+    assert.equal(spots[0].proofs?.length, MAX_PROOFS);
+    assert.equal(spots[0].proofs?.[0].capturedAt, MAX_PROOFS + 1);
+  });
+});
+
+describe('mergeProofs', () => {
+  it('unions incoming proofs with existing ones rather than replacing the list', () => {
+    const kept = addSpot([], PLACE);
+    const withOne = addProof(kept, PLACE, { url: 'https://example.org/a.jpg', capturedAt: 1, claim: 'a' });
+    const merged = mergeProofs(withOne, PLACE, [{ url: 'https://example.org/b.jpg', capturedAt: 2, claim: 'b' }]);
+    assert.equal(merged[0].proofs?.length, 2);
+  });
+
+  it('lets an incoming proof on the same URL win, as the newer share', () => {
+    const kept = addSpot([], PLACE);
+    const withOne = addProof(kept, PLACE, { url: 'https://example.org/a.jpg', capturedAt: 1, claim: 'old' });
+    const merged = mergeProofs(withOne, PLACE, [{ url: 'https://example.org/a.jpg', capturedAt: 1, claim: 'new' }]);
+    assert.equal(merged[0].proofs?.length, 1);
+    assert.equal(merged[0].proofs?.[0].claim, 'new');
   });
 });

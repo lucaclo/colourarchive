@@ -17,9 +17,17 @@
  * project has already been bitten once by a restored state with no timezone
  * printing Tokyo's sunset on a London clock. A field that does not survive
  * checking is dropped, not guessed at.
+ *
+ * **Proof photos travel the same way — issue #66.** There is no server to
+ * hold a crowd-submitted photo, so the only "opt-in, self-contained" way for
+ * one to reach anyone else is to ride along in a link exactly like the rest
+ * of this file's data: encoded here, validated with the very same
+ * `readProof` a locally-kept spot's own proofs are checked with, and merged
+ * into whichever spot it matches on arrival rather than trusted outright.
  */
 
 import type { LatLon } from './geo';
+import { readProof, type LightProof } from './spots';
 
 export interface ScoutLink {
   centre: LatLon;
@@ -40,7 +48,15 @@ export interface ScoutLink {
    * stable even though the figure is not a wall-clock time.
    */
   minute?: number;
+  /** Proof photos being carried along for this spot — issue #66. Capped at
+   *  `MAX_PROOFS_IN_LINK`, well short of `spots.ts`'s own `MAX_PROOFS`,
+   *  because these ride in the URL itself rather than in storage. */
+  proofs?: LightProof[];
 }
+
+/** Fewer than `spots.ts`'s `MAX_PROOFS` on purpose — every one here costs
+ *  real characters in a link meant to still be pasteable into a message. */
+const MAX_PROOFS_IN_LINK = 3;
 
 /**
  * Five decimal places, which is about a metre.
@@ -63,6 +79,9 @@ export function encodeScoutLink(link: ScoutLink): string {
   if (link.minute != null) params.set('t', String(Math.round(link.minute)));
   if (link.timeZone) params.set('tz', link.timeZone);
   if (link.name) params.set('n', link.name.slice(0, MAX_NAME));
+  if (link.proofs?.length) {
+    params.set('pf', JSON.stringify(link.proofs.slice(0, MAX_PROOFS_IN_LINK)));
+  }
   return params.toString();
 }
 
@@ -132,6 +151,23 @@ export function decodeScoutLink(search: string): ScoutLink | null {
   if (name) {
     const trimmed = name.trim().slice(0, MAX_NAME);
     if (trimmed) link.name = trimmed;
+  }
+
+  const proofsText = params.get('pf');
+  if (proofsText) {
+    try {
+      const parsed: unknown = JSON.parse(proofsText);
+      if (Array.isArray(parsed)) {
+        const proofs = parsed
+          .map(readProof)
+          .filter((proof): proof is LightProof => proof !== null)
+          .slice(0, MAX_PROOFS_IN_LINK);
+        if (proofs.length) link.proofs = proofs;
+      }
+    } catch {
+      // Malformed JSON in a hand-edited or truncated link costs the proofs,
+      // not the spot underneath them.
+    }
   }
 
   return link;

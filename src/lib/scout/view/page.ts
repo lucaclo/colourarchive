@@ -69,23 +69,29 @@ import {
 } from '../dome';
 import { decodeScoutLink, encodeScoutLink } from '../share';
 import {
+  addProof,
   addSpot,
   addVisit,
   closestVisit,
   describeFrame,
   formatVisitDate,
   indexOfSpot,
+  mergeProofs,
   readPhoto,
+  readProof,
   readSpots,
   removeSpot,
   updateSpot,
   MAX_OUTCOME,
   MAX_PHOTOS,
+  MAX_PROOFS,
+  type LightProof,
   type SavedSpot,
   type SpotFrame,
   type SpotPhoto,
   type SpotVisit,
 } from '../spots';
+import { crossCheckProof } from '../proof-check';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
 import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-upload';
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
@@ -6991,6 +6997,17 @@ export async function startScout(): Promise<void> {
   let keptSpots: SavedSpot[] = [];
 
   /**
+   * Proof photos that arrived on a link, waiting for somewhere to live.
+   *
+   * Issue #66: a link can carry proofs for a spot the person opening it has
+   * never kept. `restore()` merges them in immediately when the spot is
+   * already kept, but when it is not there is no notebook yet to hold them —
+   * so they wait here and are folded into the very `addSpot` call that
+   * keeps the place for the first time, rather than being silently dropped.
+   */
+  let pendingProofs: LightProof[] = [];
+
+  /**
    * A past visit's own frame, overlaid on the current one as a second, dimmed
    * wedge — issue #60. "Shoot it again, better light" only means something if
    * the original composition is a thing you can actually line the camera back
@@ -7413,8 +7430,57 @@ export async function startScout(): Promise<void> {
     $('note-say').textContent =
       photos.length >= MAX_PHOTOS ? `That is ${MAX_PHOTOS} references — remove one to add another.` : '';
 
+    renderProofs(spot);
     renderVisits(spot);
     renderDemUploads();
+  }
+
+  /**
+   * Crowd-verified light — issue #66. Each proof is shown beside Scout's
+   * own computed geometry for the instant it claims, a cross-check rather
+   * than a verification (see `proof-check.ts` for why that distinction is
+   * the whole point).
+   */
+  function renderProofs(spot: SavedSpot) {
+    const proofs = spot.proofs ?? [];
+    $('proof-list').replaceChildren(
+      ...proofs.map((proof, index) => {
+        const li = document.createElement('li');
+
+        const img = document.createElement('img');
+        img.src = proof.url;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        li.append(img);
+
+        const body = document.createElement('span');
+        body.className = 'cr';
+        const claim = document.createElement('span');
+        claim.className = 'proof-claim';
+        claim.textContent = `“${proof.claim}” — ${new Date(proof.capturedAt).toLocaleString()}`;
+        body.append(claim);
+        const check = document.createElement('span');
+        check.className = 'proof-check';
+        check.textContent = crossCheckProof(spot, proof).note;
+        body.append(document.createElement('br'), check);
+        li.append(body);
+
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'drop-photo';
+        drop.dataset.proof = String(index);
+        drop.textContent = '×';
+        drop.title = 'Remove this proof';
+        li.append(drop);
+        return li;
+      }),
+    );
+
+    $<HTMLButtonElement>('proof-add').disabled = proofs.length >= MAX_PROOFS;
+    $('proof-say').textContent =
+      proofs.length >= MAX_PROOFS ? `That is ${MAX_PROOFS} proofs — remove one to add another.` : '';
+    $<HTMLButtonElement>('proof-copy-link').disabled = proofs.length === 0;
   }
 
   /**
@@ -7591,6 +7657,83 @@ export async function startScout(): Promise<void> {
   });
 
   /**
+   * A proof photo, from the form — issue #66.
+   *
+   * `readProof` is the same reader that guards a stored or shared proof, so
+   * a claim that would be dropped on the way back in is refused here with a
+   * reason instead of silently vanishing later.
+   */
+  function addProofFromForm() {
+    const spot = keptHere();
+    if (!spot || !centre) return;
+    const urlField = $<HTMLInputElement>('proof-url');
+    const whenField = $<HTMLInputElement>('proof-when');
+    const claimField = $<HTMLInputElement>('proof-claim');
+
+    const url = urlField.value.trim();
+    const claim = claimField.value.trim();
+    if (!url || !whenField.value || !claim) {
+      $('proof-say').textContent = 'A photo link, when it was taken, and what it shows are all needed.';
+      return;
+    }
+    // `datetime-local` carries no zone of its own — read as whichever the
+    // browser is in, which is the submitter's own understanding of "when",
+    // exactly as honest as anything a stranger's own claim can be.
+    const capturedAt = new Date(whenField.value).getTime();
+    if (!Number.isFinite(capturedAt)) {
+      $('proof-say').textContent = 'That date and time did not parse.';
+      return;
+    }
+
+    const proof = readProof({ url, capturedAt, claim });
+    if (!proof) {
+      $('proof-say').textContent = 'That needs to be a full http or https link, with a claim under 200 characters.';
+      return;
+    }
+    if ((spot.proofs?.length ?? 0) >= MAX_PROOFS && !spot.proofs?.some((p) => p.url === proof.url)) return;
+
+    keptSpots = addProof(keptSpots, centre, proof);
+    if (storeSpotsOrSay()) {
+      urlField.value = '';
+      whenField.value = '';
+      claimField.value = '';
+    }
+    renderNotebook();
+  }
+
+  on('proof-add', 'click', addProofFromForm);
+
+  on('proof-list', 'click', (event) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-proof]');
+    const spot = keptHere();
+    if (!target || !spot?.proofs) return;
+    const index = Number(target.dataset.proof);
+    const proofs = spot.proofs.filter((_, i) => i !== index);
+    editSpot({ proofs: proofs.length ? proofs : undefined });
+    renderNotebook();
+  });
+
+  /**
+   * A link carrying this spot's proofs — separate from the address bar's
+   * own live-synced link (`writeLink`), which stays short for the common
+   * case of just sending someone a place. This one is asked for.
+   */
+  on('proof-copy-link', 'click', () => {
+    const spot = keptHere();
+    if (!centre || !spot?.proofs?.length) return;
+    const query = encodeScoutLink({
+      centre,
+      name: label.name || undefined,
+      timeZone,
+      radiusKm,
+      isoDate,
+      minute,
+      proofs: spot.proofs,
+    });
+    void toClipboard('proof-copy-link', `${location.origin}${location.pathname}?${query}`);
+  });
+
+  /**
    * Snapshot the plan's own numbers for the date and hour on the slider, as
    * a logged visit.
    *
@@ -7754,7 +7897,11 @@ export async function startScout(): Promise<void> {
         // default, and storing a default as a measurement is how a guess ends
         // up looking like a decision.
         slabHeightM: shown.monolith ? slab.heightM : undefined,
+        // Issue #66 — a proof that arrived on this link before there was
+        // anywhere to put it.
+        proofs: pendingProofs.length ? pendingProofs : undefined,
       });
+      pendingProofs = [];
     }
     storeSpotsOrSay();
     renderStar();
@@ -8476,6 +8623,17 @@ export async function startScout(): Promise<void> {
       timeZone = link.timeZone ?? browserTimeZone();
       radiusKm = link.radiusKm ?? 10;
       isoDate = link.isoDate || isoDateIn(new Date(), timeZone);
+
+      // Issue #66. A spot already kept gets the proofs right away; one not
+      // yet kept holds them in `pendingProofs` until the star does.
+      if (link.proofs?.length) {
+        if (indexOfSpot(keptSpots, centre) !== -1) {
+          keptSpots = mergeProofs(keptSpots, centre, link.proofs);
+          storeSpots();
+        } else {
+          pendingProofs = link.proofs;
+        }
+      }
     } else {
       centre = saved.centre!;
       label = saved.label ?? { name: '', detail: '' };

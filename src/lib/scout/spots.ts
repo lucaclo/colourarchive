@@ -57,6 +57,32 @@ export interface SpotPhoto {
 }
 
 /**
+ * A photograph offered as evidence of what the light actually did here —
+ * issue #66. Not a `SpotPhoto`: that is "why this place is worth going to";
+ * this is "here is what I saw, and when", the crowd-sourced half of the
+ * "public later" plan `[[colour-archive-scout]]` stated from the start,
+ * scoped small and opt-in rather than a public directory.
+ *
+ * A **reference**, exactly like `SpotPhoto` and for the same reasons:
+ * nothing is re-hosted, nothing is stored as bytes, and an entry that
+ * cannot say where its photo lives is not kept.
+ *
+ * This cannot *verify* anything — nothing here can confirm a photo was
+ * really taken at `capturedAt`, from this spot, of this sky. What it can
+ * do honestly is juxtapose the claim with Scout's own computed geometry for
+ * that same instant (`proof-check.ts`), so a reader can judge the two
+ * against each other rather than take either alone on faith.
+ */
+export interface LightProof {
+  url: string;
+  credit?: string;
+  /** Epoch millis — when the photo says it was taken. */
+  capturedAt: number;
+  /** What this is offered as evidence of, in the submitter's own words. */
+  claim: string;
+}
+
+/**
  * What the sky was actually doing, logged at the moment someone chose to log
  * it — the realised half of a spot that "note" alone never captured, because
  * a note is written once, when the place is kept, and says nothing about
@@ -105,6 +131,8 @@ export interface SavedSpot {
   photos?: SpotPhoto[];
   /** Logged trips to this spot, most recent first. */
   visits?: SpotVisit[];
+  /** Crowd-submitted evidence of the light here — issue #66. */
+  proofs?: LightProof[];
 }
 
 /**
@@ -155,6 +183,19 @@ export const MAX_VISITS = 12;
 
 /** Longest outcome kept — the same budget as the spot's own note. */
 export const MAX_OUTCOME = MAX_NOTE;
+
+/**
+ * How many proof photos one spot may carry.
+ *
+ * Smaller than `MAX_PHOTOS`: these travel in a shareable link as well as in
+ * storage (`share.ts`), and a link is only "short enough to paste into a
+ * message" for so many entries.
+ */
+export const MAX_PROOFS = 4;
+
+/** Longest claim kept — shorter than a note or an outcome, because this
+ *  rides along in a link and a paragraph does not belong in a URL. */
+export const MAX_CLAIM = 200;
 
 /**
  * A URL safe to put in an `href` or an `img src`.
@@ -233,6 +274,30 @@ export function readPhoto(value: unknown): SpotPhoto | null {
   const source = readText(raw.source, 40);
   if (source) photo.source = source;
   return photo;
+}
+
+/**
+ * One proof photo, or null when it is not one.
+ *
+ * `url`, `capturedAt` and `claim` are all required — a proof with no photo
+ * is not a proof, one with no instant cannot be checked against the
+ * geometry that is the entire point of it, and one with no claim is a
+ * photo with nothing said about what it is meant to show.
+ */
+export function readProof(value: unknown): LightProof | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const url = readUrl(raw.url);
+  if (!url) return null;
+  const capturedAt = Number(raw.capturedAt);
+  if (!Number.isFinite(capturedAt) || capturedAt <= 0) return null;
+  const claim = readText(raw.claim, MAX_CLAIM);
+  if (!claim) return null;
+
+  const proof: LightProof = { url, capturedAt, claim };
+  const credit = readText(raw.credit, 200);
+  if (credit) proof.credit = credit;
+  return proof;
 }
 
 /**
@@ -328,6 +393,15 @@ export function readSpot(value: unknown): SavedSpot | null {
     if (visits.length) spot.visits = visits;
   }
 
+  if (Array.isArray(raw.proofs)) {
+    const proofs = raw.proofs
+      .map(readProof)
+      .filter((proof): proof is LightProof => proof !== null)
+      .sort((a, b) => b.capturedAt - a.capturedAt)
+      .slice(0, MAX_PROOFS);
+    if (proofs.length) spot.proofs = proofs;
+  }
+
   return spot;
 }
 
@@ -380,6 +454,7 @@ export function addSpot(spots: SavedSpot[], spot: SavedSpot): SavedSpot[] {
         slabHeightM: spot.slabHeightM ?? previous.slabHeightM,
         photos: spot.photos ?? previous.photos,
         visits: spot.visits ?? previous.visits,
+        proofs: spot.proofs ?? previous.proofs,
       }
     : spot;
   return [merged, ...rest].slice(0, MAX_SPOTS);
@@ -402,6 +477,36 @@ export function updateSpot(
   const next = [...spots];
   next[existing] = { ...spots[existing], ...patch };
   return next;
+}
+
+/**
+ * Add or update one proof photo, keyed on its own URL — the same photo
+ * arriving again (a re-shared link, say) replaces its entry rather than
+ * duplicating it. Newest first, capped at `MAX_PROOFS`. Silently does
+ * nothing when the spot is not kept, the same rule `addVisit` follows.
+ */
+export function addProof(spots: SavedSpot[], at: LatLon, proof: LightProof): SavedSpot[] {
+  const existing = indexOfSpot(spots, at);
+  if (existing === -1) return spots;
+  const withoutDup = (spots[existing].proofs ?? []).filter((p) => p.url !== proof.url);
+  const proofs = [proof, ...withoutDup].sort((a, b) => b.capturedAt - a.capturedAt).slice(0, MAX_PROOFS);
+  return updateSpot(spots, at, { proofs });
+}
+
+/**
+ * Merge several proofs at once — what happens when a shared link arrives
+ * carrying someone else's contributions for a spot already kept locally.
+ * Same dedupe-by-url and cap as `addProof`; on a URL both sides carry, the
+ * incoming copy wins, since it is by definition the newer share.
+ */
+export function mergeProofs(spots: SavedSpot[], at: LatLon, incoming: LightProof[]): SavedSpot[] {
+  const existing = indexOfSpot(spots, at);
+  if (existing === -1) return spots;
+  const byUrl = new Map<string, LightProof>();
+  for (const proof of spots[existing].proofs ?? []) byUrl.set(proof.url, proof);
+  for (const proof of incoming) byUrl.set(proof.url, proof);
+  const proofs = [...byUrl.values()].sort((a, b) => b.capturedAt - a.capturedAt).slice(0, MAX_PROOFS);
+  return updateSpot(spots, at, { proofs });
 }
 
 /**
