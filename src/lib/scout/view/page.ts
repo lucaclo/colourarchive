@@ -309,6 +309,7 @@ import { pace } from './pacing';
 import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
 import type { ColourGap } from '../../gaps';
+import { createTidePanel, type TideApiResponse } from './tide-panel';
 import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
 import { createSweepExport } from './sweep-export';
 import { createMonthGrid } from './month-grid';
@@ -4667,6 +4668,10 @@ export async function startScout(): Promise<void> {
     isoDate = next;
     rebuildDay();
     void loadWeather();
+    // Unlike `gapPanel` (a year-ahead search the date on the slider does not
+    // change), the tide fold shows one specific day's extremes, so it has to
+    // restate here as well as on every centre change below.
+    tidePanel.restate();
     save();
   }
 
@@ -4726,6 +4731,7 @@ export async function startScout(): Promise<void> {
     // same reasoning as the alignment finder restating when its own inputs
     // move, just triggered by a different one.
     gapPanel.restate();
+    tidePanel.restate();
     if (refit) frameRing();
     void loadWeather();
     void loadPhotos();
@@ -4744,6 +4750,7 @@ export async function startScout(): Promise<void> {
     rebuildDay({ keepMinute: true });
     redrawEverything();
     gapPanel.restate();
+    tidePanel.restate();
     void loadWeather();
     void loadPhotos();
     nameSpot(next, reverseToken);
@@ -7297,6 +7304,26 @@ export async function startScout(): Promise<void> {
       const query = new URLSearchParams({ lat: String(centre.lat), lon: String(centre.lon) });
       const data = await fetch(`/api/scout/weather?${query}`).then((response) => response.json());
       return data.ok ? (data.report ?? null) : null;
+    },
+  });
+
+  // Issue #71. No `STATIC` fallback the way weather/gaps get one:
+  // `tide-client.ts` needs a paid key that must never reach the browser, so a
+  // published build with no server behind it has no honest way to ask at
+  // all, and `fetchTide` returning null there is what tells the panel to
+  // stay quiet rather than fail loudly — the same shape `loadSeeing` already
+  // uses for a different network dependency this build cannot reach.
+  const tidePanel = createTidePanel({
+    centre: () => centre,
+    isoDate: () => isoDate,
+    dayStart: () => day?.dayStart ?? null,
+    timeZone: () => timeZone,
+    goTo: goToInstant,
+    fetchTide: async (lat, lon, date) => {
+      if (STATIC) return null;
+      const query = new URLSearchParams({ lat: String(lat), lon: String(lon), date });
+      const response = await fetch(`/api/scout/tide?${query}`);
+      return (await response.json()) as TideApiResponse;
     },
   });
 
