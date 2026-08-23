@@ -539,6 +539,16 @@ body {
   white-space: nowrap; transition: color 200ms var(--ease);
 }
 .insights .gap-link:hover, .insights .gap-link:focus-visible { color: var(--accent-mix); }
+
+/* Issue #62 — gear-aware presets: each row carries a second line (the trend
+   sentence), so it needs its own layout rather than `.stat`'s single-line one. */
+.insights .gear-stat { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.insights .gear-stat li { display: flex; align-items: flex-start; gap: 0.7rem; font-family: var(--font-label); font-size: 0.82rem; }
+.insights .gear-stat .sw { margin-top: 0.15em; }
+.insights .gear-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.insights .gear-body .lbl { color: var(--fg); }
+.insights .gear-body .num { color: var(--muted); margin-left: 0.4rem; }
+.insights .gear-note { color: var(--muted); font-size: 0.85em; line-height: 1.4; }
 .insights-close { position: fixed; top: var(--edge); right: var(--edge); width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--accent-hair); background: transparent; color: var(--fg); font-size: 1.2rem; cursor: pointer; opacity: 0.55; transition: opacity 240ms var(--ease), border-color 240ms var(--ease); }
 .insights-close:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
 

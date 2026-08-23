@@ -4,6 +4,9 @@ import { readManifest } from '../lib/manifest';
 import { oklchCss } from '../lib/color';
 import { GENRES, GENRE_LABEL } from '../lib/types';
 import { findColourGaps } from '../lib/gaps';
+import { looksFor, photoLookRequest, type LookRequest } from '../lib/match/looks';
+import { chapterDna } from '../lib/match/chapter-dna';
+import { groupPhotosByLens, gearPresets, type GearPreset } from '../lib/match/gear-dna';
 
 // Prerenderable: `astro build` bakes a static snapshot of the archive (from the
 // current manifest) into dist/client — hostable read-only anywhere — while the
@@ -54,6 +57,43 @@ const insights = {
 // because a gap has no photo to draw one from: this is the anchor's own hue,
 // not a measurement.
 const colourGaps = findColourGaps(manifest.chapters);
+
+// Gear-aware presets — issue #62. Only photos with a lens on record have
+// anything to group by (film carries none), so this measures that subset
+// alone rather than the whole archive: the comparison baseline below is
+// honestly "your digital work", not "everything", because film was never
+// in the running.
+const lensGroups = groupPhotosByLens(digitalPhotos);
+let gearPresetsList: GearPreset[] = [];
+if (lensGroups.size > 0) {
+  const lensed = [...lensGroups.values()].flat();
+  const requests = lensed.map(photoLookRequest).filter((r): r is LookRequest => r != null);
+  const { signatures } = await looksFor(requests);
+  const bySignature = new Map(signatures.map((s) => [s.id, s]));
+  const archiveDna = chapterDna(signatures);
+  if (archiveDna) {
+    const byLensSignatures = new Map(
+      [...lensGroups].map(([lens, photos]) => [
+        lens,
+        photos.map((p) => bySignature.get(p.id)).filter((s): s is (typeof signatures)[number] => s != null),
+      ]),
+    );
+    gearPresetsList = gearPresets(archiveDna, byLensSignatures);
+  }
+}
+
+/** A lens preset's own cast and saturation, as a swatch — OKLab ab back to
+ *  OKLCH hue, the same conversion `srgb255ToOklch` uses. Achromatic (no
+ *  measurable cast) reads as a neutral grey rather than an arbitrary hue. */
+function lensSwatch(preset: GearPreset): string {
+  const global = preset.dna.regions.global;
+  if (!global) return oklchCss({ L: 0.65, C: 0, H: 0 });
+  const { a, b } = global.ab;
+  const C = Math.min(0.15, Math.hypot(a, b));
+  let H = (Math.atan2(b, a) * 180) / Math.PI;
+  if (H < 0) H += 360;
+  return oklchCss({ L: 0.65, C, H });
+}
 
 // The stamp at the foot of the scroll. This page is prerendered, so on the
 // published site this is the moment the build ran — which is the moment it was
@@ -350,6 +390,22 @@ const auroraCss = hasPhotos
           {insights.lenses.length > 0 && (
             <section><h3>Lens <span class="only">digital</span></h3>
               <ul class="stat">{insights.lenses.map(([k, n]) => (<li><span class="lbl">{k}</span><span class="num">{n}</span></li>))}</ul>
+            </section>
+          )}
+          {gearPresetsList.length > 0 && (
+            <section>
+              <h3>Look by lens <span class="only">digital</span></h3>
+              <ul class="gear-stat">
+                {gearPresetsList.map((preset) => (
+                  <li>
+                    <span class="sw" style={`background:${lensSwatch(preset)}`} />
+                    <span class="gear-body">
+                      <span class="lbl">{preset.lens} <span class="num">{preset.count}</span></span>
+                      <span class="gear-note">{preset.note}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
           {insights.focals.length > 0 && (
