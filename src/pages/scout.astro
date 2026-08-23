@@ -189,6 +189,23 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
             <p class="core-caveat">Stars to magnitude 4, dimmed for altitude and moonlight but not for cloud. Constellation lines are computed from the catalogue, not the IAU's own figures.</p>
           </details>
 
+          <!-- Issue #69. Kp, Bz and the solar wind, joined with the same
+               darkness and moon gates the Milky Way core above uses, plus a
+               cloud reading and the oval's own reach for tonight's Kp. This
+               is always a reading of *right now* — NOAA's feeds here are
+               observations, not a forecast, so unlike everything else in
+               this panel it does not follow the slider or the date picker. -->
+          <details class="fold" id="fold-aurora">
+            <summary>Aurora</summary>
+            <p class="core-line" id="aurora-line">—</p>
+            <p class="core-note" id="aurora-note"></p>
+            <p class="core-note" id="aurora-space"></p>
+            <p class="core-note" id="aurora-stale"></p>
+            <button class="ghost" id="aurora-refresh" type="button">Check now</button>
+            <p class="core-caveat">A real-time reading, not a forecast — refresh before heading out.</p>
+            <p class="core-caveat">Oval reach from NOAA SWPC's own published Kp-to-latitude guidance, an average rather than a prediction for any one night.</p>
+          </details>
+
           <!-- The per-spot answer: not where the shade is, but when the light
                gets here. The thing every other readout on the page is for. -->
           <div class="spot" id="spot">

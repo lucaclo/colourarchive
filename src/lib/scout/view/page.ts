@@ -276,6 +276,7 @@ import {
   fetchHistoricalWeatherDirect,
   fetchHorizonPairDirect,
   fetchPhotosDirect,
+  fetchSpaceWeatherDirect,
 } from '../browser/sources';
 import { $, markerElement, on } from './dom';
 import {
@@ -310,6 +311,7 @@ import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
 import type { ColourGap } from '../../gaps';
 import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
+import { createAuroraPanel } from './aurora-panel';
 import { createSweepExport } from './sweep-export';
 import { createMonthGrid } from './month-grid';
 import { createInfoTips } from './infotip';
@@ -4698,6 +4700,10 @@ export async function startScout(): Promise<void> {
     void loadPhotos();
     void loadSeeing();
     void loadDemUploads();
+    // Deduped internally on both the coordinate and the space-weather
+    // reading's own short TTL — see `aurora-panel.ts`'s `restate`, the same
+    // shape `loadSeeing`'s `seeingKey` guard keeps.
+    auroraPanel.restate();
   }
 
   function setCentre(place: Place, { refit = true } = {}) {
@@ -7335,6 +7341,28 @@ export async function startScout(): Promise<void> {
       if (spot.radiusKm) setRadius(spot.radiusKm, { refit: true });
     },
     goToInstant,
+  });
+
+  const auroraPanel = createAuroraPanel({
+    centre: () => centre,
+    lightPollutionZone: () =>
+      centre && lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null,
+    // Always the live forecast, never the historical read `weather` on the
+    // page can hold for a past date — see the panel's own note on why this
+    // reading is only ever about right now, regardless of the date picker.
+    fetchWeather: async () => {
+      const at = centre;
+      if (!at) return null;
+      if (STATIC) return fetchForecastDirect(at.lat, at.lon).catch(() => null);
+      const query = new URLSearchParams({ lat: String(at.lat), lon: String(at.lon) });
+      const data = await fetch(`/api/scout/weather?${query}`).then((response) => response.json());
+      return data.ok ? (data.report ?? null) : null;
+    },
+    fetchSpaceWeather: async () => {
+      if (STATIC) return fetchSpaceWeatherDirect().catch(() => null);
+      const data = await fetch('/api/scout/aurora').then((response) => response.json());
+      return data.ok ? (data.reading ?? null) : null;
+    },
   });
 
   createSweepExport({

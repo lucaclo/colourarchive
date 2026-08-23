@@ -45,6 +45,10 @@ export const SCOUT_AIR_DIR = path.join(SCOUT_CACHE_DIR, 'air');
 // Seeing and transparency, from a third host on 7Timer's own four-times-a-day
 // clock. See SEEING_TTL_MS.
 export const SCOUT_SEEING_DIR = path.join(SCOUT_CACHE_DIR, 'seeing');
+// Real-time space weather (Kp, Bz, solar wind speed) from NOAA SWPC. One
+// file, not one per coordinate: unlike weather, this reading does not vary
+// with where the pin is — see aurora-client.ts's own note. See AURORA_TTL_MS.
+export const SCOUT_AURORA_DIR = path.join(SCOUT_CACHE_DIR, 'aurora');
 
 /** Web path (as served) for a derivative file. */
 export const imgUrl = (name: string): string => `/img/${name}`;
