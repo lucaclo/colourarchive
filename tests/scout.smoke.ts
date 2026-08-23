@@ -339,6 +339,15 @@ describe('/scout: the world view', () => {
     // unlike the place sheet, which is on screen from the first paint saying
     // "Nowhere yet".
     await page.waitForSelector('#tools:not([hidden])', { timeout: READY_MS });
+    // The tap sets the browser's own zone immediately and only improves on it
+    // once `nameSpot`'s reverse-geocode round-trip lands (`page.ts`,
+    // `placeFirstSpotAt`) — and a headless Chromium with no configured locale
+    // reports its own zone as literally "UTC", which is indistinguishable from
+    // "the lookup never ran" if read before that round-trip finishes. Wait for
+    // the real zone rather than racing it.
+    await page.waitForFunction(`window.scout.state().timeZone !== 'UTC'`, null, {
+      timeout: READY_MS,
+    });
 
     const chosen = (await page.evaluate(
       `(() => { const s = window.scout.state();
