@@ -47,7 +47,7 @@ import {
   initialBearing,
   type LatLon,
 } from '../geo';
-import { shadowBearing, shadowLengthRatio, type SunSample } from '../sun';
+import { SUN_ALTITUDE, shadowBearing, shadowLengthRatio, sunPosition, type SunSample } from '../sun';
 import {
   BUILDING_EDGE_COLOUR,
   contrastOverrides,
@@ -138,7 +138,9 @@ import {
 } from '../daylight';
 import {
   MOON_PHASE_LABEL,
+  MOONRISE_ALTITUDE,
   moonIllumination,
+  moonPosition,
   moonTimes,
   moonTrack,
   moonlightNote,
@@ -146,6 +148,7 @@ import {
 } from '../moon';
 import { aodAt, type AirReport } from '../air';
 import {
+  CORE_RISE_ALTITUDE,
   coreNight,
   corePosition,
   coreTrack,
@@ -312,6 +315,7 @@ import type { ColourGap } from '../../gaps';
 import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
 import { createSweepExport } from './sweep-export';
 import { createMonthGrid } from './month-grid';
+import { createArCamera } from './ar-camera';
 import { createInfoTips } from './infotip';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
@@ -5757,6 +5761,11 @@ export async function startScout(): Promise<void> {
     // of this function's inputs and belongs to the "moving" half of the dome
     // geometry rather than the day's static half — see updateDome.
     updateDome();
+    // The AR view reads the sensor and focal length through `currentFov()`,
+    // not the aim — see `ar-camera.ts` for why — but a changed lens still has
+    // to reach a marker already on screen without waiting for the next
+    // compass reading or the five-second tick.
+    arView.refresh();
     if (persist) save();
   }
 
@@ -7363,6 +7372,33 @@ export async function startScout(): Promise<void> {
     $<HTMLButtonElement>('layers-button').setAttribute('aria-expanded', 'false');
     monthSheet.open();
   });
+
+  /* ── The live camera AR overlay ───────────────────────────────────────
+     Issue #72. Sun, moon and core positions here are computed for the real
+     "now" rather than read off `day.samples[minute]` or `coreAim` — a phone
+     held up to the sky is asking what is really out there, not what the
+     slider is simulating, and those two are the same instant only when
+     nobody has touched the date picker. See `ar-camera.ts` for why the aim
+     itself comes from the device's live compass rather than `lens.bearing`. */
+  const arView = createArCamera({
+    fov: currentFov,
+    sun: () => {
+      if (!centre) return null;
+      const s = sunPosition(centre.lat, centre.lon, new Date());
+      return s.altitude > SUN_ALTITUDE.sunrise ? s : null;
+    },
+    moon: () => {
+      if (!centre) return null;
+      const m = moonPosition(centre.lat, centre.lon, new Date());
+      return m.altitude > MOONRISE_ALTITUDE ? m : null;
+    },
+    core: () => {
+      if (!centre) return null;
+      const c = corePosition(centre.lat, centre.lon, new Date());
+      return c.altitude > CORE_RISE_ALTITUDE ? c : null;
+    },
+  });
+  on('ar-open', 'click', () => arView.open());
 
   /* ── The notebook ───────────────────────────────────────────────────────
      Everything you worked out at a spot that the arithmetic cannot: the note,

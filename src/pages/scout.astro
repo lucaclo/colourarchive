@@ -620,6 +620,12 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
           </div>
           <p class="slab-note" id="frame-lens">—</p>
 
+          <!-- Issue #72: the same aim/tilt geometry, drawn on the phone's own
+               camera feed instead of the map. Live compass and tilt replace
+               the drag above for as long as this is open — see ar-camera.ts
+               for why — and only the sensor/focal length here still applies. -->
+          <button class="chip chip-step" id="ar-open" type="button">Live camera view</button>
+
           <!-- Depth of field: the same rectangle from `frame.ts`, asked what is
                sharp in it rather than what is in it. Aperture and focus distance
                belong to this exposure and not to the lens, but there is nowhere
@@ -747,6 +753,21 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
           <div class="mg-body" id="mg-body"></div>
         </div>
         <p class="mg-legend" id="mg-legend"></p>
+      </div>
+
+      <!-- ── The live camera AR overlay ──────────────────────────────────
+           PhotoPills-style: sun, moon and Milky Way core drawn on the phone's
+           own camera feed, positioned by frame.ts's camera-basis projection
+           through the phone's live compass and tilt — see ar-camera.ts for
+           why that replaces the manually-dragged aim while this is open, and
+           for the two things it cannot claim: no lens distortion, and no way
+           to measure the phone camera's own field of view. -->
+      <div class="arview" id="ar-view" hidden role="dialog" aria-modal="true" aria-label="Live camera overlay">
+        <video id="ar-video" playsinline muted autoplay></video>
+        <canvas id="ar-canvas"></canvas>
+        <button class="ar-close" id="ar-close" type="button" aria-label="Close">×</button>
+        <p class="ar-status" id="ar-status" hidden></p>
+        <p class="ar-note" id="ar-note"></p>
       </div>
 
       <!-- ── Bottom: place sheet, then the day ───────────────────────────── -->
@@ -1945,6 +1966,73 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     );
   }
   .mg-body :global(.mg-now) { box-shadow: inset 0 0 0 1.5px var(--fg); }
+
+  /* ── The live camera AR overlay ──────────────────────────────────────────
+     Full-bleed and above everything, including the month grid — a camera
+     view sharing the screen with anything else is not a camera view. */
+  .arview {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: #000;
+    overflow: hidden;
+  }
+  .arview[hidden] { display: none; }
+  #ar-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #ar-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* Drawn, never clicked through to — the video beneath has nothing to
+       click on either, but a canvas that ate touches would make the close
+       button unreachable on some browsers' hit-testing order. */
+    pointer-events: none;
+  }
+  .ar-close {
+    position: absolute;
+    top: calc(0.6rem + env(safe-area-inset-top, 0px));
+    right: 0.6rem;
+    z-index: 1;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .ar-status,
+  .ar-note {
+    position: absolute;
+    left: 0.7rem;
+    right: 0.7rem;
+    margin: 0;
+    padding: 0.5rem 0.7rem;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 0.72rem;
+    line-height: 1.4;
+  }
+  /* The status — permission prompts and refusals — sits where a viewfinder's
+     eye naturally lands first. The limits note is a footnote, so it sits at
+     the bottom and stays quieter. */
+  .ar-status { top: calc(3.4rem + env(safe-area-inset-top, 0px)); }
+  .ar-status[hidden] { display: none; }
+  .ar-note {
+    bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.64rem;
+  }
 
   /* ── Notebook ─────────────────────────────────────────────────────────── */
 
