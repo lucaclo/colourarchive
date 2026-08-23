@@ -1730,6 +1730,19 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     transition: color 140ms;
   }
   .visit-list :global(.drop-visit:hover) { color: #e0603a; }
+  .visit-list :global(.ghost-visit) {
+    flex: none;
+    background: none;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.82rem;
+    line-height: 1;
+    padding: 0 0.2rem;
+    transition: color 140ms;
+  }
+  .visit-list :global(.ghost-visit:hover) { color: var(--fg); }
+  .visit-list :global(.ghost-visit[aria-pressed='true']) { color: var(--fg); }
   /* Elements built at runtime are outside Astro's scoping, so anything the
      script creates needs :global() or it falls back to the UA stylesheet. */
   .note-photos :global(.drop-photo) {

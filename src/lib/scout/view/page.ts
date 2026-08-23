@@ -81,6 +81,7 @@ import {
   MAX_OUTCOME,
   MAX_PHOTOS,
   type SavedSpot,
+  type SpotFrame,
   type SpotPhoto,
   type SpotVisit,
 } from '../spots';
@@ -304,6 +305,8 @@ export async function startScout(): Promise<void> {
   const PHOTO_SOURCE = 'scout-photos-src';
   const PLAN_SOURCE = 'scout-plan-src';
   const FRAME_SOURCE = 'scout-frame-src';
+  /** A past visit's own frame, overlaid dimmed alongside the live one — #60. */
+  const GHOST_FRAME_SOURCE = 'scout-ghost-frame-src';
   const SIGHT_SOURCE = 'scout-sight-src';
 
   /** OpenMapTiles only carries building footprints from z14. */
@@ -600,6 +603,10 @@ export async function startScout(): Promise<void> {
           // tests' hand-built fixture to also describe the shipped PNG.
           lightPollutionZone:
             centre && lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null,
+          // Issue #60: the ghost's own bearing, distinct from the live lens's
+          // — a smoke test can then turn the camera and confirm the ghost
+          // held its ground rather than following.
+          ghostFrame,
         }),
         terrain: () => terrainShadows?.state(),
         // What is actually being cast, which is the only honest scale for a
@@ -1147,6 +1154,32 @@ export async function startScout(): Promise<void> {
         source: FRAME_SOURCE,
         filter: ['==', ['geometry-type'], 'LineString'],
         paint: { 'line-color': frameInk, 'line-width': 1.4, 'line-dasharray': [3, 2], 'line-opacity': 0.9 },
+      },
+      BELOW_LABELS,
+    );
+
+    // The ghost frame (#60): the same three layers, at a fraction of the
+    // opacity and with no fill at all — a composition you are lining the
+    // camera back up against reads as an outline to aim at, not a claim about
+    // what is happening there right now, which the live wedge's own fill is.
+    map.addSource(GHOST_FRAME_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer(
+      {
+        id: 'scout-ghost-frame-edge',
+        type: 'line',
+        source: GHOST_FRAME_SOURCE,
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'line-color': frameInk, 'line-width': 1.4, 'line-dasharray': [1, 2], 'line-opacity': 0.55 },
+      },
+      BELOW_LABELS,
+    );
+    map.addLayer(
+      {
+        id: 'scout-ghost-frame-axis',
+        type: 'line',
+        source: GHOST_FRAME_SOURCE,
+        filter: ['==', ['geometry-type'], 'LineString'],
+        paint: { 'line-color': frameInk, 'line-width': 1, 'line-dasharray': [1, 2], 'line-opacity': 0.5 },
       },
       BELOW_LABELS,
     );
@@ -1700,9 +1733,11 @@ export async function startScout(): Promise<void> {
   function drawFrame() {
     if (!styleReady) return;
     const source = map?.getSource(FRAME_SOURCE) as GeoJSONSource | undefined;
-    if (!source) return;
+    const ghostSource = map?.getSource(GHOST_FRAME_SOURCE) as GeoJSONSource | undefined;
+    if (!source || !ghostSource) return;
     if (!shown.frame || !centre) {
       source.setData({ type: 'FeatureCollection', features: [] });
+      ghostSource.setData({ type: 'FeatureCollection', features: [] });
       return;
     }
     // Drawn to the radius, because that is the area being scouted. It is not a
@@ -1716,6 +1751,23 @@ export async function startScout(): Promise<void> {
         frameAxis(centre, lens.bearing, rangeM),
       ],
     });
+
+    // Issue #60: a past visit's own frame, drawn from this same coordinate —
+    // its own sensor and focal length decide its own field of view, never the
+    // live lens's, since the whole point is showing the *original* framing
+    // rather than describing it through today's settings.
+    if (!ghostFrame) {
+      ghostSource.setData({ type: 'FeatureCollection', features: [] });
+    } else {
+      const ghostFov = fieldOfView(sensorByKey(ghostFrame.sensor) ?? SENSORS[0], ghostFrame.focalLengthMm, ghostFrame.orientation);
+      ghostSource.setData({
+        type: 'FeatureCollection',
+        features: [
+          frameWedge(centre, ghostFrame.bearing, ghostFov.horizontalDeg, rangeM),
+          frameAxis(centre, ghostFrame.bearing, rangeM),
+        ],
+      });
+    }
   }
 
   /**
@@ -4102,6 +4154,9 @@ export async function startScout(): Promise<void> {
 
   function setCentre(place: Place, { refit = true } = {}) {
     centre = { lat: place.lat, lon: place.lon };
+    // Drawn from the old coordinate — issue #60 — so it would misdescribe
+    // wherever the pin is going next.
+    ghostFrame = null;
     label = { name: place.name, detail: place.detail };
     timeZone = place.timeZone || 'UTC';
     if (!isoDate) isoDate = isoDateIn(new Date(), timeZone);
@@ -4130,6 +4185,7 @@ export async function startScout(): Promise<void> {
   function setCentreCoordinates(next: LatLon) {
     reverseToken++;
     centre = next;
+    ghostFrame = null;
     label = { name: 'Naming that spot…', detail: formatCoords(next) };
     nearby = [];
     renderPanel();
@@ -5522,6 +5578,21 @@ export async function startScout(): Promise<void> {
   let keptSpots: SavedSpot[] = [];
 
   /**
+   * A past visit's own frame, overlaid on the current one as a second, dimmed
+   * wedge — issue #60. "Shoot it again, better light" only means something if
+   * the original composition is a thing you can actually line the camera back
+   * up against, not something held in memory.
+   *
+   * Session-only, deliberately: it is a visual aid for the return trip you are
+   * on right now, not a fact about the spot worth persisting into `localStorage`
+   * — the next time this spot is opened it starts un-ghosted, same as the
+   * Colour Grading wheel cluster's own `showGlobal` in Style Match does for the
+   * same reason. Cleared whenever the pin moves, since it was drawn from this
+   * spot's own coordinate and would misdescribe wherever it moved to.
+   */
+  let ghostFrame: SpotFrame | null = null;
+
+  /**
    * A spot's own surveys — issue #50. Held separately from `SavedSpot` itself
    * rather than as one more field on it: a raster can run to `MAX_UPLOAD_BYTES`
    * and `keptSpots` is serialised into `localStorage` on every edit, which a
@@ -5872,6 +5943,23 @@ export async function startScout(): Promise<void> {
           (visit.outcome ? ` · ${visit.outcome}` : '');
         li.append(detail);
 
+        // Issue #60. Only offered where there is a frame to show — a visit
+        // logged before this change carries none, and ghosting nothing would
+        // be a button that quietly did nothing when pressed.
+        if (visit.frame) {
+          const ghost = document.createElement('button');
+          ghost.type = 'button';
+          ghost.className = 'ghost-visit';
+          ghost.dataset.ghost = String(index);
+          ghost.textContent = '◫';
+          const isGhosted = ghostFrame === visit.frame;
+          ghost.setAttribute('aria-pressed', String(isGhosted));
+          ghost.title = isGhosted
+            ? 'Stop overlaying this frame'
+            : `Overlay this frame on the map — ${describeFrame(visit.frame)}`;
+          li.append(ghost);
+        }
+
         const drop = document.createElement('button');
         drop.type = 'button';
         drop.className = 'drop-visit';
@@ -6033,6 +6121,18 @@ export async function startScout(): Promise<void> {
     const outcome = outcomeField.value.trim();
     if (outcome) visit.outcome = outcome.slice(0, MAX_OUTCOME);
 
+    // The lens as it stands right now — issue #60. `spot.frame` only ever
+    // holds the *current* aim, which a later visit can turn away from; a
+    // visit that keeps its own frame is what lets a return trip overlay this
+    // exact composition as a ghost even after the live frame has moved on.
+    visit.frame = {
+      sensor: lens.sensor,
+      focalLengthMm: lens.focalLengthMm,
+      orientation: lens.orientation,
+      bearing: lens.bearing,
+      tiltDeg: lens.tiltDeg,
+    };
+
     keptSpots = addVisit(keptSpots, centre, visit);
     if (storeSpotsOrSay()) {
       outcomeField.value = '';
@@ -6042,13 +6142,29 @@ export async function startScout(): Promise<void> {
   });
 
   on('visit-list', 'click', (event) => {
-    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-visit]');
+    const el = event.target as HTMLElement;
     const spot = keptHere();
-    if (!target || !spot?.visits) return;
+    if (!spot?.visits) return;
+
+    const ghostBtn = el.closest<HTMLElement>('[data-ghost]');
+    if (ghostBtn) {
+      const visit = spot.visits[Number(ghostBtn.dataset.ghost)];
+      // A second press of the same row's button switches it off — the map
+      // reading no differently from turning the frame layer off any other way.
+      ghostFrame = visit?.frame && ghostFrame !== visit.frame ? visit.frame : null;
+      renderVisits(spot);
+      drawFrame();
+      return;
+    }
+
+    const target = el.closest<HTMLElement>('[data-visit]');
+    if (!target) return;
     const index = Number(target.dataset.visit);
+    if (ghostFrame && ghostFrame === spot.visits[index]?.frame) ghostFrame = null;
     const visits = spot.visits.filter((_, i) => i !== index);
     editSpot({ visits: visits.length ? visits : undefined });
     renderNotebook();
+    drawFrame();
   });
 
   /**

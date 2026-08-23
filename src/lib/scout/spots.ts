@@ -80,6 +80,13 @@ export interface SpotVisit {
   weather?: string;
   /** What actually happened. Free text, the same budget as the spot's own note. */
   outcome?: string;
+  /**
+   * The lens as it was set when this visit was logged — issue #60. `spot.frame`
+   * only ever holds the *current* aim; a visit's own frame is what lets a later
+   * return trip overlay that exact composition as a ghost, even after the live
+   * frame has since been turned to point somewhere else.
+   */
+  frame?: SpotFrame;
 }
 
 export interface SavedSpot {
@@ -261,6 +268,9 @@ export function readVisit(value: unknown): SpotVisit | null {
   if (weather) visit.weather = weather;
   const outcome = readText(raw.outcome, MAX_OUTCOME);
   if (outcome) visit.outcome = outcome;
+
+  const frame = readFrame(raw.frame);
+  if (frame) visit.frame = frame;
 
   return visit;
 }

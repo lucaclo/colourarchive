@@ -986,6 +986,84 @@ describe('/scout: retroactive light reconstruction (#58)', () => {
   });
 });
 
+/* ── Ghost-frame overlay ─────────────────────────────────────────────────────
+   Issue #60. The one thing no unit test can see: that the ghosted frame really
+   is a snapshot, independent of the live lens — turn the camera after logging
+   a visit, and the ghost must hold the bearing it was logged with rather than
+   silently tracking the live one, which would make it useless as a "how was
+   it framed then" reference. */
+describe('/scout: ghost-frame overlay (#60)', () => {
+  let page: Page;
+  let trouble: string[];
+
+  before(async () => {
+    page = await openPage();
+    trouble = watchForTrouble(page);
+    await page.goto(`${origin}${SPOT}`);
+    await waitForTheMap(page);
+    await page.waitForSelector('#panel:not([hidden])');
+    await page.addStyleTag({ content: '* { transition: none !important }' });
+    await page.click('#panel-head');
+    await page.waitForFunction(
+      `document.getElementById('panel').dataset.open === 'true'
+       && document.getElementById('star').getBoundingClientRect().height > 0`,
+      null,
+      { timeout: READY_MS },
+    );
+  });
+
+  after(async () => {
+    await page.close();
+  });
+
+  it('keeps a ghosted frame at the bearing it was logged with, not the live one', async () => {
+    await page.click('#star');
+    await page.waitForFunction(
+      `document.getElementById('star').getAttribute('aria-pressed') === 'true'`,
+    );
+    await page.evaluate(`document.getElementById('fold-note').open = true`);
+
+    // The default aim (270°), logged as a visit's own frame.
+    await page.click('#visit-log');
+    await page.waitForFunction(`window.scout.keptSpots()[0]?.visits?.[0]?.frame != null`);
+
+    // Turn the camera well away from what was just logged.
+    await page.evaluate(
+      `(() => {
+         const input = document.getElementById('frame-bearing');
+         input.value = '90';
+         input.dispatchEvent(new Event('input', { bubbles: true }));
+       })()`,
+    );
+    await page.waitForFunction(
+      `document.getElementById('frame-bearing-out').textContent.trim().startsWith('90°')`,
+    );
+
+    // Ghost the logged visit's frame — the ◫ button, only rendered because
+    // the visit carries one.
+    await page.click('#visit-list [data-ghost="0"]');
+    const ghosted = (await page.evaluate(`window.scout.state().ghostFrame`)) as {
+      bearing: number;
+    } | null;
+    assert.ok(ghosted, 'the ghost button did not set a ghost frame');
+    assert.equal(
+      ghosted!.bearing,
+      270,
+      `the ghost tracked the live lens (now 90°) instead of holding its own logged bearing`,
+    );
+
+    const pressed = await page.getAttribute('#visit-list [data-ghost="0"]', 'aria-pressed');
+    assert.equal(pressed, 'true', 'the ghost button did not reflect its own pressed state');
+
+    // A second press turns it back off.
+    await page.click('#visit-list [data-ghost="0"]');
+    const cleared = await page.evaluate(`window.scout.state().ghostFrame`);
+    assert.equal(cleared, null, 'a second press should have cleared the ghost');
+
+    assert.deepEqual(trouble, []);
+  });
+});
+
 /* ── On a phone ─────────────────────────────────────────────────────────────
    Everything here is a geometry failure that no unit test can see and that the
    desktop viewport hides completely, because the bottom of this page is four

@@ -280,6 +280,7 @@ describe('readVisit', () => {
       cloud: 'broken cloud, mostly low',
       weather: 'Partly cloudy',
       outcome: 'The core cleared just after midnight.',
+      frame: FRAME,
     });
     assert.deepEqual(visit, {
       at: VISIT.at,
@@ -289,7 +290,19 @@ describe('readVisit', () => {
       cloud: 'broken cloud, mostly low',
       weather: 'Partly cloudy',
       outcome: 'The core cleared just after midnight.',
+      frame: FRAME,
     });
+  });
+
+  it('keeps the lens the visit was logged with, for a ghost overlay (#60)', () => {
+    const visit = readVisit({ ...VISIT, frame: FRAME });
+    assert.deepEqual(visit?.frame, FRAME);
+  });
+
+  it('drops a malformed frame without losing the rest of the visit', () => {
+    const visit = readVisit({ ...VISIT, frame: { sensor: 'ff' /* no focalLengthMm */ } });
+    assert.equal(visit?.sunAltitude, 12.5);
+    assert.equal(visit?.frame, undefined);
   });
 
   it('refuses a visit with no timestamp or no sun position', () => {
