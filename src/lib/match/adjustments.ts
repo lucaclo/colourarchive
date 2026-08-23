@@ -339,21 +339,21 @@ export function atStrength(
  * Grouped the same way the report's own tabs already are: Light (exposure,
  * curve, the basic-sliders description of it), Colour (white balance, HSL
  * mixer, Colour Grading), Effects (texture/clarity/dehaze/vignette/grain,
- * sharpening/NR, and the masks — which the report already shows on the same
- * "Details" tab).
+ * sharpening/NR).
+ *
+ * Deliberately three full `atStrength` passes recombined field-by-field,
+ * rather than a parallel piecewise-lerp implementation: the restrained- and
+ * faithful-solution shapes only need to be defined correctly once, so a bug
+ * in the two-stage blend only has one place to hide.
  */
 export interface GroupStrength {
-  light: number;
-  colour: number;
-  effects: number;
+  light: number; // exposure, contrast/highlights/shadows/whites/blacks, curve
+  colour: number; // temp/tint/vibrance/saturation, HSL mixer, Colour Grading
+  effects: number; // texture/clarity/dehaze/vignette, grain, sharpening, NR
 }
 
-/**
- * Each group is computed by running the existing identity→restrained→faithful
- * blend at its own t (reusing `atStrength` three times) and then taking only
- * that group's fields from the matching result. This never duplicates the
- * piecewise math — a bug in the two-stage blend only has one place to hide.
- */
+export const flatGroupStrength = (t: number): GroupStrength => ({ light: t, colour: t, effects: t });
+
 export function atGroupStrength(
   restrained: Adjustments,
   faithful: Adjustments,
@@ -362,6 +362,27 @@ export function atGroupStrength(
   const light = atStrength(restrained, faithful, s.light);
   const colour = atStrength(restrained, faithful, s.colour);
   const effects = atStrength(restrained, faithful, s.effects);
+
+  // A mask carries one field of each panel's business — exposure/contrast are
+  // a Light move, temp/tint/saturation a Colour one — so it is split rather
+  // than assigned wholesale to either group. Both passes solved the same
+  // restrained/faithful pair, so they always agree on which regions exist;
+  // only the field values differ by t.
+  const masks: MaskAdjustment[] = light.masks.map((lm) => {
+    const cm = colour.masks.find((m) => m.region === lm.region) ?? lm;
+    return {
+      region: lm.region,
+      kind: lm.kind,
+      label: lm.label,
+      rationale: lm.rationale,
+      exposure: lm.exposure,
+      contrast: lm.contrast,
+      temp: cm.temp,
+      tint: cm.tint,
+      saturation: cm.saturation,
+    };
+  });
+
   return {
     exposure: light.exposure,
     contrast: light.contrast,
@@ -370,14 +391,12 @@ export function atGroupStrength(
     whites: light.whites,
     blacks: light.blacks,
     curve: light.curve,
-
     temp: colour.temp,
     tint: colour.tint,
     vibrance: colour.vibrance,
     saturation: colour.saturation,
     hsl: colour.hsl,
     grading: colour.grading,
-
     texture: effects.texture,
     clarity: effects.clarity,
     dehaze: effects.dehaze,
@@ -390,6 +409,6 @@ export function atGroupStrength(
     sharpenDetail: effects.sharpenDetail,
     noiseReduction: effects.noiseReduction,
     colorNoiseReduction: effects.colorNoiseReduction,
-    masks: effects.masks,
+    masks,
   };
 }

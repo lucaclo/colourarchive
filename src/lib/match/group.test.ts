@@ -1,19 +1,18 @@
 /**
- * Tests for combining several reference measurements into one.
- *
- * The property that matters most: a group of one must be the *exact same
- * object* `averageAnalyses` was given, not merely an equal-looking one — the
- * cache key `runMatch` builds from a reference's own file hash has to keep
- * resolving to the same match after this ships. Everything else here follows
- * the same two rules `similar.ts`'s `rankSimilarGroup` already established —
- * average what's shared, leave out what wasn't measured rather than zeroing
- * it in — applied to a much richer measurement than a colour grid.
+ * Tests for a group of reference measurements: region averaging shared with
+ * `resemble.ts`, and whether one measures like a different edit from the
+ * rest. Follows the same two rules `similar.ts`'s `rankSimilarGroup` already
+ * established — average what's shared, leave out what wasn't measured rather
+ * than zeroing it in — applied to a much richer measurement than a colour
+ * grid. The weighted centroid actually solved against (`mergeReferences`,
+ * for more than one reference) is tested in solve.test.ts alongside the rest
+ * of the solver.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analysisOutliers, analysisResemblances, averageAnalyses, averageRegions } from './group.ts';
+import { analysisOutliers, analysisResemblances, averageRegions } from './group.ts';
 import { CLOSE_ENOUGH } from './resemble.ts';
 import type { BaselineMode, HslBandStats, HueStats, PhotoAnalysis, RegionKey, RegionStats, TextureStats, VignetteStats } from './types.ts';
 
@@ -47,7 +46,6 @@ const okTexture: TextureStats = {
   flatToEdge: 0.6,
   measuredAt: { width: 2400, height: 1600 },
 };
-const badTexture: TextureStats = { ...okTexture, usable: false, blocked: 'resolution', reason: 'too small' };
 const okVignette: VignetteStats = { falloffStops: -0.3, symmetry: 0.9, usable: true };
 
 const hslBand = (key: HslBandStats['key'], weight: number, hue: number): HslBandStats => ({
@@ -82,15 +80,6 @@ function analysis(opts: {
     warnings: opts.warnings ?? [],
   };
 }
-
-/* ── averageAnalyses: the single-reference reduction ─────────────────────── */
-
-describe('averageAnalyses — one reference', () => {
-  it('returns the exact same object, not merely an equal one', () => {
-    const only = analysis({ regions: { global: region('global') } });
-    assert.equal(averageAnalyses([only]), only);
-  });
-});
 
 /* ── averageRegions ────────────────────────────────────────────────────────── */
 
@@ -137,51 +126,6 @@ describe('averageRegions', () => {
     const b = region('global', { hue: { mean: 210, strength: 0.9 } }); // opposite
     const out = averageRegions([{ global: a }, { global: b }]);
     assert.ok(out.global!.hue.strength < 0.1, `expected the opposite hues to cancel, got ${out.global!.hue.strength}`);
-  });
-});
-
-/* ── Texture / vignette: average over usable, honest zero over none ─────────── */
-
-describe('averageAnalyses — texture and vignette', () => {
-  it('averages texture only over references where it was usable', () => {
-    const a = analysis({ regions: { global: region('global') }, texture: { ...okTexture, grain: 0.01 } });
-    const b = analysis({ regions: { global: region('global') }, texture: { ...okTexture, grain: 0.03 } });
-    const c = analysis({ regions: { global: region('global') }, texture: badTexture });
-    const out = averageAnalyses([a, b, c]);
-    assert.equal(out.texture.usable, true);
-    assert.ok(Math.abs(out.texture.grain - 0.02) < 1e-9);
-  });
-
-  it('is honestly unusable, not silently zero, when nothing in the group had usable texture', () => {
-    const a = analysis({ regions: { global: region('global') }, texture: badTexture });
-    const b = analysis({ regions: { global: region('global') }, texture: badTexture });
-    const out = averageAnalyses([a, b]);
-    assert.equal(out.texture.usable, false);
-    assert.ok(out.texture.reason && out.texture.reason.length > 0);
-  });
-
-  it('does the same for vignette', () => {
-    const a = analysis({ regions: { global: region('global') }, vignette: { falloffStops: 0, symmetry: 0, usable: false } });
-    const b = analysis({ regions: { global: region('global') }, vignette: { falloffStops: 0, symmetry: 0, usable: false } });
-    assert.equal(averageAnalyses([a, b]).vignette.usable, false);
-  });
-});
-
-/* ── Baseline: the group is as reliable as its weakest reference ────────────── */
-
-describe('averageAnalyses — baseline', () => {
-  it('takes the least reliable baseline in the group, matching computeConfidence\'s own Math.min', () => {
-    const a = analysis({ regions: { global: region('global') }, baseline: 'export' }); // fidelity 1.0
-    const b = analysis({ regions: { global: region('global') }, baseline: 'preview' }); // fidelity 0.55, the worst
-    const out = averageAnalyses([a, b]);
-    assert.equal(out.baseline, 'preview');
-    assert.ok(out.baselineNote?.includes('2 references'));
-  });
-
-  it('carries no mixed-baseline note when the group agrees', () => {
-    const a = analysis({ regions: { global: region('global') }, baseline: 'macos' });
-    const b = analysis({ regions: { global: region('global') }, baseline: 'macos' });
-    assert.equal(averageAnalyses([a, b]).baselineNote, undefined);
   });
 });
 

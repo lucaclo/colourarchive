@@ -28,7 +28,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { identityAdjustments } from './adjustments.ts';
-import { solveMatch, type MatchSolution } from './solve.ts';
+import { mergeReferences, solveMatch, type MatchSolution } from './solve.ts';
 import {
   HSL_BANDS,
   type BaselineMode,
@@ -378,5 +378,109 @@ describe('determinism', () => {
     );
 
     assert.deepEqual(first, second);
+  });
+});
+
+/* ── mergeReferences ──────────────────────────────────────────────────────── */
+
+describe('mergeReferences', () => {
+  it('passes a single reference through unchanged rather than doing pointless work', () => {
+    const p = photo('solo');
+    assert.equal(mergeReferences([{ analysis: p, weight: 1 }]), p);
+  });
+
+  it('rejects an empty list rather than fabricating a blend from nothing', () => {
+    assert.throws(() => mergeReferences([]));
+  });
+
+  it('weights a region by both the caller weight and how many pixels each reference sampled there', () => {
+    const up = (v: number) => Math.min(1, v + 0.2); // global L = curve(0.5) = 0.7
+    const a = photo('a', { curve: (v) => v }); // global L = 0.5, sampled = 50_000 (default)
+    const b = photo('b', { curve: up }); // global L = 0.7, sampled = 50_000 (default)
+
+    // Equal weight, equal sample count: a plain average.
+    const equal = mergeReferences([
+      { analysis: a, weight: 1 },
+      { analysis: b, weight: 1 },
+    ]);
+    assert.ok(Math.abs(equal.regions.global!.L.mean - 0.6) < 1e-9);
+
+    // Same weights, but b's region carries nine times a's evidence: the
+    // result should sit close to b, not at the midpoint.
+    const bHeavy = photo('b-heavy', {
+      curve: up,
+      regionsOverride: { global: { ...b.regions.global!, sampled: 450_000 } },
+    });
+    const evidenceWeighted = mergeReferences([
+      { analysis: a, weight: 1 },
+      { analysis: bHeavy, weight: 1 },
+    ]);
+    assert.ok(
+      Math.abs(evidenceWeighted.regions.global!.L.mean - 0.68) < 1e-9,
+      `expected ~0.68 (90% toward b), got ${evidenceWeighted.regions.global!.L.mean}`,
+    );
+
+    // Same evidence, unequal caller weight: 3:1 toward a.
+    const callerWeighted = mergeReferences([
+      { analysis: a, weight: 3 },
+      { analysis: b, weight: 1 },
+    ]);
+    assert.ok(Math.abs(callerWeighted.regions.global!.L.mean - 0.55) < 1e-9);
+  });
+
+  it('merges a region only across the references that actually measured it', () => {
+    const withSky = photo('with-sky', {
+      regionsOverride: { 'scene.sky': region('scene.sky', { L: 0.9, coverage: 0.4 }) },
+    });
+    const withoutSky = photo('without-sky'); // no scene.sky region at all
+
+    const merged = mergeReferences([
+      { analysis: withSky, weight: 1 },
+      { analysis: withoutSky, weight: 1 },
+    ]);
+
+    // Present, and reflecting only the reference that actually had it —
+    // not diluted toward zero by the one that didn't measure it.
+    assert.ok(merged.regions['scene.sky']);
+    assert.ok(Math.abs(merged.regions['scene.sky']!.L.mean - 0.9) < 1e-9);
+  });
+
+  it('falls back cleanly when texture or vignette is unusable everywhere, and skips unusable inputs otherwise', () => {
+    const bothUnusable = mergeReferences([
+      { analysis: photo('tu-a', { texture: { usable: false, blocked: 'compression', reason: 'blocky' } }), weight: 1 },
+      { analysis: photo('tu-b', { texture: { usable: false, blocked: 'upscaled', reason: 'soft' } }), weight: 1 },
+    ]);
+    assert.equal(bothUnusable.texture.usable, false);
+
+    const oneUsable = mergeReferences([
+      { analysis: photo('tu-c', { texture: { usable: false, blocked: 'compression' } }), weight: 1 },
+      { analysis: photo('tu-d', { texture: { grain: 0.04 } }), weight: 1 },
+    ]);
+    assert.equal(oneUsable.texture.usable, true);
+    assert.ok(Math.abs(oneUsable.texture.grain - 0.04) < 1e-9, 'should equal the one usable input, not average in the unusable one');
+
+    const vigBothUnusable = mergeReferences([
+      { analysis: photo('vu-a', { vignette: { usable: false } }), weight: 1 },
+      { analysis: photo('vu-b', { vignette: { usable: false } }), weight: 1 },
+    ]);
+    assert.equal(vigBothUnusable.vignette.usable, false);
+  });
+
+  it('reports the least-trustworthy baseline of any reference it was built from', () => {
+    const merged = mergeReferences([
+      { analysis: photo('bl-a', { baseline: 'export' }), weight: 1 },
+      { analysis: photo('bl-b', { baseline: 'preview' }), weight: 1 },
+    ]);
+    assert.equal(merged.baseline, 'preview');
+  });
+
+  it('solveMatch accepts a weighted-reference array and solves against the same merge mergeReferences would produce', () => {
+    const a = photo('sm-a', { C: 0.08, hue: 20 });
+    const b = photo('sm-b', { C: 0.03, hue: 200 });
+    const mine = photo('sm-mine');
+
+    const viaArray = solveMatch([{ analysis: a, weight: 1 }, { analysis: b, weight: 1 }], mine);
+    const viaMerge = solveMatch(mergeReferences([{ analysis: a, weight: 1 }, { analysis: b, weight: 1 }]), mine);
+    assert.deepEqual(viaArray, viaMerge);
   });
 });

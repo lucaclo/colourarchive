@@ -14,10 +14,13 @@ import {
   BASELINE_FIDELITY,
   HSL_BANDS,
   REGION_LABEL,
+  VIGNETTE_MIN_SYMMETRY,
   type HslBandStats,
   type PhotoAnalysis,
   type RegionKey,
   type RegionStats,
+  type TextureStats,
+  type VignetteStats,
 } from './types';
 
 // The solver: measurements in, Lightroom values out.
@@ -1024,17 +1027,207 @@ function computeConfidence(ref: PhotoAnalysis, mine: PhotoAnalysis): number {
  * Returns both solutions plus the notes explaining every place the solver
  * declined to act. Blend them with `atStrength` from adjustments.ts.
  */
+export interface WeightedReference {
+  analysis: PhotoAnalysis;
+  weight: number;
+}
+
+/** Circular weighted mean of angles in degrees, 0..360. Falls back to the
+ *  first angle when every weight cancels out (e.g. two references with
+ *  opposite hues at equal weight) rather than returning a NaN from atan2(0,0). */
+function circularMeanDeg(angles: number[], weights: number[]): number {
+  let sumSin = 0;
+  let sumCos = 0;
+  for (let i = 0; i < angles.length; i++) {
+    const rad = (angles[i] * Math.PI) / 180;
+    sumSin += weights[i] * Math.sin(rad);
+    sumCos += weights[i] * Math.cos(rad);
+  }
+  if (Math.abs(sumSin) < 1e-9 && Math.abs(sumCos) < 1e-9) return angles[0] ?? 0;
+  let deg = (Math.atan2(sumSin, sumCos) * 180) / Math.PI;
+  if (deg < 0) deg += 360;
+  return deg;
+}
+
+/**
+ * Weighted-average N reference measurements into one synthetic PhotoAnalysis,
+ * so the existing solveOne/solveMatch pipeline can run against a blend
+ * exactly as it would against a single photo — it never has to know several
+ * references went in. See issue #41: solving each reference separately and
+ * blending the resulting Adjustments would let the tone-curve fits fight each
+ * other; blending the measured inputs first keeps every downstream fit a
+ * single coherent shape.
+ *
+ * Every region/band's contribution is weighted by the caller's per-reference
+ * weight AND by how many pixels that reference actually sampled there — a
+ * reference where a region is barely visible should not pull that region's
+ * target as hard as one where it fills the frame. Regions, texture and
+ * vignette are each merged only across the references that actually measured
+ * them; a region absent from every reference stays absent.
+ */
+export function mergeReferences(refs: WeightedReference[]): PhotoAnalysis {
+  if (refs.length === 0) throw new Error('mergeReferences: at least one reference is required.');
+  if (refs.length === 1) return refs[0].analysis;
+
+  const rawWeights = refs.map((r) => Math.max(0, r.weight));
+  const totalRaw = rawWeights.reduce((s, w) => s + w, 0);
+  const uw = totalRaw > 0 ? rawWeights.map((w) => w / totalRaw) : refs.map(() => 1 / refs.length);
+
+  // --- Regions ---------------------------------------------------------------
+  const regionKeys = new Set<RegionKey>();
+  for (const r of refs) for (const k of Object.keys(r.analysis.regions)) regionKeys.add(k as RegionKey);
+
+  const regions: Partial<Record<RegionKey, RegionStats>> = {};
+  for (const key of regionKeys) {
+    const present = refs
+      .map((r, i) => ({ stats: r.analysis.regions[key], uw: uw[i] }))
+      .filter((p): p is { stats: RegionStats; uw: number } => !!p.stats);
+    if (!present.length) continue;
+
+    // `sampled` sums each reference's raw (not renormalised) weighted pixel
+    // count — a region seen by only one of three equally-weighted references
+    // should report roughly a third of the evidence, not the same as if every
+    // reference had measured it. Everything else is a rate, not a count, so it
+    // is evidence-weighted (caller weight × pixels sampled) and renormalised
+    // across the references that actually have this region, so a reference
+    // where it fills the frame outweighs one where it is a sliver.
+    const sampled = Math.round(present.reduce((s, p) => s + p.uw * p.stats.sampled, 0));
+    const evidence = present.map((p) => p.uw * Math.max(1, p.stats.sampled));
+    const totalEvidence = evidence.reduce((s, e) => s + e, 0);
+    const w = evidence.map((e) => e / totalEvidence);
+
+    const coverage = present.reduce((s, p, i) => s + w[i] * p.stats.coverage, 0);
+    const meanL = present.reduce((s, p, i) => s + w[i] * p.stats.L.mean, 0);
+    const meanC = present.reduce((s, p, i) => s + w[i] * p.stats.C.mean, 0);
+    const meanA = present.reduce((s, p, i) => s + w[i] * p.stats.ab.a, 0);
+    const meanB = present.reduce((s, p, i) => s + w[i] * p.stats.ab.b, 0);
+    // Pool variance the way raw accumulation would (E[X^2] - E[X]^2), rebuilt
+    // from each reference's own mean/sd since the underlying sums are gone.
+    const meanL2 = present.reduce((s, p, i) => s + w[i] * (p.stats.L.sd ** 2 + p.stats.L.mean ** 2), 0);
+    const meanC2 = present.reduce((s, p, i) => s + w[i] * (p.stats.C.sd ** 2 + p.stats.C.mean ** 2), 0);
+    const varL = Math.max(0, meanL2 - meanL * meanL);
+    const varC = Math.max(0, meanC2 - meanC * meanC);
+
+    const resultant = Math.hypot(meanA, meanB);
+    const strength = meanC > 1e-6 ? Math.min(1, resultant / meanC) : 0;
+    let hueMean = (Math.atan2(meanB, meanA) * 180) / Math.PI;
+    if (hueMean < 0) hueMean += 360;
+
+    const steps = present[0].stats.percentiles.length;
+    const percentiles = Array.from({ length: steps }, (_, pi) =>
+      present.reduce((s, p, i) => s + w[i] * (p.stats.percentiles[pi] ?? 0), 0),
+    );
+
+    regions[key] = {
+      key,
+      coverage,
+      sampled,
+      L: { mean: meanL, sd: Math.sqrt(varL) },
+      C: { mean: meanC, sd: Math.sqrt(varC) },
+      hue: { mean: hueMean, strength },
+      ab: { a: meanA, b: meanB },
+      percentiles,
+    };
+  }
+
+  // --- HSL bands ---------------------------------------------------------------
+  const hslBands: HslBandStats[] = HSL_BANDS.map((band, bi) => {
+    const per = refs.map((r) => r.analysis.hslBands[bi]);
+    // Weight is itself a fraction of each reference's own chromatic pixels, so
+    // a band's combined weight is the reference-weighted average of that
+    // fraction — how present the band is across the blended set overall.
+    const wPerRef = uw.map((w, i) => w * per[i].weight);
+    const weight = wPerRef.reduce((s, w) => s + w, 0);
+    if (weight < 1e-9) return { key: band.key, weight: 0, chroma: 0, L: 0, hue: band.H };
+    const chroma = per.reduce((s, p, i) => s + wPerRef[i] * p.chroma, 0) / weight;
+    const L = per.reduce((s, p, i) => s + wPerRef[i] * p.L, 0) / weight;
+    const hue = circularMeanDeg(per.map((p) => p.hue), wPerRef);
+    return { key: band.key, weight, chroma, L, hue };
+  });
+
+  // --- Texture -------------------------------------------------------------
+  const usableTexIdx = refs.map((_, i) => i).filter((i) => refs[i].analysis.texture.usable);
+  let texture: TextureStats;
+  if (usableTexIdx.length === 0) {
+    const first = refs[0].analysis.texture;
+    texture = {
+      ...first,
+      usable: false,
+      blocked: first.blocked === 'none' ? 'resolution' : first.blocked,
+      reason: 'No usable texture measurement among the blended references.',
+    };
+  } else {
+    const tw = usableTexIdx.map((i) => uw[i]);
+    const tTotal = tw.reduce((s, w) => s + w, 0);
+    const norm = tw.map((w) => w / tTotal);
+    const pick = (f: (t: TextureStats) => number) =>
+      usableTexIdx.reduce((s, i, j) => s + norm[j] * f(refs[i].analysis.texture), 0);
+    const base = refs[usableTexIdx[0]].analysis.texture;
+    texture = {
+      usable: true,
+      blocked: 'none',
+      normalised: usableTexIdx.some((i) => refs[i].analysis.texture.normalised),
+      nativeSize: base.nativeSize,
+      grain: pick((t) => t.grain),
+      grainSize: pick((t) => t.grainSize),
+      acutance: pick((t) => t.acutance),
+      flatToEdge: pick((t) => t.flatToEdge),
+      measuredAt: base.measuredAt,
+    };
+  }
+
+  // --- Vignette --------------------------------------------------------------
+  const usableVigIdx = refs.map((_, i) => i).filter((i) => refs[i].analysis.vignette.usable);
+  let vignette: VignetteStats;
+  if (usableVigIdx.length === 0) {
+    vignette = { falloffStops: 0, symmetry: 0, usable: false };
+  } else {
+    const vw = usableVigIdx.map((i) => uw[i]);
+    const vTotal = vw.reduce((s, w) => s + w, 0);
+    const norm = vw.map((w) => w / vTotal);
+    const falloffStops = usableVigIdx.reduce(
+      (s, i, j) => s + norm[j] * refs[i].analysis.vignette.falloffStops, 0,
+    );
+    const symmetry = usableVigIdx.reduce((s, i, j) => s + norm[j] * refs[i].analysis.vignette.symmetry, 0);
+    vignette = { falloffStops, symmetry, usable: symmetry >= VIGNETTE_MIN_SYMMETRY };
+  }
+
+  // Confidence is only as good as the least-trustworthy input it was built
+  // from — blending a `native` and a `preview` reference should not read as
+  // confidently as the `native` one alone would have.
+  const baseline = refs.reduce(
+    (worst, r) => (BASELINE_FIDELITY[r.analysis.baseline] < BASELINE_FIDELITY[worst] ? r.analysis.baseline : worst),
+    refs[0].analysis.baseline,
+  );
+
+  return {
+    id: refs.map((r) => r.analysis.id).join('+'),
+    filename: refs.map((r) => r.analysis.filename).join(' + '),
+    baseline,
+    width: refs[0].analysis.width,
+    height: refs[0].analysis.height,
+    sampledAt: Math.max(...refs.map((r) => r.analysis.sampledAt)),
+    regions,
+    texture,
+    vignette,
+    hslBands,
+    timings: {},
+    warnings: [...new Set(refs.flatMap((r) => r.analysis.warnings))],
+  };
+}
+
 export function solveMatch(
-  ref: PhotoAnalysis,
+  ref: PhotoAnalysis | WeightedReference[],
   mine: PhotoAnalysis,
   opts: SolveOptions = {},
 ): MatchSolution {
+  const mergedRef = Array.isArray(ref) ? mergeReferences(ref) : ref;
   const cal = opts.calibration ?? DEFAULT_CALIBRATION;
 
   // Faithful first so its curve x positions define the shared grid.
-  const faithful = solveOne(ref, mine, cal, false, null);
+  const faithful = solveOne(mergedRef, mine, cal, false, null);
   const curveX = faithful.adj.curve.map((p) => p.x);
-  const restrained = solveOne(ref, mine, cal, true, curveX);
+  const restrained = solveOne(mergedRef, mine, cal, true, curveX);
 
   // Notes are the same set from both passes; keep the faithful pass's copy and
   // add anything the restrained pass raised uniquely.
@@ -1053,7 +1246,7 @@ export function solveMatch(
     });
   }
 
-  if (ref.baseline === 'preview' || mine.baseline === 'preview') {
+  if (mergedRef.baseline === 'preview' || mine.baseline === 'preview') {
     notes.unshift({
       severity: 'caution',
       panel: 'Baseline',
@@ -1067,7 +1260,7 @@ export function solveMatch(
     curveX,
     notes,
     basicSlidersAreDescriptive: true,
-    confidence: computeConfidence(ref, mine),
+    confidence: computeConfidence(mergedRef, mine),
     // Reported from the faithful pass: it is the ceiling on what is achievable,
     // whereas the restrained pass deliberately stops short of it.
     reachability: faithful.reachability,

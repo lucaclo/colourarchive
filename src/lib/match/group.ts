@@ -1,33 +1,16 @@
 /**
- * Combining several similarly-edited reference photographs into one
- * measurement, for the same reason `similar.ts`'s `rankSimilarGroup` averages
- * a group's colour rather than its embeddings: the grade is the thing every
- * submitted photo shares, and averaging is what makes it reinforce while
- * each photo's own scene content — different light, different subject —
- * partly cancels out.
+ * A group of similarly-edited reference photographs, once several can be
+ * submitted to one match: whether one measures like a different edit from
+ * the rest (`analysisOutliers`), and the region averaging `resemble.ts`
+ * shares with it (`averageRegions`).
  *
- * `solveMatch` never touches raw pixels; it reads a `PhotoAnalysis`. That
- * means a group centroid can be built by averaging N *measurements* and
- * solving once against the result, rather than solving N times and averaging
- * N sets of Lightroom values. The latter has no precedent here and no
- * obvious meaning: each solve's later stages (region caps, masks) are
- * residuals computed against that one photo's own running state, and are not
- * obviously combinable after the fact. Averaging the measurement first, the
- * same choice `similar.ts` already made, is the one with a clear meaning.
+ * The centroid `solveMatch` is actually run against for more than one
+ * reference is `mergeReferences` in `solve.ts` — weighted per reference and
+ * evidence-weighted per region, which this module's own unweighted average
+ * used to do before it existed. Kept here only where nothing else covers it.
  */
 
-import { BASELINE_FIDELITY, BASELINE_LABEL } from './types';
-import type {
-  BaselineMode,
-  HslBandStats,
-  HueStats,
-  Moments,
-  PhotoAnalysis,
-  RegionKey,
-  RegionStats,
-  TextureStats,
-  VignetteStats,
-} from './types';
+import type { HueStats, Moments, PhotoAnalysis, RegionKey, RegionStats } from './types';
 import { CLOSE_ENOUGH, rankResemblance, trimSignature, type Resemblance } from './resemble';
 
 const mean = (values: number[]): number => values.reduce((s, v) => s + v, 0) / values.length;
@@ -84,8 +67,8 @@ function averageRegion(key: RegionKey, stats: RegionStats[]): RegionStats {
 }
 
 /** Every region across a set of analyses, averaged key by key. Exported —
- *  `analysisResemblances` below needs the same averaging for a leave-one-out
- *  centroid, and duplicating it would risk the two drifting apart. */
+ *  `resemble.ts`'s own group-comparison shares this rather than a second
+ *  implementation of the same averaging. */
 export function averageRegions(
   all: Partial<Record<RegionKey, RegionStats>>[],
 ): Partial<Record<RegionKey, RegionStats>> {
@@ -97,114 +80,6 @@ export function averageRegions(
     if (present.length) out[key] = averageRegion(key, present);
   }
   return out;
-}
-
-function averageHslBands(all: HslBandStats[][]): HslBandStats[] {
-  const withBands = all.filter((b) => b.length > 0);
-  if (!withBands.length) return [];
-  return withBands[0].map((_, i) => {
-    const bands = withBands.map((b) => b[i]).filter((b): b is HslBandStats => Boolean(b));
-    return {
-      key: bands[0].key,
-      weight: mean(bands.map((b) => b.weight)),
-      chroma: mean(bands.map((b) => b.chroma)),
-      L: mean(bands.map((b) => b.L)),
-      // Weighted by each band's own `weight` — a band that is barely present
-      // in a photo has a hue reading close to noise (see `HslBandStats.hue`).
-      hue: meanHue(bands.map((b) => ({ mean: b.hue, strength: b.weight }))).mean,
-    };
-  });
-}
-
-/** Texture (grain/acutance/…) averaged over references whose measurement was
- *  usable. If none were, the group's is honestly unusable too, with a reason
- *  that says why rather than a silent zero. */
-function averageTexture(all: TextureStats[]): TextureStats {
-  const usable = all.filter((t) => t.usable);
-  if (!usable.length) {
-    const first = all[0];
-    return {
-      usable: false,
-      blocked: first?.blocked ?? 'none',
-      reason: `No reference had usable texture data (${all.map((t) => t.reason ?? t.blocked).join('; ')}).`,
-      normalised: false,
-      nativeSize: first?.nativeSize ?? { width: 0, height: 0 },
-      grain: 0,
-      grainSize: 0,
-      acutance: 0,
-      flatToEdge: 0,
-      measuredAt: first?.measuredAt ?? { width: 0, height: 0 },
-    };
-  }
-  return {
-    usable: true,
-    blocked: 'none',
-    normalised: usable.some((t) => t.normalised),
-    nativeSize: {
-      width: Math.round(mean(usable.map((t) => t.nativeSize.width))),
-      height: Math.round(mean(usable.map((t) => t.nativeSize.height))),
-    },
-    grain: mean(usable.map((t) => t.grain)),
-    grainSize: mean(usable.map((t) => t.grainSize)),
-    acutance: mean(usable.map((t) => t.acutance)),
-    flatToEdge: mean(usable.map((t) => t.flatToEdge)),
-    measuredAt: {
-      width: Math.round(mean(usable.map((t) => t.measuredAt.width))),
-      height: Math.round(mean(usable.map((t) => t.measuredAt.height))),
-    },
-  };
-}
-
-/** Vignette, same "average over usable, honest zero if none" rule as texture. */
-function averageVignette(all: VignetteStats[]): VignetteStats {
-  const usable = all.filter((v) => v.usable);
-  if (!usable.length) return { falloffStops: 0, symmetry: 0, usable: false };
-  return {
-    falloffStops: mean(usable.map((v) => v.falloffStops)),
-    symmetry: mean(usable.map((v) => v.symmetry)),
-    usable: true,
-  };
-}
-
-/** The least reliable baseline in the group — see `BASELINE_FIDELITY`. Mirrors
- *  `computeConfidence`'s own `Math.min` of two baselines in solve.ts: a
- *  group's confidence should never be inflated by its best-measured member
- *  covering for its worst. */
-function worstBaseline(baselines: BaselineMode[]): BaselineMode {
-  return baselines.reduce((worst, b) => (BASELINE_FIDELITY[b] < BASELINE_FIDELITY[worst] ? b : worst));
-}
-
-/**
- * The group's centroid measurement — what `solveMatch` is actually run
- * against for more than one reference.
- *
- * A single reference is returned unchanged, not merely equal to it: same
- * `id`, same object. `runMatch`'s cache key is built from the reference
- * file's own byte hash, and a group of one has to resolve to *the same*
- * cache entry a plain single-reference match already produced, or every
- * existing cached match goes stale the moment this ships.
- */
-export function averageAnalyses(analyses: PhotoAnalysis[]): PhotoAnalysis {
-  if (analyses.length === 1) return analyses[0];
-  const baseline = worstBaseline(analyses.map((a) => a.baseline));
-  const mixedBaseline = new Set(analyses.map((a) => a.baseline)).size > 1;
-  return {
-    id: analyses.map((a) => a.id).sort().join('+'),
-    filename: `${analyses.length} references, blended`,
-    baseline,
-    baselineNote: mixedBaseline
-      ? `Blended from ${analyses.length} references measured at different baselines; shown at the least reliable of them (${BASELINE_LABEL[baseline]}).`
-      : analyses[0].baselineNote,
-    width: Math.round(mean(analyses.map((a) => a.width))),
-    height: Math.round(mean(analyses.map((a) => a.height))),
-    sampledAt: Math.round(mean(analyses.map((a) => a.sampledAt))),
-    regions: averageRegions(analyses.map((a) => a.regions)),
-    texture: averageTexture(analyses.map((a) => a.texture)),
-    vignette: averageVignette(analyses.map((a) => a.vignette)),
-    hslBands: averageHslBands(analyses.map((a) => a.hslBands)),
-    timings: {},
-    warnings: [...new Set(analyses.flatMap((a) => a.warnings))],
-  };
 }
 
 export interface AnalysisResemblance {

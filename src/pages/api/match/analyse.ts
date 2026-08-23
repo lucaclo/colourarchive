@@ -4,7 +4,7 @@ import path from 'node:path';
 import { readInspStore } from '../../../lib/inspiration';
 import { readStore } from '../../../lib/manifest';
 import { INSPIRATION_DIR, PHOTOS_DIR } from '../../../lib/paths';
-import { runMatch, MATCH_STAGE_LABEL } from '../../../lib/match/session';
+import { runMatch, MATCH_STAGE_LABEL, type ReferenceInput } from '../../../lib/match/session';
 import { canDecodeRaw, isRawFilename } from '../../../lib/match/decode';
 import type { BaselineMode } from '../../../lib/match/types';
 
@@ -14,7 +14,8 @@ export const prerender = false;
 // grade.
 //
 // Each reference is an item already on the inspiration board (or in the
-// archive), identified by id; your photo is uploaded per request, since it is
+// archive), identified by id, with an optional weight alongside it if more
+// than one was picked; your photo is uploaded per request, since it is
 // usually a file you are about to edit rather than something in the archive.
 // More than one reference is how several similarly-edited photographs are
 // submitted together for a sharper solve — see group.ts for how they combine.
@@ -24,7 +25,8 @@ const BASELINES: BaselineMode[] = ['macos', 'export', 'preview', 'native'];
 export const POST: APIRoute = async ({ request }) => {
   try {
     const form = await request.formData();
-    const refIds = [...new Set(form.getAll('ref').map((v) => String(v).trim()).filter(Boolean))];
+    const refIds = form.getAll('ref').map((v) => String(v).trim()).filter(Boolean);
+    const rawWeights = form.getAll('weight').map((v) => Number(v));
     const file = form.get('photo');
     const baselineRaw = String(form.get('baseline') || 'macos');
     const baseline: BaselineMode = BASELINES.includes(baselineRaw as BaselineMode)
@@ -41,8 +43,9 @@ export const POST: APIRoute = async ({ request }) => {
     const byId = new Map([...insp, ...archive].map((p) => [p.id, p]));
     const inspIds = new Set(insp.map((p) => p.id));
 
-    const references: Array<{ buf: Buffer; name: string; path: string }> = [];
-    for (const id of refIds) {
+    const references: ReferenceInput[] = [];
+    for (let i = 0; i < refIds.length; i++) {
+      const id = refIds[i];
       const ref = byId.get(id);
       if (!ref) return json({ ok: false, error: `A reference no longer exists (${id}).` }, 404);
       const refPath = path.join(inspIds.has(id) ? INSPIRATION_DIR : PHOTOS_DIR, ref.filename);
@@ -52,7 +55,8 @@ export const POST: APIRoute = async ({ request }) => {
       } catch {
         return json({ ok: false, error: `A reference original is missing from disk (${ref.filename}).` }, 410);
       }
-      references.push({ buf, name: ref.filename, path: refPath });
+      const weight = Number.isFinite(rawWeights[i]) && rawWeights[i] > 0 ? rawWeights[i] : 1;
+      references.push({ buf, name: ref.filename, path: refPath, weight });
     }
 
     const myBuf = Buffer.from(await file.arrayBuffer());
@@ -73,11 +77,11 @@ export const POST: APIRoute = async ({ request }) => {
     const payload = (record: Awaited<ReturnType<typeof runMatch>>) => ({
       ok: true as const,
       id: record.id,
+      references: record.references,
       reference: record.reference,
       mine: record.mine,
       solution: record.solution,
       preview: record.preview,
-      referencePreview: record.referencePreview,
       maskChannels: record.maskChannels,
       referenceName: record.referenceName,
       myName: record.myName,

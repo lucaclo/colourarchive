@@ -31,6 +31,7 @@ import {
   atStrength,
   clamp,
   clampAdjustments,
+  flatGroupStrength,
   identityAdjustments,
   lerpAdjustments,
   zeroHsl,
@@ -555,11 +556,12 @@ describe('atGroupStrength', () => {
   const restrained = fixtureA();
   const faithful = fixtureB();
 
-  it('with all three groups equal, matches atStrength at that t', () => {
+  it('with all three groups equal, matches the single flat atStrength exactly', () => {
     for (const t of [0, 0.25, 0.5, 0.75, 1]) {
       assert.deepEqual(
-        atGroupStrength(restrained, faithful, { light: t, colour: t, effects: t }),
+        atGroupStrength(restrained, faithful, flatGroupStrength(t)),
         atStrength(restrained, faithful, t),
+        `mismatch at t=${t}`,
       );
     }
   });
@@ -593,7 +595,7 @@ describe('atGroupStrength', () => {
     assert.equal(a.texture, faithful.texture);
   });
 
-  it('Effects fields (including masks) track only the effects strength', () => {
+  it('Effects fields track only the effects strength', () => {
     const a = atGroupStrength(restrained, faithful, { light: 1, colour: 1, effects: 0 });
     const effectsAtZero = atStrength(restrained, faithful, 0);
     assert.equal(a.texture, effectsAtZero.texture);
@@ -608,18 +610,19 @@ describe('atGroupStrength', () => {
     assert.equal(a.sharpenDetail, effectsAtZero.sharpenDetail);
     assert.equal(a.noiseReduction, effectsAtZero.noiseReduction);
     assert.equal(a.colorNoiseReduction, effectsAtZero.colorNoiseReduction);
-    assert.deepEqual(a.masks, effectsAtZero.masks);
     // Light and Colour fields, meanwhile, sit at the faithful (t=1) solution.
     assert.equal(a.exposure, faithful.exposure);
     assert.equal(a.temp, faithful.temp);
   });
 
-  it('every field is accounted for by exactly one group', () => {
+  it('every non-mask field is accounted for by exactly one group', () => {
     // A field missing from atGroupStrength's merge would silently keep
     // whichever group happened to list it last — this catches that by driving
     // the three groups apart (0, 0.5, 1) and checking the result matches each
     // group's own atStrength at every field the type declares, with nothing
-    // left over unassigned to any of the three.
+    // left over unassigned to any of the three. `masks` is excluded here — it
+    // splits across Light and Colour rather than belonging to one group, and
+    // is covered by its own dedicated test below.
     const s = { light: 0, colour: 0.5, effects: 1 };
     const a = atGroupStrength(restrained, faithful, s);
     const light = atStrength(restrained, faithful, s.light);
@@ -629,14 +632,64 @@ describe('atGroupStrength', () => {
     const colourKeys = ['temp', 'tint', 'vibrance', 'saturation', 'hsl', 'grading'] as const;
     const effectsKeys = [
       'texture', 'clarity', 'dehaze', 'vignette', 'grainAmount', 'grainSize', 'grainRoughness',
-      'sharpenAmount', 'sharpenRadius', 'sharpenDetail', 'noiseReduction', 'colorNoiseReduction', 'masks',
+      'sharpenAmount', 'sharpenRadius', 'sharpenDetail', 'noiseReduction', 'colorNoiseReduction',
     ] as const;
     for (const k of lightKeys) assert.deepEqual(a[k], light[k], k);
     for (const k of colourKeys) assert.deepEqual(a[k], colour[k], k);
     for (const k of effectsKeys) assert.deepEqual(a[k], effects[k], k);
-    const covered = new Set<string>([...lightKeys, ...colourKeys, ...effectsKeys]);
+    const covered = new Set<string>([...lightKeys, ...colourKeys, ...effectsKeys, 'masks']);
     for (const k of Object.keys(a) as (keyof Adjustments)[]) {
       assert.ok(covered.has(k), `field '${k}' is not covered by any group`);
     }
+  });
+
+  it('lets one panel sit at full strength while another holds back — the case the flat slider cannot express', () => {
+    // Light at 1 (faithful), Colour at 0.5 (restrained), Effects at 0 (identity).
+    const result = atGroupStrength(restrained, faithful, { light: 1, colour: 0.5, effects: 0 });
+    const identity = identityAdjustments(restrained.curve.map((p) => p.x));
+
+    // Light fields track the faithful solution.
+    assert.equal(result.exposure, clampAdjustments(faithful).exposure);
+    assert.equal(result.contrast, clampAdjustments(faithful).contrast);
+    assert.deepEqual(result.curve, clampAdjustments(faithful).curve);
+
+    // Colour fields track the restrained solution.
+    assert.equal(result.temp, clampAdjustments(restrained).temp);
+    assert.equal(result.saturation, clampAdjustments(restrained).saturation);
+    assert.deepEqual(result.hsl, clampAdjustments(restrained).hsl);
+
+    // Effects fields track identity (no change).
+    assert.equal(result.texture, identity.texture);
+    assert.equal(result.grainAmount, identity.grainAmount);
+    assert.equal(result.sharpenAmount, identity.sharpenAmount);
+  });
+
+  it('splits a single mask across panels: exposure/contrast follow Light, temp/tint/saturation follow Colour', () => {
+    const withMasks = (base: Adjustments): Adjustments => ({
+      ...base,
+      masks: [mask({ exposure: 0.8, contrast: 20, temp: 40, tint: -10, saturation: 30 })],
+    });
+    const r = withMasks(restrained);
+    const f = withMasks(faithful);
+
+    const result = atGroupStrength(r, f, { light: 1, colour: 0, effects: 0 });
+    const lightOnly = atStrength(r, f, 1).masks[0];
+    const colourOff = atStrength(r, f, 0).masks[0];
+
+    assert.equal(result.masks.length, 1);
+    assert.equal(result.masks[0].exposure, lightOnly.exposure);
+    assert.equal(result.masks[0].contrast, lightOnly.contrast);
+    assert.equal(result.masks[0].temp, colourOff.temp);
+    assert.equal(result.masks[0].tint, colourOff.tint);
+    assert.equal(result.masks[0].saturation, colourOff.saturation);
+  });
+
+  it('clamps each panel independently, same as atStrength', () => {
+    const result = atGroupStrength(restrained, faithful, { light: -5, colour: 2, effects: 0.5 });
+    assert.deepEqual(
+      { exposure: result.exposure, curve: result.curve },
+      { exposure: atStrength(restrained, faithful, 0).exposure, curve: atStrength(restrained, faithful, 0).curve },
+    );
+    assert.equal(result.temp, atStrength(restrained, faithful, 1).temp);
   });
 });

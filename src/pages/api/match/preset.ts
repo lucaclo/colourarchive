@@ -7,9 +7,13 @@ export const prerender = false;
 
 // Download the preset for a match at a given strength.
 //
-// Generated on demand rather than at analysis time, because the strength slider
-// means there is no single "the" preset — the file has to correspond to what
-// the person is actually looking at when they press download.
+// Generated on demand rather than at analysis time, because the strength
+// slider(s) mean there is no single "the" preset — the file has to correspond
+// to what the person is actually looking at when they press download.
+//
+// Accepts either the flat `strength` (one number for every panel) or all
+// three of `light`/`colour`/`effects` (issue #41's per-panel strength) — the
+// UI sends whichever mode it's in, and only one of the two shapes at a time.
 
 export const GET: APIRoute = async ({ url }) => {
   try {
