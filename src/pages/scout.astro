@@ -174,7 +174,12 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
                  not answering all mean the same thing here — nothing to add,
                  so nothing is shown. -->
             <p class="core-note" id="core-seeing" hidden></p>
+            <!-- Only meaningful once the star layer has something to name —
+                 hidden the rest of the time rather than printing "—", which
+                 would read as a measurement that came back empty. -->
+            <p class="core-note" id="core-stars-note" hidden></p>
             <p class="core-caveat">Light pollution is not modelled.</p>
+            <p class="core-caveat">Stars to magnitude 4, dimmed for altitude and moonlight but not for cloud. Constellation lines are computed from the catalogue, not the IAU's own figures.</p>
           </details>
 
           <!-- The per-spot answer: not where the shade is, but when the light
@@ -440,6 +445,31 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
         </button>
       </div>
 
+      <!-- The Milky Way answer's own switches, open the moment the mode is —
+           the six layers that actually belong to it, without a trip through
+           the general Layers panel to find them. Same checkboxes as there in
+           everything but which panel they are in: `LAYER_TOGGLES` in
+           state.ts binds two ids to each of these six keys, so ticking one
+           here ticks its twin there too, and either one drives the one
+           layer. -->
+      <div class="layers night-panel" id="night-panel" hidden>
+        <p class="layers-head">Milky Way</p>
+        <label class="toggle"><input type="checkbox" id="t-stars-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Stars &amp; constellations</span></label>
+        <label class="toggle"><input type="checkbox" id="t-core-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Milky Way arc</span></label>
+        <label class="toggle"><input type="checkbox" id="t-moonpath-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Moon path</span></label>
+        <label class="toggle"><input type="checkbox" id="t-solstice-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Solstice paths</span></label>
+        <label class="toggle"><input type="checkbox" id="t-frame-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Frame</span></label>
+        <label class="toggle"><input type="checkbox" id="t-monolith-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Monolith</span></label>
+      </div>
+
+      <!-- A tapped star's own small card — positioned at the tap itself, not
+           in a fixed corner, since it is an answer to *that* point rather
+           than a panel of its own. See `showStarInfo`/`findTappedStar`. -->
+      <div class="panel star-info" id="star-info" hidden>
+        <p class="star-info-name" id="star-info-name"></p>
+        <p class="star-info-detail" id="star-info-detail"></p>
+      </div>
+
       <div class="layers" id="layers" hidden>
         <p class="layers-head">Basemap</p>
         <div class="seg seg-wide" id="baseseg">
@@ -448,20 +478,21 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
           <button type="button" data-base="satellite">Satellite</button>
         </div>
         <p class="layers-head">Show</p>
-        <label class="toggle"><input type="checkbox" id="t-buildings" checked /> <span>Building shadows</span></label>
-        <label class="toggle"><input type="checkbox" id="t-landform" checked /> <span>Landform shadows</span></label>
-        <label class="toggle"><input type="checkbox" id="t-hillshade" checked /> <span>Hillshade</span></label>
-        <label class="toggle"><input type="checkbox" id="t-sunpath" checked /> <span>Sun path</span></label>
-        <label class="toggle"><input type="checkbox" id="t-moonpath" /> <span>Moon path</span></label>
-        <label class="toggle"><input type="checkbox" id="t-solstice" /> <span>Solstice paths</span></label>
+        <label class="toggle"><input type="checkbox" id="t-buildings" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Building shadows</span></label>
+        <label class="toggle"><input type="checkbox" id="t-landform" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Landform shadows</span></label>
+        <label class="toggle"><input type="checkbox" id="t-hillshade" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Hillshade</span></label>
+        <label class="toggle"><input type="checkbox" id="t-sunpath" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Sun path</span></label>
+        <label class="toggle"><input type="checkbox" id="t-moonpath" /><span class="toggle-box" aria-hidden="true"></span> <span>Moon path</span></label>
+        <label class="toggle"><input type="checkbox" id="t-solstice" /><span class="toggle-box" aria-hidden="true"></span> <span>Solstice paths</span></label>
         <!-- "arc", not "core": this draws the path across the sky dome and
              nothing else. It shared its name with the panel section that holds
              all the text, so ticking it looked like it had done nothing. -->
-        <label class="toggle"><input type="checkbox" id="t-core" /> <span>Milky Way arc</span></label>
-        <label class="toggle"><input type="checkbox" id="t-monolith" /> <span>Monolith</span></label>
-        <label class="toggle"><input type="checkbox" id="t-photos" checked /> <span>Photo hotspots</span></label>
-        <label class="toggle"><input type="checkbox" id="t-frame" /> <span>Frame</span></label>
-        <label class="toggle"><input type="checkbox" id="t-sight" /> <span>Line of sight</span></label>
+        <label class="toggle"><input type="checkbox" id="t-core" /><span class="toggle-box" aria-hidden="true"></span> <span>Milky Way arc</span></label>
+        <label class="toggle"><input type="checkbox" id="t-stars" /><span class="toggle-box" aria-hidden="true"></span> <span>Stars &amp; constellations</span></label>
+        <label class="toggle"><input type="checkbox" id="t-monolith" /><span class="toggle-box" aria-hidden="true"></span> <span>Monolith</span></label>
+        <label class="toggle"><input type="checkbox" id="t-photos" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Photo hotspots</span></label>
+        <label class="toggle"><input type="checkbox" id="t-frame" /><span class="toggle-box" aria-hidden="true"></span> <span>Frame</span></label>
+        <label class="toggle"><input type="checkbox" id="t-sight" /><span class="toggle-box" aria-hidden="true"></span> <span>Line of sight</span></label>
 
         <!-- The lens. The wedge on the map is where the frame lands on the
              ground; the answer that needs it is whether the sun is *in* the
@@ -826,6 +857,40 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     backdrop-filter: blur(10px);
     box-shadow: 0 6px 20px -6px color-mix(in oklab, black 45%, transparent),
       0 1px 3px color-mix(in oklab, black 20%, transparent);
+  }
+
+  /* ── Panel entrances ──────────────────────────────────────────────────────
+     Every floating panel on this page used to appear and disappear via a
+     plain [hidden] toggle with zero transition — the single biggest "flat"
+     gap here. Pure CSS, no JS, and nothing in page.ts/state.ts changes:
+     `allow-discrete` defers the display:none jump until the exit transition
+     finishes, and @starting-style supplies the "just appeared" frame for the
+     entrance, so opening and closing are symmetric instead of one snapping
+     and the other easing. prefers-reduced-motion already collapses every
+     transition on this page to 0.01ms via the blanket rule below — nothing
+     extra needed here for that. */
+  .layers, .monthgrid, .photos, .star-info, .searchbox, .kept, .panel, .slab, .scout-mapmsg {
+    transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete;
+  }
+  .panel { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete, width 220ms ease; }
+  .datesheet { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete; }
+  .toast { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete; }
+
+  .layers[hidden], .monthgrid[hidden], .photos[hidden], .star-info[hidden],
+  .searchbox[hidden], .kept[hidden], .panel[hidden], .slab[hidden] { opacity: 0; transform: scale(0.95); }
+  .datesheet[hidden] { opacity: 0; transform: translateY(-50%) scale(0.95); }
+  .toast[hidden] { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  /* Already centred by its own `translate(-50%, -50%)` (see `.scout-mapmsg`
+     below) — the hidden state has to repeat that or the scale-down would
+     shrink toward the top-left corner instead of toward the message's own
+     centre. */
+  .scout-mapmsg[hidden] { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  @starting-style {
+    .layers:not([hidden]), .monthgrid:not([hidden]), .photos:not([hidden]), .star-info:not([hidden]),
+    .searchbox:not([hidden]), .kept:not([hidden]), .panel:not([hidden]), .slab:not([hidden]) { opacity: 0; transform: scale(0.95); }
+    .datesheet:not([hidden]) { opacity: 0; transform: translateY(-50%) scale(0.95); }
+    .toast:not([hidden]) { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    .scout-mapmsg:not([hidden]) { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
   }
 
   .scout-hint {
@@ -1235,13 +1300,14 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
        list rather than controls, so they take the smaller of the two. */
     min-height: 2rem;
     cursor: pointer;
-    transition: background 140ms;
+    transition: background 140ms var(--ease), transform 110ms ease-out;
   }
   .best-list :global(li:hover),
   .best-list :global(li:focus-visible) {
     background: color-mix(in oklab, var(--border) 40%, transparent);
     outline: none;
   }
+  .best-list :global(li:active) { transform: scale(0.98); }
   .best-list :global(.best-rank) {
     font-family: var(--font-label);
     font-size: 0.58rem;
@@ -1322,13 +1388,14 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     min-height: 2.4rem;
     font: inherit;
     color: var(--fg);
-    transition: background 140ms;
+    transition: background 140ms var(--ease), transform 110ms ease-out;
   }
   .align-list :global(.align-row:hover),
   .align-list :global(.align-row:focus-visible) {
     background: color-mix(in oklab, var(--border) 40%, transparent);
     outline: none;
   }
+  .align-list :global(.align-row:active) { transform: scale(0.98); }
   .align-list :global(.align-when) { font-size: 0.7rem; line-height: 1.3; }
   .align-list :global(.align-what) {
     font-family: var(--font-label);
@@ -1529,9 +1596,11 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     color: var(--fg);
     text-align: left;
     min-height: 34px;
+    transition: background 140ms var(--ease), transform 110ms ease-out;
   }
   .events :global(button:disabled) { cursor: default; opacity: 0.45; }
   .events :global(button:not(:disabled):hover) { background: color-mix(in oklab, var(--fg) 7%, transparent); }
+  .events :global(button:not(:disabled):active) { transform: scale(0.98); }
   .events :global(.ev-label) { font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); }
   .events :global(.ev-time) {
     font-family: var(--font-label);
@@ -1591,7 +1660,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     line-height: 1;
     cursor: pointer;
     padding: 0 0.3rem;
+    transition: transform 110ms ease-out;
   }
+  .mg-close:active { transform: scale(0.9); }
   .mg-scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
   /* The rows share whatever height there is: a month is a fixed number of rows,
      so letting them stretch fills the panel on a laptop without making them
@@ -1703,7 +1774,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     padding: 0 0.7rem;
     cursor: pointer;
     white-space: nowrap;
+    transition: transform 110ms ease-out;
   }
+  #note-add:active, #visit-log:active, #dem-add:active { transform: scale(0.95); }
 
   /* Issue #45: the visit log, styled as a lighter, textual cousin of the
      photo list beside it rather than as something new. */
@@ -1818,6 +1891,22 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   }
   .core-note { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--fg); }
   .core-note:empty { display: none; }
+
+  /* The one line in this fold that names what is actually overhead, rather
+     than qualifying an answer above it — same violet #bd99f2 the night
+     button and the core's own arc already carry, so the panel and the dome
+     read as one system rather than a plain note sitting under a coloured
+     control. The same callout shape `.spot` already uses for its own
+     highest-value line, not a new pattern. */
+  #core-stars-note:not(:empty) {
+    padding: 0.5rem 0.6rem;
+    margin: 0.4rem 0 0;
+    background: color-mix(in oklab, #bd99f2 12%, transparent);
+    border-left: 2px solid #bd99f2;
+    border-radius: 0 9px 9px 0;
+    color: var(--fg);
+  }
+
   /* Never hidden and never :empty — it is a standing limit on every answer
      above it, not a footnote to whichever one is on screen. */
   .core-caveat {
@@ -1910,12 +1999,28 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     cursor: pointer;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    transition: border-color 140ms, color 140ms, background 140ms;
+    /* Was an instant snap on every mode toggle (.on, aria-pressed) — the one
+       thing this page never did anywhere, on a page with more toggles than
+       any other in the app. Press feedback needs the iOS touchstart shim in
+       Layout.astro to fire at all on a phone/iPad, which this page is built
+       for first. */
+    transition: color 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease), transform 110ms ease-out;
   }
-  button.chip:hover { border-color: var(--fg); }
+  button.chip:hover { border-color: var(--accent-mix); }
+  button.chip:active { transform: scale(0.96); }
   .chip-strong { letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.56rem; }
   /* Now is a mode, not a jump, so it has to look held down while it is on. */
   .chip.on { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+  /* Now specifically is *live* — following the real clock, not a fixed point
+     in the day like every other chip — so it earns the one perpetual
+     animation on this page: a slow amber breathe, the same colour the sun
+     readouts already use everywhere else. Reduced-motion already collapses
+     this to a single static frame via the blanket rule below. */
+  @keyframes nowPulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, #f0b866 45%, transparent); }
+    50% { box-shadow: 0 0 10px 2px color-mix(in oklab, #f0b866 35%, transparent); }
+  }
+  #chip-now.on { animation: nowPulse 2.6s ease-in-out infinite; }
   .chip-clock { font-size: 1rem; padding: 0.35rem 0.7rem; cursor: default; }
   .chip-phase { font-size: 0.58rem; color: var(--muted); cursor: default; }
   .chip-phase:empty { display: none; }
@@ -1951,8 +2056,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     padding: 0.5rem 0.8rem;
     min-height: 36px;
     text-decoration: none;
-    transition: color 140ms, background 140ms;
+    transition: color 140ms, background 140ms, transform 110ms ease-out;
   }
+  .seg button:active, .seg a:active { transform: scale(0.96); }
   .seg button.on { color: var(--bg); background: var(--fg); }
   .seg button:not(.on):hover,
   .seg a:hover { color: var(--fg); }
@@ -1970,9 +2076,10 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     border-radius: 999px;
     cursor: pointer;
     color: var(--fg);
-    transition: border-color 140ms, color 140ms, background 140ms;
+    transition: color 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease), transform 110ms ease-out;
   }
-  .round:hover { border-color: var(--fg); }
+  .round:hover { border-color: var(--accent-mix); }
+  .round:active { transform: scale(0.92); }
   .round svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   /* Held down, in the same violet the core's arc is drawn in — the button and
      the mark it puts on the map have to read as the same thing. */
@@ -2004,6 +2111,40 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     border-radius: 14px;
   }
   .layers[hidden] { display: none; }
+  /* Same panel, same corner as `.layers` — the two never show at once (see
+     `page.ts`), so there is no position to disambiguate, only a colour: the
+     same violet the pressed Milky Way button and its arc on the map already
+     share, so this reads as *that* mode's own panel rather than a second
+     copy of Layers. */
+  .night-panel {
+    width: 13rem;
+    border-color: color-mix(in oklab, #bd99f2 40%, var(--border));
+  }
+
+  /* ── Tapped-star card ─────────────────────────────────────────────────── */
+
+  .star-info {
+    position: fixed;
+    z-index: 22;
+    max-width: 13rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 10px;
+    border-color: color-mix(in oklab, #bd99f2 40%, var(--border));
+    pointer-events: none;
+  }
+  .star-info[hidden] { display: none; }
+  .star-info-name {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    color: var(--fg);
+  }
+  .star-info-detail {
+    margin: 0.2rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    color: var(--muted);
+  }
   .layers-head {
     margin: 0 0 0.4rem;
     font-family: var(--font-label);
@@ -2023,7 +2164,32 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     color: var(--fg);
     cursor: pointer;
   }
-  .toggle input { accent-color: var(--fg); width: 15px; height: 15px; }
+  /* A native checkbox, kept for focus and screen readers, just clipped to
+     nothing — `.toggle-box` is what actually gets seen and drawn on. Filled
+     square for on, hollow for off: the same idiom `.seg button.on` already
+     uses, rather than a checkmark glyph this page has no other use for. */
+  .toggle input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .toggle-box {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    border: 1px solid var(--muted);
+    border-radius: 2px;
+    transition: border-color 140ms var(--ease), background 140ms var(--ease);
+  }
+  .toggle:hover .toggle-box { border-color: var(--accent-mix); }
+  .toggle input:checked + .toggle-box { background: var(--fg); border-color: var(--fg); }
+  .toggle input:focus-visible + .toggle-box { outline: 2px solid var(--fg); outline-offset: 2px; }
 
   .slab { margin: 0.4rem 0 0.6rem; padding: 0.5rem 0 0; border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
   .slab[hidden] { display: none; }
@@ -2076,9 +2242,10 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     font-family: var(--font-label);
     font-size: 0.64rem;
     cursor: pointer;
-    transition: border-color 140ms;
+    transition: border-color 160ms var(--ease), transform 110ms ease-out;
   }
-  .wide:hover { border-color: var(--fg); }
+  .wide:hover { border-color: var(--accent-mix); }
+  .wide:active { transform: scale(0.98); }
 
   /* ── Bottom sheet ─────────────────────────────────────────────────────── */
 
@@ -2131,7 +2298,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     padding: 0.6rem 0.7rem;
     min-height: 40px;
   }
-  .searchbox input:focus-visible { outline: none; border-color: var(--fg); }
+  .searchbox input:focus-visible { outline: none; border-color: var(--accent-mix); }
   .searchbox input::-webkit-search-cancel-button { filter: invert(1); opacity: 0.4; }
 
   .radiusbox { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.5rem; padding: 0 0.2rem; }
@@ -2167,14 +2334,29 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   }
   .results[hidden] { display: none; }
   .results :global(li) {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
     padding: 0.6rem 0.7rem;
     cursor: pointer;
     border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
-    transition: background 140ms;
+    transition: background 140ms var(--ease), transform 110ms ease-out;
   }
   .results :global(li:last-child) { border-bottom: 0; }
   .results :global(li:hover),
   .results :global(li[aria-selected='true']) { background: color-mix(in oklab, var(--fg) 8%, transparent); }
+  .results :global(li:active) { transform: scale(0.98); }
+  .results :global(.pin) {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 0.2rem;
+    color: color-mix(in oklab, var(--muted) 85%, transparent);
+  }
+  .results :global(li:hover .pin),
+  .results :global(li[aria-selected='true'] .pin) { color: var(--fg); }
+  .results :global(.pin svg) { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; }
+  .results :global(.result-body) { display: block; min-width: 0; flex: 1; }
   .results :global(.nm) { display: block; font-family: var(--font-label); font-size: 0.8rem; color: var(--fg); }
   .results :global(.dt) {
     display: block;
@@ -2222,7 +2404,8 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
      box; here it is already in the right spot and must sit still. */
   .kept .results { position: static; }
   .kept :global(.drop-spot) {
-    float: right;
+    flex: none;
+    align-self: center;
     border: 0;
     background: transparent;
     cursor: pointer;
@@ -2276,7 +2459,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     font-size: 0.6rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
+    transition: transform 110ms ease-out;
   }
+  .toast-do:active { transform: scale(0.94); }
 
   /* ── Photo hotspots ───────────────────────────────────────────────────── */
 
@@ -2428,10 +2613,12 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     font-size: 0.64rem;
     cursor: pointer;
     text-align: left;
-    transition: border-color 140ms, background 140ms;
+    transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 110ms ease-out;
   }
   .seasons :global(button:hover),
-  .week :global(button:hover) { border-color: var(--fg); }
+  .week :global(button:hover) { border-color: var(--accent-mix); }
+  .seasons :global(button:active),
+  .week :global(button:active) { transform: scale(0.98); }
   .seasons :global(.se-when),
   .week :global(.se-when) { color: var(--muted); font-variant-numeric: tabular-nums; }
 
@@ -2508,7 +2695,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     min-height: 30px;
     transition: color 140ms, border-color 140ms;
   }
-  .jumps button:hover:not(:disabled) { color: var(--fg); border-color: var(--fg); }
+  .jumps button:hover:not(:disabled) { color: var(--accent-mix); border-color: var(--accent-mix); }
   .jumps button:disabled { opacity: 0.3; cursor: default; }
 
   /* ── Map markers ──────────────────────────────────────────────────────── */
@@ -2544,6 +2731,23 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     border: 2px solid rgba(0, 0, 0, 0.75);
     display: block;
   }
+  /* A marker's first appearance gets a real drop — landing, not fading in.
+     Triggered once per element by a MutationObserver in the inline script
+     below (markers are moved by MapLibre via setLngLat(), which only updates
+     a transform on the *wrapper* it manages — the element itself is never
+     re-inserted on drag, so this fires on arrival only, never mid-drag).
+     Bounce is earned here specifically because something is landing under
+     its own weight, not decoration on a static reveal. */
+  @keyframes markerDrop {
+    0% { transform: translateY(-30px) scale(0.7); opacity: 0; }
+    55% { transform: translateY(0) scale(1.12); opacity: 1; }
+    75% { transform: translateY(-5px) scale(0.95); }
+    100% { transform: translateY(0) scale(1); }
+  }
+  .scout-map :global(.pin.drop-in),
+  .scout-map :global(.slabmark.drop-in),
+  .scout-map :global(.sightmark.drop-in) { animation: markerDrop 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
   /* The sightline target: a ring rather than a solid, so what it is placed on
      stays visible — the whole question is what the ground under it looks like. */
   .scout-map :global(.sightmark) { width: 26px; height: 26px; cursor: grab; display: grid; place-items: center; }
@@ -2762,6 +2966,11 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     .week :global(button) { min-height: 44px; }
     .chip { min-height: 44px; }
     .round { min-width: 44px; min-height: 44px; }
+    /* The layers panel's own checkbox rows were the one list on this page
+       that never got the pass the rest of it did — 34px, same guess-and-tap
+       problem as everything above, on a list that now also carries the
+       Milky Way mode's own "Stars & constellations" row. */
+    .toggle { min-height: 44px; }
     .datesheet input[type='date'] { min-height: 44px; font-size: 16px; }
     #framebox input[type='range'],
     #sightbox input[type='range'] { min-height: 44px; }
@@ -2826,4 +3035,32 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
   // Floating: nothing on this page awaits it, and a rejection here would only
   // ever be a bug in the module rather than a condition to handle.
   void startScout();
+</script>
+
+<script is:inline>
+  // Marker drop-in: purely observational, so it never touches how page.ts
+  // creates or moves markers. MapLibre's Marker.setLngLat() only rewrites a
+  // transform on the wrapper it owns — the .pin/.slabmark/.sightmark element
+  // itself is never re-inserted on drag — so watching for the element's
+  // first appearance in the DOM is exactly "a marker just landed here",
+  // never "the marker moved." See .drop-in / @keyframes markerDrop above.
+  (function () {
+    const mapEl = document.getElementById('map');
+    if (!mapEl || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const seen = new WeakSet();
+    const dropIn = (el) => {
+      if (seen.has(el)) return;
+      seen.add(el);
+      el.classList.add('drop-in');
+      el.addEventListener('animationend', () => el.classList.remove('drop-in'), { once: true });
+    };
+    const scan = (root) => {
+      if (root.nodeType !== 1) return;
+      if (root.matches?.('.pin, .slabmark, .sightmark')) dropIn(root);
+      root.querySelectorAll?.('.pin, .slabmark, .sightmark').forEach(dropIn);
+    };
+    new MutationObserver((mutations) => {
+      for (const m of mutations) for (const node of m.addedNodes) scan(node);
+    }).observe(mapEl, { childList: true, subtree: true });
+  })();
 </script>

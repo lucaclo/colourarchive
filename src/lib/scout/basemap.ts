@@ -357,8 +357,22 @@ export function contrastOverrides(layers: MinimalLayer[]): PaintOverride[] {
       // The single most important change: roads are the shape of a city.
       // Majors clear 3:1 against the background — WCAG's floor for a graphical
       // object — so the street grid survives a bright room and a laptop screen.
-      const major = /motorway|trunk|primary/i.test(layer.id);
-      push(layer.id, 'line-color', major ? '#666b75' : '#454a53');
+      //
+      // One grey-blue family, not a palette — six steps of it rather than the
+      // two this used to have. A motorway and a residential street sharing a
+      // colour was reading as *no* street grid at all except where a road
+      // happened to be a motorway; the shape of the city is mostly in the
+      // steps between.
+      const id = layer.id;
+      let colour = '#3f434a'; // residential / unclassified — the old "minor"
+      if (/motorway/i.test(id)) colour = '#7d828d';
+      else if (/trunk/i.test(id)) colour = '#6f747e';
+      else if (/primary/i.test(id)) colour = '#666b75'; // the old "major"
+      else if (/secondary/i.test(id)) colour = '#585d66';
+      else if (/tertiary/i.test(id)) colour = '#4b5058';
+      else if (/rail/i.test(id)) colour = '#565a5f';
+      else if (/service|path|track|pedestrian|footway|cycleway/i.test(id)) colour = '#33363c';
+      push(id, 'line-color', colour);
       continue;
     }
     if (source === 'building' && layer.type === 'fill') {
@@ -367,7 +381,18 @@ export function contrastOverrides(layers: MinimalLayer[]): PaintOverride[] {
       continue;
     }
     if (source === 'landcover' || source === 'landuse') {
-      if (layer.type === 'fill') push(layer.id, 'fill-color', '#171a1c');
+      if (layer.type !== 'fill') continue;
+      // Still one dark grey, not a palette — just enough separation that a
+      // park, a rail yard and a cemetery stop reading as the same square of
+      // nothing. OpenMapTiles already splits these into one style layer per
+      // class, so the class is in the id and nothing is being inferred.
+      const id = layer.id;
+      let colour = '#171a1c'; // the old flat default
+      if (/wood|forest|grass|park|pitch|golf/i.test(id)) colour = '#1b1f21';
+      else if (/industrial/i.test(id)) colour = '#15181a';
+      else if (/wetland|swamp|marsh/i.test(id)) colour = '#181c1e';
+      else if (/cemetery|hospital|school|education|university|college/i.test(id)) colour = '#191d1f';
+      push(id, 'fill-color', colour);
       continue;
     }
     if (layer.type === 'symbol') {
@@ -381,6 +406,18 @@ export function contrastOverrides(layers: MinimalLayer[]): PaintOverride[] {
   }
   return out;
 }
+
+/**
+ * A quiet outline around every building footprint.
+ *
+ * `fill-extrusion` has no outline property of its own, so at a low angle two
+ * adjacent buildings of a similar height and colour merge into one shape —
+ * the skyline reads as a mass rather than as buildings. This is a fixed
+ * hairline rather than a lit one: the same grey the flat 2D building layer's
+ * own outline already uses, one step lighter, there only so one roof stops
+ * reading as the next building's wall.
+ */
+export const BUILDING_EDGE_COLOUR = '#454951';
 
 /**
  * Contrast ratio between two hex colours, by WCAG's relative luminance.

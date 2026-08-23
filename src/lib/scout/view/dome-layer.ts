@@ -55,6 +55,7 @@ import {
   PROJECTION_UNIFORMS,
   readProjection,
   setProjectionUniforms,
+  type ProjectionData,
   type ShaderData,
 } from './projection';
 
@@ -91,6 +92,13 @@ export interface DomeGeometryData {
 
 export interface DomeLayer extends maplibregl.CustomLayerInterface {
   setGeometry(data: DomeGeometryData): void;
+  /**
+   * The projection data the most recent frame was drawn with, for code
+   * outside this layer that needs to answer "where on screen did that point
+   * land" the same way the shader itself would — tap-to-identify a star,
+   * for instance. Null before the first frame has rendered.
+   */
+  getProjection(): ProjectionData | null;
 }
 
 export const LINE_STRIDE = 8;
@@ -240,6 +248,7 @@ export function createDomeLayer(id: string): DomeLayer {
 
   let data: DomeGeometryData = { lines: new Float32Array(0), runs: [], points: new Float32Array(0) };
   let dirty = false;
+  let lastProjection: ProjectionData | null = null;
 
   /** Compile for `shader`'s projection, discarding whatever was up before. */
   function compileFor(gl: WebGLRenderingContext, shader: ShaderData): void {
@@ -271,6 +280,10 @@ export function createDomeLayer(id: string): DomeLayer {
       dirty = true;
     },
 
+    getProjection() {
+      return lastProjection;
+    },
+
     onAdd(_map: maplibregl.Map, gl: WebGLRenderingContext) {
       // Programs are not built here: the projection is not known until a frame
       // is drawn, and it changes afterwards anyway.
@@ -291,6 +304,7 @@ export function createDomeLayer(id: string): DomeLayer {
       const read = readProjection(args);
       if (!read) return;
       const { projection, shader } = read;
+      lastProjection = projection;
       // A canvas with no size has nothing to draw into, and the ribbon shader
       // divides by half of it. Belt as well as the shader's braces.
       if (!gl.drawingBufferWidth || !gl.drawingBufferHeight) return;
@@ -408,17 +422,18 @@ export class DomeGeometry {
     points: DomePoint[],
     mode: 'strip' | 'lines' | 'points',
     colour: RGBA | ((index: number) => RGBA),
-    size = 1,
+    size: number | ((index: number) => number) = 1,
     glow = 0,
   ): void {
     if (!points.length) return;
     const at = typeof colour === 'function' ? colour : () => colour;
+    const sizeAt = typeof size === 'function' ? size : () => size;
 
     if (mode === 'points') {
       for (let i = 0; i < points.length; i++) {
         const [x, y, z, metres] = this.project(points[i].lon, points[i].lat, points[i].altitudeM);
         const c = at(i);
-        this.points.push(x, y, z, metres, c[0], c[1], c[2], c[3], size, glow);
+        this.points.push(x, y, z, metres, c[0], c[1], c[2], c[3], sizeAt(i), glow);
       }
       return;
     }
@@ -426,11 +441,11 @@ export class DomeGeometry {
     // `lines` is disconnected pairs; `strip` is one continuous run.
     if (mode === 'lines') {
       for (let i = 0; i + 1 < points.length; i += 2) {
-        this.path([points[i], points[i + 1]], (k) => at(i + k), size);
+        this.path([points[i], points[i + 1]], (k) => at(i + k), sizeAt(i));
       }
       return;
     }
-    this.path(points, at, size);
+    this.path(points, at, sizeAt(0));
   }
 
   /**

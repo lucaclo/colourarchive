@@ -17,7 +17,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { rankSimilar } from './similar.ts';
+import { groupColourDistances, groupOutliers, rankSimilar, rankSimilarGroup } from './similar.ts';
 import type { Photo } from './types.ts';
 import type { OKLCH } from './color.ts';
 
@@ -233,5 +233,140 @@ describe('rankSimilar — order and identity', () => {
     const rows = rankSimilar(ref, [other, ref]);
     assert.equal(rows.length, 2);
     assert.equal(rows[1].photo, ref);
+  });
+});
+
+/* ── rankSimilarGroup ─────────────────────────────────────────────────────── */
+
+describe('rankSimilarGroup — reduces to rankSimilar for one reference', () => {
+  it('is bit-for-bit identical to rankSimilar, across varied fixtures', () => {
+    const candidates = [
+      photo({ embedding: [1, 0, 0], colourGrid: grid(0.4, 0.2, -0.1), oklch: { L: 0.3, C: 0.2, H: 40 } }),
+      photo({ embedding: [0, 1, 0], colourGrid: grid(0.8, -0.3, 0.2), oklch: { L: 0.7, C: 0.1, H: 200 } }),
+      photo({ embedding: undefined, colourGrid: undefined, oklch: NEUTRAL, width: 300, height: 100 }),
+    ];
+    for (const ref of [
+      photo({ embedding: [0.6, 0.8, 0], colourGrid: grid(0.5, 0.1, 0.1), oklch: { L: 0.5, C: 0.15, H: 90 } }),
+      photo({ embedding: undefined, colourGrid: undefined, oklch: NEUTRAL, width: 50, height: 200 }),
+    ]) {
+      assert.deepEqual(rankSimilarGroup([ref], candidates), rankSimilar(ref, candidates));
+    }
+  });
+});
+
+describe('rankSimilarGroup — composition: closest of the group, not a blend', () => {
+  it('a candidate matching one reference exactly on composition beats one that matches neither', () => {
+    const refA = photo({ embedding: [1, 0, 0], colourGrid: grid(0.5, 0, 0), width: 100, height: 100 });
+    const refB = photo({ embedding: [0, 1, 0], colourGrid: grid(0.5, 0, 0), width: 100, height: 100 });
+    // Exactly refA's composition — a real point in embedding space.
+    const matchesA = photo({ embedding: [1, 0, 0], colourGrid: grid(0.5, 0, 0), width: 100, height: 100 });
+    // Halfway between the two embeddings — closer to what a naive average of
+    // refA/refB would land on, and farther from *both* real references than
+    // matchesA is from its one.
+    const betweenBoth = photo({ embedding: [0.7071, 0.7071, 0], colourGrid: grid(0.5, 0, 0), width: 100, height: 100 });
+    const [rowMatches, rowBetween] = rankSimilarGroup([refA, refB], [matchesA, betweenBoth]);
+    assert.equal(rowMatches.comp, 0);
+    assert.ok(rowBetween.comp > 0, `expected the blended point to rank worse, got ${rowBetween.comp}`);
+  });
+});
+
+describe('rankSimilarGroup — colour: compared against the group centroid, not any one member', () => {
+  it('a candidate at the shared centroid beats one that only matches a single off-centroid member', () => {
+    // Three references whose a/b values are arranged to average to (0, 0) —
+    // different colours individually, but a shared centroid.
+    const refs = [
+      photo({ colourGrid: grid(0.5, 0.1, 0), oklch: NEUTRAL }),
+      photo({ colourGrid: grid(0.5, 0, 0.1), oklch: NEUTRAL }),
+      photo({ colourGrid: grid(0.5, -0.1, -0.1), oklch: NEUTRAL }),
+    ];
+    const atCentroid = photo({ colourGrid: grid(0.5, 0, 0), oklch: NEUTRAL });
+    // Exactly refs[0]'s colour — a real submitted colour, but off the group's centroid.
+    const matchesOneRef = photo({ colourGrid: grid(0.5, 0.1, 0), oklch: NEUTRAL });
+    const [rowCentroid, rowOneRef] = rankSimilarGroup(refs, [atCentroid, matchesOneRef]);
+    assert.equal(rowCentroid.col, 0);
+    assert.equal(rowOneRef.col, 1);
+  });
+
+  it('excludes refs with no colour grid from the centroid rather than averaging in a zero', () => {
+    const withGrid = photo({ colourGrid: grid(0.5, 0.2, 0.2), oklch: NEUTRAL });
+    const withoutGrid = photo({ colourGrid: undefined, oklch: NEUTRAL });
+    // Matches the one real grid exactly — should win if the centroid is that
+    // grid alone. A single-candidate check can't tell this apart from the
+    // bug (min-max normalisation puts any lone candidate at 0 regardless of
+    // its raw distance), so a second, contrasting candidate is the point:
+    // matchesRealGrid vs matchesZeroedCentroid disagree on which wins
+    // depending on whether the missing grid was excluded or averaged in as
+    // a phantom (0, 0).
+    const matchesRealGrid = photo({ colourGrid: grid(0.5, 0.2, 0.2), oklch: NEUTRAL });
+    const matchesZeroedCentroid = photo({ colourGrid: grid(0.5, 0.1, 0.1), oklch: NEUTRAL });
+    const [rowReal, rowZeroed] = rankSimilarGroup([withGrid, withoutGrid], [matchesRealGrid, matchesZeroedCentroid]);
+    assert.equal(rowReal.col, 0);
+    assert.equal(rowZeroed.col, 1);
+  });
+
+  it('still reduces to "no signal" when nothing in the group has a colour grid', () => {
+    const refs = [photo({ colourGrid: undefined }), photo({ colourGrid: undefined })];
+    const candidate = photo({ colourGrid: grid(0.9, 0.9, 0.9) });
+    const [row] = rankSimilarGroup(refs, [candidate]);
+    assert.equal(row.col, 0);
+  });
+});
+
+describe('groupColourDistances / groupOutliers', () => {
+  it('catches an outlier that a centroid including itself would dilute away', () => {
+    // Two references that agree loosely, one that genuinely doesn't — sized
+    // to real archive photos, not a clean synthetic swatch: a shared-centroid
+    // measure (the first version of this, before it was measured against
+    // real photos) rates the odd one out at 1.5x the group's mean here, just
+    // under a 1.75x threshold. Leaving each reference out of its own
+    // baseline is what actually catches it.
+    const a = photo({ id: 'a', colourGrid: grid(0.5, 0.1, 0.1) });
+    const b = photo({ id: 'b', colourGrid: grid(0.5, 0.12, 0.09) });
+    const outlier = photo({ id: 'outlier', colourGrid: grid(0.5, 0.4, -0.3) });
+    const flagged = groupOutliers([a, b, outlier]);
+    assert.ok(flagged.has('outlier'), [...flagged].join(','));
+    assert.equal(flagged.size, 1);
+  });
+
+  it('makes no assertion under three references with a colour grid — refuses to guess which of two is the outlier', () => {
+    const a = photo({ id: 'a', colourGrid: grid(0.5, 0.9, 0.9) });
+    const b = photo({ id: 'b', colourGrid: grid(0.5, -0.9, -0.9) });
+    assert.equal(groupOutliers([a, b]).size, 0);
+    assert.equal(groupOutliers([a]).size, 0);
+    assert.equal(groupOutliers([]).size, 0);
+  });
+
+  it('flags a clear odd-one-out among a tight cluster', () => {
+    const a = photo({ id: 'a', colourGrid: grid(0.5, 0.1, 0.1) });
+    const b = photo({ id: 'b', colourGrid: grid(0.5, 0.12, 0.09) });
+    const c = photo({ id: 'c', colourGrid: grid(0.5, 0.09, 0.11) });
+    const outlier = photo({ id: 'outlier', colourGrid: grid(0.5, -0.8, 0.7) });
+    const flagged = groupOutliers([a, b, c, outlier]);
+    assert.ok(flagged.has('outlier'), [...flagged].join(','));
+    assert.equal(flagged.size, 1);
+  });
+
+  it('flags nothing when the whole group is a tight cluster', () => {
+    const a = photo({ id: 'a', colourGrid: grid(0.5, 0.1, 0.1) });
+    const b = photo({ id: 'b', colourGrid: grid(0.5, 0.11, 0.1) });
+    const c = photo({ id: 'c', colourGrid: grid(0.5, 0.1, 0.11) });
+    assert.equal(groupOutliers([a, b, c]).size, 0);
+  });
+
+  it('is well-defined, not NaN, when every reference is colour-identical', () => {
+    const same = () => photo({ colourGrid: grid(0.5, 0.2, 0.2) });
+    const distances = groupColourDistances([same(), same(), same()]);
+    for (const d of distances.values()) assert.equal(d, 0);
+    assert.equal(groupOutliers([same(), same(), same()]).size, 0);
+  });
+
+  it('ignores refs with no colour grid entirely rather than counting them as agreeing at distance 0', () => {
+    const a = photo({ id: 'a', colourGrid: grid(0.5, 0.1, 0.1) });
+    const b = photo({ id: 'b', colourGrid: grid(0.5, 0.11, 0.1) });
+    const c = photo({ id: 'c', colourGrid: grid(0.5, 0.1, 0.11) });
+    const noGrid = photo({ id: 'no-grid', colourGrid: undefined });
+    const distances = groupColourDistances([a, b, c, noGrid]);
+    assert.ok(!distances.has('no-grid'));
+    assert.equal(distances.size, 3);
   });
 });

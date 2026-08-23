@@ -1,6 +1,5 @@
 ---
 import '../styles/global.css';
-import { DEFAULT_THEME } from '../lib/themes';
 
 interface Props {
   title?: string;
@@ -17,23 +16,34 @@ interface Props {
    * between a blank rectangle and a map.
    */
   preconnect?: string[];
+  /**
+   * A CSS colour string that seeds --accent for this page — see
+   * `--accent`/`--accent-mix`/`--accent-hair` in global.css. Pages with a
+   * natural colour signal (the archive's chapters, the inspiration board)
+   * pass a representative hue computed server-side; pages with none (Scout —
+   * there is no photograph behind it to draw a colour from) leave this unset
+   * and --accent falls back to its global.css default (`= --fg`), same as
+   * before this existed.
+   */
+  accent?: string;
 }
 const {
   title = 'Colour Archive',
   description = 'A photographic archive as one continuous scroll — grouped into chapters by dominant colour, ordered along the hue.',
   preconnect = [],
+  accent,
 } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="en" data-theme={DEFAULT_THEME}>
+<html lang="en" style={accent ? `--accent:${accent}` : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <!-- The palette is fixed by the theme; tell the UA so form controls,
-         scrollbars and the pre-paint canvas match instead of flashing white. -->
+    <!-- The palette is fixed; tell the UA so form controls, scrollbars and
+         the pre-paint canvas match instead of flashing white. -->
     <meta name="color-scheme" content="dark" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
@@ -53,10 +63,8 @@ const {
          three faces that paint above the fold, so they start downloading with
          the stylesheet rather than after it: the cover title, the chapter
          titles, and the mono labels. The rest load on demand.
-         NOTE: only the faces the baked-in theme (Whisper) uses are shipped —
-         Fraunces + JetBrains Mono. Switching DEFAULT_THEME to a preset built on
-         Playfair Display, Libre Bodoni or Space Mono needs those families added
-         to public/fonts (see README → Fonts), or it falls back to Georgia. -->
+         Only Fraunces + JetBrains Mono are shipped in public/fonts (see
+         README → Fonts) — the app has one typeface pairing, not several. -->
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/fraunces-italic-600-latin.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/fraunces-italic-500-latin.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/jetbrains-mono-normal-400-latin.woff2" />
@@ -69,6 +77,38 @@ const {
   </head>
   <body>
     <slot />
+    <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>
+    <script is:inline>
+      // Custom cursor: a ring tinted to whatever --accent currently is (set
+      // per-page/per-chapter elsewhere), difference-blended so it reads over
+      // any background. Site-wide, since --accent is a global.css token every
+      // page now carries. Skipped entirely on touch — nothing to follow there.
+      (function () {
+        if (matchMedia('(hover: none), (pointer: coarse)').matches) return;
+        const ring = document.getElementById('cursor-ring');
+        if (!ring) return;
+        let raf = 0, mx = -100, my = -100;
+        const move = () => { ring.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`; raf = 0; };
+        addEventListener('mousemove', (e) => {
+          mx = e.clientX; my = e.clientY;
+          ring.classList.add('show');
+          if (!raf) raf = requestAnimationFrame(move);
+        }, { passive: true });
+        addEventListener('mouseleave', () => ring.classList.remove('show'));
+        const HOVERABLE = 'a, button, .frame, [role="button"], input, textarea, select, .cs-seg, .spectrum-seg, .pr-seg';
+        document.addEventListener('mouseover', (e) => { if (e.target.closest(HOVERABLE)) ring.classList.add('hover'); });
+        document.addEventListener('mouseout', (e) => { if (e.target.closest(HOVERABLE)) ring.classList.remove('hover'); });
+        addEventListener('mousedown', () => ring.classList.add('down'));
+        addEventListener('mouseup', () => ring.classList.remove('down'));
+      })();
+
+      // iOS Safari never matches `:active` at all unless some ancestor has a
+      // touch listener attached — a long-documented quirk, not a bug in any
+      // one page's CSS. Every `:active` press-feedback rule in this app (the
+      // photo grid, Inspiration's board and workbench, Scout's controls)
+      // silently does nothing on an iPad without this one no-op listener.
+      addEventListener('touchstart', () => {}, { passive: true });
+    </script>
     <script is:inline>
       // Offline snapshot: register the service worker, then pre-cache every
       // image on the page so the archive is fully browsable offline after one

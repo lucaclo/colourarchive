@@ -6,8 +6,10 @@ import { readInspStore } from '../../../lib/inspiration';
 import { readStore } from '../../../lib/manifest';
 import { INSPIRATION_DIR, IMG_DIR, PHOTOS_DIR, imgUrl } from '../../../lib/paths';
 import { looksFor, measureLook } from '../../../lib/match/looks';
-import { TOO_FAR, describeParts, rankResemblance } from '../../../lib/match/resemble';
+import { TOO_FAR, describeParts, rankResemblance, trimSignature } from '../../../lib/match/resemble';
+import { averageRegions } from '../../../lib/match/group';
 import type { Photo } from '../../../lib/types';
+import type { LookSignature } from '../../../lib/match/resemble';
 
 export const prerender = false;
 
@@ -23,30 +25,45 @@ export const prerender = false;
 const DEFAULT_LIMIT = 8;
 
 export const GET: APIRoute = async ({ url }) => {
-  const refId = String(url.searchParams.get('ref') || '').trim();
+  const refIds = [...new Set(url.searchParams.getAll('ref').map((v) => String(v).trim()).filter(Boolean))];
   const limitRaw = Number(url.searchParams.get('limit') ?? DEFAULT_LIMIT);
   const limit = Number.isFinite(limitRaw) ? Math.min(40, Math.max(1, Math.floor(limitRaw))) : DEFAULT_LIMIT;
 
-  if (!refId) return json({ ok: false, error: 'Pick a reference first.' }, 400);
+  if (!refIds.length) return json({ ok: false, error: 'Pick a reference first.' }, 400);
 
   try {
     const [insp, archive] = await Promise.all([readInspStore(), readStore()]);
-    const inspItem = insp.find((p) => p.id === refId);
-    const archiveItem = archive.find((p) => p.id === refId);
-    const ref = inspItem ?? archiveItem;
-    if (!ref) return json({ ok: false, error: 'That reference no longer exists.' }, 404);
+    const refById = new Map([...insp, ...archive].map((p) => [p.id, p]));
+    const inspIds = new Set(insp.map((p) => p.id));
 
-    const refPath = path.join(inspItem ? INSPIRATION_DIR : PHOTOS_DIR, ref.filename);
-    try {
-      await fs.access(refPath);
-    } catch {
-      return json({ ok: false, error: 'The reference original is missing from disk.' }, 410);
+    const refPaths: Array<{ id: string; path: string }> = [];
+    for (const id of refIds) {
+      const ref = refById.get(id);
+      if (!ref) return json({ ok: false, error: `A reference no longer exists (${id}).` }, 404);
+      const refPath = path.join(inspIds.has(id) ? INSPIRATION_DIR : PHOTOS_DIR, ref.filename);
+      try {
+        await fs.access(refPath);
+      } catch {
+        return json({ ok: false, error: `A reference original is missing from disk (${ref.filename}).` }, 410);
+      }
+      refPaths.push({ id, path: refPath });
     }
 
-    const [reference, archiveLooks] = await Promise.all([
-      measureLook(ref.id, refPath),
+    const [signatures, archiveLooks] = await Promise.all([
+      Promise.all(refPaths.map((r) => measureLook(r.id, r.path))),
       looksFor(archive.map(sourceFor).filter((r): r is { id: string; imagePath: string } => r != null)),
     ]);
+    // Several references rank the archive against their shared grade, not
+    // any one of them — same reasoning as the solve path in group.ts:
+    // averaging is what makes the edit they have in common reinforce.
+    const reference: LookSignature =
+      signatures.length === 1
+        ? signatures[0]
+        : trimSignature(
+            signatures.map((s) => s.id).sort().join('+'),
+            Math.round(signatures.reduce((sum, s) => sum + s.sampledAt, 0) / signatures.length),
+            averageRegions(signatures.map((s) => s.regions)),
+          );
 
     const ranked = rankResemblance(reference, archiveLooks.signatures, {
       limit,

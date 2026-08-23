@@ -19,6 +19,7 @@
     "export:print": "tsx scripts/export-print.ts",
     "fonts": "tsx scripts/fetch-fonts.ts",
     "light-pollution": "tsx scripts/fetch-light-pollution.ts",
+    "bright-stars": "tsx scripts/fetch-bright-stars.ts",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "smoke": "node --import tsx --test tests/scout.smoke.ts",
     "canary:scout-photos": "node --import tsx --test src/lib/scout/sources/photo-client.canary.ts",

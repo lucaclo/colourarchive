@@ -96,6 +96,18 @@ export function createSearchBox(ports: SearchBoxPorts): SearchBox {
         li.setAttribute('aria-selected', 'false');
         li.dataset.index = String(index);
 
+        // A pin rather than nothing — every other control on this page marks
+        // itself with a drawn glyph, and a bare list of names was the one
+        // place left that didn't.
+        const pin = document.createElement('span');
+        pin.className = 'pin';
+        pin.setAttribute('aria-hidden', 'true');
+        pin.innerHTML =
+          '<svg viewBox="0 0 24 24"><path d="M12 21s7-7.58 7-12A7 7 0 1 0 5 9c0 4.42 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+
+        const body = document.createElement('span');
+        body.className = 'result-body';
+
         const kind = document.createElement('span');
         kind.className = 'kd';
         kind.textContent = place.kind.replace(/_/g, ' ');
@@ -104,13 +116,14 @@ export function createSearchBox(ports: SearchBoxPorts): SearchBox {
         name.className = 'nm';
         name.textContent = place.name;
 
-        li.append(kind, name);
+        body.append(kind, name);
         if (place.detail) {
           const detail = document.createElement('span');
           detail.className = 'dt';
           detail.textContent = place.detail;
-          li.append(detail);
+          body.append(detail);
         }
+        li.append(pin, body);
         return li;
       }),
     );

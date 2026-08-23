@@ -40,9 +40,15 @@ export const inkColour = (basemap: Basemap): [number, number, number] =>
  * dominant one, and 0.38 of a near-black under a near-white arc was simply
  * not enough contrast to carry that. This is still the same mechanism, not a
  * new one — just turned up to do the job it was already meant to.
+ *
+ * Raised again, a smaller step in the same direction: the sun's own arc reads
+ * clearly now, but the moon's path and the Milky Way's arc share this same
+ * lift at a fraction of its strength (see their call sites), so the same
+ * complaint reappeared one level down the hierarchy. This is still the
+ * mechanism issue #23 established, turned up once more.
  */
 export const liftColour = (basemap: Basemap): RGBA =>
-  basemap === 'light' ? [0.08, 0.09, 0.11, 0.55] : [0, 0, 0, 0.5];
+  basemap === 'light' ? [0.08, 0.09, 0.11, 0.62] : [0, 0, 0, 0.58];
 
 /**
  * The frame wedge's ink.
@@ -85,8 +91,12 @@ export const WIDTH = {
   ray: 3.0,
   plumb: 1.4,
   horizon: 2.6,
-  solstice: 1.8,
-  moon: 2.6,
+  // Raised from 1.8 and 2.6 respectively: both were thin enough, next to the
+  // sun's 4.6px arc, to read as afterthoughts rather than as the same family
+  // of mark. Still clearly quieter than the sun — the hierarchy itself is the
+  // point — just no longer quiet to the point of vanishing.
+  solstice: 2.3,
+  moon: 3.2,
   ground: 2.2,
   /**
    * Issue #48: the frame's own rectangle, overlaid on the dome. Quieter than
