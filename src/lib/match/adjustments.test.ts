@@ -27,6 +27,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  atGroupStrength,
   atStrength,
   clamp,
   clampAdjustments,
@@ -545,5 +546,97 @@ describe('atStrength', () => {
 
   it('clamps t above 1 to the same result as t=1', () => {
     assert.deepEqual(atStrength(restrained, faithful, 2), atStrength(restrained, faithful, 1));
+  });
+});
+
+/* ── atGroupStrength ───────────────────────────────────────────────────────── */
+
+describe('atGroupStrength', () => {
+  const restrained = fixtureA();
+  const faithful = fixtureB();
+
+  it('with all three groups equal, matches atStrength at that t', () => {
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      assert.deepEqual(
+        atGroupStrength(restrained, faithful, { light: t, colour: t, effects: t }),
+        atStrength(restrained, faithful, t),
+      );
+    }
+  });
+
+  it('Light fields track only the light strength', () => {
+    const a = atGroupStrength(restrained, faithful, { light: 0, colour: 1, effects: 1 });
+    const lightAtZero = atStrength(restrained, faithful, 0);
+    assert.equal(a.exposure, lightAtZero.exposure);
+    assert.equal(a.contrast, lightAtZero.contrast);
+    assert.equal(a.highlights, lightAtZero.highlights);
+    assert.equal(a.shadows, lightAtZero.shadows);
+    assert.equal(a.whites, lightAtZero.whites);
+    assert.equal(a.blacks, lightAtZero.blacks);
+    assert.deepEqual(a.curve, lightAtZero.curve);
+    // Colour and Effects fields, meanwhile, sit at the faithful (t=1) solution.
+    assert.equal(a.temp, faithful.temp);
+    assert.equal(a.texture, faithful.texture);
+  });
+
+  it('Colour fields track only the colour strength', () => {
+    const a = atGroupStrength(restrained, faithful, { light: 1, colour: 0, effects: 1 });
+    const colourAtZero = atStrength(restrained, faithful, 0);
+    assert.equal(a.temp, colourAtZero.temp);
+    assert.equal(a.tint, colourAtZero.tint);
+    assert.equal(a.vibrance, colourAtZero.vibrance);
+    assert.equal(a.saturation, colourAtZero.saturation);
+    assert.deepEqual(a.hsl, colourAtZero.hsl);
+    assert.deepEqual(a.grading, colourAtZero.grading);
+    // Light and Effects fields, meanwhile, sit at the faithful (t=1) solution.
+    assert.equal(a.exposure, faithful.exposure);
+    assert.equal(a.texture, faithful.texture);
+  });
+
+  it('Effects fields (including masks) track only the effects strength', () => {
+    const a = atGroupStrength(restrained, faithful, { light: 1, colour: 1, effects: 0 });
+    const effectsAtZero = atStrength(restrained, faithful, 0);
+    assert.equal(a.texture, effectsAtZero.texture);
+    assert.equal(a.clarity, effectsAtZero.clarity);
+    assert.equal(a.dehaze, effectsAtZero.dehaze);
+    assert.equal(a.vignette, effectsAtZero.vignette);
+    assert.equal(a.grainAmount, effectsAtZero.grainAmount);
+    assert.equal(a.grainSize, effectsAtZero.grainSize);
+    assert.equal(a.grainRoughness, effectsAtZero.grainRoughness);
+    assert.equal(a.sharpenAmount, effectsAtZero.sharpenAmount);
+    assert.equal(a.sharpenRadius, effectsAtZero.sharpenRadius);
+    assert.equal(a.sharpenDetail, effectsAtZero.sharpenDetail);
+    assert.equal(a.noiseReduction, effectsAtZero.noiseReduction);
+    assert.equal(a.colorNoiseReduction, effectsAtZero.colorNoiseReduction);
+    assert.deepEqual(a.masks, effectsAtZero.masks);
+    // Light and Colour fields, meanwhile, sit at the faithful (t=1) solution.
+    assert.equal(a.exposure, faithful.exposure);
+    assert.equal(a.temp, faithful.temp);
+  });
+
+  it('every field is accounted for by exactly one group', () => {
+    // A field missing from atGroupStrength's merge would silently keep
+    // whichever group happened to list it last — this catches that by driving
+    // the three groups apart (0, 0.5, 1) and checking the result matches each
+    // group's own atStrength at every field the type declares, with nothing
+    // left over unassigned to any of the three.
+    const s = { light: 0, colour: 0.5, effects: 1 };
+    const a = atGroupStrength(restrained, faithful, s);
+    const light = atStrength(restrained, faithful, s.light);
+    const colour = atStrength(restrained, faithful, s.colour);
+    const effects = atStrength(restrained, faithful, s.effects);
+    const lightKeys = ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'curve'] as const;
+    const colourKeys = ['temp', 'tint', 'vibrance', 'saturation', 'hsl', 'grading'] as const;
+    const effectsKeys = [
+      'texture', 'clarity', 'dehaze', 'vignette', 'grainAmount', 'grainSize', 'grainRoughness',
+      'sharpenAmount', 'sharpenRadius', 'sharpenDetail', 'noiseReduction', 'colorNoiseReduction', 'masks',
+    ] as const;
+    for (const k of lightKeys) assert.deepEqual(a[k], light[k], k);
+    for (const k of colourKeys) assert.deepEqual(a[k], colour[k], k);
+    for (const k of effectsKeys) assert.deepEqual(a[k], effects[k], k);
+    const covered = new Set<string>([...lightKeys, ...colourKeys, ...effectsKeys]);
+    for (const k of Object.keys(a) as (keyof Adjustments)[]) {
+      assert.ok(covered.has(k), `field '${k}' is not covered by any group`);
+    }
   });
 });

@@ -329,3 +329,67 @@ export function atStrength(
     ? lerpAdjustments(identity, restrained, s * 2)
     : lerpAdjustments(restrained, faithful, (s - 0.5) * 2);
 }
+
+/**
+ * Independent strength per Lightroom panel group, rather than one scalar for
+ * the whole preset — issue #41's second half. Capture One's Styles apply
+ * through layers with independent opacity; this is the same idea without a
+ * masking system, since Style Match already blends field-by-field.
+ *
+ * Grouped the same way the report's own tabs already are: Light (exposure,
+ * curve, the basic-sliders description of it), Colour (white balance, HSL
+ * mixer, Colour Grading), Effects (texture/clarity/dehaze/vignette/grain,
+ * sharpening/NR, and the masks — which the report already shows on the same
+ * "Details" tab).
+ */
+export interface GroupStrength {
+  light: number;
+  colour: number;
+  effects: number;
+}
+
+/**
+ * Each group is computed by running the existing identity→restrained→faithful
+ * blend at its own t (reusing `atStrength` three times) and then taking only
+ * that group's fields from the matching result. This never duplicates the
+ * piecewise math — a bug in the two-stage blend only has one place to hide.
+ */
+export function atGroupStrength(
+  restrained: Adjustments,
+  faithful: Adjustments,
+  s: GroupStrength,
+): Adjustments {
+  const light = atStrength(restrained, faithful, s.light);
+  const colour = atStrength(restrained, faithful, s.colour);
+  const effects = atStrength(restrained, faithful, s.effects);
+  return {
+    exposure: light.exposure,
+    contrast: light.contrast,
+    highlights: light.highlights,
+    shadows: light.shadows,
+    whites: light.whites,
+    blacks: light.blacks,
+    curve: light.curve,
+
+    temp: colour.temp,
+    tint: colour.tint,
+    vibrance: colour.vibrance,
+    saturation: colour.saturation,
+    hsl: colour.hsl,
+    grading: colour.grading,
+
+    texture: effects.texture,
+    clarity: effects.clarity,
+    dehaze: effects.dehaze,
+    vignette: effects.vignette,
+    grainAmount: effects.grainAmount,
+    grainSize: effects.grainSize,
+    grainRoughness: effects.grainRoughness,
+    sharpenAmount: effects.sharpenAmount,
+    sharpenRadius: effects.sharpenRadius,
+    sharpenDetail: effects.sharpenDetail,
+    noiseReduction: effects.noiseReduction,
+    colorNoiseReduction: effects.colorNoiseReduction,
+    masks: effects.masks,
+  };
+}

@@ -184,8 +184,35 @@ const hasItems = manifest.count > 0;
               <span class="mx-end">Full</span>
             </div>
             <p class="mx-strengthlabel" id="mx-strengthlabel"></p>
+            <button type="button" class="mx-groupreveal" id="mx-groupreveal" aria-expanded="false">
+              Light / Colour / Effects separately ›
+            </button>
             <label class="mx-check">
               <input type="checkbox" id="mx-wipe" /><span>Wipe against your original</span>
+            </label>
+          </div>
+
+          <!-- One flat strength moves Light, Colour and Effects together, which is
+               the default and all most matches need. This row lets any of the
+               three come off that master and move on its own — full strength on
+               Colour Grading while Light holds back, say — without needing three
+               sliders visible all the time. Dragging a group's own slider unlinks
+               it; the ⚭ button relinks it to the master. -->
+          <div class="mx-groupbar" id="mx-groupbar" hidden>
+            <label class="mx-groupslider">
+              <span class="mx-grouplabel">Light</span>
+              <input type="range" id="mx-strength-light" min="0" max="100" value="50" aria-label="Light strength" />
+              <button type="button" class="mx-unlink" id="mx-unlink-light" aria-pressed="false" title="Follow the match strength slider">⚭</button>
+            </label>
+            <label class="mx-groupslider">
+              <span class="mx-grouplabel">Colour</span>
+              <input type="range" id="mx-strength-colour" min="0" max="100" value="50" aria-label="Colour strength" />
+              <button type="button" class="mx-unlink" id="mx-unlink-colour" aria-pressed="false" title="Follow the match strength slider">⚭</button>
+            </label>
+            <label class="mx-groupslider">
+              <span class="mx-grouplabel">Effects</span>
+              <input type="range" id="mx-strength-effects" min="0" max="100" value="50" aria-label="Effects strength" />
+              <button type="button" class="mx-unlink" id="mx-unlink-effects" aria-pressed="false" title="Follow the match strength slider">⚭</button>
             </label>
           </div>
         </div>
@@ -447,6 +474,30 @@ const hasItems = manifest.count > 0;
   .mx-end { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); flex: 0 0 auto; }
   .mx-strengthlabel { font-family: var(--font-label); font-size: 0.66rem; color: var(--muted); margin: 0; flex: 0 1 auto; text-align: center; }
   .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); flex: 0 0 auto; cursor: pointer; }
+  .mx-groupreveal {
+    background: transparent; border: 0; cursor: pointer; color: var(--muted);
+    font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0; flex: 0 0 auto; transition: color 140ms;
+  }
+  .mx-groupreveal:hover, .mx-groupreveal[aria-expanded="true"] { color: var(--fg); }
+
+  .mx-groupbar {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.6rem;
+    padding: 0 var(--edge) 0.6rem;
+  }
+  .mx-groupslider { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 15rem; max-width: 20rem; }
+  .mx-groupslider input { flex: 1; accent-color: var(--fg); }
+  .mx-grouplabel {
+    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); flex: 0 0 3.4rem;
+  }
+  .mx-unlink {
+    background: transparent; border: 1px solid var(--hair); border-radius: 999px; cursor: pointer;
+    color: var(--muted); font-size: 0.6rem; line-height: 1; width: 1.4rem; height: 1.4rem; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; transition: color 140ms, border-color 140ms;
+  }
+  .mx-unlink[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
+  .mx-unlink:hover { color: var(--fg); }
 
   /* --- Tabs --------------------------------------------------------------- */
   .mx-tabs { flex: 0 0 auto; display: flex; gap: 0.2rem; padding: 0 var(--edge); border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
@@ -964,7 +1015,7 @@ const hasItems = manifest.count > 0;
   // Style match. A processed module (not is:inline) because it imports the
   // solver's own adjustment blending and the WebGL renderer — the preview is
   // driven by exactly the values shown on screen, never a parallel copy.
-  import { atStrength } from '../lib/match/adjustments';
+  import { atGroupStrength, type GroupStrength } from '../lib/match/adjustments';
   import { MatchPreview, deriveRenderSpec } from '../lib/match/preview-render';
   import { HSL_BANDS, REGION_LABEL, REGION_ORDER, BASELINE_LABEL } from '../lib/match/types';
   import { solveMatch } from '../lib/match/solve';
@@ -990,6 +1041,65 @@ const hasItems = manifest.count > 0;
   const strengthLabel = $('mx-strengthlabel');
   const wipeEl = $<HTMLInputElement>('mx-wipe');
   const wipeHint = $('mx-wipehint');
+
+  // ── Per-group strength (issue #41) ────────────────────────────────────────
+  //
+  // Light, Colour and Effects each default to following the master slider.
+  // Dragging a group's own slider unlinks that one group from the master;
+  // its ⚭ button links it back. `null` means "linked" — the group's live
+  // value is read through `groupT()`, never stored separately while linked,
+  // so the master stays the single source of truth until a group opts out.
+  type GroupKey = keyof GroupStrength;
+  const GROUP_KEYS: GroupKey[] = ['light', 'colour', 'effects'];
+  const groupOverride: Record<GroupKey, number | null> = { light: null, colour: null, effects: null };
+  const groupEl: Record<GroupKey, HTMLInputElement> = {
+    light: $('mx-strength-light'),
+    colour: $('mx-strength-colour'),
+    effects: $('mx-strength-effects'),
+  };
+  const groupUnlinkEl: Record<GroupKey, HTMLButtonElement> = {
+    light: $('mx-unlink-light'),
+    colour: $('mx-unlink-colour'),
+    effects: $('mx-unlink-effects'),
+  };
+  const groupReveal = $<HTMLButtonElement>('mx-groupreveal');
+  const groupBar = $('mx-groupbar');
+
+  const groupT = (g: GroupKey): number => groupOverride[g] ?? Number(strengthEl.value) / 100;
+  const currentGroupStrength = (): GroupStrength => ({
+    light: groupT('light'),
+    colour: groupT('colour'),
+    effects: groupT('effects'),
+  });
+  /** Keeps every unlinked slider's displayed value honest after the master
+   *  moves — a linked slider is a read-out of the master, not its own state. */
+  function syncGroupSliders() {
+    for (const g of GROUP_KEYS) {
+      groupEl[g].value = String(Math.round(groupT(g) * 100));
+      groupUnlinkEl[g].setAttribute('aria-pressed', String(groupOverride[g] !== null));
+    }
+  }
+
+  groupReveal.addEventListener('click', () => {
+    const open = groupBar.hidden;
+    groupBar.hidden = !open;
+    groupReveal.setAttribute('aria-expanded', String(open));
+    groupReveal.textContent = open ? 'Light / Colour / Effects separately ‹' : 'Light / Colour / Effects separately ›';
+    if (open) syncGroupSliders();
+  });
+
+  for (const g of GROUP_KEYS) {
+    groupEl[g].addEventListener('input', () => {
+      groupOverride[g] = Number(groupEl[g].value) / 100;
+      groupUnlinkEl[g].setAttribute('aria-pressed', 'true');
+      draw();
+    });
+    groupUnlinkEl[g].addEventListener('click', () => {
+      groupOverride[g] = null;
+      syncGroupSliders();
+      draw();
+    });
+  }
 
   const esc = (s: unknown) =>
     String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -1316,15 +1426,22 @@ const hasItems = manifest.count > 0;
     }
   }
 
+  const GROUP_LABEL: Record<GroupKey, string> = { light: 'Light', colour: 'Colour', effects: 'Effects' };
+
   function draw() {
     const t = Number(strengthEl.value) / 100;
-    const adj = atStrength(current.solution.restrained, current.solution.faithful, t);
-    strengthLabel.textContent =
+    syncGroupSliders();
+    const adj = atGroupStrength(current.solution.restrained, current.solution.faithful, currentGroupStrength());
+    const base =
       t === 0 ? 'No change' :
       t < 0.5 ? `${Math.round(t * 200)}% of the restrained grade` :
       t === 0.5 ? 'Restrained — adopts the reference’s character, protects skin' :
       t === 1 ? 'Faithful — closes as much of the measured gap as the controls allow' :
       `${Math.round((t - 0.5) * 200)}% of the way from restrained to faithful`;
+    const overridden = GROUP_KEYS.filter((g) => groupOverride[g] !== null);
+    strengthLabel.textContent = overridden.length
+      ? `${base} · ${overridden.map((g) => GROUP_LABEL[g]).join('/')} set independently`
+      : base;
     if (preview) {
       const spec = deriveRenderSpec(adj, current.maskChannels ?? []);
       preview.render(spec, wipeEl.checked ? 0.5 : -1);
@@ -1475,7 +1592,7 @@ const hasItems = manifest.count > 0;
   }
 
   function renderValues(adj?: Adjustments) {
-    if (!adj) adj = atStrength(current.solution.restrained, current.solution.faithful, Number(strengthEl.value) / 100);
+    if (!adj) adj = atGroupStrength(current.solution.restrained, current.solution.faithful, currentGroupStrength());
     const a = adj;
 
     // ── Light ────────────────────────────────────────────────────────────
@@ -1664,18 +1781,20 @@ const hasItems = manifest.count > 0;
 
   const download = (variant: 'full' | 'safe') => {
     const t = Number(strengthEl.value) / 100;
+    const gs = currentGroupStrength();
     if (!current.local) {
-      saveAs(`/api/match/preset?id=${encodeURIComponent(current.id)}&strength=${t}&variant=${variant}`, '');
+      const q = `strength=${t}&light=${gs.light}&colour=${gs.colour}&effects=${gs.effects}`;
+      saveAs(`/api/match/preset?id=${encodeURIComponent(current.id)}&${q}&variant=${variant}`, '');
       return;
     }
     // Offline: build the preset here. xmp.ts is isomorphic, so this is the same
     // writer the server uses — not a second implementation.
-    const adj = atStrength(current.solution.restrained, current.solution.faithful, t);
+    const adj = atGroupStrength(current.solution.restrained, current.solution.faithful, gs);
     const clean = (s: string) => s.replace(/\.[^.]+$/, '').replace(/\.[0-9a-f]{8,}$/i, '');
     const files = buildPresetFiles(adj, {
       name: `${clean(current.myName)} as ${clean(current.referenceName)}`.slice(0, 60),
       group: 'Colour Archive',
-      seed: `${current.myName}:${current.referenceName}:${t.toFixed(2)}`,
+      seed: `${current.myName}:${current.referenceName}:${gs.light.toFixed(2)}:${gs.colour.toFixed(2)}:${gs.effects.toFixed(2)}`,
     });
     const chosen = variant === 'safe' ? files[files.length - 1] : files[0];
     const url = URL.createObjectURL(new Blob([chosen.contents], { type: 'application/rdf+xml' }));

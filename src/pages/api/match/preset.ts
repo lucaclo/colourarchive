@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getMatch } from '../../../lib/match/session';
-import { atStrength } from '../../../lib/match/adjustments';
+import { atGroupStrength } from '../../../lib/match/adjustments';
 import { buildPresetFiles } from '../../../lib/match/xmp';
 
 export const prerender = false;
@@ -14,7 +14,16 @@ export const prerender = false;
 export const GET: APIRoute = async ({ url }) => {
   try {
     const id = url.searchParams.get('id') || '';
-    const strength = Math.max(0, Math.min(1, Number(url.searchParams.get('strength') ?? '0.5')));
+    const clampUnit = (v: number): number => Math.max(0, Math.min(1, v));
+    const strength = clampUnit(Number(url.searchParams.get('strength') ?? '0.5'));
+    // Light/Colour/Effects each default to the flat `strength` when the
+    // request doesn't carry its own — a link straight from `inspiration.astro`
+    // without the per-group sliders touched still works exactly as before.
+    const param = (key: string): number => {
+      const raw = url.searchParams.get(key);
+      return raw === null ? strength : clampUnit(Number(raw));
+    };
+    const groupStrength = { light: param('light'), colour: param('colour'), effects: param('effects') };
     const variant = url.searchParams.get('variant') === 'safe' ? 'safe' : 'full';
 
     const record = getMatch(id);
@@ -25,7 +34,7 @@ export const GET: APIRoute = async ({ url }) => {
       );
     }
 
-    const adj = atStrength(record.solution.restrained, record.solution.faithful, strength);
+    const adj = atGroupStrength(record.solution.restrained, record.solution.faithful, groupStrength);
     // Extension first, THEN the archive's content-hash suffix — the hash is
     // never at the end of the string while ".jpg" is still attached, so doing
     // it the other way round leaves the hash in the name Lightroom displays.
@@ -35,7 +44,7 @@ export const GET: APIRoute = async ({ url }) => {
     const files = buildPresetFiles(adj, {
       name,
       group: 'Colour Archive',
-      seed: `${record.id}:${strength.toFixed(2)}`,
+      seed: `${record.id}:${groupStrength.light.toFixed(2)}:${groupStrength.colour.toFixed(2)}:${groupStrength.effects.toFixed(2)}`,
     });
 
     // buildPresetFiles returns the masked preset first when masks exist, and
