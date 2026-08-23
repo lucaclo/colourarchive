@@ -45,6 +45,11 @@ export const SCOUT_AIR_DIR = path.join(SCOUT_CACHE_DIR, 'air');
 // Seeing and transparency, from a third host on 7Timer's own four-times-a-day
 // clock. See SEEING_TTL_MS.
 export const SCOUT_SEEING_DIR = path.join(SCOUT_CACHE_DIR, 'seeing');
+// Tide predictions (issue #71) — split into two caches with two different
+// lifetimes, since they answer two different-shaped questions. See
+// tide-client.ts's header for why.
+export const SCOUT_TIDE_STATION_DIR = path.join(SCOUT_CACHE_DIR, 'tide-station');
+export const SCOUT_TIDE_DAY_DIR = path.join(SCOUT_CACHE_DIR, 'tide-day');
 
 /** Web path (as served) for a derivative file. */
 export const imgUrl = (name: string): string => `/img/${name}`;

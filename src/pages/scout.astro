@@ -158,6 +158,24 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
             </div>
           </details>
 
+          <!-- ── Tide ──────────────────────────────────────────────────────
+               Issue #71: none of the apps Scout was benchmarked against join
+               tide state with light, and it matters for seascape and
+               long-exposure work — golden hour alone cannot say whether the
+               rock or sand a low tide would expose is actually dry then.
+               This repo has no coastline dataset, so it is gated on the one
+               thing that isn't invented: whether WorldTides can find a real
+               harmonic station within `tide.ts`'s MAX_STATION_DISTANCE_KM.
+               Hidden by default — shown only once that check comes back
+               coastal, or honestly blocked on a missing API key. See
+               `tide-panel.ts`'s header for the three states in full. -->
+          <details class="fold" id="fold-tide" hidden>
+            <summary>Tide</summary>
+            <div class="tide-strip" id="tide-strip" hidden></div>
+            <ul class="events events-sub" id="tide-events"></ul>
+            <p class="tide-note" id="tide-note"></p>
+          </details>
+
           <!-- The core is the one subject here whose answer is usually "no":
                it has to be above the horizon, the sky has to be astronomically
                dark and the moon has to be down, all at once. Each line is one
@@ -2120,6 +2138,28 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     color: var(--muted);
     font-style: italic;
   }
+
+  /* ── Tide ──────────────────────────────────────────────────────────────── */
+
+  /* Same visual grammar as `.lightday-strip`: a thin coloured bar is the
+     picture, the text underneath is the reading. Amber marks the windows
+     worth being there for a low, blue for a high — see `tide.ts`'s
+     LOW_TIDE_TINT/HIGH_TIDE_TINT, which this only has to give height to. */
+  .tide-strip {
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0 0 0.4rem;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 18%, transparent);
+  }
+  .tide-strip[hidden] { display: none; }
+  .tide-note {
+    margin: 0.3rem 0 0;
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .tide-note:empty { display: none; }
 
   /* ── Milky Way core ───────────────────────────────────────────────────── */
 
