@@ -302,6 +302,7 @@ import { pace } from './pacing';
 import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
 import type { ColourGap } from '../../gaps';
+import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
 import { createMonthGrid } from './month-grid';
 import { createInfoTips } from './infotip';
 
@@ -7270,6 +7271,43 @@ export async function startScout(): Promise<void> {
     goTo: goToInstant,
   });
 
+  /** The forecast pair for a kept spot's own bearing — same branch
+   *  `loadWeather` takes for the pin on screen, just addressed to a spot
+   *  that may not be the one currently centred. */
+  async function fetchGoTonightPair(spot: SavedSpot): Promise<GoTonightPair> {
+    if (!spot.frame) return { pin: null, gate: null };
+    const distanceM = horizonSampleDistanceM();
+    if (STATIC) {
+      const pair = await fetchHorizonPairDirect(spot.lat, spot.lon, spot.frame.bearing, distanceM);
+      return { pin: pair.pin, gate: pair.gate };
+    }
+    const query = new URLSearchParams({
+      lat: String(spot.lat),
+      lon: String(spot.lon),
+      bearing: spot.frame.bearing.toFixed(2),
+      gateKm: (distanceM / 1000).toFixed(0),
+    });
+    const data = await fetch(`/api/scout/weather?${query}`).then((response) => response.json());
+    if (!data.ok) return { pin: null, gate: null };
+    return { pin: data.report ?? null, gate: data.gate ?? null };
+  }
+
+  const goTonightPanel = createGoTonightPanel({
+    keptSpots: () => keptSpots,
+    from: () => day?.dayStart ?? new Date(),
+    fetchPair: fetchGoTonightPair,
+    // The same path a `kept-list` row takes, so a spot reached from "go
+    // tonight" behaves exactly like one reached by picking it directly.
+    goToSpot: (spot) => {
+      setCentre(
+        { name: spot.name, detail: '', lat: spot.lat, lon: spot.lon, kind: 'kept', timeZone: spot.timeZone || timeZone },
+        { refit: true },
+      );
+      if (spot.radiusKm) setRadius(spot.radiusKm, { refit: true });
+    },
+    goToInstant,
+  });
+
   on('open-month', 'click', () => {
     // The layers panel is where the button lives, and leaving it standing under
     // a full-screen sheet means finding it still open on the way back out.
@@ -7692,6 +7730,7 @@ export async function startScout(): Promise<void> {
     renderKept();
     renderNotebook();
     forgetUnkeptPicks();
+    goTonightPanel.restate();
   });
 
   on('kept-list', 'click', (event) => {
@@ -7705,6 +7744,7 @@ export async function startScout(): Promise<void> {
         renderStar();
         renderKept();
         forgetUnkeptPicks();
+        goTonightPanel.restate();
       }
       return;
     }
@@ -8338,6 +8378,9 @@ export async function startScout(): Promise<void> {
   loadSpots();
   // The picker is built from that list, so it cannot be drawn before it.
   renderPlan();
+  // Constructed before `loadSpots` ran, so its idle message was drawn
+  // against an empty list.
+  goTonightPanel.restate();
 
   (function restore() {
     let saved: SavedView;
