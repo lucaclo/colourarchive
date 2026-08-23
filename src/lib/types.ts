@@ -53,6 +53,7 @@ export interface Photo {
   // --- Similarity features (stored, stripped from the client manifest) ------
   embedding?: number[];  // 384-d DINOv2 visual fingerprint (subject + composition)
   colourGrid?: number[]; // 4x4 grid of OKLab [L,a,b] per cell — colour & tonal layout
+  clipEmbedding?: number[]; // 512-d CLIP image embedding, shared space with a text query — text search
 }
 
 export interface Chapter {

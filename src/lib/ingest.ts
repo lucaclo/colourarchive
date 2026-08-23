@@ -7,6 +7,7 @@ import { PHOTOS_DIR, IMG_DIR, imgUrl } from './paths';
 import { dominantColour } from './dominant';
 import { spatialSignature } from './signature';
 import { embedBuffer } from './embed';
+import { clipEmbedBuffer } from './clip';
 import { classifyGenreBuffer } from './genre';
 import { classify, roundOklch } from './color';
 import { WIDTHS, derivativeName } from './derivatives';
@@ -179,15 +180,17 @@ export async function processPhoto(
 
   // Similarity signatures + genre. All best-effort — if a model is
   // unavailable, ingest still succeeds (that feature just skips this photo).
-  const [colourGrid, embedding, genre] = await Promise.all([
+  const [colourGrid, embedding, clipEmbedding, genre] = await Promise.all([
     spatialSignature(buf),
     embedBuffer(buf).catch((e) => { console.warn('[embed] skipped', e?.message); return undefined; }),
+    clipEmbedBuffer(buf).catch((e) => { console.warn('[clip] skipped', e?.message); return undefined; }),
     classifyGenreBuffer(buf).catch((e) => { console.warn('[genre] skipped', e?.message); return undefined as Genre | undefined; }),
   ]);
 
   return {
     embedding,
     colourGrid,
+    clipEmbedding,
     id,
     filename,
     ext,

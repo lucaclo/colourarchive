@@ -161,6 +161,12 @@ const auroraCss = hasPhotos
         </ul>
       </div>
     )}
+    {!STATIC && hasPhotos && (
+      <div class="search-box" id="search-box">
+        <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <input type="search" id="search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
+      </div>
+    )}
     <span class="topbar-right">
       {/* Inspiration is the editing workbench — it writes to disk and shows
           other people's photographs pending credit, so it stays on the Mac.
@@ -629,9 +635,11 @@ const auroraCss = hasPhotos
   // the archive stays densely packed instead of leaving the hidden ones' gaps.
   let view = 'all';    // film / digital / all
   let genre = 'all';   // street / portrait / landscape / architecture / all
+  let searchIds = null; // Set of matching ids from /api/search, or null when no query is active
   const frameShown = (f) =>
     (view === 'all' || f.dataset.medium === view) &&
-    (genre === 'all' || f.dataset.genre === genre);
+    (genre === 'all' || f.dataset.genre === genre) &&
+    (searchIds === null || searchIds.has(f.dataset.id));
 
   // Split an ordered list of item heights into <=k CONTIGUOUS groups with the
   // most equal total heights (classic linear partition; binary search on the
@@ -1331,6 +1339,41 @@ const auroraCss = hasPhotos
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && genreMenu && !genreMenu.hidden) { closeGenre(); genreBtn?.focus(); }
+  });
+
+  // ======================================================================
+  //  Free-text search (/api/search) — CLIP text embedding vs each photo's
+  //  stored image embedding, both computed by the same model already used
+  //  for genre. Debounced so typing doesn't fire a model call per keystroke;
+  //  a request token guards against a slow earlier response landing after a
+  //  faster later one and clobbering it.
+  // ======================================================================
+  const searchInput = document.getElementById('search-input');
+  let searchTimer = 0;
+  let searchToken = 0;
+  function applySearchIds(ids) {
+    searchIds = ids;
+    layoutAll();      // repack visible frames into tight columns
+    refreshEmpties();
+  }
+  async function runSearch(q) {
+    const token = ++searchToken;
+    if (!q) { applySearchIds(null); return; }
+    let data;
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      data = await res.json();
+    } catch (err) { return; } // offline / server-only route missing (e.g. static export) — leave unfiltered
+    if (token !== searchToken) return; // a newer query has since started; this response is stale
+    // Not ready (nothing embedded yet) or a server-side failure: refuse rather
+    // than filter the archive down to a meaningless ranking — leave it as-is.
+    if (!data.ok || !data.ready) return;
+    applySearchIds(new Set(data.matches.map((m) => m.id)));
+  }
+  searchInput?.addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    const q = e.target.value.trim();
+    searchTimer = setTimeout(() => runSearch(q), 350);
   });
 
   // ======================================================================
