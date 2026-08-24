@@ -337,6 +337,7 @@ const auroraCss = hasPhotos
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
           <button class="lb-tool" id="lb-info" aria-label="Photo details" aria-pressed="false">i</button>
+          <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive">≈</button>
           <button class="lb-tool lb-close" id="lb-close" aria-label="Close">×</button>
         </div>
         <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous">‹</button>
@@ -347,6 +348,24 @@ const auroraCss = hasPhotos
         <div class="lb-caption" id="lb-caption"></div>
         <p class="lb-hint">← →  ·  scroll to zoom  ·  esc</p>
         <span class="lb-progress" aria-hidden="true"></span>
+      </div>
+
+      <!-- More like this: ranks the archive against the photo currently open
+           in the lightbox, via the same /api/similar endpoint and
+           colour/composition blend Inspiration's own "≈ similar" already
+           uses — pointed at an archive id instead of a reference id. -->
+      <div class="arc-similar" id="arc-similar" hidden role="dialog" aria-modal="true" aria-label="More like this">
+        <div class="arc-similar-inner">
+          <button class="insights-close" id="arc-similar-close" aria-label="Close">×</button>
+          <h2>More like this</h2>
+          <p class="arc-similar-hint" id="arc-similar-hint">Your closest photographs, ranked.</p>
+          <div class="arc-similar-controls">
+            <span>Colour</span>
+            <input type="range" id="arc-similar-w" min="0" max="100" value="60" aria-label="Colour to composition" />
+            <span>Composition</span>
+          </div>
+          <div class="arc-similar-grid" id="arc-similar-grid"></div>
+        </div>
       </div>
 
       <!-- Insights: a quiet stats overlay. -->
@@ -461,6 +480,43 @@ const auroraCss = hasPhotos
   }
   .colophon p { margin: 0; }
   kbd { font-family: var(--font-label); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 0.72em; }
+
+  /* "More like this" — same full-screen shape as .insights (global.css),
+     ranking the rest of the archive against the photo currently open. */
+  .arc-similar {
+    position: fixed; inset: 0; z-index: 95; overflow: auto;
+    display: flex; align-items: flex-start; justify-content: center;
+    background: color-mix(in oklab, var(--bg) 92%, #000);
+    opacity: 0; transition: opacity 320ms var(--ease);
+    overscroll-behavior: contain;
+  }
+  .arc-similar[hidden] { display: none; }
+  .arc-similar.show { opacity: 1; }
+  .arc-similar-inner { max-width: 64rem; width: 100%; padding: 9vh 8vw 12vh; }
+  .arc-similar-inner h2 {
+    font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
+    font-size: clamp(1.8rem, 4.5vw, 2.6rem); margin: 0;
+  }
+  .arc-similar-hint { font-family: var(--font-label); color: var(--muted); font-size: 0.8rem; margin: 0.4rem 0 1.6rem; letter-spacing: 0.04em; }
+  .arc-similar-controls {
+    display: flex; align-items: center; gap: 0.8rem; margin: 0 0 2rem; max-width: 26rem;
+    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  .arc-similar-controls input { flex: 1; accent-color: var(--fg); }
+  /* Injected via innerHTML at runtime, same as inspiration.astro's .sim-grid —
+     :global() because Astro's scoping hash never reaches elements it didn't
+     render itself. */
+  :global(.arc-similar-grid) { columns: 4; column-gap: 8px; }
+  :global(.arc-similar-grid figure) { position: relative; margin: 0 0 8px; break-inside: avoid; background: var(--border); cursor: zoom-in; }
+  :global(.arc-similar-grid img) { width: 100%; display: block; opacity: 0; transition: opacity 300ms var(--ease); }
+  :global(.arc-similar-grid img.on) { opacity: 1; }
+  :global(.arc-similar-grid .pct) {
+    position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.56rem;
+    letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent);
+    padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(4px);
+  }
+  @media (max-width: 900px) { :global(.arc-similar-grid) { columns: 3; } }
+  @media (max-width: 620px) { :global(.arc-similar-grid) { columns: 2; } }
 </style>
 
 <script is:inline>
@@ -1140,6 +1196,78 @@ const auroraCss = hasPhotos
   infoBtn?.addEventListener('click', toggleDetails);
   playBtn?.addEventListener('click', toggleSlideshow);
 
+  // ======================================================================
+  //  More like this — /api/similar pointed at the open photo's own id
+  //  instead of an inspiration reference id, same endpoint and blend
+  //  Inspiration's "≈ similar" view already uses.
+  // ======================================================================
+  const arcSimilar = document.getElementById('arc-similar');
+  const arcSimilarGrid = document.getElementById('arc-similar-grid');
+  const arcSimilarHint = document.getElementById('arc-similar-hint');
+  const arcSimilarW = document.getElementById('arc-similar-w');
+  let arcSimilarMatches = [];
+  let arcSimilarToken = 0;
+  function renderArcSimilar() {
+    const v = +arcSimilarW.value / 100; // 0 = pure colour, 1 = pure composition
+    const scored = arcSimilarMatches
+      .map((m) => ({ ...m, score: v * m.comp + (1 - v) * m.col }))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 30);
+    arcSimilarGrid.innerHTML = scored.map((m) =>
+      `<figure data-id="${m.id}" style="aspect-ratio:${m.w}/${m.h}"><img loading="lazy" src="${m.avif}" alt=""><span class="pct">${Math.round((1 - m.score) * 100)}</span></figure>`
+    ).join('');
+    arcSimilarGrid.querySelectorAll('img').forEach((img) => {
+      if (img.complete) img.classList.add('on');
+      else img.addEventListener('load', () => img.classList.add('on'), { once: true });
+    });
+  }
+  const arcSimilarOpen = () => arcSimilar && !arcSimilar.hidden;
+  async function openArcSimilar() {
+    if (lbIndex < 0 || !frames[lbIndex] || arcSimilarOpen()) return;
+    const id = frames[lbIndex].dataset.id;
+    const token = ++arcSimilarToken;
+    arcSimilar.hidden = false;
+    lockScroll();
+    requestAnimationFrame(() => arcSimilar.classList.add('show'));
+    captureFocus(arcSimilar, document.getElementById('arc-similar-close'));
+    arcSimilarGrid.innerHTML = '';
+    arcSimilarHint.textContent = 'Ranking…';
+    try {
+      const res = await fetch(`/api/similar?ref=${encodeURIComponent(id)}`);
+      const d = await res.json();
+      if (token !== arcSimilarToken) return; // a newer open has since started
+      if (!d.ok) throw new Error(d.error || 'failed');
+      arcSimilarMatches = d.matches || [];
+      arcSimilarHint.textContent = d.ready
+        ? 'Your closest photographs, ranked. Drag to weigh colour against composition.'
+        : 'Composition needs analysing — run  npm run reanalyze  once.';
+      renderArcSimilar();
+    } catch (err) {
+      if (token !== arcSimilarToken) return;
+      arcSimilarHint.textContent = err.message || 'Could not rank the archive.';
+    }
+  }
+  function closeArcSimilar() {
+    if (!arcSimilarOpen()) return;
+    arcSimilar.classList.remove('show');
+    unlockScroll();
+    releaseFocus();
+    setTimeout(() => { arcSimilar.hidden = true; }, 220);
+  }
+  document.getElementById('lb-similar')?.addEventListener('click', openArcSimilar);
+  document.getElementById('arc-similar-close')?.addEventListener('click', closeArcSimilar);
+  arcSimilarW?.addEventListener('input', renderArcSimilar);
+  arcSimilarGrid?.addEventListener('click', (e) => {
+    const fig = e.target.closest('figure');
+    if (!fig) return;
+    // The lightbox is already open underneath — swap to the match the same
+    // way lbStep does (showAt), not openLightbox, which would re-lock
+    // scroll a second time with only one matching unlock on close.
+    const i = frames.findIndex((f) => f.dataset.id === fig.dataset.id);
+    if (i >= 0) { closeArcSimilar(); showAt(i); }
+  });
+  arcSimilar?.addEventListener('click', (e) => { if (e.target === arcSimilar) closeArcSimilar(); });
+
   // --- Deep-linkable URL: #photo=<id> when the viewer is open --------------
   let lbPushed = false;
   function syncUrl(push) {
@@ -1201,6 +1329,12 @@ const auroraCss = hasPhotos
     if (insightsOpen()) {
       trapTab(e, insightsEl);
       if (e.key === 'Escape') { e.preventDefault(); closeInsights(); }
+      return;
+    }
+
+    if (arcSimilarOpen()) {
+      trapTab(e, arcSimilar);
+      if (e.key === 'Escape') { e.preventDefault(); closeArcSimilar(); }
       return;
     }
 
