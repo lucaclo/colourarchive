@@ -7,6 +7,7 @@ import {
   domeRadiusFor,
   dotStride,
   hourMarks,
+  MIN_DOME_RADIUS_M,
   splitAtHorizon,
 } from './dome.ts';
 import { distance, initialBearing, type LatLon } from './geo.ts';
@@ -87,10 +88,15 @@ describe('domePath', () => {
 });
 
 describe('domeRadiusFor', () => {
-  it('scales with the scouted area but stays within useful bounds', () => {
-    assert.equal(domeRadiusFor(1000), 180); // floor
-    assert.equal(domeRadiusFor(50_000), 1200); // ceiling
-    assert.ok(domeRadiusFor(10_000) > 180 && domeRadiusFor(10_000) < 1200);
+  it('floors at MIN_DOME_RADIUS_M below the tightest scouting radius', () => {
+    assert.equal(domeRadiusFor(100), MIN_DOME_RADIUS_M);
+    assert.equal(domeRadiusFor(179), MIN_DOME_RADIUS_M);
+  });
+
+  it('matches the scouting radius exactly once past the floor, with no ceiling', () => {
+    assert.equal(domeRadiusFor(1200), 1200);
+    assert.equal(domeRadiusFor(10_000), 10_000);
+    assert.equal(domeRadiusFor(50_000), 50_000); // no ceiling — this used to clamp to 1200
   });
 
   it('never shrinks as the area grows', () => {

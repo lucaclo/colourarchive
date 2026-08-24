@@ -115,6 +115,7 @@ import {
   type Ring,
 } from '../shadows';
 import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-layer';
+import { nightCameraConstraintsFor } from './night-camera';
 import {
   MINUTES_PER_DAY,
   PHASE_LABEL,
@@ -2222,7 +2223,10 @@ export async function startScout(): Promise<void> {
     domeStatic = null;
     if (!map || !styleReady || !centre || !day) return;
 
-    const radius = shown.stars ? NIGHT_DOME_RADIUS_M : domeRadiusFor(radiusKm * 1000);
+    // Milky Way mode's dome used to be a fixed NIGHT_DOME_RADIUS_M, on its
+    // own scale — that collapsed into this same call once its dome started
+    // tracking the scouting radius too. See `domeRadiusFor`'s own header.
+    const radius = domeRadiusFor(radiusKm * 1000);
     const geometry = new DomeGeometry(projectToMercator);
     const ink = inkColour(basemap);
 
@@ -2481,7 +2485,10 @@ export async function startScout(): Promise<void> {
     }
     starsWereShown = shown.stars;
 
-    const radius = shown.stars ? NIGHT_DOME_RADIUS_M : domeRadiusFor(radiusKm * 1000);
+    // Milky Way mode's dome used to be a fixed NIGHT_DOME_RADIUS_M, on its
+    // own scale — that collapsed into this same call once its dome started
+    // tracking the scouting radius too. See `domeRadiusFor`'s own header.
+    const radius = domeRadiusFor(radiusKm * 1000);
     const moving = new DomeGeometry(projectToMercator);
     const ink = inkColour(basemap);
     const lift = liftColour(basemap);
@@ -6027,59 +6034,22 @@ export async function startScout(): Promise<void> {
   const NIGHT_PITCH = 68;
 
   /**
-   * The floor Milky Way mode zooms in to, never zooming back out from
-   * whatever the session was already at past this.
+   * The zoom floor and free-look pivot elevation Milky Way mode needs for
+   * whatever dome is currently on screen — solved fresh from the live
+   * scouting radius rather than tuned once against a fixed 4000m dome. See
+   * `night-camera.ts`'s own header for the geometry (`cameraToCenterDistance`
+   * pull-back, and why it has to stay a small fraction of the dome's radius).
    *
-   * MapLibre's 3D camera does not sit *at* `center` — it is pulled back from
-   * it by a distance that grows with both pitch and how far out the zoom is,
-   * which is exactly correct for an orbit camera looking at a city and
-   * exactly wrong for a dome of stars meant to be stood inside of. At the
-   * old cap of 17 that pull-back could run to several hundred metres at
-   * `NIGHT_PITCH`, a meaningful fraction of `NIGHT_DOME_RADIUS_M` — enough
-   * that two stars actually aligned in the sky would not read as aligned on
-   * screen, seen from a point off to the side of the dome's own centre
-   * rather than from the centre itself. Near MapLibre's own zoom ceiling
-   * (22) that pull-back shrinks to a few tens of metres, close enough to
-   * the dome's radius to call the vantage point the centre.
+   * Read at mode entry (`enableFreeLook`, `lookMapAtSky`) and again whenever
+   * the radius changes while the mode is already active (`setRadius`) — the
+   * dome's own geometry already gets rebuilt on a radius change via
+   * `invalidate({ dome: true })`, and the camera constraints have to track it
+   * the same way or a radius dragged larger mid-session could pull the
+   * pivot's old, now-too-low elevation back underground.
    */
-  const NIGHT_ZOOM_MIN = 20;
-
-  /**
-   * The dome's radius while Milky Way mode is on, in place of the everyday
-   * `domeRadiusFor` — which sizes the sun's arc to stay legible *next to* the
-   * terrain it explains, exactly wrong once the terrain is no longer the
-   * subject. A PhotoPills-style galaxy view is mostly sky: the whole point is
-   * for the stars, the band and the frame to fill most of the screen rather
-   * than sit as a small ring over a townscape, so this is a fixed size on its
-   * own scale, not a fraction of the scouting radius the way the everyday
-   * dome is.
-   */
-  const NIGHT_DOME_RADIUS_M = 4000;
-
-  /**
-   * How far above the ground the free-look pivot floats, in metres —
-   * see `setCenterElevation` in `enableFreeLook`, which is what a pitch past
-   * 90° needs to keep the camera from swinging below ground.
-   *
-   * The point of this mode is standing at the *centre* of a dome of stars,
-   * not hovering somewhere up near its inner surface, so this wants to be as
-   * small as it can be while still guaranteeing the camera never dips
-   * underground — not a generous margin picked for its own sake.
-   *
-   * MapLibre's `cameraToCenterDistance` (the camera's real distance from the
-   * pivot) works out to `1.5 * viewportHeightPx * groundResolution(zoom,
-   * lat)`, and at 180° of pitch the camera sits that whole distance directly
-   * *below* the pivot. Ground resolution at `NIGHT_ZOOM_MIN` (the floor this
-   * mode's zoom never goes under) runs from about 0.15 m/px at the equator
-   * down to less at higher latitudes, so even a generously tall real-world
-   * viewport — 2200 CSS px, past what any phone, laptop or 4K monitor
-   * actually reports — only pulls the camera some 490m below the pivot.
-   * 500m clears that, at the cost of a roughly 7° tilt between the pivot and
-   * the dome's true ground-level centre (arctan of this over
-   * `NIGHT_DOME_RADIUS_M`) — small enough to still read as standing in the
-   * middle of the dome rather than floating above it.
-   */
-  const NIGHT_PIVOT_ELEVATION_M = 500;
+  function nightConstraints() {
+    return nightCameraConstraintsFor(domeRadiusFor(radiusKm * 1000), centre?.lat ?? 0);
+  }
 
   /**
    * Turn the map view itself to face where the core will be — bearing at its
@@ -6108,7 +6078,7 @@ export async function startScout(): Promise<void> {
       applyView();
     }
     const bearing = ((body.azimuth % 360) + 360) % 360;
-    const zoom = Math.max(NIGHT_ZOOM_MIN, map.getZoom());
+    const zoom = Math.max(nightConstraints().zoom, map.getZoom());
     map.easeTo({
       bearing,
       pitch: NIGHT_PITCH,
@@ -6250,12 +6220,13 @@ export async function startScout(): Promise<void> {
    * public API exposes an elevation-aware projection — only the shader gets
    * one. Deliberately *not* the globe half: `domeLayer.getProjection()`
    * hands back whatever matrix the dome's own last frame actually used, and
-   * free-look only ever runs at `NIGHT_ZOOM_MIN` or above, a zoom at which
-   * MapLibre has already swapped every custom layer's shader over to its
-   * flat-mercator variant (see the "two projections" note atop
-   * `dome-layer.ts`) — the same swap this file's own `variant` cache exists
-   * to track. A tap offered at a globe-scale zoom would have no dome to tap
-   * on in the first place.
+   * free-look only ever runs at `nightConstraints().zoom` or above — city
+   * scale or tighter across the whole range that solves to (see
+   * `night-camera.ts`), well past the point MapLibre has already swapped
+   * every custom layer's shader over to its flat-mercator variant (see the
+   * "two projections" note atop `dome-layer.ts`) — the same swap this file's
+   * own `variant` cache exists to track. A tap offered at a globe-scale zoom
+   * would have no dome to tap on in the first place.
    */
   function projectToScreen(lon: number, lat: number, altitudeM: number): { x: number; y: number } | null {
     const projection = domeLayer.getProjection();
@@ -6386,14 +6357,14 @@ export async function startScout(): Promise<void> {
     m.doubleClickZoom.disable();
     m.boxZoom.disable();
     // Zoom itself stays live — wheel, pinch and the +/- keys below all still
-    // work, see `NIGHT_ZOOM_MIN`. Only the *rotate* half of a two-finger
+    // work, see `nightConstraints()`. Only the *rotate* half of a two-finger
     // touch gesture is switched off: that is bearing control by another
     // name, and would fight the drag handlers below for it exactly the way
     // `dragRotate` would.
     //
     // Both are also pinned to zoom around the map's *centre* rather than
     // MapLibre's default of the cursor or the pinch midpoint — the whole
-    // reason the pivot is fixed and elevated (see `NIGHT_PIVOT_ELEVATION_M`
+    // reason the pivot is fixed and elevated (see `nightConstraints()`
     // below) is so the dome's centre and the camera's centre are the same
     // point; zooming toward wherever a finger happens to land would walk
     // them apart again, one scroll or pinch at a time.
@@ -6422,14 +6393,16 @@ export async function startScout(): Promise<void> {
     // opened-up tilt range. `centerClampedToGround` has to come off first —
     // while it is on, MapLibre keeps snapping the pivot's elevation back to
     // the terrain (or sea level with none loaded), which is exactly the
-    // behaviour this is working around. See `NIGHT_PIVOT_ELEVATION_M` for
-    // where the clearance number comes from and `NIGHT_ZOOM_MIN` for the
-    // zoom floor its math assumes.
+    // behaviour this is working around. See `night-camera.ts` for where the
+    // clearance number and the zoom floor it assumes both come from — solved
+    // fresh here for the dome currently on screen, not a fixed pair tuned
+    // once against a 4000m dome.
     const prevCenterClampedToGround = m.getCenterClampedToGround();
     const prevMinZoom = m.getMinZoom();
     m.setCenterClampedToGround(false);
-    m.setCenterElevation(NIGHT_PIVOT_ELEVATION_M);
-    m.setMinZoom(NIGHT_ZOOM_MIN);
+    const { zoom: nightZoomFloor, pivotElevationM } = nightConstraints();
+    m.setCenterElevation(pivotElevationM);
+    m.setMinZoom(nightZoomFloor);
     dimBasemap();
 
     // Measured at ~40-90ms a call in this app's own 3D terrain mode —
@@ -6600,9 +6573,10 @@ export async function startScout(): Promise<void> {
     // would leave a keyboard user with no way to look around at all, not
     // even the ordinary panning they lost. Arrow keys orbit the same way a
     // drag would, +/- zoom the same way a wheel or pinch would (see
-    // `NIGHT_ZOOM_MIN` — `jumpTo` clamps there on its own, same as it does
-    // for pitch); Escape leaves the mode entirely, since a gesture that
-    // replaces normal map interaction needs an equally normal way out.
+    // `nightConstraints()` — `jumpTo` clamps at whatever `setMinZoom` was
+    // last called with on its own, same as it does for pitch); Escape leaves
+    // the mode entirely, since a gesture that replaces normal map interaction
+    // needs an equally normal way out.
     const KEY_STEP_DEG = 5;
     const ZOOM_KEY_STEP = 0.5;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -6805,12 +6779,14 @@ export async function startScout(): Promise<void> {
     drawFrame();
     renderFraming();
     // The static half of the dome (the horizon ring, the sun/moon/core arcs,
-    // the hour beads) is cached against whatever radius it was last built at
-    // — see `NIGHT_DOME_RADIUS_M`. Toggling `stars` through the layers panel
-    // already forces a rebuild; this path sets `shown.stars` directly rather
-    // than dispatching that checkbox's own change event, so it has to ask for
-    // the rebuild itself or the rings stay sized for the terrain they no
-    // longer share the screen with.
+    // the hour beads) is cached and does not itself depend on `shown.stars`
+    // any more — the radius is `domeRadiusFor(radiusKm * 1000)` either way.
+    // What still depends on it is the star field and halos `rebuildDomeStatic`
+    // only draws while `shown.stars` is on. Toggling `stars` through the
+    // layers panel already forces a rebuild; this path sets `shown.stars`
+    // directly rather than dispatching that checkbox's own change event, so
+    // it has to ask for the rebuild itself or the stars stay off (or on)
+    // regardless of what the mode just switched to.
     domeStatic = null;
     invalidate({ dome: true });
 
@@ -8312,6 +8288,18 @@ export async function startScout(): Promise<void> {
     domeStatic = null;
     invalidate({ dome: true });
     renderFacts();
+    // The dome itself picks up the new radius through the invalidation
+    // above, but Milky Way mode's zoom floor and pivot elevation were solved
+    // for the *previous* radius and only get read again at mode entry — a
+    // radius dragged larger while already inside the mode would otherwise
+    // leave the pivot too low for the now-bigger dome's real pull-back,
+    // which is exactly the underground-camera failure `nightConstraints()`
+    // exists to prevent. Only worth doing while free-look is actually live.
+    if (map && freeLookCleanup) {
+      const { zoom: nightZoomFloor, pivotElevationM } = nightConstraints();
+      map.setMinZoom(nightZoomFloor);
+      map.setCenterElevation(pivotElevationM);
+    }
     if (refit) frameRing();
     save();
   }

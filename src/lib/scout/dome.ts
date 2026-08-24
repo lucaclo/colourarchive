@@ -58,15 +58,27 @@ export function domePath(
   return samples.map((s) => domePosition(centre, s.azimuth, s.altitude, radiusM));
 }
 
+/** Below this the arc reads as a smudge rather than a path, whatever the
+ *  scouting radius asked for — the one bound `domeRadiusFor` still enforces. */
+export const MIN_DOME_RADIUS_M = 180;
+
 /**
- * A sensible dome radius for the current view.
+ * The dome's radius for the current view — exactly the scouting radius.
  *
- * Tied to the radius ring rather than to the zoom, so the arc keeps a constant
- * relationship to the area being scouted: big enough to read as a path across
- * the sky, small enough to stay on screen next to the buildings it explains.
+ * Every curve drawn on the dome (the sun's path, the solstice arcs, the
+ * moon's path, hour marks, and — since Milky Way mode's dome collapsed into
+ * this same function — the star field too) starts and ends on the ground
+ * ring the reader is already looking at: at altitude 0 `domePosition`'s
+ * ground offset is `radiusM * cos(0) = radiusM`, so a sunrise or sunset point
+ * lands exactly on the radius ring rather than on a smaller ring of its own,
+ * unrelated scale sitting inside it. There is deliberately no ceiling —
+ * a 50km scouting radius is meant to produce a 50km dome, however large that
+ * reads against the terrain, because the ring itself is the only bound that
+ * matters here. `MIN_DOME_RADIUS_M` is the one floor kept: below it the arc
+ * would shrink past legible at the tightest scouting radii.
  */
 export function domeRadiusFor(scoutRadiusM: number): number {
-  return Math.min(1200, Math.max(180, scoutRadiusM * 0.06));
+  return Math.max(MIN_DOME_RADIUS_M, scoutRadiusM);
 }
 
 /**
