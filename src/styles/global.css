@@ -858,6 +858,7 @@ body {
 .lightbox.details .lb-caption { display: block; }
 .lb-caption .k { color: var(--muted); }
 .meta a, .lb-caption a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.meta .meta-scout-link { display: block; margin-top: 0.25rem; }
 .lb-hint {
   position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%);
   font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase;
