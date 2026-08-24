@@ -321,6 +321,7 @@ import { createSweepExport } from './sweep-export';
 import { createMonthGrid } from './month-grid';
 import { createArCamera } from './ar-camera';
 import { createInfoTips } from './infotip';
+import { createFirstVisitOrientation } from './orientation';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
 export async function startScout(): Promise<void> {
@@ -4738,6 +4739,7 @@ export async function startScout(): Promise<void> {
     }
 
     $<HTMLElement>('scout-hint').hidden = true;
+    firstVisit.dismiss();
     $<HTMLElement>('tools').hidden = false;
     $<HTMLElement>('sheet').hidden = false;
 
@@ -6982,6 +6984,7 @@ export async function startScout(): Promise<void> {
   });
 
   createInfoTips();
+  const firstVisit = createFirstVisitOrientation();
 
   /* ── Kept spots ────────────────────────────────────────────────────────
      Scouting is repetitive in a particular way: you find somewhere, check it
@@ -8725,6 +8728,7 @@ export async function startScout(): Promise<void> {
     $('radius-out').textContent = formatDistance(radiusKm * 1000);
     searchBox.setQuery(label.name);
     $<HTMLElement>('scout-hint').hidden = true;
+    firstVisit.dismiss();
     $<HTMLElement>('tools').hidden = false;
 
     if (map && basemap !== 'light') swapStyle();
