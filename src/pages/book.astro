@@ -175,11 +175,26 @@ const accent = manifest.chapters[0]
   const saveBtn = document.getElementById('book-save');
   const saveText = document.getElementById('book-savebar-text');
 
+  // The beforeunload confirm dialog is not a real safety net — several
+  // browsers suppress or ignore it — so a crash, an accidental swipe-close or
+  // a forgotten tab used to lose every reorder in the session. Debounce-write
+  // instead: 2s after the last change with nothing more coming, save() fires
+  // on its own. It's the same POST the button already made — autosave and the
+  // manual click both funnel through it, so there is one save path, not two.
+  const AUTOSAVE_DELAY = 2000;
+  let autosaveTimer = null;
+  // Bumped on every change, so a save already in flight can tell whether the
+  // state it captured is still the latest state once its POST resolves.
+  let version = 0;
+
   function markDirty() {
+    version++;
     dirty = true;
     savebar.hidden = false;
     saveText.textContent = 'Unsaved changes';
     saveBtn.disabled = false;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(save, AUTOSAVE_DELAY);
   }
 
   // --- Exclude toggle ------------------------------------------------------
@@ -290,7 +305,13 @@ const accent = manifest.chapters[0]
   });
 
   // --- Save ------------------------------------------------------------
-  saveBtn?.addEventListener('click', async () => {
+  // One save path for both the button and the debounce timer above.
+  let saving = false;
+  async function save() {
+    clearTimeout(autosaveTimer);
+    if (saving || !dirty) return;
+    saving = true;
+    const startVersion = version;
     saveBtn.disabled = true;
     saveText.textContent = 'Saving…';
     const chapters = {};
@@ -308,14 +329,31 @@ const accent = manifest.chapters[0]
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Save failed.');
-      dirty = false;
-      saveText.textContent = 'Saved';
-      setTimeout(() => { if (!dirty) savebar.hidden = true; }, 1600);
+      if (version === startVersion) {
+        // Nothing changed while this POST was in flight — the archive now
+        // matches what's on screen.
+        dirty = false;
+        saveText.textContent = 'Saved';
+        setTimeout(() => { if (!dirty) savebar.hidden = true; }, 1600);
+      } else {
+        // A later change arrived mid-save. That edit's own markDirty() already
+        // rescheduled the autosave timer — this save just wasn't the last
+        // word, so the bar stays up rather than reporting "Saved" over work
+        // that isn't on the server yet.
+        saveText.textContent = 'Unsaved changes';
+        saveBtn.disabled = false;
+      }
     } catch (err) {
       saveText.textContent = err.message || 'Save failed.';
       saveBtn.disabled = false;
+      // A failed autosave still gets another try on the next edit (markDirty
+      // reschedules it) or the visible button — either way there is no
+      // silent dead end.
+    } finally {
+      saving = false;
     }
-  });
+  }
+  saveBtn?.addEventListener('click', save);
 
   addEventListener('beforeunload', (e) => {
     if (!dirty) return;
