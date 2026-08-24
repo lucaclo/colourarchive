@@ -56,6 +56,10 @@ const accent = manifest.chapters[0]
         In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
       </h2>
       <p class="manage-note">Hover to remove, or flip film / digital.</p>
+      <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
+        <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
+      </div>
       <div class="grid" id="grid">
         {allPhotos.map((p) => (
           <figure class="cell" data-id={p.id} data-medium={p.medium} data-genre={p.genre ?? ''}>
@@ -139,6 +143,8 @@ const accent = manifest.chapters[0]
   .manage-count { font-family: var(--font-label); font-size: 0.9rem; color: var(--muted); }
   .manage-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.4rem; }
   .manage-note code { font-size: 0.92em; }
+  .manage-search { margin: -0.6rem 0 1rem; }
+  .manage-search input { width: 14rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
   :global(.cell) {
     position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: var(--border);
@@ -255,6 +261,7 @@ const accent = manifest.chapters[0]
   const grid = document.getElementById('grid');
   const manage = document.getElementById('manage');
   const manageCount = document.getElementById('manage-count');
+  const manageSearchBox = document.getElementById('manage-search-box');
   const swapIn = (img) => {
     const real = img.dataset.src;
     if (!real) return;
@@ -487,8 +494,41 @@ const accent = manifest.chapters[0]
     );
     grid.prepend(fig);
     if (manage) manage.hidden = false;
+    if (manageSearchBox) manageSearchBox.hidden = false;
     if (manageCount) manageCount.textContent = String(grid.children.length);
   }
+
+  // ======================================================================
+  //  Manage-grid search (/api/search) — same CLIP text-vs-embedding endpoint
+  //  and debounce/token pattern as the archive's own search box
+  //  (index.astro), wired to filter #grid's cells instead of .collage.
+  // ======================================================================
+  const manageSearchInput = document.getElementById('manage-search-input');
+  let manageSearchTimer = 0;
+  let manageSearchToken = 0;
+  function applyManageSearch(ids) {
+    if (!grid) return;
+    for (const cell of grid.children) {
+      cell.hidden = ids !== null && !ids.has(cell.dataset.id);
+    }
+  }
+  async function runManageSearch(q) {
+    const token = ++manageSearchToken;
+    if (!q) { applyManageSearch(null); return; }
+    let data;
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      data = await res.json();
+    } catch (err) { return; } // offline / server-only route missing — leave unfiltered
+    if (token !== manageSearchToken) return; // a newer query has since started; this response is stale
+    if (!data.ok || !data.ready) return;
+    applyManageSearch(new Set(data.matches.map((m) => m.id)));
+  }
+  manageSearchInput?.addEventListener('input', (e) => {
+    clearTimeout(manageSearchTimer);
+    const q = e.target.value.trim();
+    manageSearchTimer = setTimeout(() => runManageSearch(q), 350);
+  });
 
   // One delegated listener for the whole grid, so cells added after load behave
   // exactly like the ones rendered on the server.
@@ -537,6 +577,7 @@ const accent = manifest.chapters[0]
         cell.remove();
         if (manageCount) manageCount.textContent = String(grid.children.length);
         if (manage && grid.children.length === 0) manage.hidden = true;
+        if (manageSearchBox && grid.children.length === 0) manageSearchBox.hidden = true;
       } else {
         target.textContent = '×';
       }
