@@ -750,6 +750,19 @@ const auroraCss = hasPhotos
     a.textContent = `${coords} ↗`;
     return a;
   };
+  // `window.scoutLinkFor` is set by the module script below — this script is
+  // is:inline and cannot import `encodeScoutLink` itself, so it reuses it
+  // through that bridge rather than re-deriving the query format here.
+  const scoutLink = (coords) => {
+    if (!window.scoutLinkFor) return null;
+    const [lat, lon] = coords.split(',').map((s) => Number(s.trim()));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    const a = document.createElement('a');
+    a.href = window.scoutLinkFor(lat, lon);
+    a.className = 'meta-scout-link';
+    a.textContent = 'Scout this location ↗';
+    return a;
+  };
   const render = (f) => {
     body.innerHTML = '';
     for (const [key, label] of FIELDS) {
@@ -757,8 +770,13 @@ const auroraCss = hasPhotos
       if (!v) continue;
       const dt = document.createElement('dt'); dt.textContent = label;
       const dd = document.createElement('dd');
-      if (key === 'location') dd.append(mapLink(v));
-      else dd.textContent = key === 'captured' ? new Date(v).toLocaleString() : v;
+      if (key === 'location') {
+        dd.append(mapLink(v));
+        const sl = scoutLink(v);
+        if (sl) dd.append(sl);
+      } else {
+        dd.textContent = key === 'captured' ? new Date(v).toLocaleString() : v;
+      }
       body.append(dt, dd);
     }
   };
@@ -1416,4 +1434,22 @@ const auroraCss = hasPhotos
       if (target) requestAnimationFrame(() => openLightbox(target));
     }
   })();
+</script>
+
+<script>
+  // A processed module (not is:inline), purely so it can import
+  // `encodeScoutLink` — bridged to the page's main is:inline script via a
+  // global rather than converting that whole script to a module for one
+  // link. Module scripts run deferred, after every classic script's
+  // top-level code, so `window.scoutLinkFor` is set well before a user can
+  // open the lightbox and trigger the metadata panel that reads it.
+  import { encodeScoutLink } from '../lib/scout/share';
+
+  declare global {
+    interface Window {
+      scoutLinkFor?: (lat: number, lon: number) => string;
+    }
+  }
+
+  window.scoutLinkFor = (lat, lon) => `/scout?${encodeScoutLink({ centre: { lat, lon } })}`;
 </script>
