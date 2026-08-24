@@ -450,6 +450,21 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
                    was any good. -->
               <p class="note-kept" id="visit-match" hidden></p>
               <ul class="visit-list" id="visit-list"></ul>
+
+              <!-- Issue #75. Follow-up to #58's retroactive light
+                   reconstruction: instead of typing a past photo's date and
+                   coordinate by hand, pick it here and let its own EXIF
+                   timestamp — and GPS, on the rare frame that carries one —
+                   drive the slider straight to it. Same picker shape as
+                   Style Match's own reference strip. -->
+              <div class="visit-photo" id="visit-photo">
+                <button type="button" class="mx-addref-toggle" id="visit-photo-toggle" aria-expanded="false" hidden>
+                  + Attach an archive photo
+                </button>
+                <ul class="mx-addref-strip" id="visit-photo-strip" hidden></ul>
+                <p class="visit-photo-picked" id="visit-photo-picked" hidden></p>
+              </div>
+
               <div class="note-add">
                 <input
                   class="note-url"
@@ -2236,6 +2251,12 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
   }
   .visit-list :global(.ghost-visit:hover) { color: var(--fg); }
   .visit-list :global(.ghost-visit[aria-pressed='true']) { color: var(--fg); }
+  /* The archive photo a visit was reconstructed from, if any — issue #75. */
+  .visit-list :global(.visit-photo-link) {
+    flex: none; color: var(--muted); text-decoration: none; font-size: 0.82rem;
+    line-height: 1; padding: 0 0.2rem; transition: color 140ms;
+  }
+  .visit-list :global(.visit-photo-link:hover) { color: var(--fg); }
   /* Elements built at runtime are outside Astro's scoping, so anything the
      script creates needs :global() or it falls back to the UA stylesheet. */
   .note-photos :global(.drop-photo) {
@@ -2250,6 +2271,40 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     transition: color 140ms;
   }
   .note-photos :global(.drop-photo:hover) { color: #e0603a; }
+
+  /* Attach-an-archive-photo picker — issue #75. Same shape as Style Match's
+     own "+ Match against another reference too" strip (inspiration.astro). */
+  .visit-photo { margin: 0.6rem 0; }
+  .mx-addref-toggle {
+    appearance: none; background: transparent; border: 1px dashed var(--border); color: var(--muted);
+    cursor: pointer; font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 0.5rem 0.7rem; border-radius: 2px; width: 100%; text-align: left;
+    transition: border-color 160ms, color 160ms;
+  }
+  .mx-addref-toggle:hover { border-color: var(--fg); color: var(--fg); }
+  .mx-addref-toggle[hidden] { display: none; }
+  .mx-addref-strip[hidden] { display: none; }
+  .mx-addref-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0 0; padding: 0; list-style: none; max-height: 11rem; overflow-y: auto; }
+  :global(.mx-addref-pick) {
+    appearance: none; background: transparent; border: 1px solid var(--border); cursor: pointer;
+    padding: 0; border-radius: 2px; overflow: hidden; width: 3rem; height: 3rem; flex: 0 0 auto;
+    transition: border-color 160ms;
+  }
+  :global(.mx-addref-pick:hover) { border-color: var(--fg); }
+  :global(.mx-addref-pick img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .visit-photo-picked {
+    display: flex; align-items: center; gap: 0.45rem;
+    margin: 0.5rem 0 0; font-family: var(--font-label); font-size: 0.72rem; color: var(--muted);
+  }
+  .visit-photo-picked[hidden] { display: none; }
+  :global(.visit-photo-picked img) {
+    width: 1.8rem; height: 1.8rem; object-fit: cover; border-radius: 2px; flex: none;
+  }
+  :global(.visit-photo-clear) {
+    appearance: none; background: transparent; border: 0; cursor: pointer; color: var(--muted);
+    font-size: 0.9rem; line-height: 1; padding: 0 0.2rem; margin-left: auto; transition: color 140ms;
+  }
+  :global(.visit-photo-clear:hover) { color: #e0603a; }
 
   /* ── Moon ─────────────────────────────────────────────────────────────── */
 

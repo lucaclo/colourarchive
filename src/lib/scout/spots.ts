@@ -113,6 +113,14 @@ export interface SpotVisit {
    * frame has since been turned to point somewhere else.
    */
   frame?: SpotFrame;
+  /**
+   * The archive photo this visit reconstructs, if it was logged that way —
+   * issue #75. An id into the archive's own manifest, not a copy of
+   * anything: the lightbox mirrors this back as a "Scouted" line by reading
+   * this same field, so the two sides can never drift out of sync the way a
+   * duplicated URL or caption would.
+   */
+  archivePhotoId?: string;
 }
 
 export interface SavedSpot {
@@ -336,6 +344,12 @@ export function readVisit(value: unknown): SpotVisit | null {
 
   const frame = readFrame(raw.frame);
   if (frame) visit.frame = frame;
+
+  // Same shape hashBuffer (ingest.ts) has always produced: 16 lowercase hex
+  // characters. Anything else cannot be an id this archive ever issued.
+  if (typeof raw.archivePhotoId === 'string' && /^[a-f0-9]{16}$/.test(raw.archivePhotoId)) {
+    visit.archivePhotoId = raw.archivePhotoId;
+  }
 
   return visit;
 }

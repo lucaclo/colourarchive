@@ -820,6 +820,18 @@ const auroraCss = hasPhotos
     a.textContent = 'Scout this location ↗';
     return a;
   };
+  // `window.scoutedVisitFor` is set by the same module-script bridge as
+  // `scoutLinkFor` above — issue #75's mirror image: a visit logged against
+  // this photo in Scout's own kept spots becomes a line here.
+  const scoutedLine = (id) => {
+    const visit = window.scoutedVisitFor?.(id);
+    if (!visit) return null;
+    const a = document.createElement('a');
+    a.href = visit.href;
+    a.className = 'meta-scout-link';
+    a.textContent = `Scouted from ${visit.label} ↗`;
+    return a;
+  };
   const render = (f) => {
     body.innerHTML = '';
     for (const [key, label] of FIELDS) {
@@ -834,6 +846,12 @@ const auroraCss = hasPhotos
       } else {
         dd.textContent = key === 'captured' ? new Date(v).toLocaleString() : v;
       }
+      body.append(dt, dd);
+    }
+    const scouted = scoutedLine(f.dataset.id);
+    if (scouted) {
+      const dt = document.createElement('dt'); dt.textContent = 'Scouted';
+      const dd = document.createElement('dd'); dd.append(scouted);
       body.append(dt, dd);
     }
   };
@@ -1587,12 +1605,44 @@ const auroraCss = hasPhotos
   // top-level code, so `window.scoutLinkFor` is set well before a user can
   // open the lightbox and trigger the metadata panel that reads it.
   import { encodeScoutLink } from '../lib/scout/share';
+  import { readSpots } from '../lib/scout/spots';
+  import { SPOTS_KEY } from '../lib/scout/view/session';
+  import { isoDateIn } from '../lib/scout/daylight';
 
   declare global {
     interface Window {
       scoutLinkFor?: (lat: number, lon: number) => string;
+      scoutedVisitFor?: (photoId: string) => { href: string; label: string } | null;
     }
   }
 
   window.scoutLinkFor = (lat, lon) => `/scout?${encodeScoutLink({ centre: { lat, lon } })}`;
+
+  // Issue #75's mirror image: a visit logged against this photo id (Scout's
+  // own kept spots, same-origin localStorage) becomes a 'Scouted' line here —
+  // the same shape as the OpenStreetMap link above, just pointing at the
+  // plan instead of a map.
+  window.scoutedVisitFor = (photoId) => {
+    let spots;
+    try {
+      spots = readSpots(localStorage.getItem(SPOTS_KEY));
+    } catch {
+      return null;
+    }
+    for (const spot of spots) {
+      const visit = spot.visits?.find((v) => v.archivePhotoId === photoId);
+      if (!visit) continue;
+      const timeZone = spot.timeZone || 'UTC';
+      const isoDate = isoDateIn(new Date(visit.at), timeZone);
+      const query = encodeScoutLink({
+        centre: { lat: spot.lat, lon: spot.lon },
+        name: spot.name || undefined,
+        timeZone: spot.timeZone,
+        radiusKm: spot.radiusKm,
+        isoDate,
+      });
+      return { href: `/scout?${query}`, label: `${spot.name} · ${isoDate}` };
+    }
+    return null;
+  };
 </script>

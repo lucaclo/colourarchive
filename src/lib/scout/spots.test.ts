@@ -335,6 +335,17 @@ describe('readVisit', () => {
     const visit = readVisit({ ...VISIT, outcome: 'x'.repeat(MAX_OUTCOME + 500) });
     assert.equal(visit?.outcome?.length, MAX_OUTCOME);
   });
+
+  it('keeps an archive photo id shaped like one hashBuffer actually issues (#75)', () => {
+    const visit = readVisit({ ...VISIT, archivePhotoId: 'a5c956335b841643' });
+    assert.equal(visit?.archivePhotoId, 'a5c956335b841643');
+  });
+
+  it('drops an archive photo id that is not sixteen lowercase hex characters', () => {
+    assert.equal(readVisit({ ...VISIT, archivePhotoId: 'not-an-id' })?.archivePhotoId, undefined);
+    assert.equal(readVisit({ ...VISIT, archivePhotoId: 'A5C956335B841643' })?.archivePhotoId, undefined, 'uppercase');
+    assert.equal(readVisit({ ...VISIT, archivePhotoId: 'a5c9563' })?.archivePhotoId, undefined, 'too short');
+  });
 });
 
 describe('readSpot with visits', () => {
