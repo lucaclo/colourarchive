@@ -7603,6 +7603,19 @@ export async function startScout(): Promise<void> {
           li.append(ghost);
         }
 
+        // The photo this visit reconstructed, if it was logged that way —
+        // issue #75. `/#photo=` is the same deep-link hash the lightbox
+        // already opens itself to (`index.astro`'s own load-time check).
+        if (visit.archivePhotoId) {
+          const link = document.createElement('a');
+          link.className = 'visit-photo-link';
+          link.href = `/#photo=${visit.archivePhotoId}`;
+          link.target = '_blank';
+          link.title = 'Open the photo this visit reconstructs';
+          link.textContent = '▣';
+          li.append(link);
+        }
+
         const drop = document.createElement('button');
         drop.type = 'button';
         drop.className = 'drop-visit';
@@ -7804,6 +7817,117 @@ export async function startScout(): Promise<void> {
   });
 
   /**
+   * Attach an archive photo when reconstructing a past visit — issue #75,
+   * follow-up to #58. Rather than typing a past photo's date (and, on the
+   * rare frame that carries one, coordinate) by hand, pick it here: its own
+   * EXIF timestamp drives the slider straight to it via `goToInstant`, the
+   * same "put the page on a given instant" primitive the month grid uses.
+   * Same picker shape as Style Match's own reference strip
+   * (`inspiration.astro`'s `renderAddRefStrip`).
+   */
+  interface ArchivePhotoChoice {
+    id: string;
+    avif: string;
+    filename: string;
+    capturedAt: string;
+    location: LatLon | null;
+  }
+  let archivePhotoChoices: ArchivePhotoChoice[] = [];
+  let pickedVisitPhoto: ArchivePhotoChoice | null = null;
+
+  async function loadArchivePhotoChoices() {
+    try {
+      const res = await fetch('/api/photos');
+      // Same "a static host's 404 page is a 200" trap `scout-api.ts` guards
+      // against — this endpoint lives outside `/api/scout/`, so it is not
+      // wrapped by `getScoutJson`, but the failure mode is identical.
+      if (!(res.headers.get('content-type') || '').includes('json')) return;
+      const data = await res.json();
+      if (data.ok) archivePhotoChoices = data.photos ?? [];
+    } catch {
+      // No server, or offline — the picker simply stays unavailable.
+    }
+    $<HTMLButtonElement>('visit-photo-toggle').hidden = archivePhotoChoices.length === 0;
+  }
+  void loadArchivePhotoChoices();
+
+  function renderVisitPhotoStrip() {
+    $('visit-photo-strip').replaceChildren(
+      ...archivePhotoChoices
+        .filter((p) => p.id !== pickedVisitPhoto?.id)
+        .map((p) => {
+          const li = document.createElement('li');
+          const pick = document.createElement('button');
+          pick.type = 'button';
+          pick.className = 'mx-addref-pick';
+          pick.dataset.pick = p.id;
+          pick.title = p.filename;
+          const img = document.createElement('img');
+          img.src = p.avif;
+          img.alt = '';
+          img.loading = 'lazy';
+          pick.append(img);
+          li.append(pick);
+          return li;
+        }),
+    );
+  }
+
+  function renderVisitPhotoPicked() {
+    const el = $<HTMLElement>('visit-photo-picked');
+    if (!pickedVisitPhoto) {
+      el.hidden = true;
+      el.replaceChildren();
+      return;
+    }
+    el.hidden = false;
+    const img = document.createElement('img');
+    img.src = pickedVisitPhoto.avif;
+    img.alt = '';
+    const label = document.createElement('span');
+    label.textContent = `Reconstructing from ${pickedVisitPhoto.filename}`;
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'visit-photo-clear';
+    clear.textContent = '×';
+    clear.title = 'Detach this photo';
+    el.replaceChildren(img, label, clear);
+  }
+
+  /** The manual half of `visit-log`'s own title text — "set it to a past
+   *  photo's own capture time" — automated. */
+  function applyVisitPhotoTime(choice: ArchivePhotoChoice) {
+    const instant = new Date(choice.capturedAt);
+    if (Number.isNaN(instant.getTime())) return;
+    if (choice.location) setCentreCoordinates(choice.location);
+    goToInstant(instant);
+  }
+
+  on('visit-photo-toggle', 'click', () => {
+    const strip = $<HTMLElement>('visit-photo-strip');
+    const open = strip.hidden;
+    if (open) renderVisitPhotoStrip();
+    strip.hidden = !open;
+    $<HTMLButtonElement>('visit-photo-toggle').setAttribute('aria-expanded', String(open));
+  });
+  on('visit-photo-strip', 'click', (event) => {
+    const btn = (event.target as HTMLElement).closest<HTMLElement>('[data-pick]');
+    if (!btn) return;
+    const choice = archivePhotoChoices.find((p) => p.id === btn.dataset.pick);
+    if (!choice) return;
+    pickedVisitPhoto = choice;
+    applyVisitPhotoTime(choice);
+    $<HTMLElement>('visit-photo-strip').hidden = true;
+    $<HTMLButtonElement>('visit-photo-toggle').setAttribute('aria-expanded', 'false');
+    renderVisitPhotoPicked();
+  });
+  on('visit-photo-picked', 'click', (event) => {
+    if (!(event.target as HTMLElement).closest('.visit-photo-clear')) return;
+    pickedVisitPhoto = null;
+    renderVisitPhotoPicked();
+  });
+
+  /**
    * Snapshot the plan's own numbers for the date and hour on the slider, as
    * a logged visit.
    *
@@ -7853,10 +7977,14 @@ export async function startScout(): Promise<void> {
       tiltDeg: lens.tiltDeg,
     };
 
+    if (pickedVisitPhoto) visit.archivePhotoId = pickedVisitPhoto.id;
+
     keptSpots = addVisit(keptSpots, centre, visit);
     if (storeSpotsOrSay()) {
       outcomeField.value = '';
       $('visit-say').textContent = '';
+      pickedVisitPhoto = null;
+      renderVisitPhotoPicked();
     }
     renderNotebook();
   });
