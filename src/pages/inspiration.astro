@@ -1,10 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { readInspManifest } from '../lib/inspiration';
+import { readInspManifest, readInspStore } from '../lib/inspiration';
 import { readManifest } from '../lib/manifest';
 import { oklchCss } from '../lib/color';
 import { warmRegionModels } from '../lib/match/regions';
 import { warmGenre } from '../lib/genre';
+import { clusterByEmbedding } from '../lib/similar';
+import { GENRES, GENRE_LABEL } from '../lib/types';
 
 export const prerender = false;
 
@@ -18,6 +20,37 @@ void warmGenre().catch(() => {});
 
 const manifest = await readInspManifest();
 const hasItems = manifest.count > 0;
+
+// Alternate ways to group the same board — issue #88. Colour chapters (above)
+// are already the default, server-built grouping; genre and embedding-cluster
+// are computed here too, once per request, so switching between them on the
+// client is just moving existing DOM nodes around rather than a second model
+// call or a fetch. `genre` survives onto `manifest`'s own photos (unlike the
+// embeddings — see `buildManifest`'s stripping, manifest.ts), so only the
+// cluster pass needs the raw store.
+interface GroupBucket { label: string; ids: string[]; }
+
+const genreGroups: GroupBucket[] = (() => {
+  const byGenre = new Map<string, string[]>();
+  for (const ch of manifest.chapters) {
+    for (const p of ch.photos) {
+      const key = p.genre ?? 'unclassified';
+      const ids = byGenre.get(key);
+      if (ids) ids.push(p.id); else byGenre.set(key, [p.id]);
+    }
+  }
+  const ordered = GENRES.filter((g) => byGenre.has(g)).map((g) => ({ label: GENRE_LABEL[g], ids: byGenre.get(g)! }));
+  const rest = byGenre.get('unclassified');
+  return rest ? [...ordered, { label: 'Unclassified', ids: rest }] : ordered;
+})();
+
+const clusterGroups: GroupBucket[] = await (async () => {
+  const clustered = clusterByEmbedding(await readInspStore());
+  const inACluster = new Set(clustered.flatMap((g) => g.map((p) => p.id)));
+  const groups = clustered.map((g, i) => ({ label: `Similar — group ${i + 1}`, ids: g.map((p) => p.id) }));
+  const leftOver = manifest.chapters.flatMap((ch) => ch.photos.map((p) => p.id)).filter((id) => !inACluster.has(id));
+  return leftOver.length ? [...groups, { label: 'Not clustered', ids: leftOver }] : groups;
+})();
 
 // Arriving from the archive lightbox's "Match this look" (index.astro,
 // ?match=<archive id>) — resolved here rather than client-side because the
@@ -75,46 +108,78 @@ const accent = manifest.chapters[0]
 
     {
       hasItems ? (
-        <div class="insp-board" id="board">
-          {manifest.chapters.map((ch) => (
-            <section class="insp-chapter">
-              <h2 class="insp-chtitle">
-                <span class="sw" style={`background:${oklchCss(ch.oklch)}`} />
-                {ch.name}<span class="n">{ch.photos.length}</span>
-              </h2>
-              <div class="collage insp-collage">
-                {ch.photos.map((p) => {
-                  const largest = p.derivatives[p.derivatives.length - 1];
-                  return (
-                    <figure class="frame insp-frame" data-id={p.id} data-full={largest.avif}
-                            data-source={p.source ?? ''}
-                            style={`--frame-bg:${oklchCss(p.oklch)};aspect-ratio:${p.width}/${p.height}`}>
-                      <img class="ph" src={p.placeholder} alt="" aria-hidden="true" />
-                      {/* Every derivative is AVIF, so <picture> had no second
-                          format to offer — see the archive for the same fix. */}
-                      <img
-                        class="photo"
-                        srcset={p.derivatives.map((d) => `${d.avif} ${d.width}w`).join(', ')}
-                        sizes="(max-width:980px) 50vw, 33vw"
-                        src={largest.avif}
-                        width={p.width}
-                        height={p.height}
-                        loading="lazy"
-                        decoding="async"
-                        alt={p.source ? `Reference — ${p.source}` : 'Reference image'}
-                      />
-                      <button class="cell-remove" type="button" data-remove={p.id} aria-label="Remove">×</button>
-                      <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">≈ similar</button>
-                      <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">◐ match</button>
-                      <button class="cell-group" type="button" data-group={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-pressed="false" aria-label="Add to a group of similarly-edited references">+ group</button>
-                      {p.source && <figcaption class="src">{p.source}</figcaption>}
-                    </figure>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+        <>
+          <div class="insp-groupby" id="groupby" role="group" aria-label="Group the board by">
+            <button type="button" class="on" data-groupby="colour">Colour</button>
+            <button type="button" data-groupby="genre">Genre</button>
+            <button type="button" data-groupby="cluster">Similar</button>
+          </div>
+          <script type="application/json" id="insp-groupings" is:inline set:html={JSON.stringify({ genre: genreGroups, cluster: clusterGroups })} />
+          <div class="insp-board" id="board">
+            {/* Three parallel groupings of the same photos, not three copies —
+                only "colour" ever renders the actual <figure> elements; genre
+                and cluster start as empty, labelled collages that the client
+                script fills by *moving* those same nodes in, so state (drag,
+                selection, event listeners) never has to survive a rebuild.
+                See #88 and the script below ("Group by"). */}
+            <div class="insp-view" data-view="colour">
+              {manifest.chapters.map((ch) => (
+                <section class="insp-chapter">
+                  <h2 class="insp-chtitle">
+                    <span class="sw" style={`background:${oklchCss(ch.oklch)}`} />
+                    {ch.name}<span class="n">{ch.photos.length}</span>
+                  </h2>
+                  <div class="collage insp-collage">
+                    {ch.photos.map((p) => {
+                      const largest = p.derivatives[p.derivatives.length - 1];
+                      return (
+                        <figure class="frame insp-frame" data-id={p.id} data-full={largest.avif}
+                                data-source={p.source ?? ''}
+                                style={`--frame-bg:${oklchCss(p.oklch)};aspect-ratio:${p.width}/${p.height}`}>
+                          <img class="ph" src={p.placeholder} alt="" aria-hidden="true" />
+                          {/* Every derivative is AVIF, so <picture> had no second
+                              format to offer — see the archive for the same fix. */}
+                          <img
+                            class="photo"
+                            srcset={p.derivatives.map((d) => `${d.avif} ${d.width}w`).join(', ')}
+                            sizes="(max-width:980px) 50vw, 33vw"
+                            src={largest.avif}
+                            width={p.width}
+                            height={p.height}
+                            loading="lazy"
+                            decoding="async"
+                            alt={p.source ? `Reference — ${p.source}` : 'Reference image'}
+                          />
+                          <button class="cell-remove" type="button" data-remove={p.id} aria-label="Remove">×</button>
+                          <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">≈ similar</button>
+                          <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">◐ match</button>
+                          <button class="cell-group" type="button" data-group={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-pressed="false" aria-label="Add to a group of similarly-edited references">+ group</button>
+                          {p.source && <figcaption class="src">{p.source}</figcaption>}
+                        </figure>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <div class="insp-view" data-view="genre" hidden>
+              {genreGroups.map((g) => (
+                <section class="insp-chapter">
+                  <h2 class="insp-chtitle">{g.label}<span class="n">{g.ids.length}</span></h2>
+                  <div class="collage insp-collage" data-collage={g.label} />
+                </section>
+              ))}
+            </div>
+            <div class="insp-view" data-view="cluster" hidden>
+              {clusterGroups.map((g) => (
+                <section class="insp-chapter">
+                  <h2 class="insp-chtitle">{g.label}<span class="n">{g.ids.length}</span></h2>
+                  <div class="collage insp-collage" data-collage={g.label} />
+                </section>
+              ))}
+            </div>
+          </div>
+        </>
       ) : (
         <p class="insp-empty">Nothing yet.</p>
       )
@@ -341,6 +406,19 @@ const accent = manifest.chapters[0]
   .results :global(.fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .results :global(.ch) { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
   .results :global(.err) { color: #e0603a; }
+
+  .insp-groupby {
+    display: flex; gap: 0.3rem; margin: 0 0 1.6rem;
+    font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .insp-groupby button {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; padding: 0.4rem 0.85rem; border-radius: 999px;
+    transition: border-color 140ms var(--ease), color 140ms var(--ease);
+  }
+  .insp-groupby button:hover { border-color: var(--accent-mix); color: var(--fg); }
+  .insp-groupby button.on { border-color: var(--fg); color: var(--fg); }
+  .insp-view[hidden] { display: none; }
 
   .insp-chapter { margin-bottom: 3rem; }
   .insp-chtitle { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.9rem; }
@@ -1028,6 +1106,46 @@ const accent = manifest.chapters[0]
   const bar = document.getElementById('bar');
   const statusText = document.getElementById('status-text');
   const results = document.getElementById('results');
+
+  // --- Group by: colour (default), genre, or embedding-cluster — #88 -------
+  // Only "colour" ever holds the real <figure> elements at first render; the
+  // genre and cluster views start as empty, labelled collages (see the
+  // markup above) that this fills by moving those same nodes in, never by
+  // rebuilding them — so drag state, the group tray's selection below, and
+  // every listener stay attached to the one node that ever existed instead
+  // of needing to be reattached after a switch.
+  const groupings = JSON.parse(document.getElementById('insp-groupings')?.textContent || '{"genre":[],"cluster":[]}');
+  // Captured once, before any move: each frame's original collage, so
+  // "Colour" can be reconstructed exactly by walking this same order back —
+  // not approximated by re-sorting on some other key.
+  const originalOrder = [...document.querySelectorAll('.insp-view[data-view="colour"] .insp-frame')];
+  const originalCollage = new Map(originalOrder.map((f) => [f, f.parentElement]));
+
+  function applyGrouping(view) {
+    if (view === 'colour') {
+      for (const frame of originalOrder) originalCollage.get(frame)?.appendChild(frame);
+    } else {
+      const collages = new Map(
+        [...document.querySelectorAll(`.insp-view[data-view="${view}"] [data-collage]`)].map((el) => [el.dataset.collage, el]),
+      );
+      for (const { label, ids } of groupings[view] || []) {
+        const collage = collages.get(label);
+        if (!collage) continue;
+        for (const id of ids) {
+          const frame = document.querySelector(`.insp-frame[data-id="${CSS.escape(id)}"]`);
+          if (frame) collage.appendChild(frame);
+        }
+      }
+    }
+    document.querySelectorAll('.insp-view').forEach((el) => { el.hidden = el.dataset.view !== view; });
+  }
+
+  document.getElementById('groupby')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-groupby]');
+    if (!btn) return;
+    document.querySelectorAll('#groupby button').forEach((b) => b.classList.toggle('on', b === btn));
+    applyGrouping(btn.dataset.groupby);
+  });
 
   // --- The group: similarly-edited references marked with "+ group" -------
   // A `Map` rather than a `Set` of ids: `findSimilarGroup` needs each
