@@ -1,11 +1,27 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { readInspManifest } from '../lib/inspiration';
+import { readManifest } from '../lib/manifest';
 import { oklchCss } from '../lib/color';
 
 export const prerender = false;
 const manifest = await readInspManifest();
 const hasItems = manifest.count > 0;
+
+// Arriving from the archive lightbox's "Match this look" (index.astro,
+// ?match=<archive id>) — resolved here rather than client-side because the
+// photo is not necessarily on this board's own DOM at all, the way a
+// `.cell-match` reference is.
+const matchId = Astro.url.searchParams.get('match');
+let matchArchiveRef: { id: string; full: string; name: string } | null = null;
+if (matchId) {
+  const archive = await readManifest();
+  const photo = archive.chapters.flatMap((c) => c.photos).find((p) => p.id === matchId);
+  if (photo) {
+    const largest = photo.derivatives[photo.derivatives.length - 1];
+    matchArchiveRef = { id: photo.id, full: largest.avif, name: photo.filename };
+  }
+}
 // A static echo of the board's own palette — see Layout's `accent` prop.
 // Inspiration has no scroll narrative to drive this dynamically the way the
 // archive does, so it's one representative hue for the whole page rather
@@ -93,6 +109,8 @@ const accent = manifest.chapters[0]
       )
     }
   </main>
+
+  <script type="application/json" id="match-archive-data" is:inline set:html={JSON.stringify(matchArchiveRef)} />
 
   <!-- Floating tray: the group of similarly-edited references being built up
        across the board, one "+ group" tap at a time. Only ever visible with
@@ -1578,14 +1596,11 @@ const accent = manifest.chapters[0]
     return btn?.dataset.full ? { full: btn.dataset.full, name: btn.dataset.name || id } : null;
   }
 
-  /** Opens the workbench for one or several references — a plain "◐ match"
-   *  tap passes one id, "Match this look" from the group tray passes several
-   *  at once. The single entry point both paths share, so a click and a
-   *  group-tray open can never fall out of sync with each other. */
-  function openWorkbench(ids: string[]) {
-    const picked = ids
-      .map((id) => ({ id, ...boardMatchRef(id) }))
-      .filter((r): r is { id: string; full: string; name: string } => Boolean(r.full));
+  /** Opens the workbench for references already resolved to a preview URL
+   *  and name — shared by a board tap (resolved via `boardMatchRef`) and a
+   *  reference arriving pre-resolved from elsewhere, such as the archive
+   *  lightbox's "Match this look", which is not on this board's DOM at all. */
+  function openWorkbenchWithRefs(picked: { id: string; full: string; name: string }[]) {
     if (!picked.length) return;
     refs = picked.map((r) => ({ id: r.id, url: r.full, name: r.name, weight: 1 }));
     renderRefs();
@@ -1606,12 +1621,31 @@ const accent = manifest.chapters[0]
     document.body.style.overflow = 'hidden';
   }
 
+  /** Opens the workbench for one or several board references — a plain
+   *  "◐ match" tap passes one id, "Match this look" from the group tray
+   *  passes several at once. */
+  function openWorkbench(ids: string[]) {
+    const picked = ids
+      .map((id) => ({ id, ...boardMatchRef(id) }))
+      .filter((r): r is { id: string; full: string; name: string } => Boolean(r.full));
+    openWorkbenchWithRefs(picked);
+  }
+
   document.getElementById('board')?.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('.cell-match');
     if (!btn) return;
     e.stopPropagation();
     openWorkbench([btn.dataset.match || '']);
   });
+
+  // Arriving from the archive lightbox's "Match this look" (index.astro,
+  // ?match=<archive id>) — pre-resolved server-side in the frontmatter into
+  // #match-archive-data, since the photo is not necessarily on this board.
+  {
+    const raw = document.getElementById('match-archive-data')?.textContent;
+    const ref = raw ? (JSON.parse(raw) as { id: string; full: string; name: string } | null) : null;
+    if (ref) openWorkbenchWithRefs([ref]);
+  }
 
   // The group tray lives in the *other* script on this page (`is:inline`,
   // sharing no scope with this module) — see `window.getGroupIds` there.
