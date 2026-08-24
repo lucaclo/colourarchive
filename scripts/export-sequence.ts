@@ -7,14 +7,17 @@
  */
 import fs from 'node:fs/promises';
 import { readManifest } from '../src/lib/manifest';
+import { readBookCuration, curatedChapters } from '../src/lib/book';
 import { EXPORT_PATH } from '../src/lib/paths';
 
 async function main() {
   const manifest = await readManifest();
+  const curation = await readBookCuration();
+  const chapters = curatedChapters(manifest.chapters, curation);
   const sequence = {
     generatedAt: new Date().toISOString(),
-    count: manifest.count,
-    chapters: manifest.chapters.map((ch) => ({
+    count: chapters.reduce((n, ch) => n + ch.photos.length, 0),
+    chapters: chapters.map((ch) => ({
       key: ch.key,
       name: ch.name,
       oklch: ch.oklch,
@@ -27,7 +30,7 @@ async function main() {
     })),
   };
   await fs.writeFile(EXPORT_PATH, JSON.stringify(sequence, null, 2));
-  console.log(`Wrote ${EXPORT_PATH} — ${manifest.count} photos across ${manifest.chapters.length} chapters.`);
+  console.log(`Wrote ${EXPORT_PATH} — ${sequence.count} photos across ${chapters.length} chapters.`);
 }
 
 main().catch((err) => {
