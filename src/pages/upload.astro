@@ -55,10 +55,26 @@ const accent = manifest.chapters[0]
       <h2 class="manage-head">
         In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
       </h2>
-      <p class="manage-note">Hover to remove, or flip film / digital.</p>
+      <p class="manage-note">Hover to remove, or flip film / digital. Click to select, shift-click for a range.</p>
       <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
         <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
+      </div>
+      <div class="bulk-bar" id="bulk-bar" hidden>
+        <span class="bulk-count" id="bulk-count">0 selected</span>
+        <div class="bulk-actions">
+          <button type="button" class="bulk-btn" id="bulk-film">Film</button>
+          <button type="button" class="bulk-btn" id="bulk-digital">Digital</button>
+          <select class="bulk-genre" id="bulk-genre" aria-label="Set genre for selected">
+            <option value="" selected disabled>Genre…</option>
+            <option value="street">Street</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+            <option value="architecture">Architecture</option>
+          </select>
+          <button type="button" class="bulk-btn bulk-remove" id="bulk-remove">Remove</button>
+          <button type="button" class="bulk-btn bulk-clear" id="bulk-clear">Clear</button>
+        </div>
       </div>
       <div class="grid" id="grid">
         {allPhotos.map((p) => (
@@ -67,6 +83,7 @@ const accent = manifest.chapters[0]
             <button class="cell-remove" type="button" data-remove={p.id} aria-label={`Remove ${p.filename}`}>×</button>
             <button class="cell-medium" type="button" data-medium-btn={p.id} title="Toggle film / digital">{p.medium}</button>
             <button class="cell-genre" type="button" data-genre-btn={p.id} title="Change genre">{p.genre ? GENRE_LABEL[p.genre] : '— genre'}</button>
+            <span class="cell-select-mark" aria-hidden="true">✓</span>
             <figcaption>{p.chapterName}</figcaption>
           </figure>
         ))}
@@ -145,6 +162,37 @@ const accent = manifest.chapters[0]
   .manage-note code { font-size: 0.92em; }
   .manage-search { margin: -0.6rem 0 1rem; }
   .manage-search input { width: 14rem; }
+
+  .bulk-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    margin: -0.4rem 0 1rem; padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border); border-radius: 2px;
+    background: color-mix(in oklab, var(--fg) 3%, transparent);
+  }
+  .bulk-count {
+    font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); flex: 0 0 auto;
+  }
+  .bulk-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .bulk-btn, .bulk-genre {
+    appearance: none; cursor: pointer; border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--fg);
+    font-family: var(--font-label); font-size: 0.64rem; letter-spacing: 0.08em;
+    padding: 0.32rem 0.7rem; transition: border-color 140ms, background 140ms;
+  }
+  .bulk-btn:hover, .bulk-genre:hover { border-color: var(--accent-hair); }
+  .bulk-remove.armed { border-color: #c0392b; background: color-mix(in oklab, #c0392b 25%, transparent); }
+
+  :global(.cell.selected) { box-shadow: 0 0 0 2px var(--accent-mix) inset; cursor: pointer; }
+  :global(.cell) { cursor: pointer; }
+  :global(.cell .cell-select-mark) {
+    position: absolute; right: 6px; bottom: 6px; z-index: 2;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent-mix); color: #fff;
+    font-size: 11px; line-height: 18px; text-align: center;
+    opacity: 0; transform: scale(0.6); transition: opacity 120ms, transform 120ms;
+  }
+  :global(.cell.selected .cell-select-mark) { opacity: 1; transform: none; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
   :global(.cell) {
     position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: var(--border);
@@ -485,11 +533,14 @@ const accent = manifest.chapters[0]
     };
     const cap = document.createElement('figcaption');
     cap.textContent = r.chapterName || '';
+    const mark = document.createElement('span');
+    mark.className = 'cell-select-mark'; mark.setAttribute('aria-hidden', 'true'); mark.textContent = '✓';
     fig.append(
       img,
       btn('cell-remove', '×', 'remove', r.id, `Remove ${r.filename}`),
       btn('cell-medium', r.medium || 'digital', 'mediumBtn', r.id),
       btn('cell-genre', r.genre ? GENRE_LABELS[r.genre] : '— genre', 'genreBtn', r.id),
+      mark,
       cap,
     );
     grid.prepend(fig);
@@ -529,6 +580,138 @@ const accent = manifest.chapters[0]
     const q = e.target.value.trim();
     manageSearchTimer = setTimeout(() => runManageSearch(q), 350);
   });
+
+  // ======================================================================
+  //  Bulk select — shift-click range-select, the interaction already
+  //  familiar from Finder/Photos, feeding /api/label and /api/genre in a
+  //  loop rather than one photo, one confirm, one request at a time.
+  // ======================================================================
+  const bulkBar = document.getElementById('bulk-bar');
+  const bulkCount = document.getElementById('bulk-count');
+  const bulkFilm = document.getElementById('bulk-film');
+  const bulkDigital = document.getElementById('bulk-digital');
+  const bulkGenre = document.getElementById('bulk-genre');
+  const bulkRemove = document.getElementById('bulk-remove');
+  const bulkClear = document.getElementById('bulk-clear');
+
+  const selected = new Set(); // photo ids
+  let selectAnchor = null;
+
+  const cellFor = (id) => grid?.querySelector(`.cell[data-id="${id}"]`);
+  const orderedIds = () => (grid ? [...grid.children].map((c) => c.dataset.id) : []);
+
+  function updateBulkBar() {
+    if (!bulkBar) return;
+    bulkBar.hidden = selected.size === 0;
+    if (bulkCount) bulkCount.textContent = `${selected.size} selected`;
+  }
+  function setSelected(id, on) {
+    const cell = cellFor(id);
+    if (!cell) return;
+    if (on) { selected.add(id); cell.classList.add('selected'); }
+    else { selected.delete(id); cell.classList.remove('selected'); }
+  }
+  function clearSelection() {
+    for (const id of selected) cellFor(id)?.classList.remove('selected');
+    selected.clear();
+    selectAnchor = null;
+    updateBulkBar();
+  }
+
+  grid?.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return; // per-cell remove/medium/genre have their own handler
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    const id = cell.dataset.id;
+    if (e.shiftKey && selectAnchor && cellFor(selectAnchor)) {
+      const ids = orderedIds();
+      const a = ids.indexOf(selectAnchor);
+      const b = ids.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        for (let i = lo; i <= hi; i++) setSelected(ids[i], true);
+      }
+    } else {
+      setSelected(id, !selected.has(id));
+      selectAnchor = id;
+    }
+    updateBulkBar();
+  });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected.size) clearSelection(); });
+
+  async function bulkSetMedium(next) {
+    await Promise.all([...selected].map(async (id) => {
+      const cell = cellFor(id);
+      if (!cell) return;
+      const prev = cell.dataset.medium;
+      if (prev === next) return;
+      cell.dataset.medium = next;
+      const btn = cell.querySelector('.cell-medium');
+      if (btn) btn.textContent = next;
+      if (!(await post('/api/label', { id, medium: next }))) {
+        cell.dataset.medium = prev;
+        if (btn) btn.textContent = prev;
+      }
+    }));
+  }
+  bulkFilm?.addEventListener('click', () => bulkSetMedium('film'));
+  bulkDigital?.addEventListener('click', () => bulkSetMedium('digital'));
+
+  bulkGenre?.addEventListener('change', async () => {
+    const next = bulkGenre.value;
+    if (!next) return;
+    await Promise.all([...selected].map(async (id) => {
+      const cell = cellFor(id);
+      if (!cell) return;
+      const prev = cell.dataset.genre;
+      cell.dataset.genre = next;
+      const btn = cell.querySelector('.cell-genre');
+      if (btn) btn.textContent = GENRE_LABELS[next];
+      if (!(await post('/api/genre', { id, genre: next }))) {
+        cell.dataset.genre = prev;
+        if (btn) btn.textContent = prev ? GENRE_LABELS[prev] : '— genre';
+      }
+    }));
+    bulkGenre.value = '';
+  });
+
+  let bulkRemoveArmed = false;
+  let bulkRemoveTimer = 0;
+  const disarmBulkRemove = () => {
+    bulkRemoveArmed = false;
+    clearTimeout(bulkRemoveTimer);
+    if (bulkRemove) { bulkRemove.textContent = 'Remove'; bulkRemove.classList.remove('armed'); }
+  };
+  bulkRemove?.addEventListener('click', async () => {
+    if (!bulkRemoveArmed) {
+      bulkRemoveArmed = true;
+      bulkRemove.textContent = `Remove ${selected.size}? Click again`;
+      bulkRemove.classList.add('armed');
+      clearTimeout(bulkRemoveTimer);
+      bulkRemoveTimer = setTimeout(disarmBulkRemove, 2600);
+      return;
+    }
+    clearTimeout(bulkRemoveTimer);
+    bulkRemoveArmed = false;
+    bulkRemove.textContent = '…';
+    const ids = [...selected];
+    const results = await Promise.all(ids.map((id) => post('/api/remove', { id })));
+    ids.forEach((id, i) => {
+      if (results[i]) { cellFor(id)?.remove(); selected.delete(id); }
+    });
+    bulkRemove.textContent = 'Remove';
+    bulkRemove.classList.remove('armed');
+    if (manageCount) manageCount.textContent = String(grid.children.length);
+    if (manage && grid.children.length === 0) manage.hidden = true;
+    if (manageSearchBox && grid.children.length === 0) manageSearchBox.hidden = true;
+    updateBulkBar();
+  });
+  bulkClear?.addEventListener('click', clearSelection);
+  // Clicking anywhere outside the bar or the grid's cells cancels an armed
+  // bulk-remove, same reasoning as the per-cell confirm below.
+  document.addEventListener('click', (e) => {
+    if (bulkRemoveArmed && !e.target.closest('.bulk-remove')) disarmBulkRemove();
+  }, true);
 
   // One delegated listener for the whole grid, so cells added after load behave
   // exactly like the ones rendered on the server.
@@ -574,6 +757,8 @@ const accent = manifest.chapters[0]
       }
       armed = null; target.textContent = '…';
       if (await post('/api/remove', { id: cell.dataset.id })) {
+        selected.delete(cell.dataset.id);
+        updateBulkBar();
         cell.remove();
         if (manageCount) manageCount.textContent = String(grid.children.length);
         if (manage && grid.children.length === 0) manage.hidden = true;
