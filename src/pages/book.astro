@@ -29,7 +29,8 @@ const accent = manifest.chapters[0]
       <h1>The book</h1>
       <p class="lead">
         The sequence <code>export:sequence</code> and <code>export:print</code> build — drag to reorder within a
-        chapter, click a photo to leave it out. <span id="book-count">{includedCount} of {manifest.count} in the book</span>.
+        chapter (or focus a photo and use the arrow keys), click a photo to leave it out.{' '}
+        <span id="book-count">{includedCount} of {manifest.count} in the book</span>.
       </p>
     </header>
 
@@ -48,7 +49,14 @@ const accent = manifest.chapters[0]
               </h2>
               <ul class="book-grid" data-chapter-list={ch.key}>
                 {ch.photos.map((p) => (
-                  <li class="book-cell" draggable="true" data-id={p.id} data-excluded={p.excluded ? '1' : ''}>
+                  <li
+                    class="book-cell"
+                    draggable="true"
+                    tabindex="0"
+                    data-id={p.id}
+                    data-excluded={p.excluded ? '1' : ''}
+                    aria-label={`${p.filename} — arrow keys to move within this chapter`}
+                  >
                     <img src={p.avif} alt="" loading="lazy" />
                     <button
                       type="button"
@@ -106,6 +114,7 @@ const accent = manifest.chapters[0]
   .book-cell img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   .book-cell[data-excluded='1'] { opacity: 0.32; }
   .book-cell.dragging { opacity: 0.4; }
+  .book-cell:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
   .book-cell.drop-before { box-shadow: -3px 0 0 var(--accent-mix) inset; }
   .book-cell.drop-after { box-shadow: 3px 0 0 var(--accent-mix) inset; }
   .book-cell figcaption {
@@ -239,6 +248,43 @@ const accent = manifest.chapters[0]
       const before = over.classList.contains('drop-before') || (!over.classList.contains('drop-after') &&
         e.clientX - over.getBoundingClientRect().left < over.getBoundingClientRect().width / 2);
       over.insertAdjacentElement(before ? 'beforebegin' : 'afterend', dragging);
+      markDirty();
+    });
+  });
+
+  // --- Keyboard-precise reorder, one chapter's list at a time ---------------
+  // Drag is imprecise for "move this plate exactly one spot left" — curation
+  // here is precision-over-speed work, so arrow keys nudge the focused photo
+  // by one position (Left/Right) or one row (Up/Down), alongside drag rather
+  // than instead of it.
+  function columnsInRow(cells) {
+    if (!cells.length) return 1;
+    const firstTop = cells[0].offsetTop;
+    let cols = 0;
+    for (const c of cells) {
+      if (c.offsetTop !== firstTop) break;
+      cols++;
+    }
+    return Math.max(cols, 1);
+  }
+
+  document.querySelectorAll('.book-grid').forEach((list) => {
+    list.addEventListener('keydown', (e) => {
+      const cell = e.target.closest('.book-cell');
+      if (!cell || !list.contains(cell)) return;
+      const deltas = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: 0, ArrowDown: 0 };
+      if (!(e.key in deltas)) return;
+      e.preventDefault();
+      const cells = [...list.querySelectorAll('.book-cell')];
+      const from = cells.indexOf(cell);
+      const cols = columnsInRow(cells);
+      const delta = e.key === 'ArrowUp' ? -cols : e.key === 'ArrowDown' ? cols : deltas[e.key];
+      const to = Math.min(Math.max(from + delta, 0), cells.length - 1);
+      if (to === from) return;
+      const ref = cells[to];
+      if (to < from) ref.insertAdjacentElement('beforebegin', cell);
+      else ref.insertAdjacentElement('afterend', cell);
+      cell.focus();
       markDirty();
     });
   });
