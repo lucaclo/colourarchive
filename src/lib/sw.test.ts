@@ -137,10 +137,21 @@ function boot(options: {
   };
 
   /** Hand the worker a warm list, the way the page does on load. */
-  const warm = async (urls: string[]) => {
+  const warm = async (urls: string[], opts: { sig?: string; path?: string } = {}) => {
     let work: Promise<unknown> | undefined;
     handlers.message?.({
-      data: { type: 'WARM', urls },
+      data: { type: 'WARM', urls, sig: opts.sig, path: opts.path },
+      waitUntil: (p: Promise<unknown>) => (work = p),
+    });
+    await work;
+    return messages[messages.length - 1] ?? {};
+  };
+
+  /** Hand the worker a signature check, the way the page does before `warm`. */
+  const warmSig = async (sig: string, path = '/') => {
+    let work: Promise<unknown> | undefined;
+    handlers.message?.({
+      data: { type: 'WARM_SIG', sig, path },
       waitUntil: (p: Promise<unknown>) => (work = p),
     });
     await work;
@@ -151,6 +162,7 @@ function boot(options: {
     request,
     activate,
     warm,
+    warmSig,
     messages,
     cache,
     /**
@@ -299,6 +311,50 @@ describe('the service worker: warming the snapshot', () => {
     assert.equal(done.done, 5, 'the bar must always reach the end');
     assert.equal(done.have, 0);
     assert.equal(done.full, false, 'a dead network is not a full cache');
+  });
+});
+
+describe('the service worker: the signature fast path', () => {
+  const photos = (n: number) =>
+    Array.from({ length: n }, (_, i) => `${ORIGIN}/img/photo-${i}.avif`);
+
+  it('asks for the full list on a signature it has never recorded', async () => {
+    const sw = boot();
+    const res = await sw.warmSig('sig-a', '/');
+    assert.equal(res.type, 'WARM_NEED_URLS');
+  });
+
+  it('answers from the record instead of re-walking the cache once a run has completed', async () => {
+    const sw = boot();
+    await sw.warm(photos(5), { sig: 'sig-a', path: '/' });
+    const res = await sw.warmSig('sig-a', '/');
+    assert.equal(res.type, 'WARM_DONE');
+    assert.equal(res.have, 5);
+    assert.equal(res.total, 5);
+    assert.equal(res.added, 0, 'nothing new — this is the whole point');
+  });
+
+  it('asks for the full list again once the signature changes', async () => {
+    const sw = boot();
+    await sw.warm(photos(5), { sig: 'sig-a', path: '/' });
+    const res = await sw.warmSig('sig-b', '/');
+    assert.equal(res.type, 'WARM_NEED_URLS');
+  });
+
+  it('keeps one page from answering for another', async () => {
+    // `/`'s signature saying nothing changed says nothing about `/inspiration`.
+    const sw = boot();
+    await sw.warm(photos(5), { sig: 'sig-a', path: '/' });
+    const res = await sw.warmSig('sig-a', '/inspiration');
+    assert.equal(res.type, 'WARM_NEED_URLS');
+  });
+
+  it('does not record a run that ran out of room, so the next visit still retries it', async () => {
+    const sw = boot();
+    sw.cache.room = 2;
+    await sw.warm(photos(5), { sig: 'sig-a', path: '/' });
+    const res = await sw.warmSig('sig-a', '/');
+    assert.equal(res.type, 'WARM_NEED_URLS', 'a full run must not look complete next time');
   });
 });
 
