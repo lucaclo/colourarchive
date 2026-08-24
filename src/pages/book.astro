@@ -1,0 +1,279 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { readManifest } from '../lib/manifest';
+import { readBookCuration, orderedChaptersWithExclusions } from '../lib/book';
+import { oklchCss } from '../lib/color';
+
+export const prerender = false;
+
+const manifest = await readManifest();
+const curation = await readBookCuration();
+const chapters = orderedChaptersWithExclusions(manifest.chapters, curation);
+const includedCount = chapters.reduce((n, ch) => n + ch.photos.filter((p) => !p.excluded).length, 0);
+
+// Same static echo as upload.astro's — see Layout's `accent` prop.
+const accent = manifest.chapters[0]
+  ? oklchCss({ L: 0.78, C: Math.min(manifest.chapters[0].oklch.C, 0.11), H: manifest.chapters[0].oklch.H })
+  : undefined;
+---
+
+<Layout title="The book — Colour Archive" accent={accent}>
+  <header class="topbar" id="topbar">
+    <span class="brand">Colour Archive</span>
+    <span class="topbar-right"><a href="/">View archive</a></span>
+  </header>
+
+  <main class="book-page">
+    <header class="book-head">
+      <p class="kicker">Colour Archive</p>
+      <h1>The book</h1>
+      <p class="lead">
+        The sequence <code>export:sequence</code> and <code>export:print</code> build — drag to reorder within a
+        chapter, click a photo to leave it out. <span id="book-count">{includedCount} of {manifest.count} in the book</span>.
+      </p>
+    </header>
+
+    {
+      chapters.length === 0 ? (
+        <p class="book-empty">Nothing in the archive yet.</p>
+      ) : (
+        <div id="book-chapters">
+          {chapters.map((ch) => (
+            <section class="book-chapter" data-chapter={ch.key}>
+              <h2 class="book-chapter-head">
+                {ch.name}
+                <span class="book-chapter-count" data-chapter-count={ch.key}>
+                  {ch.photos.filter((p) => !p.excluded).length}/{ch.photos.length}
+                </span>
+              </h2>
+              <ul class="book-grid" data-chapter-list={ch.key}>
+                {ch.photos.map((p) => (
+                  <li class="book-cell" draggable="true" data-id={p.id} data-excluded={p.excluded ? '1' : ''}>
+                    <img src={p.avif} alt="" loading="lazy" />
+                    <button
+                      type="button"
+                      class="book-exclude"
+                      data-exclude={p.id}
+                      aria-pressed={p.excluded}
+                      title={p.excluded ? 'Include in the book' : 'Leave out of the book'}
+                    >
+                      {p.excluded ? '+' : '×'}
+                    </button>
+                    <span class="book-handle" aria-hidden="true">⠿⠿</span>
+                    <figcaption>{p.filename}</figcaption>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )
+    }
+  </main>
+
+  <div class="book-savebar" id="book-savebar" hidden>
+    <span id="book-savebar-text">Unsaved changes</span>
+    <button type="button" class="ghost" id="book-save">Save</button>
+  </div>
+</Layout>
+
+<style>
+  .book-page { max-width: 72rem; margin: 0 auto; padding: 8rem 6vw 12vh; }
+  .kicker { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .book-head h1 {
+    font-family: var(--font-display); font-weight: var(--title-weight); font-style: var(--title-style);
+    font-size: clamp(2.2rem, 5.5vw, 3.8rem); letter-spacing: var(--title-tracking);
+    margin: 0.3rem 0 0.6rem; line-height: 1;
+  }
+  .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 44rem; }
+  .lead code { font-size: 0.92em; }
+  #book-count { color: var(--fg); }
+  .book-empty { color: var(--muted); }
+
+  .book-chapter { margin-bottom: 3rem; }
+  .book-chapter-head {
+    font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
+    font-size: 1.4rem; margin: 0 0 1rem; display: flex; align-items: baseline; gap: 0.6rem;
+  }
+  .book-chapter-count { font-family: var(--font-label); font-size: 0.85rem; color: var(--muted); }
+
+  .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; }
+  .book-cell {
+    position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: var(--border);
+    border-radius: 2px; cursor: grab; transition: box-shadow 220ms var(--ease), opacity 200ms var(--ease);
+  }
+  .book-cell:active { cursor: grabbing; }
+  .book-cell img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+  .book-cell[data-excluded='1'] { opacity: 0.32; }
+  .book-cell.dragging { opacity: 0.4; }
+  .book-cell.drop-before { box-shadow: -3px 0 0 var(--accent-mix) inset; }
+  .book-cell.drop-after { box-shadow: 3px 0 0 var(--accent-mix) inset; }
+  .book-cell figcaption {
+    position: absolute; left: 0; bottom: 0; right: 0;
+    font-family: var(--font-label); font-size: 0.55rem; letter-spacing: 0.04em;
+    color: #fff; padding: 0.3rem 0.35rem; pointer-events: none;
+    background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .book-exclude {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
+    background: color-mix(in oklab, #000 55%, transparent); color: #fff;
+    font-size: 15px; line-height: 26px; text-align: center;
+    transition: background 140ms, transform 110ms ease-out; backdrop-filter: blur(6px);
+  }
+  .book-exclude:hover { background: color-mix(in oklab, #c0392b 82%, transparent); }
+  .book-exclude:active { transform: scale(0.88); }
+  .book-cell[data-excluded='1'] .book-exclude { background: color-mix(in oklab, #2e7d32 78%, transparent); }
+  .book-cell[data-excluded='1'] .book-exclude:hover { background: color-mix(in oklab, #2e7d32 95%, transparent); }
+  .book-handle {
+    position: absolute; top: 6px; left: 6px; z-index: 2;
+    color: #fff; font-size: 11px; line-height: 1; letter-spacing: -2px;
+    background: color-mix(in oklab, #000 55%, transparent); border-radius: 999px;
+    padding: 0.3rem 0.35rem; backdrop-filter: blur(6px); pointer-events: none;
+  }
+
+  .book-savebar {
+    position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 40;
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.6rem 0.6rem 0.6rem 1rem; border-radius: 999px;
+    background: color-mix(in oklab, var(--bg) 90%, #000); border: 1px solid var(--border);
+    box-shadow: 0 10px 30px -10px color-mix(in oklab, black 55%, transparent);
+  }
+  .book-savebar[hidden] { display: none; }
+  #book-savebar-text { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
+  #book-save {
+    appearance: none; cursor: pointer; border: 0; border-radius: 999px;
+    background: var(--fg); color: var(--bg); font-family: var(--font-label);
+    font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.55rem 1.1rem; transition: transform 110ms ease-out, opacity 140ms;
+  }
+  #book-save:active { transform: scale(0.96); }
+  #book-save:disabled { opacity: 0.6; cursor: default; }
+
+  @media (max-width: 620px) {
+    .book-page { padding: 7rem 5vw 14vh; }
+    .book-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  }
+</style>
+
+<script is:inline>
+  // Drag-reorder within a chapter (native HTML5 DnD — no library) and a
+  // per-photo include/exclude toggle, saved together as one POST to
+  // /api/book. See src/lib/book.ts for the curation this reads and writes.
+  let dirty = false;
+  const savebar = document.getElementById('book-savebar');
+  const saveBtn = document.getElementById('book-save');
+  const saveText = document.getElementById('book-savebar-text');
+
+  function markDirty() {
+    dirty = true;
+    savebar.hidden = false;
+    saveText.textContent = 'Unsaved changes';
+    saveBtn.disabled = false;
+  }
+
+  // --- Exclude toggle ------------------------------------------------------
+  document.getElementById('book-chapters')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.book-exclude');
+    if (!btn) return;
+    const cell = btn.closest('.book-cell');
+    const excluded = cell.dataset.excluded === '1';
+    cell.dataset.excluded = excluded ? '' : '1';
+    btn.setAttribute('aria-pressed', String(!excluded));
+    btn.textContent = excluded ? '×' : '+';
+    btn.title = excluded ? 'Leave out of the book' : 'Include in the book';
+    updateChapterCount(cell.closest('.book-chapter'));
+    updateTotalCount();
+    markDirty();
+  });
+
+  function updateChapterCount(section) {
+    const key = section.dataset.chapter;
+    const cells = section.querySelectorAll('.book-cell');
+    const included = [...cells].filter((c) => c.dataset.excluded !== '1').length;
+    const countEl = document.querySelector(`[data-chapter-count="${CSS.escape(key)}"]`);
+    if (countEl) countEl.textContent = `${included}/${cells.length}`;
+  }
+
+  function updateTotalCount() {
+    const cells = document.querySelectorAll('.book-cell');
+    const included = [...cells].filter((c) => c.dataset.excluded !== '1').length;
+    const el = document.getElementById('book-count');
+    if (el) el.textContent = `${included} of ${cells.length} in the book`;
+  }
+
+  // --- Drag-reorder, one chapter's list at a time ---------------------------
+  let dragging = null;
+  document.querySelectorAll('.book-grid').forEach((list) => {
+    list.addEventListener('dragstart', (e) => {
+      const cell = e.target.closest('.book-cell');
+      if (!cell) return;
+      dragging = cell;
+      cell.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox requires data to be set for a drag to start at all.
+      e.dataTransfer.setData('text/plain', cell.dataset.id || '');
+    });
+    list.addEventListener('dragend', () => {
+      dragging?.classList.remove('dragging');
+      list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
+      dragging = null;
+    });
+    list.addEventListener('dragover', (e) => {
+      if (!dragging || !list.contains(dragging)) return;
+      e.preventDefault();
+      const over = e.target.closest('.book-cell');
+      list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
+      if (!over || over === dragging) return;
+      const rect = over.getBoundingClientRect();
+      const before = e.clientX - rect.left < rect.width / 2;
+      over.classList.add(before ? 'drop-before' : 'drop-after');
+    });
+    list.addEventListener('drop', (e) => {
+      if (!dragging || !list.contains(dragging)) return;
+      e.preventDefault();
+      const over = e.target.closest('.book-cell');
+      list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
+      if (!over || over === dragging) return;
+      const before = over.classList.contains('drop-before') || (!over.classList.contains('drop-after') &&
+        e.clientX - over.getBoundingClientRect().left < over.getBoundingClientRect().width / 2);
+      over.insertAdjacentElement(before ? 'beforebegin' : 'afterend', dragging);
+      markDirty();
+    });
+  });
+
+  // --- Save ------------------------------------------------------------
+  saveBtn?.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    saveText.textContent = 'Saving…';
+    const chapters = {};
+    const excluded = [];
+    document.querySelectorAll('.book-grid').forEach((list) => {
+      const key = list.dataset.chapterList;
+      chapters[key] = [...list.querySelectorAll('.book-cell')].map((c) => c.dataset.id);
+      list.querySelectorAll('.book-cell[data-excluded="1"]').forEach((c) => excluded.push(c.dataset.id));
+    });
+    try {
+      const res = await fetch('/api/book', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ chapters, excluded }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Save failed.');
+      dirty = false;
+      saveText.textContent = 'Saved';
+      setTimeout(() => { if (!dirty) savebar.hidden = true; }, 1600);
+    } catch (err) {
+      saveText.textContent = err.message || 'Save failed.';
+      saveBtn.disabled = false;
+    }
+  });
+
+  addEventListener('beforeunload', (e) => {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+</script>

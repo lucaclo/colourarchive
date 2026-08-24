@@ -19,6 +19,11 @@ export const INSPIRATION_STORE = path.join(ROOT, 'src', 'data', 'inspiration.jso
 export const INSPIRATION_MANIFEST = path.join(ROOT, 'src', 'data', 'inspiration.manifest.json');
 export const OVERRIDES_PATH = path.join(ROOT, 'photos.overrides.json');
 export const EXPORT_PATH = path.join(ROOT, 'sequence.json');
+// The book's own curation — issue #82. Deliberately separate from
+// OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
+// medium, genre) for the whole archive, while this changes only whether and
+// where a photo sits in one particular curated object, the printed book.
+export const BOOK_PATH = path.join(ROOT, 'src', 'data', 'book.json');
 
 // Style Match.
 //

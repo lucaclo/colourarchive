@@ -9,6 +9,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readManifest } from '../src/lib/manifest';
+import { readBookCuration, curatedChapters } from '../src/lib/book';
 import { oklchCss } from '../src/lib/color';
 import { ROOT } from '../src/lib/paths';
 
@@ -17,11 +18,13 @@ const titleFg = (L: number) => (L > 0.62 ? '#0a0a0a' : '#f6f6f4');
 
 async function main() {
   const manifest = await readManifest();
+  const curation = await readBookCuration();
+  const chapters = curatedChapters(manifest.chapters, curation);
   const roman = (n: number) =>
     ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI'][n] ?? String(n + 1);
 
   let pages = '';
-  manifest.chapters.forEach((ch, ci) => {
+  chapters.forEach((ch, ci) => {
     const bg = oklchCss(ch.oklch);
     const fg = titleFg(ch.oklch.L);
     pages += `<section class="page divider" style="background:${bg};color:${fg}">
@@ -49,7 +52,8 @@ ${pages}</body></html>`;
 
   const out = path.join(ROOT, 'print.html');
   await fs.writeFile(out, html);
-  console.log(`Wrote ${out} — ${manifest.count} plates across ${manifest.chapters.length} chapters.`);
+  const plateCount = chapters.reduce((n, ch) => n + ch.photos.length, 0);
+  console.log(`Wrote ${out} — ${plateCount} plates across ${chapters.length} chapters.`);
   console.log('Open it in a browser and Print → Save as PDF. Tune @page in the file for your book size.');
 }
 
