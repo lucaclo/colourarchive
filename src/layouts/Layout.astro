@@ -116,36 +116,104 @@ const {
       // localhost) — iOS refuses service workers otherwise.
       (function () {
         if (!('serviceWorker' in navigator)) return;
+
+        // Resolve a `sizes` descriptor to the CSS length that applies at the
+        // current viewport (the same "first matching condition wins, last
+        // one is the default" the browser itself uses) — only `NNvw`/`NNpx`
+        // tokens, which is all this app's own `sizes` attributes ever use.
+        function resolveSizes(sizes) {
+          const parts = sizes.split(',').map((s) => s.trim());
+          for (const part of parts) {
+            const m = part.match(/^(\(.*?\))\s+(.+)$/);
+            if (!m) return part;
+            if (matchMedia(m[1]).matches) return m[2];
+          }
+          return parts[parts.length - 1];
+        }
+        function lengthToPx(length) {
+          const vw = length.match(/^([\d.]+)vw$/);
+          if (vw) return (parseFloat(vw[1]) / 100) * innerWidth;
+          const px = length.match(/^([\d.]+)px$/);
+          return px ? parseFloat(px[1]) : null;
+        }
+        // The masonry grid's own `srcset` always lists all three derivative
+        // widths (640/1280/2000w), but `sizes` caps its rendered width well
+        // under what the 2000w tier is for — the grid never needs it, only
+        // the lightbox does, at a `sizes` this function was never asked to
+        // resolve because the lightbox's own `<img>` carries no `srcset`
+        // until a photo is actually opened. So this only ever trims what the
+        // *current* element could actually render: one candidate — the
+        // smallest whose width covers the rendered size at this device's
+        // pixel ratio — rather than every width the markup happens to list.
+        function neededSrcsetUrls(el) {
+          const candidates = (el.getAttribute('srcset') || '').split(',').map((part) => {
+            const [u, w] = part.trim().split(/\s+/);
+            return { u, w: w && w.endsWith('w') ? parseFloat(w) : null };
+          }).filter((c) => c.u);
+          const sizes = el.getAttribute('sizes');
+          if (!sizes || candidates.some((c) => c.w == null)) return candidates.map((c) => c.u);
+          const displayPx = lengthToPx(resolveSizes(sizes));
+          if (displayPx == null) return candidates.map((c) => c.u);
+          const neededPx = displayPx * (devicePixelRatio || 1);
+          const sorted = [...candidates].sort((a, b) => a.w - b.w);
+          const best = sorted.find((c) => c.w >= neededPx) || sorted[sorted.length - 1];
+          return [best.u];
+        }
+
+        // A cheap, non-cryptographic fingerprint of the URL set this page
+        // would warm — good enough to notice "this page's snapshot changed
+        // since last time", which is all it is used for.
+        function hashUrls(urls) {
+          const s = [...urls].sort().join('\n');
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return `${h.toString(36)}:${s.length}`;
+        }
+
+        function collectUrls() {
+          const urls = new Set([location.pathname]);
+          // srcset lives on <img> now (the <picture>/<source> wrapper was
+          // dropped — every derivative is AVIF), but keep reading <source>
+          // so any page still using one caches too.
+          document.querySelectorAll('img[srcset], source[srcset]').forEach((s) => {
+            neededSrcsetUrls(s).forEach((u) => { if (u && !u.startsWith('data:')) urls.add(u); });
+          });
+          document.querySelectorAll('img[src], [data-src]').forEach((el) => {
+            const u = el.getAttribute('src') || el.getAttribute('data-src');
+            if (u && !u.startsWith('data:')) urls.add(u);
+          });
+          // Fonts are ours now, so they belong in the snapshot too.
+          document.querySelectorAll('link[rel="preload"][as="font"]').forEach((l) => {
+            if (l.getAttribute('href')) urls.add(l.getAttribute('href'));
+          });
+          return urls;
+        }
+
         window.addEventListener('load', async () => {
           try {
             const reg = await navigator.serviceWorker.register('/sw.js');
             const warm = () => {
               if (!navigator.onLine) return;
-              const urls = new Set([location.pathname]);
-              // srcset lives on <img> now (the <picture>/<source> wrapper was
-              // dropped — every derivative is AVIF), but keep reading <source>
-              // so any page still using one caches too.
-              document.querySelectorAll('img[srcset], source[srcset]').forEach((s) => {
-                (s.getAttribute('srcset') || '').split(',').forEach((part) => {
-                  const u = part.trim().split(/\s+/)[0];
-                  if (u && !u.startsWith('data:')) urls.add(u);
-                });
-              });
-              document.querySelectorAll('img[src], [data-src]').forEach((el) => {
-                const u = el.getAttribute('src') || el.getAttribute('data-src');
-                if (u && !u.startsWith('data:')) urls.add(u);
-              });
-              // Fonts are ours now, so they belong in the snapshot too.
-              document.querySelectorAll('link[rel="preload"][as="font"]').forEach((l) => {
-                if (l.getAttribute('href')) urls.add(l.getAttribute('href'));
-              });
+              const urls = collectUrls();
               const sw = navigator.serviceWorker.controller || reg.active;
-              if (sw) sw.postMessage({ type: 'WARM', urls: Array.from(urls) });
+              if (!sw) return;
+              // Ask first whether this page's snapshot already matches what
+              // was last completed here — a few dozen bytes — instead of
+              // reaching straight for the full list. Only a mismatch (first
+              // visit, or the archive actually changed) sends it.
+              sw.postMessage({ type: 'WARM_SIG', sig: hashUrls(urls), path: location.pathname });
+              lastUrls = urls;
             };
+            let lastUrls = null;
             if (navigator.serviceWorker.controller) warm();
             else navigator.serviceWorker.addEventListener('controllerchange', warm, { once: true });
             navigator.serviceWorker.addEventListener('message', (e) => {
               const d = e.data || {};
+              if (d.type === 'WARM_NEED_URLS') {
+                const urls = lastUrls || collectUrls();
+                const sw = navigator.serviceWorker.controller || reg.active;
+                if (sw) sw.postMessage({ type: 'WARM', urls: Array.from(urls), sig: hashUrls(urls), path: location.pathname });
+              }
               if (d.type === 'WARM_PROGRESS') offlineProgress(d.done, d.total);
               if (d.type === 'WARM_DONE') offlineDone(d);
             });

@@ -133,10 +133,42 @@ async function networkFirst(req) {
   return (await Promise.race([network, patience])) || hit;
 }
 
-// The page hands us the full list of image URLs so the WHOLE archive caches on
-// a single visit, without having to scroll every photo into view first.
+// Per-page record of the last completed warm run, so a later visit that
+// changed nothing can be answered without walking the whole URL list again.
+// Keyed by pathname (a request in this origin's own cache) because each page
+// warms its own subset of the archive — `/`'s signature saying nothing
+// changed says nothing about whether `/inspiration` did.
+function signatureKey(path) {
+  return new Request(`${self.location.origin}/__warm_signature__${path}`);
+}
+
+async function notify(type, extra) {
+  const clients = await self.clients.matchAll();
+  clients.forEach((c) => c.postMessage(Object.assign({ type }, extra)));
+}
+
+// The page first hands us just a signature of the URL list it would send —
+// not the few hundred URLs themselves. If it matches what the last completed
+// run for this page already recorded, the snapshot is unchanged and we can
+// answer from that record with a single cache read instead of re-walking
+// cache.match over every image again for a page load that changed nothing.
+// A mismatch (first visit, or the archive changed) asks the page for the
+// real list, same as before this existed.
 self.addEventListener('message', (event) => {
   const data = event.data || {};
+  if (data.type === 'WARM_SIG' && typeof data.sig === 'string') {
+    event.waitUntil((async () => {
+      const cache = await caches.open(CACHE);
+      const stored = await cache.match(signatureKey(data.path || '/'));
+      const manifest = stored ? await stored.json().catch(() => null) : null;
+      if (manifest && manifest.sig === data.sig) {
+        await notify('WARM_DONE', { total: manifest.total, have: manifest.have, added: 0, full: false });
+      } else {
+        await notify('WARM_NEED_URLS');
+      }
+    })());
+    return;
+  }
   if (data.type !== 'WARM' || !Array.isArray(data.urls)) return;
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
@@ -196,6 +228,13 @@ self.addEventListener('message', (event) => {
       }
     };
     await Promise.all(Array.from({ length: Math.min(6, total) }, worker));
+    // Only a complete run is worth remembering. A `full` cache means this
+    // exact list still has gaps — recording it as "done" would make the next
+    // visit's signature check skip the very entries that still need a fetch,
+    // with no way to recover as more quota frees up.
+    if (!full && data.sig) {
+      await cache.put(signatureKey(data.path || '/'), new Response(JSON.stringify({ sig: data.sig, total, have })));
+    }
     await say('WARM_DONE', { full, have });
   })());
 });
