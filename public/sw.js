@@ -179,7 +179,12 @@ self.addEventListener('message', (event) => {
     let added = 0, have = 0, done = 0, lastPost = 0, full = false;
     const say = async (type, extra) => {
       const clients = await self.clients.matchAll();
-      clients.forEach((c) => c.postMessage(Object.assign({ type, total, done, added }, extra)));
+      // `tag` rides along untouched so a caller other than the automatic
+      // per-page warm (Scout's own "save this area", say) can tell its own
+      // run's progress apart from — and Layout.astro's generic pill can
+      // ignore — a run it didn't start. Untagged (the common case) comes
+      // back as `tag: undefined`, same as not being there at all.
+      clients.forEach((c) => c.postMessage(Object.assign({ type, total, done, added, tag: data.tag }, extra)));
     };
     const tick = () => {
       done++;

@@ -209,6 +209,10 @@ const {
             else navigator.serviceWorker.addEventListener('controllerchange', warm, { once: true });
             navigator.serviceWorker.addEventListener('message', (e) => {
               const d = e.data || {};
+              // A tagged run belongs to something else entirely (Scout's own
+              // "save this area", currently) — not this page's automatic
+              // per-load warm, and not this pill's business.
+              if (d.tag) return;
               if (d.type === 'WARM_NEED_URLS') {
                 const urls = lastUrls || collectUrls();
                 const sw = navigator.serviceWorker.controller || reg.active;
