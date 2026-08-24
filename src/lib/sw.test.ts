@@ -137,10 +137,10 @@ function boot(options: {
   };
 
   /** Hand the worker a warm list, the way the page does on load. */
-  const warm = async (urls: string[], opts: { sig?: string; path?: string } = {}) => {
+  const warm = async (urls: string[], opts: { sig?: string; path?: string; tag?: string } = {}) => {
     let work: Promise<unknown> | undefined;
     handlers.message?.({
-      data: { type: 'WARM', urls, sig: opts.sig, path: opts.path },
+      data: { type: 'WARM', urls, sig: opts.sig, path: opts.path, tag: opts.tag },
       waitUntil: (p: Promise<unknown>) => (work = p),
     });
     await work;
@@ -311,6 +311,22 @@ describe('the service worker: warming the snapshot', () => {
     assert.equal(done.done, 5, 'the bar must always reach the end');
     assert.equal(done.have, 0);
     assert.equal(done.full, false, 'a dead network is not a full cache');
+  });
+
+  it('echoes a tag back on every message, so one caller can tell its own run apart from another', async () => {
+    // Scout's own "save this area" button posts a tagged WARM alongside the
+    // archive's untagged, automatic per-page one — both land in the same
+    // client's message listener, and the tag is the only thing that lets
+    // either side ignore a run it didn't start.
+    const sw = boot();
+    const done = await sw.warm(photos(5), { tag: 'scout-area' });
+    assert.equal(done.tag, 'scout-area');
+  });
+
+  it('leaves the tag undefined for an untagged run, same as not being there at all', async () => {
+    const sw = boot();
+    const done = await sw.warm(photos(5));
+    assert.equal(done.tag, undefined);
   });
 });
 

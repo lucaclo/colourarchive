@@ -318,6 +318,7 @@ import { createTidePanel, type TideApiResponse } from './tide-panel';
 import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
 import { createAuroraPanel } from './aurora-panel';
 import { createSweepExport } from './sweep-export';
+import { createOfflineWarm } from './offline-warm';
 import { createMonthGrid } from './month-grid';
 import { createArCamera } from './ar-camera';
 import { createInfoTips } from './infotip';
@@ -7397,6 +7398,11 @@ export async function startScout(): Promise<void> {
     dayStart: () => day?.dayStart ?? new Date(),
     now: () => currentInstant() ?? new Date(),
     locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
+  });
+
+  createOfflineWarm({
+    centre: () => centre,
+    radiusKm: () => radiusKm,
   });
 
   on('open-month', 'click', () => {

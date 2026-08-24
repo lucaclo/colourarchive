@@ -474,13 +474,31 @@ the sun meets the ridge 3.1° up".
   than swallowed. The move that fixes it — walking a few hundred metres — is not
   built.
 
-### Part 8 — Field readiness *(not started)*
+### Part 8 — Field readiness *(DEM tiles done; map tiles, spot JSON and thumbs not started)*
 
-Extend the service worker to cache map tiles, DEM tiles, spot JSON and thumbs for the
-scouted radius. The cross-origin fix above is deliberately compatible with this: a
-`WARM` message still caches whatever URLs it is handed, and the network-first path
-falls back to those entries when there is no network. A "Save this area for offline" button. The sun and moon engines are pure
-maths and work offline already; `terrain.ts` caches tiles for the life of the page only.
+A "Save this area for offline" button (`offline-warm.ts`) now walks `tilesFor`'s
+z/x/y grid for the current radius, at the finest zoom that fits the same 64-tile
+ceiling `terrain-shadows.ts` already enforces, and hands the list to the SW's
+existing `WARM` message — no new caching mechanism, same one Layout.astro's own
+automatic per-page warm already uses, just tagged (`'scout-area'`) so its
+progress doesn't land in the archive's generic pill.
+
+Left out of this pass, and each a real gap rather than an oversight:
+- **Map tiles.** `tilesFor` only walks a raster z/x/y grid; Scout's light/dark
+  basemaps are vector styles MapLibre resolves internally, with no URL template
+  exposed for enumerating individual tiles the way DEM's is. Satellite (a raster
+  XYZ source, `SATELLITE_TILES` in `page.ts`) could reuse the same `tilesFor`
+  approach as DEM, as a follow-up.
+- **Spot JSON and thumbs.** `/api/scout/photos` is excluded from the SW's fetch
+  handler outright (`sw.js`'s blanket `/api/` bypass runs before any cache
+  logic), and Wikimedia's `.jpg` thumbnails aren't in `isCacheableAsset`'s
+  extension list — so even a `WARM`-cached copy of either would sit in Cache
+  Storage unused by the normal request path today. Needs a small, deliberate
+  `sw.js` change (narrowing the `/api/` bypass for this one route, adding
+  `jpg`/`jpeg`), not the "no new SW plumbing" this issue could get away with for
+  DEM alone.
+
+The sun and moon engines are pure maths and always worked offline.
 
 ### Part 9 — Polish *(done)*
 
