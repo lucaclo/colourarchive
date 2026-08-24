@@ -482,11 +482,12 @@ scouted radius. The cross-origin fix above is deliberately compatible with this:
 falls back to those entries when there is no network. A "Save this area for offline" button. The sun and moon engines are pure
 maths and work offline already; `terrain.ts` caches tiles for the life of the page only.
 
-### Part 9 — Polish *(largely done)*
+### Part 9 — Polish *(done)*
 
 Done: light/dark/satellite, contrast overrides, 2D/3D, pill controls, a bottom sheet, a
-compass, the collapsing panel, 44px touch targets, a mobile layout pass.
-Left: the layers menu is a plain list and could be a proper sheet on mobile.
+compass, the collapsing panel, 44px touch targets, a mobile layout pass, and — the one
+gap this used to leave open — the layers menu on mobile, now the same bottom sheet as
+everything else below 820px instead of a corner-anchored dropdown.
 
 ---
 

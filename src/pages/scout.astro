@@ -3276,7 +3276,29 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
        bottom offset .edge does two lines up, and .edge-right sits in that same
        band whenever the layers panel is open — measured, layers ran straight
        through it by a full row (.layers × .edge-right in the overlap audit). */
-    .layers { top: auto; bottom: calc(var(--above-sheet) + var(--edge-h) + var(--safe-bottom)); }
+    /* Corner-anchored dropdown → bottom sheet, like `.sheet`/`.datesheet` and
+       everything else down here (SCOUT-HANDOFF Part 9's one remaining gap):
+       centred, capped at the same `.sheet` width, anchored to the bottom
+       edge instead of the top-right corner. `.night-panel` shares the
+       `.layers` class, so its own fixed 13rem (set above, desktop-only in
+       effect once this wins on specificity-tied source order) becomes the
+       same sheet too. The hidden/entrance transform has to repeat the
+       translateX centering alongside the shared scale — same reason
+       `.datesheet[hidden]` repeats its own translateY below — or the
+       open/close animation would scale toward the left edge instead of the
+       sheet's own centre. */
+    .layers {
+      top: auto;
+      right: auto;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(30rem, calc(100vw - 1.8rem));
+      bottom: calc(var(--above-sheet) + var(--edge-h) + var(--safe-bottom));
+    }
+    .layers[hidden] { transform: translateX(-50%) scale(0.95); }
+    @starting-style {
+      .layers:not([hidden]) { transform: translateX(-50%) scale(0.95); }
+    }
     .datesheet { top: auto; bottom: calc(var(--above-sheet) + var(--safe-bottom)); transform: none; }
     /* The nav and the view controls share the top row, and on a phone there is
        not room for both at full width — measured, they touch at 390px. The way
