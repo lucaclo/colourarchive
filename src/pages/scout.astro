@@ -43,6 +43,16 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
            first one is not available and the second is the only one there is. -->
       <p class="scout-hint" id="scout-hint">Type a place to begin — or zoom in and tap the map.</p>
 
+      <!-- First-visit orientation — issue #74. Shown once, ever, before a
+           place is picked, and gone the moment one is; see orientation.ts. -->
+      <div class="first-visit" id="first-visit" role="status" hidden>
+        <p>
+          Once you pick a place: sun and moon paths, twilight and tide windows, aurora odds, alignments,
+          missing colours, tonight's go/no-go, sweep and timelapse timing, ND math, and a place to log what you saw.
+        </p>
+        <button type="button" id="first-visit-close" aria-label="Dismiss">×</button>
+      </div>
+
       <!-- ── Top left: the way back ──────────────────────────────────────────
            Scout is a full-bleed map with no topbar, so the two links every
            other page carries have nowhere to live. They go here, in the same
@@ -1081,6 +1091,41 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
   }
   .scout-hint[hidden] { display: none; }
 
+  /* Same box language as .infotip-pop below — a quiet callout rather than a
+     modal, sitting just under the hint it follows. */
+  .first-visit {
+    position: absolute;
+    left: 50%;
+    top: calc(42% + 2.4rem);
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    max-width: min(26rem, calc(100vw - 2.4rem));
+    padding: 0.6rem 0.7rem;
+    background: color-mix(in oklab, var(--bg) 92%, #000);
+    border: 1px solid var(--border);
+    border-left: 2px solid #e0603a;
+    border-radius: 2px;
+    box-shadow: 0 6px 20px -6px color-mix(in oklab, black 45%, transparent),
+      0 1px 3px color-mix(in oklab, black 20%, transparent);
+  }
+  .first-visit[hidden] { display: none; }
+  .first-visit p {
+    margin: 0;
+    font-family: var(--font-label);
+    font-size: 0.7rem;
+    line-height: 1.55;
+    color: var(--fg);
+  }
+  .first-visit button {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    flex: none; padding: 0.1rem; font-size: 0.9rem; line-height: 1; color: var(--muted);
+    transition: color 140ms;
+  }
+  .first-visit button:hover { color: var(--fg); }
+
   .scout-mapmsg {
     position: absolute;
     left: 50%;
@@ -1912,6 +1957,17 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     cursor: pointer;
     padding: 0.35rem 0;
     min-height: 30px;
+  }
+  /* A fold this session hasn't opened yet — see orientation.ts. Gone the
+     first time it's toggled open, not reapplied until the next session. */
+  .fold.unread summary::before {
+    content: '';
+    display: inline-block;
+    width: 5px; height: 5px;
+    margin-right: 0.5em;
+    border-radius: 50%;
+    background: #e0603a;
+    vertical-align: middle;
   }
 
   /* ── The month grid ────────────────────────────────────────────────────
