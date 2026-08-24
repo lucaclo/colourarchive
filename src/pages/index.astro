@@ -338,6 +338,7 @@ const auroraCss = hasPhotos
           </button>
           <button class="lb-tool" id="lb-info" aria-label="Photo details" aria-pressed="false">i</button>
           <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive">≈</button>
+          <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom">◐</button>
           <button class="lb-tool lb-close" id="lb-close" aria-label="Close">×</button>
         </div>
         <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous">‹</button>
@@ -1255,6 +1256,14 @@ const auroraCss = hasPhotos
     setTimeout(() => { arcSimilar.hidden = true; }, 220);
   }
   document.getElementById('lb-similar')?.addEventListener('click', openArcSimilar);
+  // Style Match's workbench lives on /inspiration — every reference there
+  // has to be resolvable by id, and /api/match/analyse already looks an id
+  // up in the archive as well as the inspiration board, so handing it this
+  // photo's own id is all the plumbing this needs on the archive side.
+  document.getElementById('lb-match')?.addEventListener('click', () => {
+    if (lbIndex < 0 || !frames[lbIndex]) return;
+    location.href = `/inspiration?match=${encodeURIComponent(frames[lbIndex].dataset.id)}`;
+  });
   document.getElementById('arc-similar-close')?.addEventListener('click', closeArcSimilar);
   arcSimilarW?.addEventListener('input', renderArcSimilar);
   arcSimilarGrid?.addEventListener('click', (e) => {
