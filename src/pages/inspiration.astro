@@ -3,8 +3,19 @@ import Layout from '../layouts/Layout.astro';
 import { readInspManifest } from '../lib/inspiration';
 import { readManifest } from '../lib/manifest';
 import { oklchCss } from '../lib/color';
+import { warmRegionModels } from '../lib/match/regions';
+import { warmGenre } from '../lib/genre';
 
 export const prerender = false;
+
+// Fire-and-forget: get the segmentation/CLIP models loading into memory the
+// moment this page is requested, not the moment someone presses "match" —
+// each getX() below is a memoized singleton, so a second visit is a no-op,
+// and a failed/slow download here just means the first match still falls
+// back to loading on demand, same as before this existed.
+void warmRegionModels().catch(() => {});
+void warmGenre().catch(() => {});
+
 const manifest = await readInspManifest();
 const hasItems = manifest.count > 0;
 

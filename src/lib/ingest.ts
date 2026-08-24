@@ -8,7 +8,7 @@ import { dominantColour } from './dominant';
 import { spatialSignature } from './signature';
 import { embedBuffer } from './embed';
 import { clipEmbedBuffer } from './clip';
-import { classifyGenreBuffer } from './genre';
+import { classifyGenreFromEmbedding } from './genre';
 import { classify, roundOklch } from './color';
 import { WIDTHS, derivativeName } from './derivatives';
 import type { Photo, Exif, Derivative, Medium, Genre } from './types';
@@ -180,12 +180,17 @@ export async function processPhoto(
 
   // Similarity signatures + genre. All best-effort — if a model is
   // unavailable, ingest still succeeds (that feature just skips this photo).
-  const [colourGrid, embedding, clipEmbedding, genre] = await Promise.all([
+  // Genre is scored off the CLIP embedding rather than run as a separate
+  // model call — see genre.ts — so it waits on clipEmbedding instead of
+  // joining the Promise.all independently.
+  const [colourGrid, embedding, clipEmbedding] = await Promise.all([
     spatialSignature(buf),
     embedBuffer(buf).catch((e) => { console.warn('[embed] skipped', e?.message); return undefined; }),
     clipEmbedBuffer(buf).catch((e) => { console.warn('[clip] skipped', e?.message); return undefined; }),
-    classifyGenreBuffer(buf).catch((e) => { console.warn('[genre] skipped', e?.message); return undefined as Genre | undefined; }),
   ]);
+  const genre = clipEmbedding
+    ? await classifyGenreFromEmbedding(clipEmbedding).catch((e) => { console.warn('[genre] skipped', e?.message); return undefined as Genre | undefined; })
+    : undefined;
 
   return {
     embedding,
