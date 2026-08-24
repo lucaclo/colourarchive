@@ -17,7 +17,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { groupColourDistances, groupOutliers, rankSimilar, rankSimilarGroup } from './similar.ts';
+import {
+  clusterByEmbedding,
+  embeddingDistance,
+  groupColourDistances,
+  groupOutliers,
+  rankSimilar,
+  rankSimilarGroup,
+} from './similar.ts';
 import type { Photo } from './types.ts';
 import type { OKLCH } from './color.ts';
 
@@ -368,5 +375,58 @@ describe('groupColourDistances / groupOutliers', () => {
     const distances = groupColourDistances([a, b, c, noGrid]);
     assert.ok(!distances.has('no-grid'));
     assert.equal(distances.size, 3);
+  });
+});
+
+describe('embeddingDistance', () => {
+  it('is 0 for identical embeddings', () => {
+    assert.equal(embeddingDistance([1, 0, 0], [1, 0, 0]), 0);
+  });
+
+  it('is maximally far (2) when either embedding is missing', () => {
+    assert.equal(embeddingDistance(undefined, [1, 0, 0]), 2);
+    assert.equal(embeddingDistance([1, 0, 0], undefined), 2);
+    assert.equal(embeddingDistance(undefined, undefined), 2);
+  });
+
+  it('is maximally far when the two do not even share a length', () => {
+    assert.equal(embeddingDistance([1, 0], [1, 0, 0]), 2);
+  });
+});
+
+/* ── Board clustering ─────────────────────────────────────────────────────── */
+
+describe('clusterByEmbedding', () => {
+  // Plain 1-D "embeddings": embeddingDistance is just `1 - a·b`, so a single
+  // number gives exact, deterministic distances (no trig rounding to worry
+  // about) while still letting two clusters exist — one placed near +1,
+  // the other near -1, both far from a loner sitting at 0.
+  const item = (id: string, v: number) => ({ id, embedding: [v] });
+
+  it('returns nothing with fewer than two embedded items', () => {
+    assert.deepEqual(clusterByEmbedding([item('a', 1)]), []);
+    assert.deepEqual(clusterByEmbedding([]), []);
+  });
+
+  it('groups items whose embeddings sit closer together than the set typically does, and drops the rest', () => {
+    const items = [
+      item('a1', 1.0),
+      item('a2', 0.9), // close to a1 — dist 0.1
+      item('b1', -1.0),
+      item('b2', -0.9), // close to b1 — dist 0.1, same as the a pair
+      item('loner', 0), // dist ~1 from everything — not close to anyone
+    ];
+    const clusters = clusterByEmbedding(items);
+    const byIds = clusters.map((g) => g.map((i) => i.id).sort().join(','));
+    assert.equal(clusters.length, 2);
+    assert.ok(byIds.includes('a1,a2'));
+    assert.ok(byIds.includes('b1,b2'));
+    assert.ok(!clusters.some((g) => g.some((i) => i.id === 'loner')), 'a lone item is not its own cluster');
+  });
+
+  it('leaves items with no embedding out of the clustering entirely', () => {
+    const items = [item('a1', 1.0), item('a2', 0.9), { id: 'no-emb', embedding: undefined }];
+    const clusters = clusterByEmbedding(items);
+    assert.ok(!clusters.some((g) => g.some((i) => i.id === 'no-emb')));
   });
 });

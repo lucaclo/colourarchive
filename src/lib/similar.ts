@@ -68,17 +68,21 @@ function colourCentroid(refs: Photo[]): ColourCentroid {
   };
 }
 
+/** Cosine distance between two same-length DINOv2 embeddings (0 identical …
+ *  2 opposite, assuming the unit vectors ingest already stores). Maximally
+ *  far — never a false match — if either is missing or they don't line up. */
+export function embeddingDistance(a?: number[], b?: number[]): number {
+  if (!a || !b || a.length !== b.length) return 2;
+  return 1 - dot(a, b);
+}
+
 /**
  * `compRaw` between one candidate and one reference — the composition half of
  * what `rankSimilar` always computed, factored out so the group path can take
  * the closest reference rather than reimplementing the distance math.
  */
 function compAgainst(ref: Photo, c: Photo): number {
-  // Embedding distance (0 identical … 2 opposite); large if either missing.
-  let embDist = 2;
-  if (ref.embedding && c.embedding && ref.embedding.length === c.embedding.length) {
-    embDist = 1 - dot(ref.embedding, c.embedding);
-  }
+  const embDist = embeddingDistance(ref.embedding, c.embedding);
   // Tonal layout from the L channel of the 4x4 OKLab grid.
   let toneDist = 0;
   if (ref.colourGrid && c.colourGrid && ref.colourGrid.length === c.colourGrid.length) {
@@ -205,4 +209,75 @@ export function groupOutliers(refs: Photo[]): Set<string> {
   const outliers = new Set<string>();
   for (const [id, dist] of distances) if (dist > med * OUTLIER_FACTOR) outliers.add(id);
   return outliers;
+}
+
+/** Bottom slice of a board's own pairwise embedding distances counted as
+ *  "notably closer than typical" — see `clusterByEmbedding`. Percentile
+ *  rather than an absolute distance for the same reason `groupOutliers`
+ *  measures against its own group's median rather than a fixed number:
+ *  a board of near-identical macro shots and a board of varied street scenes
+ *  do not sit at the same scale in embedding space, so a magic constant
+ *  would either over- or under-cluster one of them. Unvalidated against real
+ *  usage yet — a starting point, tunable once there's a board's worth of
+ *  actual clustering results to look at. */
+const CLUSTER_PERCENTILE = 0.12;
+
+/**
+ * Which items on a board sit closer to each other, in DINOv2 embedding
+ * space, than the board's own typical spread — likely near-duplicates or
+ * close variations, worth seeing as clusters *before* picking a
+ * multi-reference match rather than after. `groupOutliers` only catches a
+ * mismatched reference once a group is already committed; this is the same
+ * embedding signal turned around, offered earlier.
+ *
+ * Single-link (union-find): if A is close to B and B is close to C, all
+ * three land in one cluster even where A and C alone would not have crossed
+ * the threshold — the right call for "which of these are variations of each
+ * other," a chain of near-duplicates, not a strict pairwise rule.
+ *
+ * Items with no embedding are left out entirely, and a "cluster" of exactly
+ * one item is not returned — it isn't a cluster, it's everything else on
+ * the board. Needs at least two embedded items to compare; with fewer,
+ * returns nothing rather than asserting a cluster of one.
+ */
+export function clusterByEmbedding<T extends { id: string; embedding?: number[] }>(items: T[]): T[][] {
+  const withEmb = items.filter((i): i is T & { embedding: number[] } => Boolean(i.embedding?.length));
+  if (withEmb.length < 2) return [];
+
+  const dists: number[] = [];
+  for (let i = 0; i < withEmb.length; i++) {
+    for (let j = i + 1; j < withEmb.length; j++) {
+      dists.push(embeddingDistance(withEmb[i].embedding, withEmb[j].embedding));
+    }
+  }
+  const sorted = [...dists].sort((a, b) => a - b);
+  const threshold = sorted[Math.min(sorted.length - 1, Math.floor(CLUSTER_PERCENTILE * sorted.length))];
+
+  const parent = new Map<string, string>(withEmb.map((it) => [it.id, it.id]));
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  for (let i = 0; i < withEmb.length; i++) {
+    for (let j = i + 1; j < withEmb.length; j++) {
+      if (embeddingDistance(withEmb[i].embedding, withEmb[j].embedding) <= threshold) {
+        union(withEmb[i].id, withEmb[j].id);
+      }
+    }
+  }
+
+  const groups = new Map<string, T[]>();
+  for (const it of withEmb) {
+    const root = find(it.id);
+    const group = groups.get(root);
+    if (group) group.push(it);
+    else groups.set(root, [it]);
+  }
+  return [...groups.values()].filter((g) => g.length > 1);
 }
