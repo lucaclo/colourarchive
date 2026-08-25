@@ -78,6 +78,16 @@ const MAX_TILES = 64;
 
 /* ── Tiles ─────────────────────────────────────────────────────────────────── */
 
+/**
+ * How many decoded tiles the cache may hold at once.
+ *
+ * Roughly 6-8 field-loads' worth at `MAX_TILES` tiles each: enough that
+ * revisiting a spot you just left is still free, without pinning every place
+ * scouted this session in memory. See the module doc's "Fetching" note — the
+ * cache exists to survive the fetch, not to grow without bound.
+ */
+const TILE_CACHE_LIMIT = 8 * MAX_TILES;
+
 const tileCache = new Map<string, Promise<Float32Array | null>>();
 
 /**
@@ -90,7 +100,13 @@ const tileCache = new Map<string, Promise<Float32Array | null>>();
 async function decodeTile(tile: TileAddress): Promise<Float32Array | null> {
   const key = `${tile.z}/${tile.x}/${tile.y}`;
   const cached = tileCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    // Touch: move to the end so the tiles actually still in use are the ones
+    // that survive eviction, not just the ones fetched most recently.
+    tileCache.delete(key);
+    tileCache.set(key, cached);
+    return cached;
+  }
 
   const work = (async () => {
     try {
@@ -122,6 +138,12 @@ async function decodeTile(tile: TileAddress): Promise<Float32Array | null> {
   })();
 
   tileCache.set(key, work);
+  // Insertion order is eviction order: the least recently touched tile (see
+  // the `get` above) goes first once the cache is over budget.
+  if (tileCache.size > TILE_CACHE_LIMIT) {
+    const oldest = tileCache.keys().next().value;
+    if (oldest !== undefined) tileCache.delete(oldest);
+  }
   return work;
 }
 
