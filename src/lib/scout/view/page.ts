@@ -308,17 +308,19 @@ import {
 import { getScoutJson, type Place } from './scout-api';
 import { createSearchBox } from './search-box';
 import { pace } from './pacing';
-import { createAlignmentPanel, type HorizonReading } from './alignment-panel';
+// Alignment, aurora, go-tonight, sweep-export, month-grid and ar-camera are
+// all loaded lazily — see `lazyFoldPanel` and each construction site below —
+// so only their types are imported here.
+import type { AlignmentPanel, HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
 import type { ColourGap } from '../../gaps';
 import { createTidePanel, type TideApiResponse } from './tide-panel';
-import { createGoTonightPanel, type GoTonightPair } from './go-tonight-panel';
-import { createAuroraPanel } from './aurora-panel';
-import { createSweepExport } from './sweep-export';
+import type { GoTonightPanel, GoTonightPair } from './go-tonight-panel';
+import type { AuroraPanel } from './aurora-panel';
 import { createOfflineWarm } from './offline-warm';
 import { createPlanPanel, PLAN_SOURCE } from './plan-panel';
-import { createMonthGrid } from './month-grid';
-import { createArCamera } from './ar-camera';
+import type { MonthGridView } from './month-grid';
+import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
 import { createFirstVisitOrientation } from './orientation';
 
@@ -5783,8 +5785,10 @@ export async function startScout(): Promise<void> {
     // The AR view reads the sensor and focal length through `currentFov()`,
     // not the aim — see `ar-camera.ts` for why — but a changed lens still has
     // to reach a marker already on screen without waiting for the next
-    // compass reading or the five-second tick.
-    arView.refresh();
+    // compass reading or the five-second tick. Null until the camera has
+    // been opened once — see `ensureArView` — in which case there is no
+    // marker on screen to refresh anyway.
+    arViewLoaded?.refresh();
     if (persist) save();
   }
 
@@ -6975,6 +6979,43 @@ export async function startScout(): Promise<void> {
     }
   });
 
+  /**
+   * Defer a panel's own module and construction until its `<details class="fold">`
+   * is first opened — the click that would reveal it anyway. Every panel this
+   * wraps exposes exactly one thing afterwards: `restate()`, called whenever
+   * page state it depends on changes. Before the fold has ever been opened
+   * there is nothing on screen to update, so the returned stub's `restate()`
+   * is a no-op; the real panel, built the moment the fold first opens, calls
+   * its own `restate()` once immediately, to catch up on whatever changed
+   * while it was still unbuilt.
+   *
+   * Safe specifically because every panel wrapped this way owns its fold
+   * outright (each panel's own doc says so) — nothing in it is visible and
+   * nothing outside it reads from the panel until the fold is open. A panel
+   * that can open its *own* fold — `gapPanel`'s deep link, `tidePanel`'s
+   * coastal-only reveal, `planPanel`'s kept-spot threshold — cannot be
+   * wrapped this way: it would have to be built already to know whether to
+   * open the fold in the first place, which defeats the deferral.
+   */
+  function lazyFoldPanel(foldId: string, build: () => Promise<{ restate(): void }>): { restate(): void } {
+    let panel: { restate(): void } | null = null;
+    let started = false;
+    const fold = $<HTMLDetailsElement>(foldId);
+    fold.addEventListener('toggle', () => {
+      if (started || !fold.open) return;
+      started = true;
+      void build().then((built) => {
+        panel = built;
+        panel.restate();
+      });
+    });
+    return {
+      restate() {
+        panel?.restate();
+      },
+    };
+  }
+
   const searchBox = createSearchBox({
     onChoose: (place) => setCentre(place),
     onQueryChanged: () => renderKept(),
@@ -7184,18 +7225,27 @@ export async function startScout(): Promise<void> {
     }
   }
 
-  const monthSheet = createMonthGrid({
-    centre: () => centre,
-    isoDate: () => isoDate,
-    timeZone: () => timeZone,
-    lightAt: (instant) => {
-      if (!weather) return null;
-      const hour = hourAt(weather, instant);
-      return hour ? directLightFractionFor(hour) : null;
-    },
-    currentInstant,
-    goTo: goToInstant,
-  });
+  // Built on first open rather than at page load — see `on('open-month', …)`
+  // below, its only caller. Memoized on the promise itself so a second click
+  // while the module is still loading does not start a second import.
+  let monthSheetPromise: Promise<MonthGridView> | null = null;
+  function ensureMonthSheet(): Promise<MonthGridView> {
+    monthSheetPromise ??= import('./month-grid').then(({ createMonthGrid }) =>
+      createMonthGrid({
+        centre: () => centre,
+        isoDate: () => isoDate,
+        timeZone: () => timeZone,
+        lightAt: (instant) => {
+          if (!weather) return null;
+          const hour = hourAt(weather, instant);
+          return hour ? directLightFractionFor(hour) : null;
+        },
+        currentInstant,
+        goTo: goToInstant,
+      }),
+    );
+    return monthSheetPromise;
+  }
 
   /* ── The alignment finder ───────────────────────────────────────────────
      "On what dates does the sun go behind that?" — the sightline ring picks
@@ -7243,26 +7293,30 @@ export async function startScout(): Promise<void> {
     return { deg, basis: parts.join(' ') };
   }
 
-  const alignPanel = createAlignmentPanel({
-    centre: () => centre,
-    // Gated on the layer, not merely on the coordinate. `redrawEverything`
-    // parks the ring half a radius due north the moment a place is chosen, so
-    // the coordinate is almost never the sentinel — and due north is a
-    // placeholder, not a thing anyone pointed at. Once the layer is on the ring
-    // is visible on the map and draggable, which is what makes its bearing a
-    // choice rather than a default.
-    target: () =>
-      shown.sight && !(target.lat === 0 && target.lon === 0)
-        ? { lat: target.lat, lon: target.lon }
-        : null,
-    horizon: alignHorizon,
-    timeZone: () => timeZone,
-    from: () => day?.dayStart ?? new Date(),
-    goTo: goToInstant,
-    // Same fallback the "keep this spot" star already uses — a name if one
-    // was found, otherwise the coordinates, never a blank LOCATION field.
-    locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
-  });
+  const alignPanel: AlignmentPanel = lazyFoldPanel('fold-align', () =>
+    import('./alignment-panel').then(({ createAlignmentPanel }) =>
+      createAlignmentPanel({
+        centre: () => centre,
+        // Gated on the layer, not merely on the coordinate. `redrawEverything`
+        // parks the ring half a radius due north the moment a place is chosen, so
+        // the coordinate is almost never the sentinel — and due north is a
+        // placeholder, not a thing anyone pointed at. Once the layer is on the ring
+        // is visible on the map and draggable, which is what makes its bearing a
+        // choice rather than a default.
+        target: () =>
+          shown.sight && !(target.lat === 0 && target.lon === 0)
+            ? { lat: target.lat, lon: target.lon }
+            : null,
+        horizon: alignHorizon,
+        timeZone: () => timeZone,
+        from: () => day?.dayStart ?? new Date(),
+        goTo: goToInstant,
+        // Same fallback the "keep this spot" star already uses — a name if one
+        // was found, otherwise the coordinates, never a blank LOCATION field.
+        locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
+      }),
+    ),
+  );
 
   /** The `#gap-data` script tag `scout.astro`'s frontmatter bakes — see the
    *  comment over it. Absent or malformed reads as no gaps, not an error:
@@ -7339,62 +7393,83 @@ export async function startScout(): Promise<void> {
     return { pin: data.report ?? null, gate: data.gate ?? null };
   }
 
-  const goTonightPanel = createGoTonightPanel({
-    keptSpots: () => keptSpots,
-    from: () => day?.dayStart ?? new Date(),
-    fetchPair: fetchGoTonightPair,
-    // The same path a `kept-list` row takes, so a spot reached from "go
-    // tonight" behaves exactly like one reached by picking it directly.
-    goToSpot: (spot) => {
-      setCentre(
-        { name: spot.name, detail: '', lat: spot.lat, lon: spot.lon, kind: 'kept', timeZone: spot.timeZone || timeZone },
-        { refit: true },
-      );
-      if (spot.radiusKm) setRadius(spot.radiusKm, { refit: true });
-    },
-    goToInstant,
-  });
-
-  const auroraPanel = createAuroraPanel({
-    centre: () => centre,
-    lightPollutionZone: () =>
-      centre && lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null,
-    // Always the live forecast, never the historical read `weather` on the
-    // page can hold for a past date — see the panel's own note on why this
-    // reading is only ever about right now, regardless of the date picker.
-    fetchWeather: async () => {
-      const at = centre;
-      if (!at) return null;
-      if (STATIC) return fetchForecastDirect(at.lat, at.lon).catch(() => null);
-      const query = new URLSearchParams({ lat: String(at.lat), lon: String(at.lon) });
-      const data = await fetch(`/api/scout/weather?${query}`).then((response) => response.json());
-      return data.ok ? (data.report ?? null) : null;
-    },
-    fetchSpaceWeather: async () => {
-      if (STATIC) return fetchSpaceWeatherDirect().catch(() => null);
-      const data = await fetch('/api/scout/aurora').then((response) => response.json());
-      return data.ok ? (data.reading ?? null) : null;
-    },
-  });
-
-  createSweepExport({
-    canvas: () => map?.getCanvas() ?? null,
-    // Same signal the PNG export already trusts for a complete, not
-    // half-drawn, frame.
-    waitForFrame: () =>
-      new Promise<void>((resolve) => {
-        if (!map) {
-          resolve();
-          return;
-        }
-        map.once('idle', () => resolve());
-        map.triggerRepaint();
+  const goTonightPanel: GoTonightPanel = lazyFoldPanel('fold-tonight', () =>
+    import('./go-tonight-panel').then(({ createGoTonightPanel }) =>
+      createGoTonightPanel({
+        keptSpots: () => keptSpots,
+        from: () => day?.dayStart ?? new Date(),
+        fetchPair: fetchGoTonightPair,
+        // The same path a `kept-list` row takes, so a spot reached from "go
+        // tonight" behaves exactly like one reached by picking it directly.
+        goToSpot: (spot) => {
+          setCentre(
+            { name: spot.name, detail: '', lat: spot.lat, lon: spot.lon, kind: 'kept', timeZone: spot.timeZone || timeZone },
+            { refit: true },
+          );
+          if (spot.radiusKm) setRadius(spot.radiusKm, { refit: true });
+        },
+        goToInstant,
       }),
-    goToInstant,
-    dayStart: () => day?.dayStart ?? new Date(),
-    now: () => currentInstant() ?? new Date(),
-    locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
-  });
+    ),
+  );
+
+  const auroraPanel: AuroraPanel = lazyFoldPanel('fold-aurora', () =>
+    import('./aurora-panel').then(({ createAuroraPanel }) =>
+      createAuroraPanel({
+        centre: () => centre,
+        lightPollutionZone: () =>
+          centre && lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null,
+        // Always the live forecast, never the historical read `weather` on the
+        // page can hold for a past date — see the panel's own note on why this
+        // reading is only ever about right now, regardless of the date picker.
+        fetchWeather: async () => {
+          const at = centre;
+          if (!at) return null;
+          if (STATIC) return fetchForecastDirect(at.lat, at.lon).catch(() => null);
+          const query = new URLSearchParams({ lat: String(at.lat), lon: String(at.lon) });
+          const data = await fetch(`/api/scout/weather?${query}`).then((response) => response.json());
+          return data.ok ? (data.report ?? null) : null;
+        },
+        fetchSpaceWeather: async () => {
+          if (STATIC) return fetchSpaceWeatherDirect().catch(() => null);
+          const data = await fetch('/api/scout/aurora').then((response) => response.json());
+          return data.ok ? (data.reading ?? null) : null;
+        },
+      }),
+    ),
+  );
+
+  // No external methods at all — sweep-export owns `#fold-sweep` outright and
+  // wires its own buttons once built, so deferral needs nothing more than
+  // waiting for the fold's first open.
+  {
+    const fold = $<HTMLDetailsElement>('fold-sweep');
+    let started = false;
+    fold.addEventListener('toggle', () => {
+      if (started || !fold.open) return;
+      started = true;
+      void import('./sweep-export').then(({ createSweepExport }) => {
+        createSweepExport({
+          canvas: () => map?.getCanvas() ?? null,
+          // Same signal the PNG export already trusts for a complete, not
+          // half-drawn, frame.
+          waitForFrame: () =>
+            new Promise<void>((resolve) => {
+              if (!map) {
+                resolve();
+                return;
+              }
+              map.once('idle', () => resolve());
+              map.triggerRepaint();
+            }),
+          goToInstant,
+          dayStart: () => day?.dayStart ?? new Date(),
+          now: () => currentInstant() ?? new Date(),
+          locationLabel: () => (centre ? label.name || formatCoords(centre) : ''),
+        });
+      });
+    });
+  }
 
   createOfflineWarm({
     centre: () => centre,
@@ -7418,7 +7493,7 @@ export async function startScout(): Promise<void> {
     // a full-screen sheet means finding it still open on the way back out.
     $<HTMLElement>('layers').hidden = true;
     $<HTMLButtonElement>('layers-button').setAttribute('aria-expanded', 'false');
-    monthSheet.open();
+    void ensureMonthSheet().then((sheet) => sheet.open());
   });
 
   /* ── The live camera AR overlay ───────────────────────────────────────
@@ -7428,25 +7503,40 @@ export async function startScout(): Promise<void> {
      slider is simulating, and those two are the same instant only when
      nobody has touched the date picker. See `ar-camera.ts` for why the aim
      itself comes from the device's live compass rather than `lens.bearing`. */
-  const arView = createArCamera({
-    fov: currentFov,
-    sun: () => {
-      if (!centre) return null;
-      const s = sunPosition(centre.lat, centre.lon, new Date());
-      return s.altitude > SUN_ALTITUDE.sunrise ? s : null;
-    },
-    moon: () => {
-      if (!centre) return null;
-      const m = moonPosition(centre.lat, centre.lon, new Date());
-      return m.altitude > MOONRISE_ALTITUDE ? m : null;
-    },
-    core: () => {
-      if (!centre) return null;
-      const c = corePosition(centre.lat, centre.lon, new Date());
-      return c.altitude > CORE_RISE_ALTITUDE ? c : null;
-    },
-  });
-  on('ar-open', 'click', () => arView.open());
+  // Built on first open — `ar-camera.ts` is the single largest secondary
+  // panel, and unlike the fold-gated panels above it is a full-screen
+  // overlay behind a plain button, not a `<details>`. `arViewLoaded` is read
+  // directly by `frameChanged()`'s `.refresh()` call below: before the
+  // camera has ever been opened there is no marker on screen to refresh, so
+  // a null there is exactly the right no-op.
+  let arViewPromise: Promise<ArCameraView> | null = null;
+  let arViewLoaded: ArCameraView | null = null;
+  function ensureArView(): Promise<ArCameraView> {
+    arViewPromise ??= import('./ar-camera').then(({ createArCamera }) => {
+      const view = createArCamera({
+        fov: currentFov,
+        sun: () => {
+          if (!centre) return null;
+          const s = sunPosition(centre.lat, centre.lon, new Date());
+          return s.altitude > SUN_ALTITUDE.sunrise ? s : null;
+        },
+        moon: () => {
+          if (!centre) return null;
+          const m = moonPosition(centre.lat, centre.lon, new Date());
+          return m.altitude > MOONRISE_ALTITUDE ? m : null;
+        },
+        core: () => {
+          if (!centre) return null;
+          const c = corePosition(centre.lat, centre.lon, new Date());
+          return c.altitude > CORE_RISE_ALTITUDE ? c : null;
+        },
+      });
+      arViewLoaded = view;
+      return view;
+    });
+    return arViewPromise;
+  }
+  on('ar-open', 'click', () => void ensureArView().then((view) => view.open()));
 
   /* ── The notebook ───────────────────────────────────────────────────────
      Everything you worked out at a spot that the arithmetic cannot: the note,

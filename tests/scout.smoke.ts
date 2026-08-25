@@ -770,6 +770,16 @@ describe('/scout: the alignment finder', () => {
       { timeout: READY_MS },
     );
     await page.evaluate(`document.getElementById('fold-align').open = true`);
+    // The panel itself is loaded lazily, on this same fold opening — see
+    // `lazyFoldPanel` in page.ts — so the module fetch and first `restate()`
+    // land some ticks after `.open = true` returns, not within it. `render()`
+    // sets `align-basis` unconditionally, in every state, so it is never left
+    // reading the markup's own static placeholder once the real panel exists.
+    await page.waitForFunction(
+      `document.getElementById('align-basis').textContent !== '—'`,
+      null,
+      { timeout: READY_MS },
+    );
   });
 
   after(async () => {
