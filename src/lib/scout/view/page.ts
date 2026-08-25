@@ -226,6 +226,7 @@ import {
   type RGBA,
 } from './dome-layer';
 import { createTerrainShadows, type TerrainShadows } from './terrain-shadows';
+import { DESPIKED_TERRAIN_PROTOCOL, registerDespikedTerrainProtocol } from './terrain-protocol';
 import { loadStars } from './stars-loader';
 import {
   cloudStructure,
@@ -664,6 +665,7 @@ export async function startScout(): Promise<void> {
    * before the split, and a rename would have been seven chances to miss one.
    */
   const maplibregl = (await import('maplibre-gl')).default;
+  registerDespikedTerrainProtocol(maplibregl);
 
   if (!webglAvailable()) {
     showMapMessage(
@@ -1469,9 +1471,12 @@ export async function startScout(): Promise<void> {
     }
 
     // --- Terrain ----------------------------------------------------------
+    // Routed through DESPIKED_TERRAIN_PROTOCOL rather than straight at AWS —
+    // see terrain-protocol.ts for why: the raw tileset has isolated bad
+    // pixels that render as needles spiking out of otherwise flat ground.
     map.addSource(TERRAIN_SOURCE, {
       type: 'raster-dem',
-      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      tiles: [`${DESPIKED_TERRAIN_PROTOCOL}://elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`],
       encoding: 'terrarium',
       tileSize: 256,
       maxzoom: 14,

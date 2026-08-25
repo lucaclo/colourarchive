@@ -6,10 +6,13 @@ import {
   EARTH_CIRCUMFERENCE_M,
   TILE_SIZE,
   chooseZoom,
+  clampImplausibleElevation,
+  despikeHeights,
   fitsZoom,
   tileCountAt,
   decodeTerrarium,
   decodeTerrariumTile,
+  encodeTerrarium,
   elevationAt,
   horizonReachM,
   latToTileY,
@@ -102,6 +105,88 @@ describe('decodeTerrarium', () => {
     assert.equal(heights.length, 16);
     assert.equal(heights[7], 7);
     assert.throws(() => decodeTerrariumTile(rgba, 8), RangeError);
+  });
+});
+
+describe('encodeTerrarium', () => {
+  it('is the exact inverse of decodeTerrarium', () => {
+    assert.deepEqual(encodeTerrarium(0), [128, 0, 0]);
+    assert.deepEqual(encodeTerrarium(100), [128, 100, 0]);
+    assert.deepEqual(encodeTerrarium(-100), [127, 156, 0]);
+    assert.deepEqual(encodeTerrarium(0.5), [128, 0, 128]);
+    assert.deepEqual(encodeTerrarium(8.25), [128, 8, 64]);
+  });
+
+  it('round-trips through decodeTerrarium at quarter-metre precision', () => {
+    for (const h of [-32768, -1223.75, -30, 0, 8.25, 100, 917.5, 32767.75]) {
+      const [r, g, b] = encodeTerrarium(h);
+      assert.ok(Math.abs(decodeTerrarium(r, g, b) - h) < 1 / 256, `${h} -> ${decodeTerrarium(r, g, b)}`);
+    }
+  });
+
+  it('clamps rather than wraps past the format range', () => {
+    assert.deepEqual(encodeTerrarium(-999_999), [0, 0, 0]);
+    assert.deepEqual(encodeTerrarium(999_999), [255, 255, 255]);
+  });
+});
+
+describe('despikeHeights', () => {
+  const SIZE = 5;
+  /** All 25 cells the same height. */
+  const flat = (h: number) => new Float32Array(25).fill(h);
+
+  it('leaves a flat field untouched', () => {
+    const heights = flat(12.5);
+    assert.deepEqual(despikeHeights(heights, SIZE), heights);
+  });
+
+  it('replaces an isolated spike over otherwise flat ground with its neighbours’ median', () => {
+    const heights = flat(0);
+    heights[12] = 1200; // dead centre of the 5x5 grid
+    const cleaned = despikeHeights(heights, SIZE);
+    assert.equal(cleaned[12], 0);
+    // Nothing else moved.
+    for (let i = 0; i < 25; i++) if (i !== 12) assert.equal(cleaned[i], 0);
+  });
+
+  it('corrects a deep negative pit the same way it corrects a peak', () => {
+    const heights = flat(0);
+    heights[12] = -1223.9; // the exact shape of the bug this exists to catch
+    assert.equal(despikeHeights(heights, SIZE)[12], 0);
+  });
+
+  it('despikes a spike sitting on the tile edge, judged against whatever neighbours exist', () => {
+    const heights = flat(0);
+    heights[0] = 900; // top-left corner: only 3 real neighbours
+    assert.equal(despikeHeights(heights, SIZE)[0], 0);
+  });
+
+  it('leaves a genuine slope alone — neighbours disagreeing by design raises the bar', () => {
+    // Each row 200m higher than the last: every pixel's 3x3 window already
+    // spans a real ~200-400m range, so the Hampel threshold scales up with
+    // it rather than sanding the slope flat.
+    const heights = new Float32Array(25);
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) heights[row * SIZE + col] = row * 200;
+    }
+    assert.deepEqual(despikeHeights(heights, SIZE), heights);
+  });
+});
+
+describe('clampImplausibleElevation', () => {
+  it('leaves every real-world height alone, land or sea', () => {
+    const heights = Float32Array.from([-430.5, -86, -0.3, 0, 8.25, 500, 8_849]);
+    assert.deepEqual(clampImplausibleElevation(heights), heights);
+  });
+
+  it('snaps a depth below the lowest dry land on Earth to sea level', () => {
+    const heights = Float32Array.from([-1223.9, -547.3, -501]);
+    assert.deepEqual(clampImplausibleElevation(heights), Float32Array.from([0, 0, 0]));
+  });
+
+  it('snaps a height above Everest to sea level', () => {
+    const heights = Float32Array.from([9_001, 32_000]);
+    assert.deepEqual(clampImplausibleElevation(heights), Float32Array.from([0, 0]));
   });
 });
 

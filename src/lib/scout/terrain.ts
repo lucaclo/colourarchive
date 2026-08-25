@@ -64,6 +64,127 @@ const EFFECTIVE_EARTH_RADIUS_M = (6_371_008.8 * 7) / 6;
 export const decodeTerrarium = (r: number, g: number, b: number): number =>
   r * 256 + g + b / 256 - 32768;
 
+/** The exact inverse of {@link decodeTerrarium}. */
+export function encodeTerrarium(heightM: number): [r: number, g: number, b: number] {
+  const packed = Math.min(0xffffff, Math.max(0, Math.round((heightM + 32768) * 256)));
+  return [(packed >> 16) & 0xff, (packed >> 8) & 0xff, packed & 0xff];
+}
+
+/**
+ * How far a pixel may sit from its neighbourhood's own median before it is
+ * treated as a bad pixel rather than real relief, metres.
+ *
+ * A floor rather than a bare multiple of the local spread: over dead-flat
+ * water that spread is ~0, and a bare multiple would flag literally any
+ * deviation there — including the sub-metre noise every tile legitimately
+ * carries. 40 m is comfortably above that noise floor and comfortably below
+ * the isolated single-pixel holes this exists to catch (-1200 m, -547 m,
+ * -258 m — all found in one small bay's worth of tiles at zoom 12-14: see
+ * the AWS terrarium tileset's own known data-quality issues).
+ */
+const DESPIKE_FLOOR_M = 40;
+
+/**
+ * How many local median-absolute-deviations a pixel may sit from the median
+ * before it is treated as a bad pixel. Scales the threshold up with the
+ * neighbourhood's *own* roughness, so a genuine cliff — where every pixel
+ * in the window legitimately disagrees with its neighbours — raises its own
+ * bar rather than being sanded down to the same flatness as calm water.
+ */
+const DESPIKE_K = 3;
+
+/**
+ * Replace isolated bad pixels in a decoded terrain tile with the median of
+ * their immediate neighbours, leaving real relief alone.
+ *
+ * The AWS-hosted terrarium tileset (`elevation-tiles-prod`) is otherwise
+ * excellent and free, but is not curated — individual pixels, mostly over
+ * water, occasionally decode to elevations hundreds or thousands of metres
+ * from anything nearby. Rendered as MapLibre's own 3D terrain mesh, one bad
+ * pixel is a needle spiking out of a calm fjord; this app's own shadow mask
+ * (`terrainShadowMask`) is not immune either, since a phantom 1000 m peak
+ * would happily block a shadow it should not.
+ *
+ * A Hampel filter: for every pixel, take the median of the 3×3 window
+ * centred on it (itself included) and the median absolute deviation of that
+ * same window, then replace the pixel only if it strays past both
+ * `DESPIKE_FLOOR_M` and `DESPIKE_K` times that deviation. Both conditions
+ * have to fail before a pixel is touched, which is what lets a real ridge
+ * survive: neighbours on a slope disagree with each other by design, so
+ * their own deviation already accounts for it.
+ *
+ * Border pixels are judged against whatever of the 3×3 window falls inside
+ * the tile — one tile short of the true neighbourhood, and so slightly less
+ * able to catch a bad pixel sitting exactly on a seam. Not worth reaching
+ * across a tile boundary for: this is a cosmetic and shadow-quality pass,
+ * not a survey.
+ */
+export function despikeHeights(heights: Float32Array, size: number): Float32Array {
+  const out = new Float32Array(heights.length);
+  const window = new Array<number>(9);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= size) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= size) continue;
+          window[n++] = heights[ny * size + nx];
+        }
+      }
+      const sample = window.slice(0, n).sort((a, b) => a - b);
+      const median = sample[n >> 1];
+      const deviations = sample.map((v) => Math.abs(v - median)).sort((a, b) => a - b);
+      const mad = deviations[n >> 1];
+      const value = heights[i];
+      const threshold = Math.max(DESPIKE_FLOOR_M, DESPIKE_K * mad);
+      out[i] = Math.abs(value - median) > threshold ? median : value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Below the lowest point of dry land anywhere on Earth (the Dead Sea shore,
+ * -430.5 m), with a margin. `despikeHeights` cannot reach some of the
+ * artifacts this exists to catch: a bad region tens of pixels across (found,
+ * in one small Icelandic bay, smoothly descending to -1224 m before rising
+ * again) looks to a *local* filter exactly like a real, if dramatic, slope —
+ * because locally, that is indistinguishable from one. This bound does not
+ * try to be local: nothing this deep is ever real dry land, and nothing this
+ * deep is a metre a land photographer could stand on, so it is treated as
+ * broken regardless of how smoothly it was interpolated into looking real.
+ */
+const PLAUSIBLE_FLOOR_M = -500;
+
+/**
+ * Above Everest (8,849 m), with headroom for whatever a photographer might
+ * one day stand on top of.
+ */
+const PLAUSIBLE_CEILING_M = 9_000;
+
+/**
+ * Replace any height outside Earth's real range with sea level.
+ *
+ * A clamp to the boundary itself would still leave a cliff a few hundred
+ * metres tall at the edge of a bad region — bounded, but still visibly
+ * wrong. Snapping to sea level instead is the more honest answer for this
+ * app specifically: nothing beyond this bound is ever a metre of ground a
+ * land photographer scouts, whether it is bad data or real bathymetry, so
+ * there is no reading of it this app has any use for.
+ */
+export function clampImplausibleElevation(heights: Float32Array): Float32Array {
+  const out = new Float32Array(heights.length);
+  for (let i = 0; i < heights.length; i++) {
+    const value = heights[i];
+    out[i] = value < PLAUSIBLE_FLOOR_M || value > PLAUSIBLE_CEILING_M ? 0 : value;
+  }
+  return out;
+}
+
 /** A decoded tile: `size × size` heights in metres, row-major from the north-west. */
 export function decodeTerrariumTile(rgba: Uint8ClampedArray | Uint8Array, size = TILE_SIZE): Float32Array {
   const expected = size * size * 4;

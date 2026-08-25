@@ -20,7 +20,9 @@
 import type maplibregl from 'maplibre-gl';
 import {
   fitsZoom,
+  clampImplausibleElevation,
   decodeTerrariumTile,
+  despikeHeights,
   loadHeightField,
   maskToRGBA,
   terrainShadowMask,
@@ -129,7 +131,13 @@ async function decodeTile(tile: TileAddress): Promise<Float32Array | null> {
       context.drawImage(bitmap, 0, 0);
       bitmap.close?.();
       const pixels = context.getImageData(0, 0, width, height);
-      return decodeTerrariumTile(pixels.data, width);
+      // The source tileset is not curated — see `despikeHeights` and
+      // `clampImplausibleElevation` — and a bad pixel here is not just a
+      // cosmetic spike: it is a phantom peak the shadow sweep would happily
+      // cast a shadow from, or stop one behind. The absolute clamp runs
+      // first so a wide, smoothly-interpolated bad region collapses to sea
+      // level before the local filter's own median has to reason about it.
+      return despikeHeights(clampImplausibleElevation(decodeTerrariumTile(pixels.data, width)), width);
     } catch {
       // A tile that will not load is a patch of unknown ground, which
       // `loadHeightField` counts and reports. It is not a page error.
