@@ -30,8 +30,6 @@
  *     photogrammetry tool already lands in one of those.
  */
 
-import { fromArrayBuffer } from 'geotiff';
-
 export class DemUploadError extends Error {}
 
 export interface UploadedDem {
@@ -53,6 +51,15 @@ export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
  * cannot be longitude and latitude, or more cells than this app is willing to
  * hold in memory all end the parse with a stated reason instead of a raster
  * quietly placed somewhere wrong or an out-of-memory crash three steps later.
+ *
+ * `geotiff` itself is imported here, not at module scope. It — and the LERC,
+ * zstd, pako and JPEG codec chunks it pulls in behind its own dynamic
+ * imports — has no reason to load for the vast majority of visits that never
+ * touch the "upload your own elevation file" button, and everything else
+ * this module exports (`elevationWithOverride` chief among them) is on the
+ * hot path every shadow cast already runs. Splitting the import here rather
+ * than splitting the file keeps both halves in one place while still letting
+ * the bundler cut `geotiff` into its own chunk.
  */
 export async function parseGeoTiffDem(buffer: ArrayBuffer): Promise<UploadedDem> {
   if (buffer.byteLength > MAX_UPLOAD_BYTES) {
@@ -61,6 +68,7 @@ export async function parseGeoTiffDem(buffer: ArrayBuffer): Promise<UploadedDem>
     );
   }
 
+  const { fromArrayBuffer } = await import('geotiff');
   let tiff: Awaited<ReturnType<typeof fromArrayBuffer>>;
   try {
     tiff = await fromArrayBuffer(buffer);
