@@ -2,10 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildBuildingGrid,
   buildSkyline,
   isSunlit,
   lightWindows,
   mergeHorizon,
+  nearbyBuildings,
   nextChange,
   obstructionAt,
   summariseLight,
@@ -18,12 +20,11 @@ import { type SunSample } from './sun.ts';
 const ORIGIN: LatLon = { lat: 51.5, lon: -0.12 };
 
 /**
- * A square building `sizeM` on a side, centred `distanceM` away on `bearing`.
- * Built with the real geodesy so the test exercises the same projection the
- * caller will feed it.
+ * A square building `sizeM` on a side, centred on `centre`. Built with the
+ * real geodesy so the test exercises the same projection the caller will
+ * feed it.
  */
-function blockAt(distanceM: number, bearing: number, heightM: number, sizeM = 20): SkylineBuilding {
-  const centre = destination(ORIGIN, bearing, distanceM);
+function squareAt(centre: LatLon, heightM: number, sizeM = 20): SkylineBuilding {
   const half = sizeM / 2;
   const corners: Ring = [];
   for (const [db, dd] of [
@@ -36,6 +37,11 @@ function blockAt(distanceM: number, bearing: number, heightM: number, sizeM = 20
     corners.push([c.lon, c.lat]);
   }
   return { ring: corners, height: heightM };
+}
+
+/** A square building `sizeM` on a side, centred `distanceM` away from `ORIGIN` on `bearing`. */
+function blockAt(distanceM: number, bearing: number, heightM: number, sizeM = 20): SkylineBuilding {
+  return squareAt(destination(ORIGIN, bearing, distanceM), heightM, sizeM);
 }
 
 /** A day track stub — only azimuth and altitude are ever read. */
@@ -339,5 +345,49 @@ describe('mergeHorizon', () => {
     const skyline = buildSkyline(ORIGIN, [blockAt(20, 90, 20)]);
     const merged = mergeHorizon(skyline, { stepDeg: 1, altitudes: new Float64Array(0) });
     assert.equal(merged, skyline);
+  });
+});
+
+describe('buildBuildingGrid / nearbyBuildings', () => {
+  it('finds a building well within radius and skips one well outside it', () => {
+    const near = blockAt(20, 90, 20);
+    const far = blockAt(5000, 0, 20);
+    const grid = buildBuildingGrid([near, far], ORIGIN);
+
+    const found = nearbyBuildings(grid, ORIGIN, 1500);
+    assert.ok(found.includes(near));
+    assert.ok(!found.includes(far));
+  });
+
+  it('produces the same skyline as scanning the full set directly', () => {
+    const buildings = [
+      blockAt(20, 90, 20),
+      blockAt(200, 180, 40),
+      blockAt(900, 45, 15),
+      blockAt(5000, 0, 100), // well outside the query radius
+    ];
+    const grid = buildBuildingGrid(buildings, ORIGIN);
+
+    const viaGrid = buildSkyline(ORIGIN, nearbyBuildings(grid, ORIGIN, 1500));
+    const direct = buildSkyline(ORIGIN, buildings);
+    assert.deepEqual(Array.from(viaGrid.altitudes), Array.from(direct.altitudes));
+  });
+
+  it('queries correctly for a point away from the grid own origin', () => {
+    // The grid is built once about the pin (ORIGIN); a hotspot a kilometre
+    // away needs its own neighbours, not the pin's — see page.ts's dayLightAt.
+    const hotspot = destination(ORIGIN, 45, 1000);
+    const buildingNearHotspot = squareAt(destination(hotspot, 90, 20), 20);
+    const farFromHotspot = blockAt(20, 90, 20); // near ORIGIN, ~1.4km from hotspot
+    const grid = buildBuildingGrid([buildingNearHotspot, farFromHotspot], ORIGIN);
+
+    const found = nearbyBuildings(grid, hotspot, 200);
+    assert.ok(found.includes(buildingNearHotspot));
+    assert.ok(!found.includes(farFromHotspot));
+  });
+
+  it('returns nothing from an empty grid', () => {
+    const grid = buildBuildingGrid([], ORIGIN);
+    assert.deepEqual(nearbyBuildings(grid, ORIGIN, 1500), []);
   });
 });

@@ -115,6 +115,93 @@ function containsOrigin(points: [number, number][]): boolean {
   return inside;
 }
 
+/* ── Spatial index ─────────────────────────────────────────────────────────── */
+
+/**
+ * How wide a grid cell is, metres.
+ *
+ * Coarse next to a building footprint, fine next to `radiusM` — a query
+ * touches roughly `(2 * radiusM / cellM)²` cells, so this is the knob between
+ * "too many cells to walk" and "too many buildings per cell to have saved
+ * anything". 200m keeps that count in the low hundreds at the default 1.5km
+ * radius while still cutting a dense district down to the handful of cells
+ * actually near a given point.
+ */
+const DEFAULT_CELL_M = 200;
+
+/**
+ * Buildings bucketed by a uniform grid about one origin, so a query near any
+ * point in range costs a handful of cells rather than the whole set.
+ *
+ * Tied to `origin`: every building's cell is computed through `origin`'s own
+ * `localFrame`, so a grid built for one pin cannot be queried against a point
+ * whose distance from that pin the projection has stopped being accurate for
+ * (tens of kilometres, per `localFrame`'s own note) — in practice never an
+ * issue here, since a grid is rebuilt alongside the buildings it indexes.
+ */
+export interface BuildingGrid {
+  readonly cellM: number;
+  readonly origin: LatLon;
+  readonly cells: ReadonlyMap<string, SkylineBuilding[]>;
+}
+
+const cellKey = (cx: number, cy: number) => `${cx},${cy}`;
+
+/**
+ * Index a building set for repeated nearby queries against different points,
+ * replacing what would otherwise be an O(buildings) scan per query.
+ *
+ * Built once per view — see `nearbyBuildings` — from the same set already
+ * gathered for shadow-casting. A building keyed by its first ring vertex: the
+ * same corner `page.ts`'s own distance filter already uses, close enough at
+ * cell width for a footprint that is metres across next to a 200m cell.
+ */
+export function buildBuildingGrid(
+  buildings: SkylineBuilding[],
+  origin: LatLon,
+  cellM: number = DEFAULT_CELL_M,
+): BuildingGrid {
+  const project = localFrame(origin);
+  const cells = new Map<string, SkylineBuilding[]>();
+  for (const building of buildings) {
+    if (building.ring.length < 3) continue;
+    const [lon, lat] = building.ring[0];
+    const [x, y] = project(lon, lat);
+    const key = cellKey(Math.floor(x / cellM), Math.floor(y / cellM));
+    let bucket = cells.get(key);
+    if (!bucket) {
+      bucket = [];
+      cells.set(key, bucket);
+    }
+    bucket.push(building);
+  }
+  return { cellM, origin, cells };
+}
+
+/**
+ * Every building within `radiusM` of `at` — a superset, not an exact
+ * distance filter: it returns whole cells, so a corner of a cell just inside
+ * the radius pulls in the rest of that cell too. `buildSkyline`'s own bbox
+ * reject already discards whatever the coarseness let through, at a fraction
+ * of the cost of walking the full building set to find it.
+ */
+export function nearbyBuildings(grid: BuildingGrid, at: LatLon, radiusM: number): SkylineBuilding[] {
+  const project = localFrame(grid.origin);
+  const [ax, ay] = project(at.lon, at.lat);
+  const span = Math.ceil(radiusM / grid.cellM);
+  const cx = Math.floor(ax / grid.cellM);
+  const cy = Math.floor(ay / grid.cellM);
+
+  const found: SkylineBuilding[] = [];
+  for (let gx = cx - span; gx <= cx + span; gx++) {
+    for (let gy = cy - span; gy <= cy + span; gy++) {
+      const bucket = grid.cells.get(cellKey(gx, gy));
+      if (bucket) found.push(...bucket);
+    }
+  }
+  return found;
+}
+
 /* ── The profile ───────────────────────────────────────────────────────────── */
 
 /**
