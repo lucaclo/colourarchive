@@ -93,6 +93,19 @@ import {
 } from './projection';
 
 /**
+ * Caps how much of the display's real device-pixel ratio the shadow
+ * framebuffer renders at.
+ *
+ * A shadow edge is a soft boundary, not a texture worth retina sharpness —
+ * texture-heavy WebGL apps commonly cap an offscreen target's resolution for
+ * exactly this reason. Left uncapped, the framebuffer is sized straight off
+ * `gl.drawingBufferWidth/Height`, which on a high-DPI display (the iPad this
+ * workflow is built around included) means allocating and repainting the mask
+ * at 2-3x the resolution the composite pass needs.
+ */
+const MAX_FRAMEBUFFER_DPR = 2;
+
+/**
  * Sets the depth buffer's scale. Used to be "taller than anything that has
  * been built" — 1000 m was plenty for a *relative* building height. Issue
  * #51 made every height here absolute (terrain elevation folded in), and
@@ -446,10 +459,12 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
     texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    // NEAREST and clamped: the mask is sampled one texel to one pixel, so there
-    // is nothing to interpolate and edge wrapping could only smear it.
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    // LINEAR and clamped: with MAX_FRAMEBUFFER_DPR capping this target below
+    // the drawing buffer's own resolution, the composite pass (pass 3) stretches
+    // it back up to full size, and a soft shadow edge should stretch smoothly
+    // rather than blocky. Clamped so edge wrapping cannot smear it.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
@@ -582,7 +597,20 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       // never been shown, not a context that cannot do this. Standing down here
       // would be permanent, so wait instead — there is nothing to draw anyway.
       if (!width || !height) return;
-      if (!ensureTarget(gl, width, height)) {
+
+      // The private target renders at the drawing buffer's own resolution
+      // capped to MAX_FRAMEBUFFER_DPR — see that constant. `clientWidth` is the
+      // canvas's CSS size, so `width / clientWidth` is the display's real DPR;
+      // when that is under the cap already there is nothing to scale down.
+      const canvasEl = gl.canvas as HTMLCanvasElement;
+      const clientWidth = canvasEl.clientWidth || width;
+      const clientHeight = canvasEl.clientHeight || height;
+      const dpr = width / clientWidth;
+      const scale = dpr > MAX_FRAMEBUFFER_DPR ? MAX_FRAMEBUFFER_DPR / dpr : 1;
+      const targetWidth = scale === 1 ? width : Math.max(1, Math.round(width * scale));
+      const targetHeight = scale === 1 ? height : Math.max(1, Math.round(height * scale));
+
+      if (!ensureTarget(gl, targetWidth, targetHeight)) {
         ready = false;
         // Out of the render pass before telling anyone: the listener puts the
         // fallback layer back up, and restyling the map from inside its own
@@ -604,7 +632,7 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       const previousDepthRange = gl.getParameter(gl.DEPTH_RANGE) as Float32Array;
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-      gl.viewport(0, 0, width, height);
+      gl.viewport(0, 0, targetWidth, targetHeight);
       gl.clearColor(0, 0, 0, 0);
       gl.clearDepth(1);
       // Both masks open *before* the clear. A clear is masked exactly like a
