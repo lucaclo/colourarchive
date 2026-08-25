@@ -602,9 +602,9 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       // capped to MAX_FRAMEBUFFER_DPR — see that constant. `clientWidth` is the
       // canvas's CSS size, so `width / clientWidth` is the display's real DPR;
       // when that is under the cap already there is nothing to scale down.
+      // DPR applies uniformly to both axes, so one ratio scales both.
       const canvasEl = gl.canvas as HTMLCanvasElement;
       const clientWidth = canvasEl.clientWidth || width;
-      const clientHeight = canvasEl.clientHeight || height;
       const dpr = width / clientWidth;
       const scale = dpr > MAX_FRAMEBUFFER_DPR ? MAX_FRAMEBUFFER_DPR / dpr : 1;
       const targetWidth = scale === 1 ? width : Math.max(1, Math.round(width * scale));

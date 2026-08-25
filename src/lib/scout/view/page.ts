@@ -190,12 +190,15 @@ import {
 } from '../astrophoto';
 import { bracketingSolstices, seasonEvents, seasonName } from '../almanac';
 import {
+  buildBuildingGrid,
   buildSkyline,
   isSunlit,
   lightWindows,
   mergeHorizon,
+  nearbyBuildings,
   nextChange,
   obstructionAt,
+  type BuildingGrid,
   type LightWindow,
   type Skyline,
 } from '../skyline';
@@ -3022,6 +3025,15 @@ export async function startScout(): Promise<void> {
    */
   let castableBox: { west: number; south: number; east: number; north: number } | null = null;
   /**
+   * `castable`, bucketed for fast nearby queries.
+   *
+   * Rebuilt alongside `castable` — same trigger, same signature guard — so a
+   * hotspot's skyline (`dayLightAt`) can look up only the buildings within
+   * `SKYLINE_RADIUS_M` of *its own* point without scanning the whole set.
+   * With H hotspots and B buildings in view, that turns O(H·B) into O(H·k).
+   */
+  let buildingGrid: BuildingGrid | null = null;
+  /**
    * What `castable` was last gathered from, so a gather that found the same
    * buildings can stop rather than reassigning and forcing a recast. Cleared,
    * not just recomputed, wherever `castable` is emptied or the layers holding
@@ -3053,6 +3065,7 @@ export async function startScout(): Promise<void> {
       castable = [];
       castableSignature = '';
       castableBox = null;
+      buildingGrid = null;
       nearby = [];
       shadowStats = {
         cast: 0,
@@ -3179,6 +3192,9 @@ export async function startScout(): Promise<void> {
     }
 
     castable = buildings;
+    // Indexed once here, against the pin — every hotspot's own skyline query
+    // (`dayLightAt`) reuses this rather than re-scanning `castable` itself.
+    buildingGrid = buildBuildingGrid(castable, centre);
     shadowStats = { cast: 0, estimated, longestM: 0, omitted, tooFar: false };
 
     // The skyline does not depend on the time at all, so it is rebuilt with the
@@ -5014,12 +5030,12 @@ export async function startScout(): Promise<void> {
    * describing the same coordinate differently. Costs about a millisecond.
    */
   function dayLightAt(at: LatLon, samples: SunSample[]): SpotLight {
-    // From `castable` rather than `nearby`: `nearby` is filtered to 1.5 km of
-    // the *pin*, and a spot 2 km away needs its own neighbours, not the pin's.
-    const around = castable.filter(
-      (building) =>
-        distance(at, { lat: building.ring[0][1], lon: building.ring[0][0] }) < SKYLINE_RADIUS_M,
-    );
+    // From `buildingGrid` rather than `nearby`: `nearby` is filtered to
+    // 1.5 km of the *pin*, and a spot 2 km away needs its own neighbours, not
+    // the pin's. The grid turns that per-hotspot lookup into a handful of
+    // cells instead of a scan of every building `castable` holds — see
+    // `buildingGrid`'s own comment.
+    const around = buildingGrid ? nearbyBuildings(buildingGrid, at, SKYLINE_RADIUS_M) : [];
     let profile = buildSkyline(at, around);
     const field = terrainShadows?.state().field;
     if (field) {
