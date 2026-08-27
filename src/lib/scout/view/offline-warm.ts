@@ -24,13 +24,10 @@
  * XYZ source) could be added the same way `tilesFor` handles DEM, as a
  * follow-up.
  */
-import { tilesFor, fitsZoom, type Bounds, type TileAddress } from '../terrain';
+import { tilesFor, fitsZoom, type Bounds } from '../terrain';
 import { boundingBox, type LatLon } from '../geo';
 import { $, on } from './dom';
-
-/** The same host/template the 3D terrain and the landform overlay already fetch from. */
-const TILE_URL = (t: TileAddress) =>
-  `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${t.z}/${t.x}/${t.y}.png`;
+import { terrariumTileUrl } from './terrarium-tile';
 
 /** Same ceiling `terrain-shadows.ts` already enforces against the same host —
  *  see that file's own comment for why a request past this size is refused
@@ -106,7 +103,7 @@ export function createOfflineWarm(ports: OfflineWarmPorts): void {
       note('That radius is too wide to save in one go — try a smaller one.');
       return;
     }
-    const urls = tilesFor(bounds, choice.zoom).map(TILE_URL);
+    const urls = tilesFor(bounds, choice.zoom).map(terrariumTileUrl);
 
     running = true;
     button.disabled = true;
