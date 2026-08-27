@@ -60,6 +60,17 @@ const SPOT =
   `/scout?at=${EDINBURGH.lat},${EDINBURGH.lon}&d=${DATE}&t=${NOON}` +
   `&tz=Europe/London&r=5&n=Edinburgh`;
 
+/**
+ * A point on the map, safely clear of the first-visit orientation callout
+ * (`orientation.ts`) — every `openPhone()` page is a fresh, isolated browser
+ * context, so that callout is showing, centred over roughly the middle third
+ * of the 375×667 viewport (measured: y 318–531), on every single test run.
+ * A tap there lands on the callout instead of the map and does nothing at
+ * all, which reads exactly like the dead-tap bug this suite exists to catch
+ * — except it is the test's own aim, not the page, that is broken.
+ */
+const TAP_AT = { x: 187, y: 100 } as const;
+
 const DEM_HOST = 's3.amazonaws.com/elevation-tiles-prod';
 
 /**
@@ -299,7 +310,7 @@ describe('/scout: the world view', () => {
     await page.goto(`${origin}/scout`);
     await waitForTheMap(page);
 
-    await page.touchscreen.tap(187, 320);
+    await page.touchscreen.tap(TAP_AT.x, TAP_AT.y);
     // Doing nothing at all is the old failure wearing a different hat: the page
     // has to say why, or a dead gesture reads as a broken map.
     await page.waitForFunction(
@@ -333,7 +344,7 @@ describe('/scout: the world view', () => {
       `window.scout.map().jumpTo({ center: [${EDINBURGH.lon}, ${EDINBURGH.lat}], zoom: 12 })`,
     );
     await waitForTheMap(page);
-    await page.touchscreen.tap(187, 320);
+    await page.touchscreen.tap(TAP_AT.x, TAP_AT.y);
 
     // The view controls, which really are hidden until somewhere is chosen —
     // unlike the place sheet, which is on screen from the first paint saying

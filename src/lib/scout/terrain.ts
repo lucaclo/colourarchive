@@ -119,9 +119,32 @@ const DESPIKE_K = 3;
  * across a tile boundary for: this is a cosmetic and shadow-quality pass,
  * not a survey.
  */
+/**
+ * Insertion sort, in place, over the first `n` entries.
+ *
+ * Every call here sorts at most 9 elements, where the O(n²) it costs is a
+ * handful of comparisons and `Array.prototype.sort`'s comparator-call and
+ * allocation overhead is not — this runs once per pixel of every DEM tile
+ * fetched, so that overhead is the whole budget in `despikeHeights` below.
+ */
+function insertionSort(arr: Float32Array, n: number): void {
+  for (let k = 1; k < n; k++) {
+    const v = arr[k];
+    let j = k - 1;
+    while (j >= 0 && arr[j] > v) {
+      arr[j + 1] = arr[j];
+      j--;
+    }
+    arr[j + 1] = v;
+  }
+}
+
 export function despikeHeights(heights: Float32Array, size: number): Float32Array {
   const out = new Float32Array(heights.length);
-  const window = new Array<number>(9);
+  // Reused across every pixel rather than allocated per pixel — see
+  // `insertionSort`'s own comment for why that is the point.
+  const window = new Float32Array(9);
+  const deviations = new Float32Array(9);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
@@ -135,9 +158,10 @@ export function despikeHeights(heights: Float32Array, size: number): Float32Arra
           window[n++] = heights[ny * size + nx];
         }
       }
-      const sample = window.slice(0, n).sort((a, b) => a - b);
-      const median = sample[n >> 1];
-      const deviations = sample.map((v) => Math.abs(v - median)).sort((a, b) => a - b);
+      insertionSort(window, n);
+      const median = window[n >> 1];
+      for (let k = 0; k < n; k++) deviations[k] = Math.abs(window[k] - median);
+      insertionSort(deviations, n);
       const mad = deviations[n >> 1];
       const value = heights[i];
       const threshold = Math.max(DESPIKE_FLOOR_M, DESPIKE_K * mad);

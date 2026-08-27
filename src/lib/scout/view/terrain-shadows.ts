@@ -20,9 +20,6 @@
 import type maplibregl from 'maplibre-gl';
 import {
   fitsZoom,
-  clampImplausibleElevation,
-  decodeTerrariumTile,
-  despikeHeights,
   loadHeightField,
   maskToRGBA,
   terrainShadowMask,
@@ -32,13 +29,10 @@ import {
   type HeightField,
   type TileAddress,
 } from '../terrain';
+import { getCleanedTerrariumTile } from './terrarium-tile';
 
 export const TERRAIN_SHADOW_SOURCE = 'scout-landform-src';
 export const TERRAIN_SHADOW_LAYER = 'scout-landform';
-
-/** AWS Open Data's global 30 m elevation, the same tiles the 3D terrain uses. */
-const TILE_URL = (t: TileAddress) =>
-  `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${t.z}/${t.x}/${t.y}.png`;
 
 /**
  * How many samples the working grid may hold.
@@ -81,78 +75,17 @@ const MAX_TILES = 64;
 /* ── Tiles ─────────────────────────────────────────────────────────────────── */
 
 /**
- * How many decoded tiles the cache may hold at once.
+ * A terrarium PNG as heights, cleaned of the source tileset's occasional bad
+ * pixels — a phantom peak here is not just a cosmetic spike, it is something
+ * the shadow sweep would happily cast a shadow from, or stop one behind.
  *
- * Roughly 6-8 field-loads' worth at `MAX_TILES` tiles each: enough that
- * revisiting a spot you just left is still free, without pinning every place
- * scouted this session in memory. See the module doc's "Fetching" note — the
- * cache exists to survive the fetch, not to grow without bound.
- */
-const TILE_CACHE_LIMIT = 8 * MAX_TILES;
-
-const tileCache = new Map<string, Promise<Float32Array | null>>();
-
-/**
- * A terrarium PNG as heights.
- *
- * `OffscreenCanvas` where it exists, a detached DOM canvas where it does not —
- * Safari only gained the former recently and this has to work on the iPad it was
- * built for.
+ * The actual fetch, decode, clamp and despike — and the cache that lets a
+ * tile the 3D terrain protocol already cleaned this session be reused here
+ * for free, and vice versa — live in `terrarium-tile.ts`.
  */
 async function decodeTile(tile: TileAddress): Promise<Float32Array | null> {
-  const key = `${tile.z}/${tile.x}/${tile.y}`;
-  const cached = tileCache.get(key);
-  if (cached) {
-    // Touch: move to the end so the tiles actually still in use are the ones
-    // that survive eviction, not just the ones fetched most recently.
-    tileCache.delete(key);
-    tileCache.set(key, cached);
-    return cached;
-  }
-
-  const work = (async () => {
-    try {
-      const response = await fetch(TILE_URL(tile));
-      if (!response.ok) return null;
-      const bitmap = await createImageBitmap(await response.blob());
-      const { width, height } = bitmap;
-
-      let context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
-      if (typeof OffscreenCanvas !== 'undefined') {
-        context = new OffscreenCanvas(width, height).getContext('2d');
-      } else {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        context = canvas.getContext('2d');
-      }
-      if (!context) return null;
-
-      context.drawImage(bitmap, 0, 0);
-      bitmap.close?.();
-      const pixels = context.getImageData(0, 0, width, height);
-      // The source tileset is not curated — see `despikeHeights` and
-      // `clampImplausibleElevation` — and a bad pixel here is not just a
-      // cosmetic spike: it is a phantom peak the shadow sweep would happily
-      // cast a shadow from, or stop one behind. The absolute clamp runs
-      // first so a wide, smoothly-interpolated bad region collapses to sea
-      // level before the local filter's own median has to reason about it.
-      return despikeHeights(clampImplausibleElevation(decodeTerrariumTile(pixels.data, width)), width);
-    } catch {
-      // A tile that will not load is a patch of unknown ground, which
-      // `loadHeightField` counts and reports. It is not a page error.
-      return null;
-    }
-  })();
-
-  tileCache.set(key, work);
-  // Insertion order is eviction order: the least recently touched tile (see
-  // the `get` above) goes first once the cache is over budget.
-  if (tileCache.size > TILE_CACHE_LIMIT) {
-    const oldest = tileCache.keys().next().value;
-    if (oldest !== undefined) tileCache.delete(oldest);
-  }
-  return work;
+  const cleaned = await getCleanedTerrariumTile(tile);
+  return cleaned?.heights ?? null;
 }
 
 /* ── The overlay ───────────────────────────────────────────────────────────── */

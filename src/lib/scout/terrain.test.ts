@@ -190,6 +190,46 @@ describe('clampImplausibleElevation', () => {
   });
 });
 
+describe('despikeHeights and clampImplausibleElevation together', () => {
+  // Production never calls either alone — both `terrain-protocol.ts` and
+  // `terrain-shadows.ts` (by way of `terrarium-tile.ts`) run exactly
+  // `despikeHeights(clampImplausibleElevation(heights), size)`. Each
+  // function has its own tests above; this is the composition, in the order
+  // it actually runs.
+
+  it('cleans a bad region wide enough that despike alone cannot see it', () => {
+    // A local filter judges a pixel only against its own 3×3 window, so a
+    // plateau of bad values several cells across looks, from the inside,
+    // exactly like real terrain — every neighbour agrees with it. That is
+    // despikeHeights's own documented limit, and exactly why
+    // clampImplausibleElevation has to run first.
+    const SIZE = 8;
+    const heights = new Float32Array(SIZE * SIZE);
+    for (let row = 2; row < 6; row++) {
+      for (let col = 2; col < 6; col++) heights[row * SIZE + col] = -600; // past PLAUSIBLE_FLOOR_M
+    }
+
+    const despikeAlone = despikeHeights(heights, SIZE);
+    assert.equal(
+      despikeAlone[3 * SIZE + 3],
+      -600,
+      'an interior pixel of a uniform bad plateau should survive despike alone',
+    );
+
+    const productionOrder = despikeHeights(clampImplausibleElevation(heights), SIZE);
+    for (let i = 0; i < productionOrder.length; i++) {
+      assert.equal(productionOrder[i], 0, `cell ${i} still implausible after the real cleaning pipeline`);
+    }
+  });
+
+  it('still despikes a genuine single-pixel spike clamping has no reason to touch', () => {
+    const heights = new Float32Array(25); // flat ground
+    heights[12] = 300; // plausible, but an obvious spike over flat ground
+    const cleaned = despikeHeights(clampImplausibleElevation(heights), 5);
+    assert.equal(cleaned[12], 0);
+  });
+});
+
 /* ── Mercator ──────────────────────────────────────────────────────────────── */
 
 describe('web mercator', () => {
