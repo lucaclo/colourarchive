@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { readManifest } from '../lib/manifest';
 import { oklchCss } from '../lib/color';
 import { GENRES, GENRE_LABEL } from '../lib/types';
-import { findColourGaps } from '../lib/gaps';
+import { findColourGaps, findGenreColourGaps } from '../lib/gaps';
 import { looksFor, photoLookRequest, type LookRequest } from '../lib/match/looks';
 import { chapterDna } from '../lib/match/chapter-dna';
 import { groupPhotosByLens, gearPresets, type GearPreset } from '../lib/match/gear-dna';
@@ -32,13 +32,47 @@ const showMediumToggle = hasPhotos && mediumCounts.film > 0 && mediumCounts.digi
 // Genre dropdown: only offer genres that actually appear, and only when there
 // are at least two to choose between (else there's nothing to filter).
 const genreCounts: Record<string, number> = { street: 0, portrait: 0, landscape: 0, architecture: 0 };
-for (const ch of manifest.chapters) for (const p of ch.photos) if (p.genre) genreCounts[p.genre]++;
+// Per-medium breakdown too — Film + Portrait can be zero even when Portrait
+// itself isn't, and picking that combination blind used to land on a
+// silently empty archive. The dropdown greys out (never hides — the count
+// itself is useful) whichever genre is empty for the medium already active.
+const genreCountsByMedium = {
+  film: { street: 0, portrait: 0, landscape: 0, architecture: 0 },
+  digital: { street: 0, portrait: 0, landscape: 0, architecture: 0 },
+};
+for (const ch of manifest.chapters) for (const p of ch.photos) if (p.genre) {
+  genreCounts[p.genre]++;
+  genreCountsByMedium[p.medium][p.genre]++;
+}
 const presentGenres = GENRES.filter((g) => genreCounts[g] > 0);
 const showGenreDrop = hasPhotos && presentGenres.length >= 2;
 
 // --- Insights: quiet stats about the archive ---------------------------------
 const allPhotos = manifest.chapters.flatMap((c) => c.photos);
 const digitalPhotos = allPhotos.filter((p) => p.medium === 'digital'); // film EXIF is scanner noise
+
+// The archive's own pulse — digital only, same reason as every other EXIF
+// read here: film's capturedAt is the scanner's date, not the subject's.
+// Rendered from `Date.now()`, so it's exact on the Mac (astro dev renders
+// per request) and only as fresh as the last build on the published static
+// site — the same tradeoff `builtAt`'s footer stamp already accepts below.
+const capturedDates = digitalPhotos
+  .map((p) => (p.exif.capturedAt ? new Date(p.exif.capturedAt) : undefined))
+  .filter((d): d is Date => Boolean(d) && !Number.isNaN(d!.getTime()));
+const lastShotAt = capturedDates.length ? new Date(Math.max(...capturedDates.map((d) => d.getTime()))) : undefined;
+const daysSinceLastShot = lastShotAt ? Math.floor((Date.now() - lastShotAt.getTime()) / 86_400_000) : undefined;
+
+// Photos from today's month/day in an earlier year — the one thing a
+// colour-sorted archive has no other way to surface, since nothing else
+// here groups by date at all. Newest match first within each year.
+const today = new Date();
+const onThisDay = digitalPhotos
+  .filter((p) => {
+    if (!p.exif.capturedAt) return false;
+    const d = new Date(p.exif.capturedAt);
+    return !Number.isNaN(d.getTime()) && d.getMonth() === today.getMonth() && d.getDate() === today.getDate() && d.getFullYear() !== today.getFullYear();
+  })
+  .sort((a, b) => new Date(b.exif.capturedAt!).getTime() - new Date(a.exif.capturedAt!).getTime());
 const topCounts = (values: Array<string | undefined>, n = 6): Array<[string, number]> => {
   const m = new Map<string, number>();
   for (const v of values) if (v) m.set(v, (m.get(v) ?? 0) + 1);
@@ -58,6 +92,18 @@ const insights = {
 // because a gap has no photo to draw one from: this is the anchor's own hue,
 // not a measurement.
 const colourGaps = findColourGaps(manifest.chapters);
+
+// A different claim from colourGaps above: not "never shot this hue" but
+// "never shot this genre IN this hue", which a pure hue count or a pure
+// genre count can't see on its own — see gaps.ts's own header for why. One
+// row per genre that has at least one blind spot, anchors it's missing
+// joined into a single line rather than one row per (genre, anchor) pair.
+const genreGaps = findGenreColourGaps(allPhotos);
+const genreGapsByGenre = GENRES.map((g) => ({
+  genre: g,
+  label: GENRE_LABEL[g],
+  anchors: genreGaps.filter((gap) => gap.genre === g).map((gap) => gap.anchorName),
+})).filter((g) => g.anchors.length > 0);
 
 // Gear-aware presets — issue #62. Only photos with a lens on record have
 // anything to group by (film carries none), so this measures that subset
@@ -116,6 +162,14 @@ const initialAccent = manifest.chapters[0]
   : undefined;
 const roman = (n: number) =>
   ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI'][n] ?? String(n + 1);
+// How much of the archive a chapter actually is, relative to an even split —
+// the same ratio the cover spectrum already turns into segment width
+// (`flex-grow: ch.photos.length`). Reused here as a typographic weight
+// instead of a new decoration: a chapter's divider carries a little more (or
+// less) presence in proportion to its own size, nothing invented. Clamped so
+// one outsized or tiny chapter can't swing the title past legible bounds.
+const avgChapterSize = hasPhotos ? manifest.count / manifest.chapters.length : 1;
+const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avgChapterSize));
 // The aurora behind the cover title is built from every chapter's own hue —
 // a conic sweep around the archive's real palette, not an invented gradient.
 // It never touches a photograph (grain header rule: "the photograph is the
@@ -156,7 +210,19 @@ const auroraCss = hasPhotos
         <ul class="genre-menu" id="genre-menu" role="listbox" aria-label="Genre" hidden>
           <li role="option" data-genre="all" aria-selected="true" tabindex="-1">All genres</li>
           {presentGenres.map((g) => (
-            <li role="option" data-genre={g} aria-selected="false" tabindex="-1">{GENRE_LABEL[g]}</li>
+            <li
+              role="option"
+              data-genre={g}
+              data-label={GENRE_LABEL[g]}
+              data-count-all={genreCounts[g]}
+              data-count-film={genreCountsByMedium.film[g]}
+              data-count-digital={genreCountsByMedium.digital[g]}
+              aria-selected="false"
+              tabindex="-1"
+            >
+              <span class="genre-name">{GENRE_LABEL[g]}</span>
+              <span class="genre-count" data-genre-count></span>
+            </li>
           ))}
         </ul>
       </div>
@@ -192,7 +258,13 @@ const auroraCss = hasPhotos
     {hasPhotos && (
       <nav class="cover-spectrum" id="cover-spectrum" aria-label="Chapters">
         {manifest.chapters.map((ch, ci) => (
-          <button class="cs-seg" data-jump={ci} style={`background:${oklchCss(ch.oklch)};flex-grow:${Math.max(1, ch.photos.length)}`} aria-label={`Jump to ${ch.name}`} />
+          <button class="cs-seg" data-jump={ci} style={`background:${oklchCss(ch.oklch)};flex-grow:${Math.max(1, ch.photos.length)}`} aria-label={`Jump to ${ch.name}`}>
+            {/* Hue alone can't tell two adjacent chapters apart for every
+                visitor — this names the segment on hover/focus without
+                touching the band's own true colour, which is the one place
+                the archive's real palette is shown at once. */}
+            <span class="cs-tip" aria-hidden="true">{ch.name}</span>
+          </button>
         ))}
       </nav>
     )}
@@ -202,27 +274,33 @@ const auroraCss = hasPhotos
   {
     hasPhotos ? (
       <main class="archive">
+        {/* Filtering (medium/genre/search) to a combination with nothing in it
+            used to leave every chapter and collage hidden with zero
+            explanation — a blank gradient from the cover straight to the
+            footer, indistinguishable from the page being broken. This is the
+            fallback `refreshEmpties()` reveals when nothing survives the
+            active filter, with a one-click way back out. */}
+        <div class="archive-empty" id="archive-empty" hidden>
+          <p id="archive-empty-text"></p>
+          <button type="button" class="archive-empty-clear" id="archive-empty-clear">Clear filters</button>
+        </div>
         {manifest.chapters.map((ch, ci) => {
           const bg = oklchCss(ch.oklch);
           const fg = titleFg(ch.oklch.L);
+          const weight = chapterWeight(ch.photos.length);
           return (
             <>
               <section
                 class="chapter-gap"
-                style={`--chapter-bg:${bg};--chapter-fg:${fg};color:${fg}`}
+                style={`--chapter-bg:${bg};--chapter-fg:${fg};--chapter-weight:${weight.toFixed(3)};color:${fg}`}
                 aria-label={`Chapter ${ch.name}`}
                 data-ci={ci}
                 data-wash={oklchCss({ L: Math.min(0.16, ch.oklch.L), C: ch.oklch.C * 0.45, H: ch.oklch.H })}
                 data-accent={oklchCss({ L: 0.78, C: Math.min(ch.oklch.C, 0.11), H: ch.oklch.H })}
               >
-                {/* The chapter's own name, repeated to fill the width behind
-                    the title. Purely typographic: no imagery competes with
-                    the photograph, per the file header's own rule above. */}
-                <div class="chapter-marquee" aria-hidden="true">
-                  <div class="cm-track">{Array.from({ length: 6 }).map(() => <span>{ch.name}</span>)}</div>
-                </div>
                 <p class="chapter-index">Chapter {roman(ci)}</p>
                 <h2 class="chapter-title">{ch.name}</h2>
+                <p class="chapter-count">{ch.photos.length} photograph{ch.photos.length === 1 ? '' : 's'}</p>
                 <span class="chapter-swatch" style={`background:${bg}`} />
               </section>
               <div class="collage">
@@ -334,19 +412,19 @@ const auroraCss = hasPhotos
              device this is actually read on — `i` and `p` are unreachable, so
              details and the slideshow were invisible features there. -->
         <div class="lb-tools">
-          <button class="lb-tool" id="lb-play" aria-label="Play slideshow" aria-pressed="false">
+          <button class="lb-tool" id="lb-play" aria-label="Play slideshow" title="Play slideshow" aria-pressed="false">
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
-          <button class="lb-tool" id="lb-info" aria-label="Photo details" aria-pressed="false">i</button>
-          <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive">≈</button>
-          <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom">◐</button>
-          <button class="lb-tool lb-close" id="lb-close" aria-label="Close">×</button>
+          <button class="lb-tool" id="lb-info" aria-label="Photo details" title="Photo details" aria-pressed="false">i</button>
+          <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">≈</button>
+          <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">◐</button>
+          <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close">×</button>
         </div>
-        <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous">‹</button>
+        <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous">‹</button>
         <div class="lb-stage">
           <img id="lb-img" alt="" sizes="100vw" />
         </div>
-        <button class="lb-nav lb-next" id="lb-next" aria-label="Next">›</button>
+        <button class="lb-nav lb-next" id="lb-next" aria-label="Next" title="Next">›</button>
         <div class="lb-caption" id="lb-caption"></div>
         <p class="lb-hint">← →  ·  scroll to zoom  ·  esc</p>
         <span class="lb-progress" aria-hidden="true"></span>
@@ -375,7 +453,12 @@ const auroraCss = hasPhotos
         <div class="insights-inner">
           <button class="insights-close" id="insights-close" aria-label="Close">×</button>
           <h2>Insights</h2>
-          <p class="insights-sub">{manifest.count} photographs · {mediumCounts.digital} digital · {mediumCounts.film} film · {manifest.chapters.length} chapters</p>
+          <p class="insights-sub">
+            {manifest.count} photographs · {mediumCounts.digital} digital · {mediumCounts.film} film · {manifest.chapters.length} chapters
+            {daysSinceLastShot !== undefined && (
+              <> · last shot {daysSinceLastShot === 0 ? 'today' : daysSinceLastShot === 1 ? 'yesterday' : `${daysSinceLastShot} days ago`}</>
+            )}
+          </p>
 
           <section>
             <h3>Colour</h3>
@@ -404,6 +487,34 @@ const auroraCss = hasPhotos
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {genreGapsByGenre.length > 0 && (
+            <section>
+              <h3>Genre blind spots</h3>
+              <ul class="stat">
+                {genreGapsByGenre.map((g) => (
+                  <li>
+                    <span class="lbl">{g.label}</span>
+                    <span class="genre-gap-note">never in {g.anchors.map((a) => a.toLowerCase()).join(', ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {onThisDay.length > 0 && (
+            <section>
+              <h3>On this day</h3>
+              <div class="otd-strip">
+                {onThisDay.slice(0, 10).map((p) => (
+                  <figure class="otd-item" style={`aspect-ratio:${p.width}/${p.height}`}>
+                    <img src={p.derivatives[0].avif} alt="" loading="lazy" />
+                    <figcaption>{new Date(p.exif.capturedAt!).getFullYear()}</figcaption>
+                  </figure>
+                ))}
+              </div>
             </section>
           )}
 
@@ -1199,12 +1310,14 @@ const auroraCss = hasPhotos
     lb.classList.remove('playing');
     playBtn?.setAttribute('aria-pressed', 'false');
     playBtn?.setAttribute('aria-label', 'Play slideshow');
+    playBtn?.setAttribute('title', 'Play slideshow');
   }
   function toggleSlideshow() {
     if (slideTimer) { stopSlideshow(); return; }
     lb.classList.add('playing');
     playBtn?.setAttribute('aria-pressed', 'true');
     playBtn?.setAttribute('aria-label', 'Pause slideshow');
+    playBtn?.setAttribute('title', 'Pause slideshow');
     slideTimer = setInterval(nextVisibleWrap, 4000);
   }
   // Details and the slideshow, reachable without a keyboard.
@@ -1449,15 +1562,49 @@ const auroraCss = hasPhotos
   const countVisible = (collage) =>
     Array.from(collage.querySelectorAll('.frame')).filter(frameShown).length;
 
+  // A medium/genre/search combination with nothing in it used to hide every
+  // chapter and collage and leave a silent blank stretch from the cover to
+  // the footer — indistinguishable from the page being broken (a real
+  // combination, Film + Portrait, does this on the archive's own current
+  // photos). This surfaces which filters produced the empty result and a
+  // one-click way out, the same "Clear filters" gesture regardless of
+  // whether medium, genre or search (or all three) are the cause.
+  const archiveEmpty = document.getElementById('archive-empty');
+  const archiveEmptyText = document.getElementById('archive-empty-text');
+  const archiveEmptyClear = document.getElementById('archive-empty-clear');
+  const VIEW_LABEL = { film: 'Film', digital: 'Digital' };
+  function updateArchiveEmptyMessage() {
+    if (!archiveEmptyText) return;
+    const parts = [];
+    if (view !== 'all') parts.push(VIEW_LABEL[view]);
+    if (genre !== 'all' && genreCurrent) parts.push(genreCurrent.textContent);
+    const q = searchInput?.value.trim();
+    if (q) parts.push(`"${q}"`);
+    archiveEmptyText.textContent = parts.length
+      ? `Nothing matches ${parts.join(' · ')}.`
+      : 'Nothing here yet.';
+  }
+  archiveEmptyClear?.addEventListener('click', () => {
+    applyView('all');
+    applyGenre('all', 'All genres');
+    if (searchInput) { searchInput.value = ''; runSearch(''); }
+  });
+
   function refreshEmpties() {
+    let anyVisible = false;
     collages.forEach((c, i) => {
       const has = countVisible(c) > 0;
+      anyVisible = anyVisible || has;
       c.style.display = has ? '' : 'none';
       const gap = c.previousElementSibling;
       if (gap && gap.classList.contains('chapter-gap')) gap.style.display = has ? '' : 'none';
       const seg = document.querySelector(`.spectrum-seg[data-jump="${i}"]`);
       if (seg) seg.style.display = has ? '' : 'none';
     });
+    if (archiveEmpty) {
+      archiveEmpty.hidden = anyVisible;
+      if (!anyVisible) updateArchiveEmptyMessage();
+    }
   }
   function applyView(v) {
     view = v;
@@ -1467,6 +1614,7 @@ const auroraCss = hasPhotos
     }
     layoutAll();      // repack visible frames into tight columns
     refreshEmpties();
+    updateGenreMenuCounts();
     viewToggle?.querySelectorAll('[data-view]').forEach((b) =>
       b.setAttribute('aria-pressed', String(b.dataset.view === v)));
     savePos();
@@ -1491,6 +1639,21 @@ const auroraCss = hasPhotos
     genreMenu.classList.remove('show'); genreBtn?.setAttribute('aria-expanded', 'false'); genreDrop?.classList.remove('open');
     setTimeout(() => { genreMenu.hidden = true; }, 160);
   };
+  // How many photos each genre actually has under the medium filter already
+  // active — filled in from the data-count-* attributes each <li> carries
+  // (computed server-side in the frontmatter). Runs once at load and again
+  // whenever the medium toggle changes; picking a genre never recomputes it,
+  // since the medium is the only thing that shifts these counts.
+  function updateGenreMenuCounts() {
+    const key = view === 'film' ? 'countFilm' : view === 'digital' ? 'countDigital' : 'countAll';
+    genreMenu?.querySelectorAll('[data-genre]:not([data-genre="all"])').forEach((li) => {
+      const n = Number(li.dataset[key] ?? 0);
+      const countEl = li.querySelector('[data-genre-count]');
+      if (countEl) countEl.textContent = String(n);
+      li.classList.toggle('genre-empty', n === 0);
+    });
+  }
+  updateGenreMenuCounts();
   function applyGenre(g, label) {
     genre = g;
     if (archiveEl) {
@@ -1511,7 +1674,7 @@ const auroraCss = hasPhotos
   genreMenu?.addEventListener('click', (e) => {
     const li = e.target.closest('[data-genre]');
     if (!li) return;
-    applyGenre(li.dataset.genre, li.textContent.trim());
+    applyGenre(li.dataset.genre, li.dataset.label || li.textContent.trim());
     closeGenre();
   });
   document.addEventListener('click', (e) => {

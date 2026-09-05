@@ -1,7 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { readManifest } from '../lib/manifest';
-import { readBookCuration, orderedChaptersWithExclusions } from '../lib/book';
+import { readManifest, readStore } from '../lib/manifest';
+import { readBookCuration, orderedChaptersWithExclusions, curatedChapters } from '../lib/book';
+import { duplicateGroups } from '../lib/duplicates';
+import { readNotes } from '../lib/notes';
 import { oklchCss } from '../lib/color';
 
 export const prerender = false;
@@ -10,6 +12,41 @@ const manifest = await readManifest();
 const curation = await readBookCuration();
 const chapters = orderedChaptersWithExclusions(manifest.chapters, curation);
 const includedCount = chapters.reduce((n, ch) => n + ch.photos.filter((p) => !p.excluded).length, 0);
+// One divider page per chapter that survives exclusion, plus one plate page
+// per included photo — the same count `export:print` actually produces.
+const pageCount = curatedChapters(manifest.chapters, curation).length + includedCount;
+// Every chapter, for the per-photo "move to chapter" control — includes
+// chapters a move has emptied, so a photo can always be moved back.
+const chapterList = manifest.chapters.map((ch) => ({ key: ch.key, name: ch.name }));
+
+// The archive's own notebook (see notes.ts) — why a photo matters, not
+// anything measured. Read once here so every cell can show whether it
+// already carries one; the editor itself is a single reusable overlay,
+// opened from whichever cell's caption was clicked.
+const notes = await readNotes();
+
+// Possible bursts/duplicates — see duplicates.ts for why this is scoped per
+// chapter and uses an absolute embedding-distance ceiling rather than a
+// percentile of the chapter's own spread. Flagged, never acted on
+// automatically: the tool has no principled way to judge which frame of a
+// burst is the one worth keeping, so it surfaces the group and leaves the
+// choice — and the exclude button — to whoever is looking at them.
+//
+// manifest.json deliberately strips embeddings to keep the rendered page
+// lean (see manifest.ts's groupChapters) — they only ever lived in the flat
+// store. Read that separately and match back up by id, purely to compute
+// the groups below; only each match's key and size (never the vectors
+// themselves) make it into the template.
+const embeddingById = new Map((await readStore()).map((p) => [p.id, p.embedding] as const));
+const dupGroups = duplicateGroups(
+  chapters.map((ch) => ({
+    key: ch.key,
+    photos: ch.photos.map((p) => ({ ...p, embedding: embeddingById.get(p.id) })),
+  })),
+);
+const dupByPhoto = new Map(dupGroups.flatMap((g) => g.ids.map((id) => [id, { key: g.key, size: g.ids.length }] as const)));
+const dupCountByChapter = new Map<string, number>();
+for (const g of dupGroups) dupCountByChapter.set(g.chapterKey, (dupCountByChapter.get(g.chapterKey) ?? 0) + 1);
 
 // Same static echo as upload.astro's — see Layout's `accent` prop.
 const accent = manifest.chapters[0]
@@ -20,7 +57,12 @@ const accent = manifest.chapters[0]
 <Layout title="The book — Colour Archive" accent={accent}>
   <header class="topbar" id="topbar">
     <span class="brand">Colour Archive</span>
-    <span class="topbar-right"><a href="/">View archive</a></span>
+    <span class="topbar-right">
+      <a href="/">Archive</a>
+      <a href="/inspiration">Inspiration</a>
+      <a href="/scout">Scout</a>
+      <a href="/upload">Add<span class="wide-only"> / Remove</span></a>
+    </span>
   </header>
 
   <main class="book-page">
@@ -28,9 +70,13 @@ const accent = manifest.chapters[0]
       <p class="kicker">Colour Archive</p>
       <h1>The book</h1>
       <p class="lead">
-        The sequence <code>export:sequence</code> and <code>export:print</code> build — drag to reorder within a
-        chapter (or focus a photo and use the arrow keys), click a photo to leave it out.{' '}
-        <span id="book-count">{includedCount} of {manifest.count} in the book</span>.
+        The sequence <code>export:sequence</code> and <code>export:print</code> build — drag the handle to reorder
+        within a chapter (or focus a photo and use the arrow keys), click a photo to leave it out, or use a photo's
+        chapter menu to move it into a different one.{' '}
+        <span id="book-count">{includedCount} of {manifest.count} in the book — ~{pageCount} pages</span>.{' '}
+        <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-share-link">
+          View the read-only share link →
+        </a>
       </p>
     </header>
 
@@ -46,31 +92,68 @@ const accent = manifest.chapters[0]
                 <span class="book-chapter-count" data-chapter-count={ch.key}>
                   {ch.photos.filter((p) => !p.excluded).length}/{ch.photos.length}
                 </span>
+                {
+                  (dupCountByChapter.get(ch.key) ?? 0) > 0 && (
+                    <span class="book-dup-summary">
+                      {dupCountByChapter.get(ch.key)} possible duplicate{dupCountByChapter.get(ch.key) === 1 ? '' : 's'}
+                    </span>
+                  )
+                }
               </h2>
               <ul class="book-grid" data-chapter-list={ch.key}>
-                {ch.photos.map((p) => (
-                  <li
-                    class="book-cell"
-                    draggable="true"
-                    tabindex="0"
-                    data-id={p.id}
-                    data-excluded={p.excluded ? '1' : ''}
-                    aria-label={`${p.filename} — arrow keys to move within this chapter`}
-                  >
-                    <img src={p.avif} alt="" loading="lazy" />
-                    <button
-                      type="button"
-                      class="book-exclude"
-                      data-exclude={p.id}
-                      aria-pressed={p.excluded}
-                      title={p.excluded ? 'Include in the book' : 'Leave out of the book'}
+                {ch.photos.map((p) => {
+                  const dup = dupByPhoto.get(p.id);
+                  return (
+                    <li
+                      class="book-cell"
+                      tabindex="0"
+                      data-id={p.id}
+                      data-home={p.chapter}
+                      data-stem={p.filename.split('.')[0]}
+                      data-excluded={p.excluded ? '1' : ''}
+                      data-dup-group={dup?.key}
+                      data-note={notes[p.id] ?? ''}
+                      style={`aspect-ratio:${p.width}/${p.height}`}
+                      aria-label={`${p.filename} — drag the handle or use arrow keys to move within this chapter`}
                     >
-                      {p.excluded ? '+' : '×'}
-                    </button>
-                    <span class="book-handle" aria-hidden="true">⠿⠿</span>
-                    <figcaption>{p.filename}</figcaption>
-                  </li>
-                ))}
+                      <img src={p.derivatives[0].avif} alt="" loading="lazy" />
+                      <button
+                        type="button"
+                        class="book-exclude"
+                        data-exclude={p.id}
+                        aria-pressed={p.excluded}
+                        title={p.excluded ? 'Include in the book' : 'Leave out of the book'}
+                      >
+                        {p.excluded ? '+' : '×'}
+                      </button>
+                      <span class="book-handle" aria-hidden="true" title="Drag to reorder">⠿⠿</span>
+                      <div class="book-foot">
+                        <button type="button" class="book-caption" data-note-btn={p.id} title={notes[p.id] ? 'Edit note' : 'Add a note'}>
+                          {notes[p.id] && <span class="book-note-mark" aria-hidden="true">✎</span>}
+                          {p.filename.split('.')[0]}
+                        </button>
+                        {
+                          dup && (
+                            <button
+                              type="button"
+                              class="book-dup"
+                              data-dup-keep={p.id}
+                              data-dup-group={dup.key}
+                              title={`${dup.size} similar shots in this chapter, probably the same moment — click to keep this one and leave the others out`}
+                            >
+                              ⧉{dup.size}
+                            </button>
+                          )
+                        }
+                        <select class="book-move" data-move={p.id} title="Move to a different chapter">
+                          {chapterList.map((c) => (
+                            <option value={c.key} selected={c.key === ch.key}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ))}
@@ -79,9 +162,33 @@ const accent = manifest.chapters[0]
     }
   </main>
 
+  <div class="book-undo" id="book-undo" hidden role="status">
+    <span id="book-undo-text"></span>
+    <button type="button" id="book-undo-btn">Undo</button>
+  </div>
+
   <div class="book-savebar" id="book-savebar" hidden>
     <span id="book-savebar-text">Unsaved changes</span>
     <button type="button" class="ghost" id="book-save">Save</button>
+  </div>
+
+  <!-- The notebook: why a photo matters, not anything measured. One reusable
+       overlay rather than an inline field per cell — a cell is too small to
+       hold a comfortable textarea, and this way the same editor works from
+       any chapter without duplicating markup 90-odd times. -->
+  <div class="book-noteedit" id="book-noteedit" hidden>
+    <div class="book-noteedit-body">
+      <img id="book-noteedit-img" alt="" />
+      <div class="book-noteedit-form">
+        <p class="book-noteedit-name" id="book-noteedit-name"></p>
+        <textarea id="book-noteedit-text" placeholder="Why this one matters…" rows="5"></textarea>
+        <p class="book-noteedit-error" id="book-noteedit-error" hidden></p>
+        <div class="book-noteedit-actions">
+          <button type="button" class="ghost" id="book-noteedit-cancel">Cancel</button>
+          <button type="button" id="book-noteedit-save">Save</button>
+        </div>
+      </div>
+    </div>
   </div>
 </Layout>
 
@@ -95,6 +202,7 @@ const accent = manifest.chapters[0]
   }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 44rem; }
   .lead code { font-size: 0.92em; }
+  .book-share-link { color: var(--accent-mix, var(--fg)); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
   #book-count { color: var(--fg); }
   .book-empty { color: var(--muted); }
 
@@ -104,26 +212,60 @@ const accent = manifest.chapters[0]
     font-size: 1.4rem; margin: 0 0 1rem; display: flex; align-items: baseline; gap: 0.6rem;
   }
   .book-chapter-count { font-family: var(--font-label); font-size: 0.85rem; color: var(--muted); }
-
-  .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; }
-  .book-cell {
-    position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: var(--border);
-    border-radius: 2px; cursor: grab; transition: box-shadow 220ms var(--ease), opacity 200ms var(--ease);
+  .book-dup-summary {
+    font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase;
+    color: #c9973a; padding: 0.15rem 0.5rem; border-radius: 999px; background: color-mix(in oklab, #c9973a 14%, transparent);
   }
-  .book-cell:active { cursor: grabbing; }
+
+  .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); align-items: start; gap: 8px; list-style: none; margin: 0; padding: 0; }
+  .book-cell {
+    /* aspect-ratio is set inline per-cell, from the photo's own dimensions — a
+       thumbnail cropped to a square here could hide a composition that would
+       decide an include/exclude or reorder call differently at full frame. */
+    position: relative; margin: 0; overflow: hidden; background: var(--border);
+    border-radius: 2px; transition: box-shadow 220ms var(--ease), opacity 200ms var(--ease);
+  }
   .book-cell img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   .book-cell[data-excluded='1'] { opacity: 0.32; }
-  .book-cell.dragging { opacity: 0.4; }
   .book-cell:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+  /* Possible duplicate/burst — a signal, not a verdict: the ring says "look
+     at this one," the existing × exclude button (or the ⧉ shortcut below)
+     is still what actually acts on it. */
+  .book-cell[data-dup-group] { box-shadow: 0 0 0 2px #c9973a inset; }
   .book-cell.drop-before { box-shadow: -3px 0 0 var(--accent-mix) inset; }
   .book-cell.drop-after { box-shadow: 3px 0 0 var(--accent-mix) inset; }
-  .book-cell figcaption {
-    position: absolute; left: 0; bottom: 0; right: 0;
-    font-family: var(--font-label); font-size: 0.55rem; letter-spacing: 0.04em;
-    color: #fff; padding: 0.3rem 0.35rem; pointer-events: none;
+  .book-foot {
+    position: absolute; left: 0; bottom: 0; right: 0; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between; gap: 0.3rem;
+    padding: 0.3rem 0.3rem; pointer-events: none;
     background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .book-caption {
+    pointer-events: auto; appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
+    padding: 0; font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.02em;
+    color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+  .book-caption:hover, .book-caption:focus-visible { color: var(--accent-mix, #fff); }
+  .book-note-mark { margin-right: 0.2rem; }
+  .book-move {
+    pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
+    background: color-mix(in oklab, #000 55%, transparent); color: #fff;
+    font-family: var(--font-label); font-size: 0.5rem; letter-spacing: 0.02em;
+    padding: 0.2rem 0.4rem; max-width: 5.2rem; flex: none; backdrop-filter: blur(6px);
+  }
+  .book-move:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
+  /* "Keep this one" — excludes the rest of its duplicate group in one step,
+     same one-step-undo path the × exclude button already uses. */
+  .book-dup {
+    pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
+    background: color-mix(in oklab, #c9973a 55%, #000 45%); color: #fff;
+    font-family: var(--font-label); font-size: 0.5rem; letter-spacing: 0.01em;
+    padding: 0.2rem 0.4rem; flex: none; backdrop-filter: blur(6px);
+    transition: transform 110ms ease-out, background 140ms;
+  }
+  .book-dup:hover { background: color-mix(in oklab, #c9973a 78%, #000 22%); }
+  .book-dup:active { transform: scale(0.92); }
+  .book-dup:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
   .book-exclude {
     position: absolute; top: 6px; right: 6px; z-index: 2;
     width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
@@ -137,19 +279,30 @@ const accent = manifest.chapters[0]
   .book-cell[data-excluded='1'] .book-exclude:hover { background: color-mix(in oklab, #2e7d32 95%, transparent); }
   .book-handle {
     position: absolute; top: 6px; left: 6px; z-index: 2;
+    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 11px; line-height: 1; letter-spacing: -2px;
     background: color-mix(in oklab, #000 55%, transparent); border-radius: 999px;
-    padding: 0.3rem 0.35rem; backdrop-filter: blur(6px); pointer-events: none;
+    backdrop-filter: blur(6px); cursor: grab; touch-action: none;
   }
+  .book-handle:active { cursor: grabbing; }
+  .book-cell.touch-dragging { opacity: 0.4; z-index: 5; }
 
-  .book-savebar {
-    position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 40;
+  .book-undo, .book-savebar {
+    position: fixed; left: 50%; transform: translateX(-50%); z-index: 40;
     display: flex; align-items: center; gap: 1rem;
     padding: 0.6rem 0.6rem 0.6rem 1rem; border-radius: 999px;
     background: color-mix(in oklab, var(--bg) 90%, #000); border: 1px solid var(--border);
     box-shadow: 0 10px 30px -10px color-mix(in oklab, black 55%, transparent);
   }
-  .book-savebar[hidden] { display: none; }
+  .book-undo { bottom: 5.2rem; }
+  .book-savebar { bottom: 1.4rem; }
+  .book-undo[hidden], .book-savebar[hidden] { display: none; }
+  #book-undo-text { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
+  #book-undo-btn {
+    appearance: none; cursor: pointer; border: 0; background: none; color: var(--accent-mix, var(--fg));
+    font-family: var(--font-label); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.3rem 0.2rem; text-decoration: underline; text-underline-offset: 2px;
+  }
   #book-savebar-text { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
   #book-save {
     appearance: none; cursor: pointer; border: 0; border-radius: 999px;
@@ -160,6 +313,33 @@ const accent = manifest.chapters[0]
   #book-save:active { transform: scale(0.96); }
   #book-save:disabled { opacity: 0.6; cursor: default; }
 
+  .book-noteedit {
+    position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--bg) 88%, #000); padding: 1.4rem;
+    opacity: 0; transition: opacity 200ms var(--ease);
+  }
+  .book-noteedit[hidden] { display: none; }
+  .book-noteedit.show { opacity: 1; }
+  .book-noteedit-body {
+    display: flex; gap: 1.4rem; max-width: 40rem; width: 100%;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1.2rem;
+    transform: scale(0.97); transition: transform 200ms var(--ease);
+  }
+  .book-noteedit.show .book-noteedit-body { transform: none; }
+  @media (prefers-reduced-motion: reduce) { .book-noteedit, .book-noteedit-body { transition: none; } }
+  .book-noteedit-body img { width: 9rem; height: 9rem; object-fit: cover; border-radius: 3px; flex: 0 0 auto; background: var(--border); }
+  .book-noteedit-form { display: flex; flex-direction: column; gap: 0.6rem; flex: 1 1 auto; min-width: 0; }
+  .book-noteedit-name { margin: 0; font-family: var(--font-label); font-size: 0.72rem; color: var(--muted); }
+  #book-noteedit-text {
+    flex: 1 1 auto; resize: vertical; min-height: 6rem; background: color-mix(in oklab, var(--fg) 4%, transparent);
+    border: 1px solid var(--border); border-radius: 3px; color: var(--fg); font: inherit; font-size: 0.86rem;
+    line-height: 1.5; padding: 0.6rem; font-family: var(--font-display); font-style: var(--title-style);
+  }
+  #book-noteedit-text:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
+  .book-noteedit-error { margin: 0; font-family: var(--font-label); font-size: 0.7rem; color: #c0392b; }
+  .book-noteedit-error[hidden] { display: none; }
+  .book-noteedit-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+
   @media (max-width: 620px) {
     .book-page { padding: 7rem 5vw 14vh; }
     .book-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
@@ -167,13 +347,17 @@ const accent = manifest.chapters[0]
 </style>
 
 <script is:inline>
-  // Drag-reorder within a chapter (native HTML5 DnD — no library) and a
-  // per-photo include/exclude toggle, saved together as one POST to
-  // /api/book. See src/lib/book.ts for the curation this reads and writes.
+  // Drag-reorder within a chapter (Pointer Events — no library), a per-photo
+  // include/exclude toggle, and moving a photo to a different chapter, saved
+  // together as one POST to /api/book. See src/lib/book.ts for the curation
+  // this reads and writes.
   let dirty = false;
   const savebar = document.getElementById('book-savebar');
   const saveBtn = document.getElementById('book-save');
   const saveText = document.getElementById('book-savebar-text');
+  const undoBar = document.getElementById('book-undo');
+  const undoText = document.getElementById('book-undo-text');
+  const undoBtn = document.getElementById('book-undo-btn');
 
   // The beforeunload confirm dialog is not a real safety net — several
   // browsers suppress or ignore it — so a crash, an accidental swipe-close or
@@ -197,18 +381,65 @@ const accent = manifest.chapters[0]
     autosaveTimer = setTimeout(save, AUTOSAVE_DELAY);
   }
 
-  // --- Exclude toggle ------------------------------------------------------
+  // --- Exclude toggle, with a one-step undo -------------------------------
+  // A misclick during a fast curation pass used to be silent until the
+  // caption's dimming was noticed later. showUndo keeps only the most recent
+  // toggle reachable — this is a quick-recovery affordance, not a history —
+  // and its own timer means it never has to be dismissed explicitly. It
+  // takes a *batch* of {cell, previous} pairs, not one, so "keep this one"
+  // below (which can exclude several photos at once) is a single undo step
+  // too, not one the undo bar can only halfway reverse.
+  let undoTimer = null;
+  let undoTarget = null;
+
+  function setExcluded(cell, excluded) {
+    cell.dataset.excluded = excluded ? '1' : '';
+    const btn = cell.querySelector('.book-exclude');
+    btn.setAttribute('aria-pressed', String(excluded));
+    btn.textContent = excluded ? '+' : '×';
+    btn.title = excluded ? 'Include in the book' : 'Leave out of the book';
+    updateChapterCount(cell.closest('.book-chapter'));
+    updateTotalCount();
+  }
+
+  function showUndo(entries, message) {
+    clearTimeout(undoTimer);
+    undoTarget = entries;
+    undoText.textContent = message;
+    undoBar.hidden = false;
+    undoTimer = setTimeout(() => { undoBar.hidden = true; undoTarget = null; }, 6000);
+  }
+
+  undoBtn?.addEventListener('click', () => {
+    if (!undoTarget) return;
+    for (const { cell, previous } of undoTarget) setExcluded(cell, previous);
+    markDirty();
+    clearTimeout(undoTimer);
+    undoBar.hidden = true;
+    undoTarget = null;
+  });
+
   document.getElementById('book-chapters')?.addEventListener('click', (e) => {
+    const dupBtn = e.target.closest('.book-dup');
+    if (dupBtn) {
+      const keepId = dupBtn.dataset.dupKeep;
+      const groupKey = dupBtn.dataset.dupGroup;
+      const cells = [...document.querySelectorAll(`.book-cell[data-dup-group="${CSS.escape(groupKey)}"]`)];
+      const toExclude = cells.filter((c) => c.dataset.id !== keepId && c.dataset.excluded !== '1');
+      if (!toExclude.length) return;
+      const entries = toExclude.map((cell) => ({ cell, previous: false }));
+      for (const { cell } of entries) setExcluded(cell, true);
+      const keepCell = cells.find((c) => c.dataset.id === keepId);
+      showUndo(entries, `Left out ${entries.length} similar to ${keepCell?.dataset.stem || keepId}`);
+      markDirty();
+      return;
+    }
     const btn = e.target.closest('.book-exclude');
     if (!btn) return;
     const cell = btn.closest('.book-cell');
-    const excluded = cell.dataset.excluded === '1';
-    cell.dataset.excluded = excluded ? '' : '1';
-    btn.setAttribute('aria-pressed', String(!excluded));
-    btn.textContent = excluded ? '×' : '+';
-    btn.title = excluded ? 'Leave out of the book' : 'Include in the book';
-    updateChapterCount(cell.closest('.book-chapter'));
-    updateTotalCount();
+    const nowExcluded = cell.dataset.excluded !== '1';
+    setExcluded(cell, nowExcluded);
+    showUndo([{ cell, previous: !nowExcluded }], `${nowExcluded ? 'Left out' : 'Included'}: ${cell.dataset.stem || cell.dataset.id}`);
     markDirty();
   });
 
@@ -220,52 +451,92 @@ const accent = manifest.chapters[0]
     if (countEl) countEl.textContent = `${included}/${cells.length}`;
   }
 
+  // One print page per surviving chapter divider, plus one per included
+  // photo — mirrors export-print.ts's own pagination (curatedChapters drops
+  // a chapter emptied entirely by exclusion or by every photo moving out).
+  function estimatedPageCount() {
+    let chaptersWithIncluded = 0;
+    document.querySelectorAll('.book-chapter').forEach((section) => {
+      if (section.querySelector('.book-cell:not([data-excluded="1"])')) chaptersWithIncluded++;
+    });
+    const included = document.querySelectorAll('.book-cell:not([data-excluded="1"])').length;
+    return chaptersWithIncluded + included;
+  }
+
   function updateTotalCount() {
     const cells = document.querySelectorAll('.book-cell');
     const included = [...cells].filter((c) => c.dataset.excluded !== '1').length;
     const el = document.getElementById('book-count');
-    if (el) el.textContent = `${included} of ${cells.length} in the book`;
+    if (el) el.textContent = `${included} of ${cells.length} in the book — ~${estimatedPageCount()} pages`;
   }
 
-  // --- Drag-reorder, one chapter's list at a time ---------------------------
-  let dragging = null;
-  document.querySelectorAll('.book-grid').forEach((list) => {
-    list.addEventListener('dragstart', (e) => {
-      const cell = e.target.closest('.book-cell');
-      if (!cell) return;
-      dragging = cell;
-      cell.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      // Firefox requires data to be set for a drag to start at all.
-      e.dataTransfer.setData('text/plain', cell.dataset.id || '');
-    });
-    list.addEventListener('dragend', () => {
-      dragging?.classList.remove('dragging');
-      list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
-      dragging = null;
-    });
-    list.addEventListener('dragover', (e) => {
-      if (!dragging || !list.contains(dragging)) return;
+  // --- Move a photo to a different chapter --------------------------------
+  // Book-only — see book.ts's `moved` field. Physically relocating the <li>
+  // is enough: save() below reads chapter membership straight from the DOM,
+  // the same way it already reads order.
+  document.getElementById('book-chapters')?.addEventListener('change', (e) => {
+    const select = e.target.closest('.book-move');
+    if (!select) return;
+    const cell = select.closest('.book-cell');
+    const fromSection = cell.closest('.book-chapter');
+    const toList = document.querySelector(`[data-chapter-list="${CSS.escape(select.value)}"]`);
+    if (!toList || !cell) return;
+    toList.appendChild(cell);
+    updateChapterCount(fromSection);
+    updateChapterCount(cell.closest('.book-chapter'));
+    updateTotalCount();
+    markDirty();
+  });
+
+  // --- Reorder, one chapter's list at a time ------------------------------
+  // Pointer Events cover mouse, pen and touch alike from one code path — the
+  // previous native HTML5 DnD never fired from a touch drag (iOS Safari does
+  // not dispatch dragstart for touch), which meant reordering only worked
+  // with a mouse. The drag handle is the only pointerdown target so a touch
+  // scroll through the grid is never mistaken for the start of a drag.
+  let ptr = null; // { cell, list, pointerId }
+
+  function clearDropMarks(list) {
+    list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
+  }
+
+  document.querySelectorAll('.book-handle').forEach((handle) => {
+    handle.addEventListener('pointerdown', (e) => {
+      const cell = handle.closest('.book-cell');
+      const list = handle.closest('.book-grid');
+      if (!cell || !list) return;
       e.preventDefault();
-      const over = e.target.closest('.book-cell');
-      list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
-      if (!over || over === dragging) return;
-      const rect = over.getBoundingClientRect();
-      const before = e.clientX - rect.left < rect.width / 2;
-      over.classList.add(before ? 'drop-before' : 'drop-after');
-    });
-    list.addEventListener('drop', (e) => {
-      if (!dragging || !list.contains(dragging)) return;
-      e.preventDefault();
-      const over = e.target.closest('.book-cell');
-      list.querySelectorAll('.drop-before, .drop-after').forEach((c) => c.classList.remove('drop-before', 'drop-after'));
-      if (!over || over === dragging) return;
-      const before = over.classList.contains('drop-before') || (!over.classList.contains('drop-after') &&
-        e.clientX - over.getBoundingClientRect().left < over.getBoundingClientRect().width / 2);
-      over.insertAdjacentElement(before ? 'beforebegin' : 'afterend', dragging);
-      markDirty();
+      handle.setPointerCapture(e.pointerId);
+      ptr = { cell, list, pointerId: e.pointerId };
+      cell.classList.add('touch-dragging');
     });
   });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!ptr || e.pointerId !== ptr.pointerId) return;
+    const { list, cell } = ptr;
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.book-cell');
+    clearDropMarks(list);
+    if (!over || over === cell || !list.contains(over)) return;
+    const rect = over.getBoundingClientRect();
+    over.classList.add(e.clientX - rect.left < rect.width / 2 ? 'drop-before' : 'drop-after');
+  });
+
+  function endDrag(e) {
+    if (!ptr || e.pointerId !== ptr.pointerId) return;
+    const { list, cell } = ptr;
+    cell.classList.remove('touch-dragging');
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.book-cell');
+    clearDropMarks(list);
+    ptr = null;
+    if (!over || over === cell || !list.contains(over)) return;
+    const rect = over.getBoundingClientRect();
+    const before = e.clientX - rect.left < rect.width / 2;
+    over.insertAdjacentElement(before ? 'beforebegin' : 'afterend', cell);
+    markDirty();
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
 
   // --- Keyboard-precise reorder, one chapter's list at a time ---------------
   // Drag is imprecise for "move this plate exactly one spot left" — curation
@@ -285,6 +556,9 @@ const accent = manifest.chapters[0]
 
   document.querySelectorAll('.book-grid').forEach((list) => {
     list.addEventListener('keydown', (e) => {
+      // The chapter <select> uses arrow keys natively to change its own
+      // value — don't hijack those into a reorder.
+      if (e.target.closest('.book-move')) return;
       const cell = e.target.closest('.book-cell');
       if (!cell || !list.contains(cell)) return;
       const deltas = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: 0, ArrowDown: 0 };
@@ -316,16 +590,22 @@ const accent = manifest.chapters[0]
     saveText.textContent = 'Saving…';
     const chapters = {};
     const excluded = [];
+    const moved = {};
     document.querySelectorAll('.book-grid').forEach((list) => {
       const key = list.dataset.chapterList;
       chapters[key] = [...list.querySelectorAll('.book-cell')].map((c) => c.dataset.id);
-      list.querySelectorAll('.book-cell[data-excluded="1"]').forEach((c) => excluded.push(c.dataset.id));
+      list.querySelectorAll('.book-cell').forEach((c) => {
+        if (c.dataset.excluded === '1') excluded.push(c.dataset.id);
+        // Only a photo actually sitting outside its own manifest chapter
+        // needs an entry — everything else falls back to its home chapter.
+        if (c.dataset.home && c.dataset.home !== key) moved[c.dataset.id] = key;
+      });
     });
     try {
       const res = await fetch('/api/book', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chapters, excluded }),
+        body: JSON.stringify({ chapters, excluded, moved }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Save failed.');
@@ -354,6 +634,85 @@ const accent = manifest.chapters[0]
     }
   }
   saveBtn?.addEventListener('click', save);
+
+  // --- Notes: the archive's own notebook -----------------------------------
+  // One reusable overlay, opened from whichever cell's caption was clicked.
+  // Saves straight to /api/notes on its own — a note isn't book curation, so
+  // it does not go through markDirty/save above and is never lost to a
+  // closed tab the way an unsaved reorder would be.
+  const noteEdit = document.getElementById('book-noteedit');
+  const noteEditImg = document.getElementById('book-noteedit-img');
+  const noteEditName = document.getElementById('book-noteedit-name');
+  const noteEditText = document.getElementById('book-noteedit-text');
+  const noteEditError = document.getElementById('book-noteedit-error');
+  const noteEditSave = document.getElementById('book-noteedit-save');
+  let noteEditCell = null;
+
+  function openNoteEdit(cell) {
+    noteEditCell = cell;
+    noteEditImg.src = cell.querySelector('img').src;
+    noteEditName.textContent = cell.dataset.stem || cell.dataset.id;
+    noteEditText.value = cell.dataset.note || '';
+    noteEditError.hidden = true;
+    noteEdit.hidden = false;
+    requestAnimationFrame(() => {
+      noteEdit.classList.add('show');
+      noteEditText.focus();
+    });
+  }
+  function closeNoteEdit() {
+    if (noteEdit.hidden) return;
+    noteEdit.classList.remove('show');
+    setTimeout(() => { noteEdit.hidden = true; noteEditCell = null; }, 200);
+  }
+  function updateNoteMark(cell, text) {
+    cell.dataset.note = text;
+    const btn = cell.querySelector('.book-caption');
+    const existingMark = btn.querySelector('.book-note-mark');
+    if (text && !existingMark) {
+      const mark = document.createElement('span');
+      mark.className = 'book-note-mark';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = '✎';
+      btn.prepend(mark);
+    } else if (!text && existingMark) {
+      existingMark.remove();
+    }
+    btn.title = text ? 'Edit note' : 'Add a note';
+  }
+
+  document.getElementById('book-chapters')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.book-caption');
+    if (!btn) return;
+    openNoteEdit(btn.closest('.book-cell'));
+  });
+  document.getElementById('book-noteedit-cancel').addEventListener('click', closeNoteEdit);
+  noteEdit.addEventListener('click', (e) => { if (e.target === noteEdit) closeNoteEdit(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !noteEdit.hidden) closeNoteEdit(); });
+
+  noteEditSave.addEventListener('click', async () => {
+    if (!noteEditCell) return;
+    const id = noteEditCell.dataset.id;
+    const text = noteEditText.value;
+    noteEditSave.disabled = true;
+    noteEditError.hidden = true;
+    try {
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, text }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Save failed.');
+      updateNoteMark(noteEditCell, text.trim());
+      closeNoteEdit();
+    } catch (err) {
+      noteEditError.textContent = err.message || 'Save failed.';
+      noteEditError.hidden = false;
+    } finally {
+      noteEditSave.disabled = false;
+    }
+  });
 
   addEventListener('beforeunload', (e) => {
     if (!dirty) return;

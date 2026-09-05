@@ -19,7 +19,12 @@ const accent = manifest.chapters[0]
 <Layout title="Add & remove — Colour Archive" accent={accent}>
   <header class="topbar" id="topbar">
     <span class="brand">Colour Archive</span>
-    <span class="topbar-right"><a href="/">View archive</a> <a href="/book">Book</a></span>
+    <span class="topbar-right">
+      <a href="/">Archive</a>
+      <a href="/inspiration">Inspiration</a>
+      <a href="/scout">Scout</a>
+      <a href="/book">Book</a>
+    </span>
   </header>
 
   <main class="ingest">
@@ -226,6 +231,15 @@ const accent = manifest.chapters[0]
     position: absolute; left: 0; bottom: 0; right: 0;
     font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
     color: #fff; padding: 0.3rem 0.4rem;
+    /* .cell-medium sits at left:6px on the same edge (bottom:6px), so this
+       full-width caption needs to clear it or a long chapter name shows its
+       tail past the pill ("Deep Yellow" → "FILM ELLOW"). 5rem clears the
+       widest pill (.cell-medium showing "digital" at the touch-target size
+       used under `pointer: coarse` — measured 73.6px) with a small margin;
+       overflow/ellipsis is the backstop for whatever's still too long for
+       what's left of the cell. */
+    padding-left: 5rem;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
   }
   :global(.cell-remove) {

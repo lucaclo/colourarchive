@@ -24,6 +24,15 @@ export const EXPORT_PATH = path.join(ROOT, 'sequence.json');
 // medium, genre) for the whole archive, while this changes only whether and
 // where a photo sits in one particular curated object, the printed book.
 export const BOOK_PATH = path.join(ROOT, 'src', 'data', 'book.json');
+// The archive's own notebook — why a photo matters, kept by id. Deliberately
+// its own file, not folded into overrides or the book curation: this is
+// never derived and never affects rendering, chapter, or export — the only
+// thing that ever reads it is a human.
+export const NOTES_PATH = path.join(ROOT, 'src', 'data', 'notes.json');
+// Scout's curated list of named photographers to look for near a spot — see
+// `scout/sources/notable.ts`'s header. Hand-edited, like NOTES_PATH, so it is
+// read fresh rather than cached at module load.
+export const NOTABLE_PHOTOGRAPHERS_PATH = path.join(ROOT, 'src', 'data', 'notable-photographers.json');
 
 // Style Match.
 //

@@ -1,0 +1,107 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { readManifest } from '../../lib/manifest';
+import { readBookCuration, curatedChapters } from '../../lib/book';
+import { oklchCss } from '../../lib/color';
+
+// The share link — issue "scoped read-only share". Deliberately its own
+// static page rather than a token/auth system: this reads only what
+// book.astro already writes (book.json, never touched here), makes zero
+// requests of its own (no /api/book, no /api/notes — nothing here can be
+// written to), and shows only the photos already included in the curated
+// book. Prerendered, so it bakes into `astro build` / `export:static`
+// exactly like the archive scroll — a link to it works on the published
+// static site with no server behind it at all, the same "one route carries
+// the code and the imagery" reasoning the README gives for publishing the
+// rest of the archive that way.
+//
+// Excluding a photo here is not a privacy control — it only ever hid a
+// photo from the *book*, never from the archive scroll one click away, and
+// this page inherits that: it is a curated order to hand someone, not a
+// smaller audience.
+export const prerender = true;
+
+const manifest = await readManifest();
+const curation = await readBookCuration();
+const chapters = curatedChapters(manifest.chapters, curation);
+const totalPhotos = chapters.reduce((n, ch) => n + ch.photos.length, 0);
+
+const titleFg = (L: number) => (L > 0.62 ? '#0a0a0a' : '#f6f6f4');
+const roman = (n: number) =>
+  ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI'][n] ?? String(n + 1);
+
+const accent = chapters[0]
+  ? oklchCss({ L: 0.78, C: Math.min(chapters[0].oklch.C, 0.11), H: chapters[0].oklch.H })
+  : undefined;
+---
+
+<Layout title="The book — Colour Archive" description="A curated sequence from the Colour Archive." accent={accent}>
+  <header class="bv-head">
+    <p class="bv-kicker">Colour Archive</p>
+    <h1>The book</h1>
+    <p class="bv-sub">{totalPhotos} photograph{totalPhotos === 1 ? '' : 's'} · {chapters.length} chapter{chapters.length === 1 ? '' : 's'}</p>
+  </header>
+
+  {
+    chapters.length === 0 ? (
+      <p class="bv-empty">Nothing curated yet.</p>
+    ) : (
+      <main class="bv-main">
+        {chapters.map((ch, ci) => {
+          const bg = oklchCss(ch.oklch);
+          const fg = titleFg(ch.oklch.L);
+          return (
+            <section class="bv-chapter">
+              <div class="bv-divider" style={`background:${bg};color:${fg}`}>
+                <p class="bv-index">Chapter {roman(ci)}</p>
+                <h2>{ch.name}</h2>
+              </div>
+              <div class="bv-grid">
+                {ch.photos.map((p) => (
+                  <figure class="bv-frame" style={`aspect-ratio:${p.width}/${p.height}`}>
+                    <a href={p.derivatives[p.derivatives.length - 1]?.avif ?? p.derivatives[0].avif} target="_blank" rel="noopener noreferrer">
+                      <img src={p.derivatives[0].avif} alt="" loading="lazy" />
+                    </a>
+                  </figure>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </main>
+    )
+  }
+</Layout>
+
+<style>
+  .bv-head { max-width: 60rem; margin: 0 auto; padding: 9vh 6vw 4vh; text-align: center; }
+  .bv-kicker { font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .bv-head h1 {
+    font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
+    font-size: clamp(2.4rem, 6vw, 4rem); margin: 0.3rem 0 0.6rem; line-height: 1;
+  }
+  .bv-sub { font-family: var(--font-label); font-size: 0.76rem; color: var(--muted); margin: 0; }
+  .bv-empty { text-align: center; color: var(--muted); padding: 4rem 0; }
+
+  .bv-main { max-width: 84rem; margin: 0 auto; padding: 0 0 10vh; }
+  .bv-chapter { margin-bottom: 3.5rem; }
+  .bv-divider {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem;
+    padding: 3.4rem 6vw; text-align: center; margin-bottom: 1.2rem;
+  }
+  .bv-index { font-family: var(--font-label); font-size: 0.64rem; letter-spacing: 0.24em; text-transform: uppercase; opacity: 0.75; margin: 0; }
+  .bv-divider h2 {
+    font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
+    font-size: clamp(1.8rem, 4.5vw, 3rem); margin: 0; line-height: 1;
+  }
+
+  /* Pure-CSS masonry — no column-balancing JS, since this page makes no
+     requests and runs no script of its own at all. */
+  .bv-grid { columns: 3; column-gap: 10px; padding: 0 6vw; }
+  .bv-frame { margin: 0 0 10px; break-inside: avoid; background: var(--border); }
+  .bv-frame a { display: block; }
+  .bv-frame img { width: 100%; display: block; }
+
+  @media (max-width: 900px) { .bv-grid { columns: 2; } }
+  @media (max-width: 560px) { .bv-grid { columns: 1; padding: 0 4vw; } .bv-divider { padding: 2.6rem 4vw; } }
+</style>

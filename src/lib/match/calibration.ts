@@ -38,6 +38,21 @@ export interface Calibration {
   /** OKLab b-axis offset corresponding to Temp +100 on the relative scale.
    *  (b is the blue/yellow axis, which is what Temp moves.) */
   tempUnit: number;
+  /** Kelvin equivalent of a Temp move of +100 on the relative scale — used
+   *  only to relabel the *global* Temp readout in the units a RAW's own
+   *  Temp slider actually uses (see xmp.ts's header: Temperature is
+   *  absolute Kelvin on a RAW, which is exactly why the preset never writes
+   *  it). Adobe has never published an equivalence between the relative
+   *  scale (used on a rendered image) and the absolute one (used on a RAW)
+   *  — they are different controls on different image types, and the
+   *  honest conversion is baseline-dependent besides: the same correction
+   *  is a different number of Kelvin near tungsten than near daylight. This
+   *  constant is a single-point estimate near daylight, not a measured one,
+   *  and — unlike every other constant here — `match-calibrate.ts` has no
+   *  way to probe it at all, because there is no "apply N Kelvin" preset
+   *  that means the same thing on every camera; only real side-by-side use
+   *  against a RAW's own slider can validate this number. */
+  tempKelvinPer100: number;
   /** OKLab a-axis offset corresponding to Tint +100. (a is green/magenta.) */
   tintUnit: number;
   /** Chroma ratio -> per-band Saturation slider gain in the Color Mixer. */
@@ -75,6 +90,7 @@ export const DEFAULT_CALIBRATION: Calibration = {
   vibranceGain: 1.6,
   colorGradeUnit: 0.06,
   tempUnit: 0.055,
+  tempKelvinPer100: 2000,
   tintUnit: 0.05,
   hslSaturationGain: 1.0,
   hslLuminanceGain: 320,

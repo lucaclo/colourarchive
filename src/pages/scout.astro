@@ -21,11 +21,24 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
 // below): which hue anchors the archive is missing, baked at build/request
 // time from the manifest the same way `index.astro` bakes its chapters.
 const colourGaps = findColourGaps((await readManifest()).chapters);
+
+// Every other page seeds --accent from its own real colour data (a chapter's
+// OKLCH hue) — this page's equivalent is #f0b866, the warm amber its sun
+// readouts, the live "now" chip pulse and its clock already use everywhere
+// else in this file. Static, not time-of-day-reactive: the sun position is
+// computed client-side per selected place/date, so there is no server-side
+// "current light" to seed with, and this page's own colour language (amber
+// for sun, violet for the Milky Way/night, blue/orange for tide) is already
+// meaningful per-category rather than a single mood that should shift —
+// wiring the chrome to the one colour that already means "this page" is the
+// static equivalent, not an attempt to fake a dynamic one.
+const accent = '#f0b866';
 ---
 
 <Layout
   title="Scout — Colour Archive"
   description="Type a place, set a radius, and see how the light falls inside it."
+  accent={accent}
   preconnect={[
     // The basemap: style, sprite, glyphs and vector tiles all come from here,
     // and nothing draws until they do.
@@ -354,7 +367,7 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
             <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="A worked example of the Shadow ratio above, in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
             <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow this minute. Near the horizon a whole city can be in range, so this is capped at the 4,000 tallest and says so rather than passing triage off as complete.">i</button></dt><dd id="f-buildings">—</dd></div>
             <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin itself is in the shadow of a hill or ridge, from the same elevation data as the map's terrain shading — with the grid size it was read at.">i</button></dt><dd id="f-landform">—</dd></div>
-            <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Peer-reviewed photographs from Wikimedia Commons near this spot, clustered into hotspots — not every photo ever taken here, and Flickr is not in this yet.">i</button></dt><dd id="f-photos">—</dd></div>
+            <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Peer-reviewed photographs from Wikimedia Commons, plus Flickr when a key is configured, clustered into hotspots near this spot — not every photo ever taken here. A photograph by someone on the curated notable-photographer list is marked and ranked above the rest.">i</button></dt><dd id="f-photos">—</dd></div>
             <div>
               <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The sunlight's own colour and contrast this minute — kelvin, and stops of shadow fill. Modelled for a clear sky; cloud is not an input to this figure, see the weather note above for that.">i</button></dt>
               <dd id="f-light">
@@ -933,8 +946,10 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
         </div>
         <ul class="photo-grid" id="photo-grid"></ul>
         <p class="photos-note">
-          Peer-reviewed photographs from Wikimedia Commons — featured pictures and quality
-          images only. Each is its author's, under the licence shown.
+          Peer-reviewed photographs from Wikimedia Commons, ranked photographs from Flickr
+          when a key is configured, and any photograph — from either — by someone on the
+          curated list of named photographers, marked and ranked above the rest. Each is its
+          author's, under the licence shown.
         </p>
       </div>
 
@@ -2559,8 +2574,11 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
   }
   .seg button:active, .seg a:active { transform: scale(0.96); }
   .seg button.on { color: var(--bg); background: var(--fg); }
-  .seg button:not(.on):hover,
-  .seg a:hover { color: var(--fg); }
+  .seg button:not(.on):hover { color: var(--fg); }
+  /* The nav's own links (Archive/Inspiration) — everywhere else in the app,
+     a link hover picks up --accent-mix; this was the one link-hover left on
+     plain --fg from before Scout had a real --accent to pick up. */
+  .seg a:hover { color: var(--accent-mix); }
   .seg a svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
   .seg-wide { width: 100%; margin-bottom: 0.6rem; }
   .seg-wide button { flex: 1; }
@@ -3029,6 +3047,10 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
     color: color-mix(in oklab, var(--fg) 55%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 25%, transparent);
   }
+  /* Inverted fill — the strongest badge here on purpose. A named photographer
+     outranks every accolade tier (see byStanding in wikimedia.ts), so it reads
+     as the top of the visual hierarchy too, not just another coloured chip. */
+  .photo-grid :global(.acc-notable) { background: var(--fg); color: var(--bg); }
   .photo-grid :global(.by) {
     display: block;
     padding: 0.35rem 0.4rem 0;

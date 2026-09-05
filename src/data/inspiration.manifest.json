@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-21T18:34:00.298Z",
-  "count": 7,
+  "generatedAt": "2026-08-28T21:39:52.462Z",
+  "count": 11,
   "chapters": [
     {
       "key": "achromatic",
@@ -50,175 +50,113 @@
       ]
     },
     {
-      "key": "orange",
-      "name": "Orange",
+      "key": "red",
+      "name": "Red",
       "oklch": {
-        "L": 0.626,
-        "C": 0.067,
-        "H": 68.8
+        "L": 0.568,
+        "C": 0.125,
+        "H": 40.8
       },
       "photos": [
         {
-          "id": "a7c5e21fa101fcda",
-          "filename": "DSC02179.a7c5e21fa101fcda.jpg",
+          "id": "28708e9677e8d570",
+          "filename": "715059760_18002567435936155_1541617333202851161_n.28708e9677e8d570.jpg",
           "ext": "jpg",
-          "width": 2500,
-          "height": 3500,
-          "bytes": 1519144,
+          "width": 1500,
+          "height": 1071,
+          "bytes": 294042,
           "oklch": {
-            "L": 0.779,
-            "C": 0.045,
-            "H": 221.3
+            "L": 0.619,
+            "C": 0.104,
+            "H": 35.1
           },
-          "autoChapter": "teal",
-          "chapter": "teal",
+          "autoChapter": "red",
+          "chapter": "red",
           "autoMedium": "film",
           "medium": "film",
           "autoGenre": "landscape",
           "genre": "landscape",
-          "placeholder": "data:image/webp;base64,UklGRngAAABXRUJQVlA4IGwAAAAwBQCdASoYACIAPulgqE2pJaQiNVgIASAdCWMAxvQWbM6jNKijVt4B0h8ZGOjK3t2lAAD+rknq2szSMk4sqHNewwiMZOGoDSo9buJOF6JO37gjmT/snBklR3EGB1Ekigl9Ttm52O2SmFn6AAA=",
+          "placeholder": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAABwBACdASoYABEAPu1mqk2ppaQiMAgBMB2JQBYdg9K0Lep+663Vji8jueyTQAD+e9xwRqVjklJOpFiaNKTQ1kNjxuK68BszpaYEPMBds/bv3Z5OqoY4pISWFfa+YCWRBZlQAA==",
           "derivatives": [
             {
               "width": 640,
-              "avif": "/img/a7c5e21fa101fcda-640.avif"
+              "avif": "/img/28708e9677e8d570-640.avif"
             },
             {
               "width": 1280,
-              "avif": "/img/a7c5e21fa101fcda-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/a7c5e21fa101fcda-2000.avif"
+              "avif": "/img/28708e9677e8d570-1280.avif"
             }
           ],
           "exif": {},
-          "addedAt": "2026-07-29T08:24:15.842Z"
+          "addedAt": "2026-08-28T21:39:51.143Z"
         },
         {
-          "id": "568ab0b23a39eeca",
-          "filename": "DSC00672.568ab0b23a39eeca.jpg",
+          "id": "7150c54bfe25f2e0",
+          "filename": "734846020_18006134951936155_7311644261873608517_n.7150c54bfe25f2e0.jpg",
           "ext": "jpg",
-          "width": 2500,
-          "height": 1667,
-          "bytes": 1456575,
+          "width": 2684,
+          "height": 1405,
+          "bytes": 631417,
           "oklch": {
-            "L": 0.59,
-            "C": 0.108,
-            "H": 129.1
+            "L": 0.596,
+            "C": 0.127,
+            "H": 43.9
           },
-          "autoChapter": "green",
-          "chapter": "green",
-          "autoMedium": "film",
-          "medium": "film",
-          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADQBACdASoYABAAPu1kq04ppaQiMAgBMB2JQBWGUI8DBVYZUECIV4pxneKbTnjaAAD+46J9rtknc6WGKTIf4WRIjpC7H/McJ6xxm9EU54f7TCcAF97KpREIAAA=",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/568ab0b23a39eeca-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/568ab0b23a39eeca-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/568ab0b23a39eeca-2000.avif"
-            }
-          ],
-          "exif": {},
-          "addedAt": "2026-07-27T06:31:01.962Z"
-        },
-        {
-          "id": "8bf353c70b064fd0",
-          "filename": "temp_image_D6CA033F-9923-4044-B01C-5C3F65A0C16D.8bf353c70b064fd0.webp",
-          "ext": "webp",
-          "width": 1596,
-          "height": 2108,
-          "bytes": 1171500,
-          "oklch": {
-            "L": 0.658,
-            "C": 0.082,
-            "H": 61.1
-          },
-          "autoChapter": "orange",
-          "chapter": "orange",
+          "autoChapter": "red",
+          "chapter": "red",
           "autoMedium": "film",
           "medium": "film",
           "autoGenre": "landscape",
           "genre": "landscape",
-          "placeholder": "data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAABwBQCdASoYACAAPu1kqk4ppaQiMAgBMB2JYgCdMtVAH6mDqo9AYqz3oqIJ3xFBD8bPHVDAAP3sgiHjIqw+NeSNPB7CMdEvACt+0QO4dMhVNaHm3NI22rfCPliFispsqy+MD4lT2yWuqsryVNFeasFSHSQaf/I9/lJbhTrkyPpqgd+qjwJPKYBzmsIv4g0Cz7ywAA==",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADQAwCdASoYAA0APu1iqk2ppaQiMAgBMB2JZgCdMoADTdYuxdCcuQAA/tpgxO40ZA7fcq1sQfCAHyOpyTvDInAZhGNoi+NdUIOEuca4lAS/x4KyEEo1/KMBeG075lyAAAA=",
           "derivatives": [
             {
               "width": 640,
-              "avif": "/img/8bf353c70b064fd0-640.avif"
+              "avif": "/img/7150c54bfe25f2e0-640.avif"
             },
             {
               "width": 1280,
-              "avif": "/img/8bf353c70b064fd0-1280.avif"
+              "avif": "/img/7150c54bfe25f2e0-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/7150c54bfe25f2e0-2000.avif"
             }
           ],
           "exif": {},
-          "addedAt": "2026-08-21T14:21:47.955Z"
+          "addedAt": "2026-08-28T21:39:52.460Z"
         },
         {
-          "id": "5fb880c287a47b42",
-          "filename": "Screenshot-2026-08-13-at-12-16-18.5fb880c287a47b42.png",
-          "ext": "png",
-          "width": 798,
-          "height": 604,
-          "bytes": 1004385,
+          "id": "501746f35d844be5",
+          "filename": "753275708_18009819413936155_5352116710144668229_n.501746f35d844be5.jpg",
+          "ext": "jpg",
+          "width": 1835,
+          "height": 1223,
+          "bytes": 279731,
           "oklch": {
-            "L": 0.636,
-            "C": 0.097,
-            "H": 63.2
+            "L": 0.598,
+            "C": 0.152,
+            "H": 41.3
           },
-          "autoChapter": "orange",
-          "chapter": "orange",
+          "autoChapter": "red",
+          "chapter": "red",
           "autoMedium": "film",
           "medium": "film",
-          "autoGenre": "architecture",
-          "genre": "architecture",
-          "placeholder": "data:image/webp;base64,UklGRnYAAABXRUJQVlA4IGoAAABwBQCdASoYABIAPu1or1AppaSiqAqpMB2JQBai+BAdGlcTQ57I/y93cswhmTlLndHhuDkAAP5jCvk6jrbZGgKc5g85Eq5IbSyEjFoAcH0WYm/dFwAvZXkfai8cfe+YQnZzf5AHM8vFMAAA",
+          "autoGenre": "portrait",
+          "genre": "portrait",
+          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAADwAwCdASoYABAAPu1iqk2ppaQiMAgBMB2JQBOgBApR5wK64PG8xuQCAP3e8IXNSLKIuFoND8gGijWs+r4eTGHbOXJtrahQMsvt1zpjjUHx6LPjlhUZkY3fa4AAAA==",
           "derivatives": [
             {
               "width": 640,
-              "avif": "/img/5fb880c287a47b42-640.avif"
-            }
-          ],
-          "exif": {},
-          "addedAt": "2026-08-13T10:18:42.952Z"
-        },
-        {
-          "id": "44562b9bdadb5739",
-          "filename": "temp_image_EF929203-ED5C-4459-B4AC-9A2E8E1A9C15.44562b9bdadb5739.webp",
-          "ext": "webp",
-          "width": 1596,
-          "height": 2108,
-          "bytes": 1199570,
-          "oklch": {
-            "L": 0.632,
-            "C": 0.116,
-            "H": 48.1
-          },
-          "autoChapter": "orange",
-          "chapter": "orange",
-          "autoMedium": "film",
-          "medium": "film",
-          "autoGenre": "architecture",
-          "genre": "architecture",
-          "placeholder": "data:image/webp;base64,UklGRrAAAABXRUJQVlA4IKQAAACQBQCdASoYACAAPtleo02oJaMiN/qoAQAbCUAXyQN0SQ8Sxlbv2K/K2MuuOiHaKZV6/Er+AAD+hcmqZPtrVmnZB9AuRqtz4eoNBgkiRxf4qXkmhHihD6tLApMgTOXPNrpda3XOwAoiGje+Jdrt45wZjli4ufBR77wn0F8Qm1qv4VU9DguIuoAqMdKLOspY2363kC+/tge7Dw1z+9pHmMTZBKAAAA==",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/44562b9bdadb5739-640.avif"
+              "avif": "/img/501746f35d844be5-640.avif"
             },
             {
               "width": 1280,
-              "avif": "/img/44562b9bdadb5739-1280.avif"
+              "avif": "/img/501746f35d844be5-1280.avif"
             }
           ],
           "exif": {},
-          "addedAt": "2026-08-21T14:21:49.050Z"
+          "addedAt": "2026-08-28T21:39:51.662Z"
         },
         {
           "id": "4dcc897807f397b8",
@@ -255,6 +193,211 @@
           ],
           "exif": {},
           "addedAt": "2026-07-29T08:19:30.820Z"
+        }
+      ]
+    },
+    {
+      "key": "orange",
+      "name": "Orange",
+      "oklch": {
+        "L": 0.652,
+        "C": 0.069,
+        "H": 70.5
+      },
+      "photos": [
+        {
+          "id": "44dd86d6688f0628",
+          "filename": "670260816_17995902305936155_5273337129774517791_n.44dd86d6688f0628.jpg",
+          "ext": "jpg",
+          "width": 1440,
+          "height": 960,
+          "bytes": 195762,
+          "oklch": {
+            "L": 0.615,
+            "C": 0.123,
+            "H": 49.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAABwBACdASoYABAAPu1krU2ppaSiMAgBMB2JYgCdMoJYACYuc2/BfQYYzr5lAAD+98eSQ7p1butPTZv5WEeniIAy0JR/4kAT4k1EvUMAJOPI4L03VZ/A7TStb8cLyJwxGR6UQdHLSpAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/44dd86d6688f0628-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/44dd86d6688f0628-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-28T21:39:50.706Z"
+        },
+        {
+          "id": "44562b9bdadb5739",
+          "filename": "temp_image_EF929203-ED5C-4459-B4AC-9A2E8E1A9C15.44562b9bdadb5739.webp",
+          "ext": "webp",
+          "width": 1596,
+          "height": 2108,
+          "bytes": 1199570,
+          "oklch": {
+            "L": 0.632,
+            "C": 0.116,
+            "H": 48.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRrAAAABXRUJQVlA4IKQAAACQBQCdASoYACAAPtleo02oJaMiN/qoAQAbCUAXyQN0SQ8Sxlbv2K/K2MuuOiHaKZV6/Er+AAD+hcmqZPtrVmnZB9AuRqtz4eoNBgkiRxf4qXkmhHihD6tLApMgTOXPNrpda3XOwAoiGje+Jdrt45wZjli4ufBR77wn0F8Qm1qv4VU9DguIuoAqMdKLOspY2363kC+/tge7Dw1z+9pHmMTZBKAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/44562b9bdadb5739-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/44562b9bdadb5739-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-21T14:21:49.050Z"
+        },
+        {
+          "id": "5fb880c287a47b42",
+          "filename": "Screenshot-2026-08-13-at-12-16-18.5fb880c287a47b42.png",
+          "ext": "png",
+          "width": 798,
+          "height": 604,
+          "bytes": 1004385,
+          "oklch": {
+            "L": 0.636,
+            "C": 0.097,
+            "H": 63.2
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRnYAAABXRUJQVlA4IGoAAABwBQCdASoYABIAPu1or1AppaSiqAqpMB2JQBai+BAdGlcTQ57I/y93cswhmTlLndHhuDkAAP5jCvk6jrbZGgKc5g85Eq5IbSyEjFoAcH0WYm/dFwAvZXkfai8cfe+YQnZzf5AHM8vFMAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/5fb880c287a47b42-640.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-13T10:18:42.952Z"
+        },
+        {
+          "id": "8bf353c70b064fd0",
+          "filename": "temp_image_D6CA033F-9923-4044-B01C-5C3F65A0C16D.8bf353c70b064fd0.webp",
+          "ext": "webp",
+          "width": 1596,
+          "height": 2108,
+          "bytes": 1171500,
+          "oklch": {
+            "L": 0.658,
+            "C": 0.082,
+            "H": 61.1
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAABwBQCdASoYACAAPu1kqk4ppaQiMAgBMB2JYgCdMtVAH6mDqo9AYqz3oqIJ3xFBD8bPHVDAAP3sgiHjIqw+NeSNPB7CMdEvACt+0QO4dMhVNaHm3NI22rfCPliFispsqy+MD4lT2yWuqsryVNFeasFSHSQaf/I9/lJbhTrkyPpqgd+qjwJPKYBzmsIv4g0Cz7ywAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/8bf353c70b064fd0-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/8bf353c70b064fd0-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-21T14:21:47.955Z"
+        },
+        {
+          "id": "568ab0b23a39eeca",
+          "filename": "DSC00672.568ab0b23a39eeca.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 1667,
+          "bytes": 1456575,
+          "oklch": {
+            "L": 0.59,
+            "C": 0.108,
+            "H": 129.1
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADQBACdASoYABAAPu1kq04ppaQiMAgBMB2JQBWGUI8DBVYZUECIV4pxneKbTnjaAAD+46J9rtknc6WGKTIf4WRIjpC7H/McJ6xxm9EU54f7TCcAF97KpREIAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/568ab0b23a39eeca-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/568ab0b23a39eeca-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/568ab0b23a39eeca-2000.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-27T06:31:01.962Z"
+        },
+        {
+          "id": "a7c5e21fa101fcda",
+          "filename": "DSC02179.a7c5e21fa101fcda.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 3500,
+          "bytes": 1519144,
+          "oklch": {
+            "L": 0.779,
+            "C": 0.045,
+            "H": 221.3
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRngAAABXRUJQVlA4IGwAAAAwBQCdASoYACIAPulgqE2pJaQiNVgIASAdCWMAxvQWbM6jNKijVt4B0h8ZGOjK3t2lAAD+rknq2szSMk4sqHNewwiMZOGoDSo9buJOF6JO37gjmT/snBklR3EGB1Ekigl9Ttm52O2SmFn6AAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a7c5e21fa101fcda-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/a7c5e21fa101fcda-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/a7c5e21fa101fcda-2000.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-29T08:24:15.842Z"
         }
       ]
     }

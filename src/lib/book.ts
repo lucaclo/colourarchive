@@ -34,6 +34,15 @@ export interface BookCuration {
   /** Photo ids left out of the book, wherever they sit in their chapter's
    *  order above. */
   excluded?: string[];
+  /** Photo id -> chapter key it prints under in the book, when that differs
+   *  from the photo's own manifest chapter. Book-only, same reasoning as the
+   *  rest of this file's header: the photo's real (colour-derived) chapter
+   *  is untouched, so this never reaches the archive's own overrides or
+   *  triggers a rebuild/deploy — it just changes which section of the book
+   *  the plate prints in. A target key absent from the manifest's own
+   *  chapters is ignored (see `regroupedChapters`), so a chapter renamed or
+   *  removed since a move was saved can't strand a photo. */
+  moved?: Record<string, string>;
 }
 
 async function readJson(): Promise<unknown> {
@@ -63,6 +72,14 @@ function readCuration(value: unknown): BookCuration {
 
   if (Array.isArray(raw.excluded) && raw.excluded.every((id) => typeof id === 'string')) {
     curation.excluded = raw.excluded as string[];
+  }
+
+  if (raw.moved && typeof raw.moved === 'object' && !Array.isArray(raw.moved)) {
+    const moved: Record<string, string> = {};
+    for (const [id, chapterKey] of Object.entries(raw.moved as Record<string, unknown>)) {
+      if (typeof chapterKey === 'string') moved[id] = chapterKey;
+    }
+    if (Object.keys(moved).length) curation.moved = moved;
   }
 
   return curation;
@@ -114,13 +131,38 @@ function orderedPhotos(chapter: Chapter, curation: BookCuration): Photo[] {
 }
 
 /**
- * The book's own sequence: manifest grouping, curation's order and
- * exclusions applied. A chapter emptied entirely by exclusion drops out
- * rather than printing a divider for nothing.
+ * Re-sections photos across chapters per `curation.moved`, before either
+ * ordering or exclusion is applied. Chapter identity (name, oklch) is kept
+ * from the manifest's own grouping — a move only relocates which section a
+ * photo's id shows up in, never invents a chapter.
+ */
+function regroupedChapters(chapters: Chapter[], curation: BookCuration): Chapter[] {
+  const moved = curation.moved;
+  if (!moved || !Object.keys(moved).length) return chapters;
+  // Two passes, not one: a chapter's own photos keep their relative order and
+  // sort ahead of anything moved in, rather than incoming photos landing
+  // wherever their source chapter happened to be processed.
+  const home = new Map(chapters.map((ch) => [ch.key, [] as Photo[]]));
+  const incoming = new Map(chapters.map((ch) => [ch.key, [] as Photo[]]));
+  for (const ch of chapters) {
+    for (const p of ch.photos) {
+      const target = moved[p.id];
+      if (target && incoming.has(target)) incoming.get(target)!.push(p);
+      else home.get(ch.key)!.push(p);
+    }
+  }
+  return chapters.map((ch) => ({ ...ch, photos: [...home.get(ch.key)!, ...incoming.get(ch.key)!] }));
+}
+
+/**
+ * The book's own sequence: manifest grouping (with moves applied), curation's
+ * order and exclusions applied. A chapter emptied entirely by exclusion (or
+ * by every photo being moved out) drops out rather than printing a divider
+ * for nothing.
  */
 export function curatedChapters(chapters: Chapter[], curation: BookCuration): Chapter[] {
   const excluded = new Set(curation.excluded ?? []);
-  return chapters
+  return regroupedChapters(chapters, curation)
     .map((ch) => ({ ...ch, photos: orderedPhotos(ch, curation).filter((p) => !excluded.has(p.id)) }))
     .filter((ch) => ch.photos.length > 0);
 }
@@ -143,7 +185,7 @@ export interface BookEditorChapter {
  */
 export function orderedChaptersWithExclusions(chapters: Chapter[], curation: BookCuration): BookEditorChapter[] {
   const excluded = new Set(curation.excluded ?? []);
-  return chapters.map((ch) => ({
+  return regroupedChapters(chapters, curation).map((ch) => ({
     key: ch.key,
     name: ch.name,
     photos: orderedPhotos(ch, curation).map((p) => ({ ...p, excluded: excluded.has(p.id) })),

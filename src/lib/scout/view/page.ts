@@ -3869,13 +3869,21 @@ export async function startScout(): Promise<void> {
     // as an honest empty place, which this is not.
     else if (photoFailed) photos.textContent = 'search failed';
     else {
-      const okTiers = photoTiers.filter((t) => t.ok).length;
+      // A source with no key configured was never asked, not asked and
+      // ignored — it must not read as a broken tier alongside the ones that
+      // actually failed. Counted separately, below.
+      const reportable = photoTiers.filter((t) => !t.needsKey);
+      const okTiers = reportable.filter((t) => t.ok).length;
       // Say when a tier went quiet, so a broken source and an honestly empty
       // place stop looking identical — the bug this fact row used to have.
-      const partial =
-        photoTiers.length && okTiers < photoTiers.length
-          ? ` (${okTiers} of ${photoTiers.length} sources answered)`
+      const answered =
+        reportable.length && okTiers < reportable.length
+          ? ` (${okTiers} of ${reportable.length} sources answered)`
           : '';
+      const needsKey = photoTiers.some((t) => t.accolade === 'flickr' && t.needsKey)
+        ? " · Flickr needs an API key (FLICKR_API_KEY), which isn't configured for this deployment"
+        : '';
+      const partial = answered + needsKey;
       if (!hotspots.length) photos.textContent = `nothing found${partial}`;
       else {
         const total = hotspots.reduce((n, spot) => n + spot.count, 0);
@@ -4942,14 +4950,18 @@ export async function startScout(): Promise<void> {
       originUrl: string;
       thumbUrl: string;
       accolade?: 'featured' | 'quality' | 'valued' | 'contest';
+      notable?: { name: string; wikipediaUrl?: string };
       megapixels?: number;
     }>;
   }
 
-  /** Whether one accolade's own Commons request answered, apart from what it found. */
+  /** Whether one source's own request answered, apart from what it found.
+   *  `needsKey` marks the one honest reason a source can be unreachable
+   *  without being broken: no API key configured for this deployment. */
   interface TierStatus {
-    accolade: 'featured' | 'quality' | 'valued' | 'contest';
+    accolade: 'featured' | 'quality' | 'valued' | 'contest' | 'flickr' | 'notable';
     ok: boolean;
+    needsKey?: boolean;
   }
 
   /**
@@ -5403,7 +5415,19 @@ export async function startScout(): Promise<void> {
         // somebody went there meaning to make a picture and says nothing about
         // whether it is any good. It gets its own wording and an outlined chip
         // rather than a filled one — see the styles in `scout.astro`.
-        if (photo.accolade) {
+        // A named photographer outranks the accolade badge below, the same way
+        // it outranks it in `byStanding` — "shot by X" is a stronger claim
+        // than "the community rated it well," so it gets its own, higher-
+        // emphasis badge rather than sharing the accolade one. A `<span>`, not
+        // a link: this sits inside `link`, itself an `<a>`, and a nested
+        // anchor is invalid HTML.
+        if (photo.notable) {
+          const badge = document.createElement('span');
+          badge.className = 'acc acc-notable';
+          badge.textContent = photo.notable.name;
+          badge.title = `On the curated list of named photographers${photo.notable.wikipediaUrl ? ' — ' + photo.notable.wikipediaUrl : ''}.`;
+          link.append(badge);
+        } else if (photo.accolade) {
           const badge = document.createElement('span');
           badge.className = `acc acc-${photo.accolade}`;
           badge.textContent = ACCOLADE_BADGE[photo.accolade].text;

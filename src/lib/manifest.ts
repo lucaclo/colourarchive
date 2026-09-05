@@ -3,7 +3,7 @@ import path from 'node:path';
 import { MANIFEST_PATH, OVERRIDES_PATH, STORE_PATH } from './paths';
 import {
   chapterName, chapterRank, chapterKey, baseKeyOf,
-  lightnessBand, ACHROMATIC_KEY, SPLIT_MIN, MERGE_MAX, roundOklch,
+  lightnessBand, ACHROMATIC_KEY, ACHROMATIC_CHROMA, SPLIT_MIN, MERGE_MAX, roundOklch,
   type OKLCH, type Band,
 } from './color';
 import type { Photo, Chapter, Manifest, Overrides, Derivative } from './types';
@@ -177,80 +177,65 @@ async function writeJson(p: string, data: unknown, expect?: number): Promise<voi
   parsed.delete(p);
 }
 
-// --- Perceptual gradient ordering -------------------------------------------
-// Order a chapter so consecutive photos are as visually close as possible.
-// Each photo is a point in OKLab (perceptually uniform); we build the shortest
-// path through them (greedy nearest-neighbour + 2-opt), which minimises the
-// total colour "jump" from frame to frame — far smoother than a 1-D hue sort,
-// and fully automatic. Deterministic (fixed dark→ start, stable tie-breaks) so
-// it never reshuffles arbitrarily on rebuild.
-
-// Lightness weight in the distance. 1 = full perceptual ΔE (lightness flows as
-// smoothly as hue/chroma). Lower would favour colour continuity over tone.
-const L_WEIGHT = 1;
-const MAX_2OPT = 400; // skip the O(n²) polish on very large chapters
+// --- Colour-strength ordering ------------------------------------------------
+// Order a chapter from the photo that most strongly embodies the chapter's
+// own colour down to the one that least does — a ranking, not a path.
+//
+// A previous version of this built the shortest possible walk through every
+// photo in OKLab (nearest-neighbour + 2-opt) so *adjacent* frames were always
+// close. That optimises the wrong thing: it can wander through the chapter's
+// whole hue/chroma range with no sense of direction, because "close to its
+// neighbour" says nothing about "close to what this chapter actually is."
+// The chapter already has its own answer to that — `oklch` below, the mean of
+// every photo in it — so ranking against that mean directly is both simpler
+// and answers the question a reader actually has scrolling through a chapter:
+// which of these is the purest example of it, and which is the chapter's own
+// colour barely holding on.
+//
+// The measure is a projection, not a distance: each photo's OKLab (a, b) dotted
+// with the chapter's own unit hue direction. That rewards exactly the two
+// things "embodies this chapter's colour" means at once — high chroma AND a
+// hue close to the chapter's own — and penalises either one falling short,
+// the same way a viewer would: a vivid photo at the wrong hue and a
+// perfectly-hued but washed-out one both read as "not really this chapter's
+// colour," for different reasons, and the projection scores both down.
+//
+// Achromatic chapters have no hue direction to project onto — "colour
+// strength" there means the opposite thing, purity of grey, so those are
+// ranked by chroma ascending (the least colour-tinted first) instead.
 
 type Lab = [number, number, number];
 const toLab = (o: OKLCH): Lab => {
   const rad = (o.H * Math.PI) / 180;
   return [o.L, o.C * Math.cos(rad), o.C * Math.sin(rad)];
 };
-const dE = (a: Lab, b: Lab): number => {
-  const dl = (a[0] - b[0]) * L_WEIGHT;
-  return Math.sqrt(dl * dl + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
-};
+/** Plain Euclidean distance in OKLab — perceptually uniform, so this is a
+ *  real perceptual distance, not just a formula. Used for chapter-to-chapter
+ *  comparisons (folding a tiny chapter into its nearest neighbour, below) —
+ *  a different question from photo ordering within one chapter, above. */
+const dE = (a: Lab, b: Lab): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-function orderByGradient(photos: Photo[]): Photo[] {
-  if (photos.length <= 2) return photos.slice();
-  const labs = photos.map((p) => toLab(p.oklch));
-  const n = photos.length;
+export function orderByChapterStrength(photos: Photo[], chapterMean: OKLCH): Photo[] {
+  if (photos.length <= 1) return photos.slice();
 
-  // Start deterministically at the darkest photo (stable, and a natural entry).
-  let start = 0;
-  for (let i = 1; i < n; i++) if (labs[i][0] < labs[start][0]) start = i;
-
-  // Greedy nearest-neighbour path.
-  const used = new Array<boolean>(n).fill(false);
-  const order = [start];
-  used[start] = true;
-  for (let step = 1; step < n; step++) {
-    const last = order[order.length - 1];
-    let best = -1, bd = Infinity;
-    for (let i = 0; i < n; i++) {
-      if (used[i]) continue;
-      const d = dE(labs[last], labs[i]);
-      if (d < bd) { bd = d; best = i; }
-    }
-    order.push(best);
-    used[best] = true;
+  if (chapterMean.C < ACHROMATIC_CHROMA) {
+    return photos
+      .slice()
+      .sort((a, b) => a.oklch.C - b.oklch.C || (a.id < b.id ? -1 : 1));
   }
 
-  // 2-opt: reverse segments while it shortens the open path (removes crossings).
-  if (n <= MAX_2OPT) {
-    let improved = true;
-    while (improved) {
-      improved = false;
-      for (let i = 0; i < n - 1; i++) {
-        for (let k = i + 1; k < n; k++) {
-          const a = i > 0 ? labs[order[i - 1]] : null;
-          const b = labs[order[i]];
-          const c = labs[order[k]];
-          const d = k < n - 1 ? labs[order[k + 1]] : null;
-          let before = 0, after = 0;
-          if (a) { before += dE(a, b); after += dE(a, c); }
-          if (d) { before += dE(c, d); after += dE(b, d); }
-          if (after < before - 1e-9) {
-            for (let lo = i, hi = k; lo < hi; lo++, hi--) {
-              const t = order[lo]; order[lo] = order[hi]; order[hi] = t;
-            }
-            improved = true;
-          }
-        }
-      }
-    }
-  }
+  const [, dirA, dirB] = toLab(chapterMean);
+  const mag = Math.hypot(dirA, dirB);
+  const ux = dirA / mag;
+  const uy = dirB / mag;
 
-  return order.map((i) => photos[i]);
+  return photos
+    .map((p) => {
+      const [, a, b] = toLab(p.oklch);
+      return { photo: p, strength: a * ux + b * uy };
+    })
+    .sort((x, y) => y.strength - x.strength || (x.photo.id < y.photo.id ? -1 : 1))
+    .map((s) => s.photo);
 }
 
 /** Mean colour of a set of photos, averaged in OKLab so hue behaves. */
@@ -339,26 +324,21 @@ function groupChapters(photos: Photo[], overrides: Overrides): Array<{ key: stri
 export function buildManifest(photos: Photo[], overrides: Overrides): Manifest {
   const groups = groupChapters(photos, overrides);
 
-  const chapters: Chapter[] = groups.map((g) => ({
-    key: g.key,
-    name: overrides.chapters?.[g.key] ?? chapterName(g.key, overrides.chapters?.[baseKeyOf(g.key)]),
-    oklch: meanOklch(g.photos),
-    // Within a chapter: shortest perceptual path (smooth colour gradient).
-    photos: orderByGradient(g.photos),
-  }));
-
-  // Chain chapters: flip a chapter's path if its other end connects more
-  // smoothly to the previous chapter's last photo, so the gradient carries
-  // across the gaps too (not just within a chapter).
-  for (let i = 1; i < chapters.length; i++) {
-    const prev = chapters[i - 1].photos;
-    const cur = chapters[i].photos;
-    if (prev.length === 0 || cur.length < 2) continue;
-    const tail = toLab(prev[prev.length - 1].oklch);
-    if (dE(tail, toLab(cur[cur.length - 1].oklch)) < dE(tail, toLab(cur[0].oklch))) {
-      cur.reverse();
-    }
-  }
+  const chapters: Chapter[] = groups.map((g) => {
+    const oklch = meanOklch(g.photos);
+    return {
+      key: g.key,
+      name: overrides.chapters?.[g.key] ?? chapterName(g.key, overrides.chapters?.[baseKeyOf(g.key)]),
+      oklch,
+      // Within a chapter: most colour-accurate/strong first, weakest last —
+      // see orderByChapterStrength above. There is no cross-chapter chaining
+      // step any more: that used to flip a chapter's path end-for-end to
+      // smooth the handoff at the boundary, which is exactly what this
+      // ordering must never do to itself, since flipping it would put the
+      // weakest photo first and the strongest last.
+      photos: orderByChapterStrength(g.photos, oklch),
+    };
+  });
 
   return {
     generatedAt: new Date().toISOString(),

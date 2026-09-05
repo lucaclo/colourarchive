@@ -208,6 +208,27 @@ body {
 /* --- The archive scroll --------------------------------------------------- */
 .archive { display: block; }
 
+/* Shown by refreshEmpties() (index.astro) only when a medium/genre/search
+   combination leaves nothing visible — otherwise the archive body used to go
+   fully blank between the cover and the footer, reading as broken rather
+   than "no results." Sized like a held breath, the same restraint as a
+   chapter-gap, so it doesn't feel like an error page. */
+.archive-empty {
+  min-height: 40vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem; text-align: center; color: var(--muted);
+  font-family: var(--font-label); font-size: 0.82rem; letter-spacing: 0.04em;
+}
+.archive-empty[hidden] { display: none; }
+.archive-empty-clear {
+  appearance: none; cursor: pointer; border: 0; background: none; color: var(--accent-mix, var(--fg));
+  font-family: var(--font-label); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.3rem 0.2rem; text-decoration: underline; text-underline-offset: 2px;
+  transition: transform 110ms ease-out;
+}
+.archive-empty-clear:active { transform: scale(0.96); }
+@media (prefers-reduced-motion: reduce) { .archive-empty-clear:active { transform: none; } }
+
 /* Collage: a full-bleed masonry wall per chapter. Photographs are never
    cropped — tiles take their natural aspect and flow into balanced columns,
    like the Aperture cover wall. */
@@ -333,16 +354,6 @@ body {
   padding: 14vh var(--edge);
   color: var(--chapter-fg, var(--fg));
   background: var(--chapter-bg, var(--bg));
-  overflow: hidden; /* clips the marquee below */
-}
-/* The chapter's own name, set faintly behind the title. Purely typographic:
-   the chapter's own name is the only "decoration," never a borrowed image. */
-.chapter-marquee { position: absolute; inset: 0; z-index: 0; display: flex; pointer-events: none; }
-.cm-track { display: flex; flex-shrink: 0; align-items: center; }
-.cm-track span {
-  font-family: var(--font-display); font-style: italic; font-weight: 600;
-  font-size: clamp(5rem, 18vw, 16rem); line-height: 1;
-  color: currentColor; opacity: 0.06; white-space: nowrap; padding: 0 0.25em;
 }
 .chapter-title {
   position: relative;
@@ -350,7 +361,12 @@ body {
   font-optical-sizing: auto;  /* Fraunces: hairlines sharpen as the title grows */
   font-weight: var(--title-weight);
   font-style: var(--title-style);
-  font-size: var(--title-size);
+  /* A chapter with more of the archive in it carries a little more
+     typographic weight — `--chapter-weight` is the same photo-count ratio
+     the cover spectrum already turns into segment width, just read here as a
+     size instead. Clamped upstream to 0.7–1.5, so the swing stays a whisper
+     (±10% around --title-size), not a second type scale. */
+  font-size: calc(var(--title-size) * (0.9 + 0.1 * var(--chapter-weight, 1)));
   letter-spacing: var(--title-tracking);
   text-transform: var(--title-transform);
   line-height: var(--title-leading);
@@ -358,11 +374,14 @@ body {
   max-width: 18ch;
   text-align: var(--title-text-align);
 }
-/* An editorial contrast-hairline beneath the title. */
+/* An editorial contrast-hairline beneath the title — its length carries the
+   same chapter-weight signal as the title above it, like a quiet echo of the
+   cover spectrum's own segment widths. */
 .chapter-title::after {
   content: '';
   display: block;
-  width: 2.75rem; height: 1px;
+  width: calc(2.75rem * var(--chapter-weight, 1));
+  height: 1px;
   margin: 1.6rem 0 0;
   margin-inline: var(--rule-inline, auto);
   background: currentColor;
@@ -377,7 +396,18 @@ body {
   margin: 0 0 1.7rem;
   font-weight: 500;
 }
-/* Chapter entrance: title and index rise in the instant the gap itself
+/* Real data, not decoration, in the room the marquee used to fill — how much
+   of the archive this chapter actually is. */
+.chapter-count {
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-track);
+  text-transform: uppercase;
+  opacity: 0.45;
+  margin: 0.9rem 0 0;
+  font-weight: 500;
+}
+/* Chapter entrance: title, index and count rise in the instant the gap itself
    scrolls into view (see the IntersectionObserver in index.astro), rather
    than the divider simply appearing static and already-coloured. The 0%
    keyframe + `both` fill-mode hides each element only for the (brief) window
@@ -386,10 +416,13 @@ body {
    plain resting opacity instead of vanishing. */
 @keyframes chapterIndexIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 0.55; transform: none; } }
 @keyframes chapterTitleIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes chapterCountIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 0.45; transform: none; } }
 .chapter-gap.enter .chapter-index { animation: chapterIndexIn 650ms var(--ease) 20ms both; }
 .chapter-gap.enter .chapter-title { animation: chapterTitleIn 750ms var(--ease) 110ms both; }
+.chapter-gap.enter .chapter-count { animation: chapterCountIn 650ms var(--ease) 180ms both; }
 @media (prefers-reduced-motion: reduce) {
-  .chapter-gap.enter .chapter-index, .chapter-gap.enter .chapter-title { animation: none; }
+  .chapter-gap.enter .chapter-index, .chapter-gap.enter .chapter-title,
+  .chapter-gap.enter .chapter-count { animation: none; }
 }
 .chapter-swatch {
   display: var(--swatch-display);
@@ -466,7 +499,7 @@ body {
   appearance: none; background: transparent; border: 0; padding: 0; cursor: pointer;
   font-family: var(--font-label);
   font-size: var(--label-size); letter-spacing: var(--label-track); text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted); white-space: nowrap;
   transition: color 200ms var(--ease);
 }
 .topbar .brand:hover, .topbar .brand:focus-visible { color: var(--accent-mix); }   /* it returns you to the cover */
@@ -480,7 +513,7 @@ body {
   color: var(--fg); text-decoration: none;
   font-family: var(--font-label); font-size: var(--label-size);
   letter-spacing: 0.18em; text-transform: uppercase;
-  padding: 0.3rem 0; position: relative;
+  padding: 0.3rem 0; position: relative; white-space: nowrap;
   transition: color 200ms var(--ease);
 }
 .topbar a:hover, .topbar .ghost:hover,
@@ -538,6 +571,20 @@ body {
   flex: 0 0 auto; color: var(--muted); font-size: 0.78em; text-decoration: none;
   white-space: nowrap; transition: color 200ms var(--ease);
 }
+/* Prose, not a number — a genre's blind spot can span several hues, so
+   unlike .num this wraps instead of truncating to one line. */
+.insights .genre-gap-note { flex: 3 1 auto; color: var(--muted); white-space: normal; text-align: left; }
+
+/* "On this day" — the one insights row that shows photographs rather than
+   numbers, so it gets a strip instead of a .stat list. */
+.otd-strip { display: flex; gap: 0.6rem; overflow-x: auto; padding-bottom: 0.2rem; }
+.otd-item { margin: 0; flex: 0 0 5.5rem; position: relative; border-radius: 2px; overflow: hidden; background: var(--border); }
+.otd-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.otd-item figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+  font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.06em; text-align: center;
+  color: #fff; padding: 0.2rem 0; background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
+}
 .insights .gap-link:hover, .insights .gap-link:focus-visible { color: var(--accent-mix); }
 
 /* Issue #62 — gear-aware presets: each row carries a second line (the trend
@@ -557,7 +604,7 @@ body {
 .view-toggle button {
   appearance: none; border: 0; cursor: pointer; background: transparent; color: var(--muted);
   font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.18em;
-  text-transform: uppercase; padding: 0.3rem 0; position: relative;
+  text-transform: uppercase; padding: 0.3rem 0; position: relative; white-space: nowrap;
   transition: color 200ms var(--ease);
 }
 .view-toggle button:hover, .view-toggle button:focus-visible { color: var(--accent-mix); }
@@ -582,6 +629,7 @@ body {
   appearance: none; border: 0; cursor: pointer; background: transparent; color: var(--muted);
   font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.18em;
   text-transform: uppercase; padding: 0.3rem 0; display: inline-flex; align-items: center; gap: 0.5rem;
+  white-space: nowrap;
   transition: color 200ms var(--ease);
 }
 .genre-btn:hover, .genre-btn:focus-visible, .genre-drop.open .genre-btn { color: var(--accent-mix); }
@@ -610,10 +658,20 @@ body {
   font-family: var(--font-label); font-size: var(--label-size); letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--muted); cursor: pointer; white-space: nowrap;
   padding: 0.55rem 0.75rem; border-radius: 7px;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
   transition: background 160ms var(--ease), color 160ms var(--ease);
 }
 .genre-menu li:hover { color: var(--fg); background: rgba(255, 255, 255, 0.06); }
 .genre-menu li[aria-selected='true'] { color: var(--fg); }
+/* How many photos this genre actually has under the medium filter already
+   active — filled in by updateGenreMenuCounts() in the inline script below,
+   from the data-count-* attributes each <li> carries. Real numbers, the same
+   idiom the spectrum tooltips and Insights already use, so a combination
+   that would land on an empty archive (e.g. Film + Portrait) is visible
+   before it's picked, not just explained after. */
+.genre-count { font-size: 0.6rem; letter-spacing: 0.1em; opacity: 0.6; }
+.genre-menu li.genre-empty { color: var(--muted); opacity: 0.42; }
+.genre-menu li.genre-empty:hover { background: transparent; color: var(--muted); }
 
 /* Free-text search (CLIP) — a quiet inline field, not a boxed input, so it
    reads as one more piece of topbar chrome rather than a form. */
@@ -690,14 +748,31 @@ body {
    cover shows the whole archive's palette at once, so it earns the room. */
 .cover-spectrum {
   display: flex; width: min(90vw, 34rem); height: 7px; margin: 0.9rem 0 0;
-  border-radius: 999px; overflow: hidden;
 }
+/* Rounded via the end segments, not `overflow: hidden` on the row — a
+   clipped ancestor would take the hover/focus name tag (.cs-tip) down with
+   it, since an absolutely-positioned child can't escape a clipping parent
+   even when the parent isn't its offset parent. */
+.cover-spectrum .cs-seg:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
+.cover-spectrum .cs-seg:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
 .cover-spectrum .cs-seg {
-  appearance: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  position: relative; appearance: none; border: 0; padding: 0; margin: 0; cursor: pointer;
   min-width: 2px; transition: transform 260ms var(--ease), filter 200ms var(--ease);
   transform-origin: center;
 }
 .cover-spectrum .cs-seg:hover { filter: brightness(1.3); transform: scaleY(2.6); }
+/* Named on hover/focus, not just coloured — two adjacent hues can look the
+   same shade of grey to a colour-blind visitor, and a label beats asking
+   them to trust which segment their pointer is actually over. */
+.cs-tip {
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translate(-50%, 4px);
+  font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.05em; white-space: nowrap;
+  color: var(--fg); background: color-mix(in oklab, var(--bg) 88%, #000); border: 1px solid var(--border);
+  padding: 0.25rem 0.6rem; border-radius: 999px; opacity: 0; pointer-events: none;
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease);
+}
+.cs-seg:hover .cs-tip, .cs-seg:focus-visible .cs-tip { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { .cs-tip { transition: opacity 120ms linear; transform: translate(-50%, 0); } }
 /* Elegant scroll cue: a thin travelling line. */
 .scroll-hint {
   position: absolute; bottom: 4vh; left: 50%; transform: translateX(-50%);
@@ -802,20 +877,34 @@ body {
    (enlarge, split view, match panel), and clustered with `.lb-tool` in the
    archive's viewer. Both need the same round hairline button; only the
    positioning differs, below. */
+/* A tall photo leaves almost no dark margin above/below it in the stage, so
+   these fixed-position controls often sit directly over the photograph
+   itself, not over the lightbox's own near-black backdrop — a transparent
+   background left them nearly invisible over a bright sky or water (icon and
+   hairline border both wash out together). A scrim behind every one, the
+   same dark-blur idiom every other icon-only control over a photograph
+   already uses (the book page's ⠿/×/⧉, the manage grid's genre/medium
+   chips), fixes that regardless of what's underneath. */
 .lb-tool, .lb-close, .lb-nav {
   position: relative; z-index: 81; appearance: none; cursor: pointer;
-  background: transparent; color: var(--fg);
+  background: color-mix(in oklab, #000 45%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  color: var(--fg);
   border: 1px solid var(--accent-hair);
   font-size: 1.2rem; line-height: 1; width: 46px; height: 46px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  opacity: 0.55;
+  opacity: 0.8;
   transition: opacity 240ms var(--ease), border-color 240ms var(--ease), background 240ms var(--ease);
 }
 .lb-nav { position: fixed; }
 /* A standalone close pins itself to the corner; one inside the archive's tool
    cluster is laid out by that row instead. */
 .lb-close:not(.lb-tool) { position: fixed; top: var(--edge); right: var(--edge); }
-.lb-tool:hover, .lb-close:hover, .lb-nav:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); background: color-mix(in oklab, var(--accent-mix) 8%, transparent); }
+/* Hover brightens the border and deepens the scrim together — it never
+   swaps to a lighter accent-tinted background, which would reopen the same
+   washout this scrim exists to prevent. */
+.lb-tool:hover, .lb-close:hover, .lb-nav:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); background: color-mix(in oklab, #000 55%, transparent); }
+.lb-tool:focus-visible, .lb-close:focus-visible, .lb-nav:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
 .lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: scale(0.92); }
 @media (prefers-reduced-motion: reduce) {
   .lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: none; }
@@ -832,10 +921,15 @@ body {
   display: flex; align-items: center; gap: 0.55rem;
 }
 /* Position in the sequence — the one number worth showing. */
+/* Same washout risk as the tool buttons opposite it (a tall photo can sit
+   right behind it too) — the same scrim, shaped as a pill instead of a
+   circle since it holds text, not a glyph. */
 .lb-count {
   position: fixed; z-index: 81; top: var(--edge); left: var(--edge);
   font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.16em;
-  color: var(--muted); line-height: 46px;
+  color: var(--muted); line-height: 46px; padding: 0 0.9rem; border-radius: 999px;
+  background: color-mix(in oklab, #000 45%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
 /* Slideshow: a hairline crossing the foot of the screen, one pass per photo,
    so a running show is visible without a label announcing itself. */
@@ -915,6 +1009,24 @@ body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
 
 /* --- Responsive collage + the breath scales down ------------------------- */
 @media (max-width: 980px) { :root { --cols: 2; } }
+
+/* --- Topbar: tablet/small-laptop wrap -------------------------------------
+   Below ~1150px (measured — the busiest topbar is the archive's own: brand +
+   medium toggle + genre dropdown + search + up to five nav links) the row no
+   longer fits on one line. Without `flex-wrap`, a flex row that overflows
+   doesn't move items to a second line — it shrinks each item toward its own
+   min-content width, and for text that isn't `nowrap` the min-content is just
+   its longest word. That is what wrapped "Colour Archive" into two lines
+   instead of moving it: the label was shrinking, not the layout. Every topbar
+   label is `white-space: nowrap` now (see `.topbar .brand`/`.topbar a`/
+   `.view-toggle button`/`.genre-btn` above), so from here down the row wraps
+   as whole groups instead — the same fix the sub-640px block already uses,
+   just starting earlier and without that block's font/spacing shrink, since
+   there's room enough here that shrinking isn't needed, only wrapping. */
+@media (max-width: 1150px) and (min-width: 641px) {
+  .topbar { flex-wrap: wrap; row-gap: 0.5rem; }
+  .topbar-right { flex: 0 0 auto; }
+}
 
 /* ===== Mobile ============================================================= */
 @media (max-width: 640px) {

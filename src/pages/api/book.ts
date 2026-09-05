@@ -33,7 +33,11 @@ export const GET: APIRoute = async () => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = (await request.json()) as { chapters?: Record<string, unknown>; excluded?: unknown };
+    const body = (await request.json()) as {
+      chapters?: Record<string, unknown>;
+      excluded?: unknown;
+      moved?: Record<string, unknown>;
+    };
     const curation: BookCuration = {};
 
     if (body.chapters && typeof body.chapters === 'object') {
@@ -45,6 +49,13 @@ export const POST: APIRoute = async ({ request }) => {
     }
     if (Array.isArray(body.excluded) && body.excluded.every((id) => typeof id === 'string')) {
       curation.excluded = body.excluded;
+    }
+    if (body.moved && typeof body.moved === 'object') {
+      const moved: Record<string, string> = {};
+      for (const [id, chapterKey] of Object.entries(body.moved)) {
+        if (typeof chapterKey === 'string') moved[id] = chapterKey;
+      }
+      if (Object.keys(moved).length) curation.moved = moved;
     }
 
     await writeBookCuration(curation);

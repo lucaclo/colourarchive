@@ -78,6 +78,22 @@ describe('curatedChapters', () => {
     const result = curatedChapters(chapters, curation);
     assert.deepEqual(result[0].photos.map((p) => p.id), ['2', '1']);
   });
+
+  it('moves a photo into a different chapter for the book, leaving its manifest chapter untouched', () => {
+    const chapters = [chapter('a', ['1', '2']), chapter('b', ['3'])];
+    const curation: BookCuration = { moved: { '1': 'b' } };
+    const result = curatedChapters(chapters, curation);
+    assert.deepEqual(result.map((ch) => ch.key), ['a', 'b']);
+    assert.deepEqual(result[0].photos.map((p) => p.id), ['2']);
+    assert.deepEqual(result[1].photos.map((p) => p.id), ['3', '1']);
+  });
+
+  it('ignores a move to a chapter key the manifest no longer has', () => {
+    const chapters = [chapter('a', ['1', '2'])];
+    const curation: BookCuration = { moved: { '1': 'ghost' } };
+    const result = curatedChapters(chapters, curation);
+    assert.deepEqual(result[0].photos.map((p) => p.id), ['1', '2']);
+  });
 });
 
 describe('orderedChaptersWithExclusions', () => {

@@ -454,6 +454,23 @@ function fitCurve(from: number[], to: number[]): { points: CurvePoint[]; x: numb
 const softenCurve = (c: CurvePoint[], pull: number): CurvePoint[] =>
   c.map((p) => ({ x: p.x, y: p.y + (p.x - p.y) * pull }));
 
+/** A fitted curve's y at an arbitrary x, by linear interpolation between the
+ *  two control points bracketing it — the curve's own shape evaluated at a
+ *  point that may not be one of its own taps. Used both to describe a curve
+ *  with the Basic sliders below, and to resample one curve onto another's
+ *  shared x-grid (see solveOne's blending note on `sharedCurveX`) — the two
+ *  passes fit against different tone gaps, so their own taps land at
+ *  different x positions and reading `curve[i].y` at a shared index is not
+ *  the same value as reading the curve's shape at that shared x. */
+function sampleCurve(curve: CurvePoint[], x: number): number {
+  let i = 0;
+  while (i < curve.length - 2 && curve[i + 1].x < x) i++;
+  const p0 = curve[i];
+  const p1 = curve[i + 1] ?? curve[i];
+  const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
+  return p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t));
+}
+
 /**
  * Describe a curve using the Basic sliders. Display only — see the header note.
  * Values are read off the curve's deviation from identity in the tonal band
@@ -463,14 +480,7 @@ function describeCurve(curve: CurvePoint[]): Pick<
   Adjustments,
   'contrast' | 'highlights' | 'shadows' | 'whites' | 'blacks'
 > {
-  const at = (x: number): number => {
-    let i = 0;
-    while (i < curve.length - 2 && curve[i + 1].x < x) i++;
-    const p0 = curve[i];
-    const p1 = curve[i + 1] ?? curve[i];
-    const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-    return p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t));
-  };
+  const at = (x: number): number => sampleCurve(curve, x);
   const dev = (x: number): number => (at(x) - x) / 2.55; // -> roughly slider units
   // Contrast from the slope across the midtones rather than a single point.
   const slope = (at(180) - at(76)) / (180 - 76);
@@ -552,8 +562,16 @@ function solveOne(
   let curve = fitted.points;
   if (restrained) curve = softenCurve(curve, RESTRAINED_CURVE_PULL);
   // Both solutions must share x positions so the strength slider can blend.
+  // Resampled by the curve's own shape at each shared x — NOT by array index:
+  // the faithful and restrained passes fit against different tone gaps (the
+  // restrained one after a clamped, softened exposure), so their own fitted
+  // taps land at different x positions even when there happen to be the same
+  // number of them. Pairing by index instead of by x silently swapped in the
+  // wrong y for almost every point, including the x=255 anchor — which must
+  // stay exactly 255 so the curve terminates at white, and a positional
+  // splice had no reason to preserve that.
   if (sharedCurveX) {
-    curve = sharedCurveX.map((x, i) => ({ x, y: curve[i]?.y ?? x }));
+    curve = sharedCurveX.map((x) => ({ x, y: Math.round(sampleCurve(curve, x)) }));
   }
   adj.curve = curve;
   applyCurve(state, curve);

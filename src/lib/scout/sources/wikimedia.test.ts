@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   assessedSearchUrl,
   byStanding,
+  categorySearchUrl,
   parsePhotoDetails,
   parseSearchTitles,
   photoDetailsUrl,
@@ -217,6 +218,39 @@ describe('byStanding', () => {
   it('still ranks a contest entry above a photograph with no standing at all', () => {
     const sorted = [photo(undefined, 60), photo('contest', 1)].sort(byStanding);
     assert.deepEqual(sorted.map((p) => p.accolade), ['contest', undefined]);
+  });
+
+  it('ranks a named photographer above every accolade tier, however small', () => {
+    const notable = { ...photo('featured', 1), accolade: undefined, notable: { name: 'Dorothea Lange' } };
+    const sorted = [photo('featured', 60), notable].sort(byStanding);
+    assert.equal(sorted[0].notable?.name, 'Dorothea Lange');
+  });
+
+  it('breaks a tie between two named photographers on resolution, not NaN', () => {
+    const a = { ...photo(undefined, 12), notable: { name: 'A' } };
+    const b = { ...photo(undefined, 40), notable: { name: 'B' } };
+    const sorted = [a, b].sort(byStanding);
+    assert.deepEqual(sorted.map((p) => p.notable?.name), ['B', 'A']);
+  });
+});
+
+describe('categorySearchUrl', () => {
+  it('is the same query assessedSearchUrl builds from a tier', () => {
+    // notable.ts reuses this directly for a named photographer's own category —
+    // same shape, a different category string.
+    const query = { centre: CENTRE, radiusM: 5000, limit: 10 };
+    assert.equal(
+      categorySearchUrl(query, 'Quality images', false),
+      assessedSearchUrl(query, 'quality'),
+    );
+  });
+
+  it('walks subcategories only when asked to', () => {
+    const query = { centre: CENTRE, radiusM: 5000, limit: 10 };
+    const term = new URL(categorySearchUrl(query, 'Photographs by Dorothea Lange', true)).searchParams.get(
+      'srsearch',
+    );
+    assert.match(term ?? '', /deepcat:"Photographs by Dorothea Lange"/);
   });
 });
 

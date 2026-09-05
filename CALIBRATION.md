@@ -81,7 +81,7 @@ it. If `solve.ts` ever changes how it uses a constant, the probe measuring
 that constant needs to change with it, or the fit will confidently produce a
 number for a formula that no longer exists.
 
-Three constants are declared in `Calibration` but not probed here:
+Four constants are declared in `Calibration` but not probed here:
 
 - **`sharpenUnit`** — `solve.ts` doesn't currently set `adj.sharpenAmount`
   from any measurement, so there is no forward formula to invert. Measuring
@@ -94,6 +94,17 @@ Three constants are declared in `Calibration` but not probed here:
   needs a mask actually drawn in Lightroom and a measurement restricted to
   that mask's region — a different, heavier harness than probing a global
   slider. Left as a follow-up.
+- **`tempKelvinPer100`** — not a slider-response constant at all, so the
+  probe methodology above doesn't apply to it: there is no "apply N Kelvin"
+  preset that means the same thing on every camera, because the global Temp
+  readout is display-only (see xmp.ts — `Temperature` is never written to
+  the preset) and exists purely to relabel an already-solved relative move
+  into the units a RAW's own Temp slider uses. Only a real side-by-side
+  comparison against that slider, on a real RAW, can validate this number —
+  and even then the honest answer is baseline-dependent (the same
+  correction is a different number of Kelvin near tungsten than near
+  daylight), so "validated" here means "reasonable near daylight," not
+  "exact everywhere."
 
 ## Why a linear fit is the right model
 

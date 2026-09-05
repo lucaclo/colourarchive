@@ -20,7 +20,8 @@
  */
 
 import { ACHROMATIC_KEY, ANCHORS, baseKeyOf } from './color';
-import type { Chapter } from './types';
+import { GENRES, GENRE_LABEL } from './types';
+import type { Chapter, Genre, Photo } from './types';
 
 /** Below this share of the busiest anchor's count, a present anchor still reads as thin. */
 const THIN_SHARE = 0.15;
@@ -76,6 +77,67 @@ export function findColourGaps(chapters: Chapter[]): ColourGap[] {
         kind: 'thin',
         photoCount: count,
         note: `Thin: only ${count} photo${count === 1 ? '' : 's'} of ${anchor.name.toLowerCase()}, against ${busiest} in the biggest chapter.`,
+      });
+    }
+  }
+  return gaps;
+}
+
+/** An anchor needs at least this many genre-labelled photos before its genre
+ *  mix means anything — "1 photo, missing 3 of 4 genres" isn't a blind spot,
+ *  it's a sample size. `findColourGaps`'s own thin/missing split already
+ *  covers an anchor this thin from the colour side alone. */
+const MIN_GENRE_SAMPLE = 3;
+
+export interface GenreColourGap {
+  genre: Genre;
+  anchorKey: string;
+  anchorName: string;
+  targetHue: number;
+  /** How many genre-labelled photos exist at this anchor, across every
+   *  genre — the sample size the absence is measured against. */
+  anchorTotal: number;
+  note: string;
+}
+
+/**
+ * Genres never shot in a hue the archive otherwise shoots plenty of — a
+ * different claim from `findColourGaps`, which is blind to genre entirely.
+ * "You have 40 blue landscapes and zero blue portraits" is invisible to a
+ * pure hue count (blue is obviously not a gap) and invisible to a pure
+ * genre count (portraits aren't rare overall); it only shows up once the
+ * two are crossed.
+ *
+ * Scoped to anchors with enough genre-labelled photos to say anything (see
+ * `MIN_GENRE_SAMPLE`) — film carries no genre by default and a photo with
+ * no genre at all is left out rather than silently counted as "not this
+ * genre", which would manufacture gaps out of missing labels rather than
+ * missing photographs.
+ */
+export function findGenreColourGaps(photos: Photo[]): GenreColourGap[] {
+  const byAnchor = new Map<string, Photo[]>();
+  for (const p of photos) {
+    if (!p.genre) continue;
+    const base = baseKeyOf(p.chapter);
+    if (base === ACHROMATIC_KEY) continue;
+    if (!byAnchor.has(base)) byAnchor.set(base, []);
+    byAnchor.get(base)!.push(p);
+  }
+
+  const gaps: GenreColourGap[] = [];
+  for (const anchor of ANCHORS) {
+    const ps = byAnchor.get(anchor.slug);
+    if (!ps || ps.length < MIN_GENRE_SAMPLE) continue;
+    const present = new Set(ps.map((p) => p.genre));
+    for (const genre of GENRES) {
+      if (present.has(genre)) continue;
+      gaps.push({
+        genre,
+        anchorKey: anchor.slug,
+        anchorName: anchor.name,
+        targetHue: anchor.H,
+        anchorTotal: ps.length,
+        note: `${ps.length} ${anchor.name.toLowerCase()} photo${ps.length === 1 ? '' : 's'} in the archive, none of them ${GENRE_LABEL[genre].toLowerCase()}.`,
       });
     }
   }

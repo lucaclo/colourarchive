@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findColourGaps } from './gaps.ts';
+import { findColourGaps, findGenreColourGaps } from './gaps.ts';
 import { ANCHORS } from './color.ts';
 import type { OKLCH } from './color.ts';
-import type { Chapter, Photo } from './types.ts';
+import type { Chapter, Genre, Photo } from './types.ts';
 
-const photo = (H: number): Photo => {
+const photo = (H: number, extra: Partial<Photo> = {}): Photo => {
   const oklch: OKLCH = { L: 0.5, C: 0.15, H };
   return {
     id: `p-${H}-${Math.random()}`,
@@ -24,6 +24,7 @@ const photo = (H: number): Photo => {
     derivatives: [],
     exif: {},
     addedAt: new Date().toISOString(),
+    ...extra,
   };
 };
 
@@ -84,5 +85,54 @@ describe('findColourGaps', () => {
     const gaps = findColourGaps([]);
     assert.equal(gaps.length, ANCHORS.length);
     assert.ok(gaps.every((g) => g.kind === 'missing'));
+  });
+});
+
+describe('findGenreColourGaps', () => {
+  const blue = ANCHORS.find((a) => a.slug === 'blue')!;
+  const genrePhotos = (genre: Genre, n: number, anchorSlug = blue.slug) =>
+    Array.from({ length: n }, () => photo(blue.H, { chapter: anchorSlug, genre }));
+
+  it('flags a genre never shot in a hue the archive otherwise shoots plenty of', () => {
+    const photos = [...genrePhotos('landscape', 10), ...genrePhotos('street', 5)];
+    const gaps = findGenreColourGaps(photos);
+    assert.ok(gaps.some((g) => g.anchorKey === 'blue' && g.genre === 'portrait'));
+    assert.ok(gaps.some((g) => g.anchorKey === 'blue' && g.genre === 'architecture'));
+    assert.ok(!gaps.some((g) => g.anchorKey === 'blue' && g.genre === 'landscape'));
+    assert.ok(!gaps.some((g) => g.anchorKey === 'blue' && g.genre === 'street'));
+  });
+
+  it('reports nothing once every genre is represented at an anchor', () => {
+    const photos = [
+      ...genrePhotos('landscape', 5),
+      ...genrePhotos('street', 5),
+      ...genrePhotos('portrait', 5),
+      ...genrePhotos('architecture', 5),
+    ];
+    assert.deepEqual(findGenreColourGaps(photos), []);
+  });
+
+  it('ignores an anchor with too few genre-labelled photos to mean anything', () => {
+    // Two landscape photos at 'red' — below MIN_GENRE_SAMPLE — should not
+    // manufacture "missing portrait/street/architecture" out of a sample of two.
+    const red = ANCHORS.find((a) => a.slug === 'red')!;
+    const photos = [photo(red.H, { chapter: 'red', genre: 'landscape' }), photo(red.H, { chapter: 'red', genre: 'landscape' })];
+    assert.deepEqual(findGenreColourGaps(photos), []);
+  });
+
+  it('never reports achromatic — it is not a hue', () => {
+    const photos = Array.from({ length: 10 }, () => photo(0, { chapter: 'achromatic', genre: 'street' }));
+    assert.deepEqual(findGenreColourGaps(photos), []);
+  });
+
+  it('leaves out photos with no genre rather than counting them as "not this genre"', () => {
+    // Three genreless photos at an anchor must not, by themselves, manufacture
+    // gaps for all four genres — there is no evidence about genre here at all.
+    const photos = Array.from({ length: 3 }, () => photo(blue.H, { chapter: 'blue', genre: undefined }));
+    assert.deepEqual(findGenreColourGaps(photos), []);
+  });
+
+  it('is stable over an empty archive', () => {
+    assert.deepEqual(findGenreColourGaps([]), []);
   });
 });

@@ -75,6 +75,17 @@ export interface RawPhoto {
    * reviewed tiers and says so on the picture.
    */
   accolade?: 'featured' | 'quality' | 'valued' | 'contest';
+  /**
+   * This photograph is attributed to a named photographer on the curated
+   * notable-photographer list (`src/data/notable-photographers.json`), matched by
+   * Commons category or Flickr user id — see `sources/notable.ts`.
+   *
+   * A different claim from `accolade`: that is "other photographers reviewed this
+   * and rated it well"; this is "a specific person we can name made this." Kept
+   * as its own field rather than folded into `accolade` so the two never get
+   * compared as if they were one scale — see `byStanding` in `wikimedia.ts`.
+   */
+  notable?: { name: string; wikipediaUrl?: string };
   /** Blunt, but real: nobody shoots forty megapixels of somewhere they did not care about. */
   megapixels?: number;
 }

@@ -1,0 +1,115 @@
+{
+  "chapters": {
+    "achromatic": [
+      "a5c956335b841643",
+      "f104248915053a6b",
+      "7b1f1207fb43e10a",
+      "9509a343e3ed2798",
+      "6bc75e8b9e1e1814",
+      "b017f0a25a7e90c7",
+      "0d70aef098c91c24"
+    ],
+    "red": [
+      "e12418f8f98a750a",
+      "5a7d7a8e8ddf10eb",
+      "1f67632eb2ea95f3",
+      "8056da29cfd38281",
+      "b711cd6fdcc470e2",
+      "0eed7a86bf8d9db1",
+      "3a17441c5bd4cfec",
+      "95c64f9a7668258b",
+      "f8c25c7d2c67bb55"
+    ],
+    "orange": [
+      "a56f65b2a5c21623",
+      "02933f839dd4de37",
+      "e84aade9d6949b1b",
+      "efa6424fdd6ccf8e",
+      "697e9dd28d1caea2",
+      "f9b35193ab4ee955",
+      "de0a1553f0fabdf6",
+      "a1c6ea8fe4d48668",
+      "a7ea9949fdda071b",
+      "47414d39495e013d",
+      "0996bf2418d080ac",
+      "5244001baec22fdb",
+      "4f44f97e01bbbeac",
+      "59f612f9eac97d61",
+      "2693d07bb4650ac8",
+      "c5f3c71073829f66",
+      "ab0d651db40bcbff",
+      "f7d3a6ae147d9e24",
+      "fd49be6267aef0ff",
+      "b06384d3c56a114e"
+    ],
+    "yellow-deep": [
+      "26a4e6364d2dca3c",
+      "ffa4380cf6d846de",
+      "b7ff65497456fe1a",
+      "41cf17767465146d",
+      "26f9c24b21acf2ff",
+      "a3e67180f60445d4",
+      "c88ff0854fb48711",
+      "26b553744394494e"
+    ],
+    "yellow": [
+      "a62a16fd87f51388",
+      "c3c9da2aecb2dbb0",
+      "21ad52f9a82607c3",
+      "e6a66cbcfcdb05df",
+      "565484189ea49d0a",
+      "e3218c87b4f18f3a",
+      "54aea1ceb542af21",
+      "412e1723ef0de162",
+      "c7d89fde4b1709ee",
+      "6217b0d6e89dbf50",
+      "8374e2ecc2e0712f"
+    ],
+    "green": [
+      "198be59eba923291",
+      "2c3237d4b15d4a2d",
+      "d74fdd441009efb3",
+      "2ab913bca95ec4be",
+      "7deb32bbeff9dc62"
+    ],
+    "teal": [
+      "8d0188018e62ab25",
+      "5573a3f29a16eb32",
+      "a8569641675d64f9",
+      "c0f06a2c21adfec4",
+      "41561d6f1c3dc482",
+      "257ccae6d0ddc80f",
+      "b90cc1f30ac4fd87",
+      "7fd6b6e228634959",
+      "70367a2319ad7d3b",
+      "344d2ee73c19ef55",
+      "4ecdd23b1bd23556",
+      "703d044c2b9f5626"
+    ],
+    "blue": [
+      "57f086e366198377",
+      "42605e496d4fb8e9",
+      "cba2fc9febffa837",
+      "ffd598c8b38675b5",
+      "d62b2154e7fee842",
+      "54ad7a9a4ae5a375",
+      "7ab33d66afc379a7",
+      "56cc4159dc4c2cf4",
+      "e07accf7f6d22a11",
+      "a1a3dcf53d5f770a"
+    ]
+  },
+  "excluded": [
+    "b017f0a25a7e90c7"
+  ],
+  "moved": {
+    "26a4e6364d2dca3c": "yellow-deep",
+    "ffa4380cf6d846de": "yellow-deep",
+    "b7ff65497456fe1a": "yellow-deep",
+    "41cf17767465146d": "yellow-deep",
+    "26f9c24b21acf2ff": "yellow-deep",
+    "a3e67180f60445d4": "yellow-deep",
+    "c88ff0854fb48711": "yellow-deep",
+    "26b553744394494e": "yellow-deep"
+  }
+}

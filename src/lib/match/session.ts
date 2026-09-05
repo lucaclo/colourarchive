@@ -83,6 +83,11 @@ export function listMatches(): MatchRecord[] {
   return [...records.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Just the kept ones — the Style Match "library" a viewer browses. */
+export function listKeptMatches(): MatchRecord[] {
+  return listMatches().filter((r) => r.kept);
+}
+
 async function evictOldUnkept(): Promise<void> {
   const unkept = [...records.values()]
     .filter((r) => !r.kept)
@@ -247,6 +252,23 @@ export async function keepMatch(id: string): Promise<MatchRecord | undefined> {
   return record;
 }
 
+/** Undo `keepMatch` — removes the persisted JSON so it won't reload on the
+ *  next restart, and clears the in-memory flag so `evictOldUnkept` can claim
+ *  it again like any other unpinned comparison. The preview assets under
+ *  `MATCH_CACHE_DIR` are left alone; eviction (or a later keep of something
+ *  else) cleans those up its own way, and deleting them here too would race
+ *  a browser tab still showing this report. */
+export async function unkeepMatch(id: string): Promise<boolean> {
+  const record = records.get(id);
+  if (record) record.kept = false;
+  try {
+    await fs.rm(path.join(MATCH_KEPT_DIR, `${id}.json`));
+    return true;
+  } catch {
+    return Boolean(record);
+  }
+}
+
 /** Reload kept reports at startup so they survive a restart. */
 export async function loadKeptMatches(): Promise<void> {
   let files: string[];
@@ -276,3 +298,13 @@ export async function loadKeptMatches(): Promise<void> {
     }
   }
 }
+
+// `loadKeptMatches` exists specifically so a kept report survives a restart,
+// but nothing ever called it — every kept match was actually gone the moment
+// the dev server (or the Netlify function's cold container) restarted, silent
+// because `keepMatch` still succeeded and `records` still held it until then.
+// A top-level await runs this exactly once, the first time anything imports
+// this module, before `getMatch`/`listMatches`/`listKeptMatches` can be
+// called from the same request — Node resolves an importer's own top-level
+// code only after an awaited import's has finished.
+await loadKeptMatches();

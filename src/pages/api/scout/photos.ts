@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
-import { PhotoError, fetchCommonsPhotos, toHotspots } from '../../../lib/scout/sources/photo-client';
+import { PhotoError, toHotspots } from '../../../lib/scout/sources/photo-client';
+import { fetchSpotPhotos } from '../../../lib/scout/sources/spot-photos';
 import { MAX_PHOTOS, PHOTO_SEARCH_RADIUS_M } from '../../../lib/scout/sources/types';
 
 export const prerender = false;
@@ -17,15 +18,15 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   try {
-    const { photos, tiers } = await fetchCommonsPhotos({
+    const { photos, tiers } = await fetchSpotPhotos({
       centre: { lat, lon },
       // Capped here as well as at the caller: this route is reachable directly,
       // and a 200 km radius would be somebody else's bandwidth.
       radiusM: Math.min(PHOTO_SEARCH_RADIUS_M, Number.isFinite(radiusM) ? radiusM : PHOTO_SEARCH_RADIUS_M),
       limit: MAX_PHOTOS,
     });
-    // Commons photographs do not move and neither do their licences, so a
-    // reload should not pay for this again.
+    // Photographs, wherever they came from, do not move and their licences
+    // do not change, so a reload should not pay for this again.
     return json(
       { ok: true, hotspots: toHotspots(photos), photoCount: photos.length, tiers },
       200,

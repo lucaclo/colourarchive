@@ -39,14 +39,29 @@ const AGENT = 'ColourArchiveScout/1.0 (https://github.com/; personal photographi
 
 const TIMEOUT_MS = 8_000;
 /** Commons photographs do not move, and neither do their licences. */
-const CACHE_MS = 30 * 60 * 1000;
+export const CACHE_MS = 30 * 60 * 1000;
 /** The details call takes a batch of titles; 50 is comfortably inside the API's limit. */
 const BATCH = 50;
 
-/** Whether an accolade's own request answered, independent of what it found. */
+/**
+ * Whether one source's own request answered, independent of what it found.
+ *
+ * `accolade` is the historical name — this started as "which Commons tier" —
+ * and now also carries `'flickr'` (the general interestingness search) and
+ * `'notable'` (the curated-photographer Commons+Flickr searches, reported as
+ * one row rather than one per person). `needsKey` marks the one honest reason
+ * a source can be unreachable without being *broken*: no API key configured
+ * for this deployment — see `flickr.ts`'s `hasFlickrKey`.
+ *
+ * The `'flickr' | 'notable'` half of this union is never produced by anything
+ * in *this* file — only by `spot-photos.ts`, which is server-only. It is
+ * declared here anyway so `browser/sources.ts` and this file's own consumers
+ * share one type, rather than two structurally-identical ones drifting apart.
+ */
 export interface TierStatus {
-  accolade: Accolade;
+  accolade: Accolade | 'flickr' | 'notable';
   ok: boolean;
+  needsKey?: boolean;
 }
 
 export interface PhotoSearch {
@@ -72,7 +87,10 @@ const cache = new Map<string, Entry>();
  */
 export type JsonTransport = (url: string) => Promise<unknown>;
 
-const serverGetJson: JsonTransport = async (url) => {
+/** Exported for `spot-photos.ts`, the only other server-only caller — see
+ *  this file's header for why Flickr/notable fetching lives there instead of
+ *  here. */
+export const serverGetJson: JsonTransport = async (url) => {
   const response = await fetch(url, {
     headers: { 'user-agent': AGENT, accept: 'application/json' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -187,8 +205,9 @@ export async function collectCommonsPhotos(
   return { photos, tiers: tierStatus() };
 }
 
-/** Map with a ceiling on how many are in flight. Order of results is preserved. */
-async function inParallel<T, R>(
+/** Map with a ceiling on how many are in flight. Order of results is preserved.
+ *  Exported for `spot-photos.ts`, same reason as `serverGetJson` above. */
+export async function inParallel<T, R>(
   items: T[],
   limit: number,
   work: (item: T) => Promise<R>,

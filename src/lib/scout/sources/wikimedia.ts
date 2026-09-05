@@ -108,13 +108,20 @@ const withCors = (params: URLSearchParams, options: UrlOptions | undefined) => {
   return params;
 };
 
-export function assessedSearchUrl(
+/**
+ * The intersection-of-a-category-and-a-place query, shared by the accolade
+ * tiers below and `notable.ts`'s named-photographer search — the two ask the
+ * same kind of question ("files in category X near this point") of different
+ * categories, and duplicating the CirrusSearch expression would be a second
+ * place to get `incategory:` vs `deepcat:` or the km/metre split wrong.
+ */
+export function categorySearchUrl(
   query: SpotSearch,
-  accolade: Accolade,
+  category: string,
+  deep: boolean,
   options?: UrlOptions,
 ): string {
   const km = Math.min(NEARCOORD_MAX_KM, Math.max(1, Math.round(query.radiusM / 1000)));
-  const { category, deep } = ACCOLADES[accolade];
   // `incategory:` is direct membership; `deepcat:` walks the subcategory tree.
   // Which one a tier needs is a property of how Commons files that tier, not a
   // preference — see `ACCOLADES`, where getting this wrong cost a whole tier.
@@ -130,6 +137,15 @@ export function assessedSearchUrl(
     srlimit: String(Math.min(100, Math.max(1, query.limit))),
   });
   return `${COMMONS_API}?${withCors(params, options)}`;
+}
+
+export function assessedSearchUrl(
+  query: SpotSearch,
+  accolade: Accolade,
+  options?: UrlOptions,
+): string {
+  const { category, deep } = ACCOLADES[accolade];
+  return categorySearchUrl(query, category, deep ?? false, options);
 }
 
 /**
@@ -201,8 +217,13 @@ const IMAGE_MIME = /^image\/(jpeg|png|webp|avif|tiff)$/;
  * **A file missing an author or a licence is dropped, not shown anonymously.**
  * So is one with no coordinates, since a spot photograph that is not anywhere
  * is not a spot photograph.
+ *
+ * `accolade` is optional because `notable.ts` reuses this same detail-batch
+ * parser for a named photographer's own category, which is not an accolade
+ * tier at all — those results carry no `accolade` and get tagged `notable`
+ * instead, by the caller.
  */
-export function parsePhotoDetails(payload: unknown, accolade: Accolade): RawPhoto[] {
+export function parsePhotoDetails(payload: unknown, accolade?: Accolade): RawPhoto[] {
   const pages = (payload as { query?: { pages?: unknown } })?.query?.pages;
   if (!Array.isArray(pages)) return [];
 
@@ -266,12 +287,21 @@ export function parsePhotoDetails(payload: unknown, accolade: Accolade): RawPhot
 /**
  * Best first.
  *
- * Accolade decides it — a featured picture beat a field of quality images by
+ * A named photographer on the notable list outranks every accolade tier —
+ * "Dorothea Lange shot this" is a stronger claim than "the community voted
+ * for it," not a bigger number on the same scale, so it gets a rank above the
+ * whole `ACCOLADES` range rather than being folded into it. Below that,
+ * accolade decides it — a featured picture beat a field of quality images by
  * vote, and that is a better judgement than anything computable here. Within a
  * tier, resolution breaks the tie: it is blunt, but nobody shoots forty
  * megapixels of somewhere they did not care about.
  */
 export function byStanding(a: RawPhoto, b: RawPhoto): number {
-  const rank = (photo: RawPhoto) => (photo.accolade ? ACCOLADES[photo.accolade].rank : 0);
+  // A separate, higher tier rather than folding into ACCOLADES' 0-4 range —
+  // Number.MAX_SAFE_INTEGER stays a normal finite number, so two notable
+  // photos still subtract to a clean 0 and fall through to the tiebreak below
+  // instead of NaN.
+  const rank = (photo: RawPhoto) =>
+    photo.notable ? Number.MAX_SAFE_INTEGER : photo.accolade ? ACCOLADES[photo.accolade].rank : 0;
   return rank(b) - rank(a) || (b.megapixels ?? 0) - (a.megapixels ?? 0);
 }

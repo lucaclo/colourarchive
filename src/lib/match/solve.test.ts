@@ -330,6 +330,50 @@ describe('curveX', () => {
       assert.deepEqual(sol.curveX, sol.restrained.curve.map((p) => p.x));
     }
   });
+
+  it('keeps the white anchor at y=255 on both passes, even after resampling onto the shared grid', () => {
+    // A real exposure gap, not a self-match: the restrained pass runs
+    // against a differently-exposed state (clamped, then damped) than the
+    // faithful pass, so its own fitted curve can land on different x
+    // positions before being resampled onto the faithful pass's shared
+    // grid. The x=255 anchor must still land on y=255 after that resample —
+    // the curve terminates at white by construction (fitCurve) — and a
+    // resample keyed by array position rather than by x has no reason to
+    // preserve that once the two passes' point counts differ.
+    const ref = photo('anchor-ref', { curve: (v) => v });
+    const mine = photo('anchor-mine', { curve: (v) => Math.sqrt(v) });
+    const sol = solveMatch(ref, mine);
+
+    const last = <T>(arr: T[]): T => arr[arr.length - 1];
+    assert.deepEqual(last(sol.faithful.curve), { x: 255, y: 255 });
+    assert.deepEqual(last(sol.restrained.curve), { x: 255, y: 255 });
+  });
+
+  it("resamples the restrained curve by its own shape at each shared x, not by the faithful pass's array position", () => {
+    // Curve math has no calibration constant in it anywhere (see solveOne's
+    // stage 2 — Exposure and the curve are "exactly solvable", unlike every
+    // later stage), so unlike a slider value, an exact expected curve here
+    // is not the kind of number that changes when someone plugs in a real
+    // measured calibration. It is a fixed point of the geometry, safe to
+    // pin down directly.
+    //
+    // A positional splice (pairing the restrained curve's own y at each
+    // array index with the faithful curve's x at that index, rather than
+    // resampling the restrained curve's shape at that x) gets every
+    // interior point wrong here, not just the anchor: confirmed by running
+    // the pre-fix solver against this exact fixture, which produced
+    // [{0,0},{18,76},{99,150},{255,223}] instead of the values below.
+    const ref = photo('resample-ref', { curve: (v) => v });
+    const mine = photo('resample-mine', { curve: (v) => v ** 2 });
+    const sol = solveMatch(ref, mine);
+
+    assert.deepEqual(sol.restrained.curve, [
+      { x: 0, y: 0 },
+      { x: 18, y: 26 },
+      { x: 99, y: 114 },
+      { x: 255, y: 255 },
+    ]);
+  });
 });
 
 /* ── Missing measurement ──────────────────────────────────────────────────── */

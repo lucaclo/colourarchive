@@ -16,6 +16,7 @@
     "deploy:site": "tsx scripts/deploy-site.ts",
     "drift": "tsx scripts/deploy-site.ts --check",
     "check:photos": "tsx scripts/check-photos.ts",
+    "doctor": "tsx scripts/doctor.ts",
     "export:sequence": "tsx scripts/export-sequence.ts",
     "export:print": "tsx scripts/export-print.ts",
     "fonts": "tsx scripts/fetch-fonts.ts",
