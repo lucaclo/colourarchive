@@ -439,7 +439,10 @@ body {
   background: color-mix(in oklab, var(--bg) 82%, transparent);
   color: var(--fg);
   border: 1px solid var(--border);
-  backdrop-filter: blur(14px);
+  /* Regular variant, matching the topbar's own fix — this is text-heavy
+     metadata floating over photographs, the same case. */
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
   padding: 1rem 1.2rem;
   font-family: var(--font-label);
   font-size: 0.82rem;
@@ -491,7 +494,17 @@ body {
   padding: 1.1rem var(--edge);
   font-family: var(--font-label);
   background: linear-gradient(to bottom, color-mix(in oklab, var(--bg) 78%, transparent), transparent);
-  backdrop-filter: blur(4px);
+  /* Liquid Glass's "regular" variant, sized to Apple's own stated range
+     (20-40px) rather than the 4px this carried before: a text-heavy nav bar
+     floating over actively-scrolling photographs is the textbook regular
+     case, and 4px left nav labels genuinely hard to read against a bright or
+     busy photo passing underneath. The gradient fill (still fading to fully
+     transparent at the bottom) is untouched, so this stays the same soft
+     editorial bar, not a hard slab — only the legibility under it changes.
+     A mild saturation boost keeps the colour showing through lively instead
+     of muddying it, the other half of the same guideline. */
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
   transition: transform 420ms var(--ease), opacity 420ms var(--ease);
 }
 .topbar.hidden { transform: translateY(-115%); opacity: 0; pointer-events: none; }
@@ -566,6 +579,23 @@ body {
   transition: width 700ms var(--ease);
 }
 @media (prefers-reduced-motion: reduce) { .insights .bar { transition: none; } }
+/* Row entrance: each stat/gear-stat row and "on this day" photo rises in on
+   open, staggered by JS (see openInsights() in index.astro) — the same
+   translateY-and-fade idiom the chapter dividers use for their own entrance
+   (chapterTitleIn et al., above), applied to data instead of a photograph, so
+   the one page that's all numbers still speaks the app's motion language.
+   Base state stays fully visible — nothing here sets a permanent opacity:0 —
+   so if the stagger script never runs, rows simply appear at once instead of
+   staying hidden. */
+@keyframes insightsRowIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.insights.show .stat li.enter,
+.insights.show .gear-stat li.enter,
+.insights.show .otd-item.enter { animation: insightsRowIn 420ms var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .insights.show .stat li.enter,
+  .insights.show .gear-stat li.enter,
+  .insights.show .otd-item.enter { animation: none; }
+}
 .insights .num { flex: 0 0 auto; color: var(--muted); min-width: 2rem; text-align: right; }
 .insights .gap-link {
   flex: 0 0 auto; color: var(--muted); font-size: 0.78em; text-decoration: none;
@@ -639,7 +669,7 @@ body {
   position: absolute; top: calc(100% + 0.7rem); left: 50%;
   margin: 0; padding: 0.4rem; list-style: none; z-index: 60;
   background: rgba(18, 17, 16, 0.96); border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 11px; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border-radius: 11px; -webkit-backdrop-filter: blur(12px) saturate(1.15); backdrop-filter: blur(12px) saturate(1.15);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); min-width: 9.5rem;
   /* Origin-aware: it drops from the button that opened it, not from its own
      centre. Used the same JS `.show`-after-rAF pattern as every other overlay
@@ -888,7 +918,14 @@ body {
 .lb-tool, .lb-close, .lb-nav {
   position: relative; z-index: 81; appearance: none; cursor: pointer;
   background: color-mix(in oklab, #000 45%, transparent);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  /* Liquid Glass's "clear" variant — these float over the photograph itself,
+     not over app chrome — nudged from 6px into Apple's stated 8-16px range,
+     plus the same mild saturation boost as the topbar. The 45% dark fill and
+     hairline border stay exactly as they were: that scrim is what actually
+     keeps the icon visible over a blown-out sky or water (see the comment
+     below), and is a deliberate, considered choice, not something this
+     guideline should override. */
+  -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
   color: var(--fg);
   border: 1px solid var(--accent-hair);
   font-size: 1.2rem; line-height: 1; width: 46px; height: 46px; border-radius: 50%;
@@ -929,7 +966,9 @@ body {
   font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.16em;
   color: var(--muted); line-height: 46px; padding: 0 0.9rem; border-radius: 999px;
   background: color-mix(in oklab, #000 45%, transparent);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  /* Same scrim, same fix as .lb-tool above — it would read as inconsistent
+     glass right next to it otherwise. */
+  -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
 }
 /* Slideshow: a hairline crossing the foot of the screen, one pass per photo,
    so a running show is visible without a label announcing itself. */
@@ -992,7 +1031,10 @@ body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
   font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.08em;
   color: var(--fg); background: color-mix(in oklab, var(--bg) 88%, transparent);
   border: 1px solid var(--hair); border-radius: 999px; padding: 0.6rem 1.05rem;
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  /* The app's "small transient pill" tier — Scout's own .toast is the same
+     idiom and gets the same value, for one consistent step between the
+     10px icon-button tier and the 20px full-panel tier. */
+  -webkit-backdrop-filter: blur(12px) saturate(1.15); backdrop-filter: blur(12px) saturate(1.15);
   opacity: 0; transition: opacity 420ms var(--ease), transform 420ms var(--ease);
   font-variant-numeric: tabular-nums;    /* the count must not jitter as it climbs */
 }

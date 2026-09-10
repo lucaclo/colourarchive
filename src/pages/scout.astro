@@ -1069,7 +1069,13 @@ const accent = '#f0b866';
   .seg {
     background: color-mix(in oklab, var(--bg) 86%, #000);
     border: 1px solid var(--border);
-    backdrop-filter: blur(10px);
+    /* Regular variant — this is the single most load-bearing glass surface on
+       the page (every panel, sheet, chip and round button shares it), text
+       and control-heavy, floating over the map. Was 10px, well under Apple's
+       own stated 20-40px range for this case; matches the topbar/.meta fix
+       for the same reason. */
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
     box-shadow: 0 6px 20px -6px color-mix(in oklab, black 45%, transparent),
       0 1px 3px color-mix(in oklab, black 20%, transparent);
   }
@@ -1120,6 +1126,15 @@ const accent = '#f0b866';
     color: var(--muted);
     pointer-events: none;
     text-align: center;
+    /* Sits directly on the basemap, whose colour is whatever's under the pin —
+       open ocean, snow, desert, all rendered pale by this style — so a plain
+       --muted grey can lose almost all its contrast. Every other floating
+       label on this page sits on a solid panel behind it (.panel, .first-visit,
+       .scout-mapmsg); this is the one that never got that scrim because there
+       is no place to anchor a box before a location is picked. A soft dark
+       halo does the same job without needing one. */
+    text-shadow: 0 1px 3px color-mix(in oklab, #000 75%, transparent),
+      0 2px 18px color-mix(in oklab, #000 55%, transparent);
   }
   .scout-hint[hidden] { display: none; }
 
@@ -1435,7 +1450,9 @@ const accent = '#f0b866';
   .wx-label { font-family: var(--font-label); font-size: 0.76rem; }
   .wx-sum {
     font-family: var(--font-label);
-    font-size: 0.6rem;
+    /* Was 0.6rem — the cloud-deck readout, the one number under the headline
+       condition, at a size step below what it needs to actually be read. */
+    font-size: 0.7rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
@@ -2017,7 +2034,10 @@ const accent = '#f0b866';
     padding: 0.7rem;
     border-radius: 14px;
     background: color-mix(in oklab, var(--bg) 92%, transparent);
-    backdrop-filter: blur(14px);
+    /* Same Regular-variant fix as the shared panel rule above — text-heavy,
+       floating over the map. */
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
     border: 1px solid var(--border);
     overflow: hidden;
   }
@@ -2443,7 +2463,11 @@ const accent = '#f0b866';
   .spot-line { margin: 0; font-family: var(--font-label); font-size: 0.68rem; line-height: 1.55; color: var(--fg); }
   .spot-next { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.68rem; color: #f0b866; }
   .spot-next:empty { display: none; }
-  .spot-basis { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.56rem; line-height: 1.5; color: var(--muted); }
+  /* Matches .spot-line/.spot-next above, not a size of its own — this is the
+     sentence explaining *why* a spot is lit, real reading content rather than
+     a decorative label, and it was sitting a full step smaller than the two
+     lines it supports. */
+  .spot-basis { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.68rem; line-height: 1.5; color: var(--muted); }
   .spot-basis:empty { display: none; }
 
   /* ── Facts ────────────────────────────────────────────────────────────── */
@@ -2720,7 +2744,9 @@ const accent = '#f0b866';
   }
   .slab-row output { color: var(--fg); font-variant-numeric: tabular-nums; }
   .slab input[type='range'] { width: 100%; accent-color: var(--fg); }
-  .slab-note { margin: 0.35rem 0 0; font-family: var(--font-label); font-size: 0.56rem; line-height: 1.5; color: var(--muted); }
+  /* Same fix as .spot-basis — this is the note explaining what the shadow-ratio
+     slider means, not a label, so it needs to actually be read. */
+  .slab-note { margin: 0.35rem 0 0; font-family: var(--font-label); font-size: 0.68rem; line-height: 1.5; color: var(--muted); }
 
   .nd-countdown {
     margin: 0.5rem 0 0;
@@ -2847,7 +2873,8 @@ const accent = '#f0b866';
     background: color-mix(in oklab, var(--bg) 96%, #000);
     border: 1px solid var(--border);
     border-radius: 10px;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
   }
   .results[hidden] { display: none; }
   .results :global(li) {
@@ -2961,7 +2988,9 @@ const accent = '#f0b866';
     color: var(--fg);
     background: color-mix(in oklab, var(--bg) 92%, #000);
     border: 1px solid var(--border);
-    backdrop-filter: blur(10px);
+    /* The app's small-pill tier — same value as .offline-pill in global.css. */
+    backdrop-filter: blur(12px) saturate(1.15);
+    -webkit-backdrop-filter: blur(12px) saturate(1.15);
   }
   .toast[hidden] { display: none; }
   .toast-do {
@@ -3033,7 +3062,11 @@ const accent = '#f0b866';
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     font-family: var(--font-label);
-    font-size: 0.48rem;
+    /* Was 0.48rem (7.68px) — the smallest text in the app, on a word
+       ("Featured"/"Quality"/"Notable") that has to actually be legible to mean
+       anything. Reused 0.62rem rather than inventing a new step — the size
+       this app's own tracked-caps micro-labels already settle at elsewhere. */
+    font-size: 0.62rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
@@ -3556,6 +3589,25 @@ const accent = '#f0b866';
        ring that belongs to the pin and is not drawn. */
     .scout-map :global(.pin) { touch-action: none; }
     .scout-map :global(.pin)::after {
+      content: '';
+      position: absolute;
+      inset: -9px;
+      border-radius: 50%;
+    }
+
+    /* The terrain-height slab marker and the line-of-sight target got the same
+       "drag this on the map" treatment as the pin above but never the same
+       hit-ring — both were still guess-and-tap at 24px and 26px. Same reasoning:
+       the visible mark stays exactly as small, only the invisible target grows. */
+    .scout-map :global(.slabmark),
+    .scout-map :global(.sightmark) { touch-action: none; }
+    .scout-map :global(.slabmark)::after {
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+    }
+    .scout-map :global(.sightmark)::after {
       content: '';
       position: absolute;
       inset: -9px;

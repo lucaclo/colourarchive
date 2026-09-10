@@ -57,7 +57,12 @@ self.addEventListener('fetch', (event) => {
         const res = await fetch(req);
         const cache = await caches.open(CACHE);
         cache.put(req, res.clone());
-        if (url.origin === self.location.origin) cache.put('/', res.clone()); // start_url for offline launch
+        // start_url for offline launch — only ever overwritten by a request for
+        // '/' itself. This used to run for every navigation regardless of path,
+        // so visiting any other page (e.g. /scout) clobbered the cached '/' entry
+        // with that page's HTML; the next time '/' had to fall back to cache
+        // (network hiccup, offline), it silently served the wrong page.
+        if (url.origin === self.location.origin && url.pathname === '/') cache.put('/', res.clone());
         return res;
       } catch {
         const cache = await caches.open(CACHE);

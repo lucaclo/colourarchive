@@ -246,6 +246,38 @@ describe('the service worker: third-party assets', () => {
   });
 });
 
+describe('the service worker: navigation pages', () => {
+  it('caches a fetched page under its own URL', async () => {
+    const sw = boot({ network: async () => new Response('scout page', { status: 200 }) });
+    await sw.request(`${ORIGIN}/scout`, { headers: { accept: 'text/html' } });
+    assert.equal(await (await sw.cache.match(`${ORIGIN}/scout`))!.text(), 'scout page');
+  });
+
+  it('does not let visiting another page overwrite the offline start_url', async () => {
+    // The regression: cache.put('/', res.clone()) used to run for every
+    // navigation, not just one for '/' itself, so the last page visited before
+    // going offline — not the homepage — is what '/' served up.
+    const sw = boot({
+      network: async (url) =>
+        new Response(url.endsWith('/scout') ? 'scout page' : 'home page', { status: 200 }),
+    });
+    await sw.request(`${ORIGIN}/`, { headers: { accept: 'text/html' } });
+    await sw.request(`${ORIGIN}/scout`, { headers: { accept: 'text/html' } });
+    assert.equal(await (await sw.cache.match('/'))!.text(), 'home page');
+  });
+
+  it('falls back to the cached start_url when a navigation has no cached copy of its own', async () => {
+    const sw = boot({
+      cached: { '/': 'home page' },
+      network: async () => {
+        throw new TypeError('Failed to fetch');
+      },
+    });
+    const res = await sw.request(`${ORIGIN}/never-visited`, { headers: { accept: 'text/html' } });
+    assert.equal(await res!.text(), 'home page');
+  });
+});
+
 describe('the service worker: activation', () => {
   it('keeps the third-party copies rather than evicting them', async () => {
     // Evicting these is what left the map with no sprite and no way to get one.

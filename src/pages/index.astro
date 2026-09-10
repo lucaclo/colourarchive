@@ -624,9 +624,13 @@ const auroraCss = hasPhotos
   :global(.arc-similar-grid img) { width: 100%; display: block; opacity: 0; transition: opacity 300ms var(--ease); }
   :global(.arc-similar-grid img.on) { opacity: 1; }
   :global(.arc-similar-grid .pct) {
-    position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.56rem;
+    position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label);
+    /* Was 0.56rem (9px) — the only place the match percentage is readable. */
+    font-size: 0.68rem;
     letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent);
-    padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(4px);
+    padding: 1px 7px; border-radius: 999px;
+    /* Clear variant, same as .lb-tool — floats over the photo. */
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   @media (max-width: 900px) { :global(.arc-similar-grid) { columns: 3; } }
   @media (max-width: 620px) { :global(.arc-similar-grid) { columns: 2; } }
@@ -1514,6 +1518,13 @@ const auroraCss = hasPhotos
       insightsEl.querySelectorAll('.bar[data-w]').forEach((bar, i) => {
         setTimeout(() => { bar.style.width = bar.dataset.w + '%'; }, i * 12);
       });
+      // Each row rises in too (see insightsRowIn in global.css), in document
+      // order across every visible section — capped so a long list (cameras,
+      // lenses) doesn't stretch the stagger into something you sit and wait
+      // through.
+      insightsEl.querySelectorAll('.stat li, .gear-stat li, .otd-item').forEach((row, i) => {
+        setTimeout(() => { row.classList.add('enter'); }, Math.min(i, 26) * 14);
+      });
     });
     captureFocus(insightsEl, document.getElementById('insights-close'));
   };
@@ -1527,6 +1538,9 @@ const auroraCss = hasPhotos
       // Reset for next time — without this, re-opening would find every bar
       // already at its target width and skip straight past the reveal.
       insightsEl.querySelectorAll('.bar[data-w]').forEach((bar) => { bar.style.width = '0'; });
+      insightsEl.querySelectorAll('.stat li.enter, .gear-stat li.enter, .otd-item.enter').forEach((row) => {
+        row.classList.remove('enter');
+      });
     }, 200);
   };
   document.getElementById('insights-btn')?.addEventListener('click', openInsights);

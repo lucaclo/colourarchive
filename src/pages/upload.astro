@@ -242,12 +242,16 @@ const accent = manifest.chapters[0]
     overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
   }
+  /* .cell-remove/.cell-medium/.cell-genre: Clear variant, same fix as
+     .lb-tool/book.astro's cell buttons — icon/label chips floating over a
+     photo thumbnail, was 6px, under Apple's stated 8-16px range. */
   :global(.cell-remove) {
     position: absolute; top: 6px; right: 6px; z-index: 2;
     width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     font-size: 15px; line-height: 26px; text-align: center;
-    opacity: 0; transition: opacity 140ms, background 140ms, transform 110ms ease-out; backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity 140ms, background 140ms, transform 110ms ease-out;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   :global(.cell:hover .cell-remove), :global(.cell:focus-within .cell-remove) { opacity: 1; }
   :global(.cell-remove:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
@@ -259,7 +263,8 @@ const accent = manifest.chapters[0]
     font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em;
     text-transform: uppercase; padding: 0.2rem 0.5rem;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
-    backdrop-filter: blur(6px); transition: background 140ms, transform 110ms ease-out;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    transition: background 140ms, transform 110ms ease-out;
   }
   :global(.cell[data-medium='film'] .cell-medium) { background: color-mix(in oklab, #b08968 78%, #000); }
   :global(.cell[data-medium='digital'] .cell-medium) { background: color-mix(in oklab, #4a6fa5 78%, #000); }
@@ -271,7 +276,8 @@ const accent = manifest.chapters[0]
     font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em;
     text-transform: uppercase; padding: 0.2rem 0.5rem;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
-    backdrop-filter: blur(6px); transition: background 140ms, filter 140ms, transform 110ms ease-out;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    transition: background 140ms, filter 140ms, transform 110ms ease-out;
   }
   :global(.cell[data-genre=''] .cell-genre) { color: color-mix(in oklab, #fff 60%, transparent); }
   :global(.cell-genre:hover) { filter: brightness(1.2); }

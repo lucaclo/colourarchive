@@ -286,7 +286,7 @@ const accent = manifest.chapters[0]
               <option value="preview">The camera preview inside the RAW — fastest, least accurate</option>
             </select>
           </label>
-          <p class="mx-note" id="mx-status"></p>
+          <p class="mx-note" id="mx-status" aria-live="polite"></p>
         </div>
 
         <!-- Before you edit anything: the photographs in the archive that
@@ -464,7 +464,8 @@ const accent = manifest.chapters[0]
     width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     font-size: 15px; line-height: 26px; text-align: center;
-    opacity: 0; transition: opacity 140ms, background 140ms, transform 110ms ease-out; backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity 140ms, background 140ms, transform 110ms ease-out;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   :global(.kept-strip li:hover .kept-remove),
   :global(.kept-strip li:focus-within .kept-remove) { opacity: 1; }
@@ -521,7 +522,7 @@ const accent = manifest.chapters[0]
     opacity: 0; transition: opacity 160ms var(--ease);
   }
   .insp-frame:hover .src { opacity: 1; }
-  .cell-remove { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; background: color-mix(in oklab, #000 55%, transparent); color: #fff; font-size: 15px; line-height: 26px; text-align: center; opacity: 0; transition: opacity 140ms; backdrop-filter: blur(6px); }
+  .cell-remove { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; background: color-mix(in oklab, #000 55%, transparent); color: #fff; font-size: 15px; line-height: 26px; text-align: center; opacity: 0; transition: opacity 140ms; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
   .insp-frame:hover .cell-remove, .insp-frame:focus-within .cell-remove { opacity: 1; }
   .cell-remove:hover { background: color-mix(in oklab, #c0392b 82%, transparent); }
   .cell-remove.armed { background: #c0392b; opacity: 1; }
@@ -536,7 +537,8 @@ const accent = manifest.chapters[0]
     display: flex; align-items: center; gap: 0.7rem;
     padding: 0.5rem 0.55rem 0.5rem 1rem; border-radius: 999px;
     background: color-mix(in oklab, var(--bg) 90%, #000); border: 1px solid var(--accent-hair);
-    backdrop-filter: blur(10px);
+    /* Small-pill tier, same as .offline-pill/.toast. */
+    backdrop-filter: blur(12px) saturate(1.15); -webkit-backdrop-filter: blur(12px) saturate(1.15);
     box-shadow: 0 8px 24px -8px color-mix(in oklab, black 55%, transparent), 0 1px 3px color-mix(in oklab, black 30%, transparent);
     opacity: 0; transform: translate(-50%, 12px); pointer-events: none;
     transition: opacity 200ms var(--ease), transform 200ms var(--ease);
@@ -607,7 +609,8 @@ const accent = manifest.chapters[0]
     border: 0; cursor: pointer; border-radius: 999px;
     font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
     padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
-    backdrop-filter: blur(6px); opacity: 0; transition: opacity 140ms, background 140ms;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    opacity: 0; transition: opacity 140ms, background 140ms;
   }
   .insp-frame:hover .cell-similar, .insp-frame:focus-within .cell-similar { opacity: 1; }
   .cell-similar:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
@@ -623,7 +626,7 @@ const accent = manifest.chapters[0]
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     font-size: 15px; line-height: 26px; text-align: center;
     opacity: 0; transition: opacity 140ms, background 140ms, color 140ms;
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   .insp-frame:hover .cell-group, .insp-frame:focus-within .cell-group { opacity: 1; }
   .cell-group:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
@@ -655,7 +658,8 @@ const accent = manifest.chapters[0]
   :global(.sim-strip .rm) {
     position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
     border: 0; cursor: pointer; background: color-mix(in oklab, #000 60%, transparent); color: #fff;
-    font-size: 12px; line-height: 20px; text-align: center; backdrop-filter: blur(4px);
+    font-size: 12px; line-height: 20px; text-align: center;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   :global(.sim-strip .rm:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
   /* The one thing this whole feature exists to surface: a submitted photo
@@ -676,7 +680,8 @@ const accent = manifest.chapters[0]
   :global(.sim-cell) { position: relative; margin: 0 0 8px; break-inside: avoid; background: var(--border); cursor: zoom-in; }
   :global(.sim-cell img) { width: 100%; display: block; opacity: 0; transition: opacity 300ms var(--ease); }
   :global(.sim-cell img.on) { opacity: 1; }
-  :global(.sim-cell .pct) { position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent); padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(4px); }
+  /* Was 0.56rem (9px) — the only place the match percentage is readable. */
+  :global(.sim-cell .pct) { position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent); padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
   @media (max-width: 1100px) { .sim { grid-template-columns: 1fr; grid-template-rows: 42% 58%; } .sim-left { border-right: 0; border-bottom: 1px solid var(--accent-hair); } :global(.sim-grid) { columns: 4; } }
   #lb { z-index: 88; } /* enlarge sits above the split view */
 
@@ -714,7 +719,8 @@ const accent = manifest.chapters[0]
     border: 0; cursor: pointer; border-radius: 999px;
     font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
     padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
-    backdrop-filter: blur(6px); opacity: 0; transition: opacity 140ms, background 140ms;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    opacity: 0; transition: opacity 140ms, background 140ms;
   }
   .insp-frame:hover .cell-match, .insp-frame:focus-within .cell-match { opacity: 1; }
   .cell-match:hover { background: color-mix(in oklab, var(--fg) 22%, #000); }
@@ -764,6 +770,20 @@ const accent = manifest.chapters[0]
     .urlrow input,
     #addurl { min-height: 44px; }
     .urlrow input { font-size: 16px; }
+
+    /* The split-view comparison strip's own remove button never got the pass
+       above — 20px, same guess-and-tap problem, same fix. Held 12px off each
+       edge rather than the usual 3px, same reasoning as .cell-similar's own
+       fix nearby: the 84px figure clips its overflow, so a ring that hangs
+       past its edge is clipped away with it — moving the button in is what
+       lets the full 44px ring actually land inside the box. */
+    :global(.sim-strip .rm) { touch-action: none; top: 12px; right: 12px; }
+    :global(.sim-strip .rm)::after {
+      content: '';
+      position: absolute;
+      inset: -12px;
+      border-radius: 50%;
+    }
   }
 
   .mx { position: fixed; inset: 0; z-index: 84; display: flex; flex-direction: column; background: color-mix(in oklab, var(--bg) 98%, #000); }
@@ -865,7 +885,8 @@ const accent = manifest.chapters[0]
     position: absolute; left: 8px; bottom: 8px;
     font-family: var(--font-label); font-size: 0.54rem; letter-spacing: 0.12em; text-transform: uppercase;
     color: #fff; background: color-mix(in oklab, #000 62%, transparent);
-    padding: 2px 8px; border-radius: 999px; backdrop-filter: blur(4px);
+    padding: 2px 8px; border-radius: 999px;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     opacity: var(--s); transition: opacity 120ms linear; pointer-events: none;
   }
 

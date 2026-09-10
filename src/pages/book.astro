@@ -182,7 +182,7 @@ const accent = manifest.chapters[0]
       <div class="book-noteedit-form">
         <p class="book-noteedit-name" id="book-noteedit-name"></p>
         <textarea id="book-noteedit-text" placeholder="Why this one matters…" rows="5"></textarea>
-        <p class="book-noteedit-error" id="book-noteedit-error" hidden></p>
+        <p class="book-noteedit-error" id="book-noteedit-error" role="alert" hidden></p>
         <div class="book-noteedit-actions">
           <button type="button" class="ghost" id="book-noteedit-cancel">Cancel</button>
           <button type="button" id="book-noteedit-save">Save</button>
@@ -247,11 +247,16 @@ const accent = manifest.chapters[0]
   }
   .book-caption:hover, .book-caption:focus-visible { color: var(--accent-mix, #fff); }
   .book-note-mark { margin-right: 0.2rem; }
+  /* .book-move/.book-dup/.book-exclude/.book-handle: the Clear variant, same
+     as .lb-tool in global.css — every one of these floats over a photograph,
+     not over app chrome, and was at 6px, under Apple's stated 8-16px range
+     for that case. */
   .book-move {
     pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     font-family: var(--font-label); font-size: 0.5rem; letter-spacing: 0.02em;
-    padding: 0.2rem 0.4rem; max-width: 5.2rem; flex: none; backdrop-filter: blur(6px);
+    padding: 0.2rem 0.4rem; max-width: 5.2rem; flex: none;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   .book-move:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
   /* "Keep this one" — excludes the rest of its duplicate group in one step,
@@ -260,7 +265,8 @@ const accent = manifest.chapters[0]
     pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
     background: color-mix(in oklab, #c9973a 55%, #000 45%); color: #fff;
     font-family: var(--font-label); font-size: 0.5rem; letter-spacing: 0.01em;
-    padding: 0.2rem 0.4rem; flex: none; backdrop-filter: blur(6px);
+    padding: 0.2rem 0.4rem; flex: none;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     transition: transform 110ms ease-out, background 140ms;
   }
   .book-dup:hover { background: color-mix(in oklab, #c9973a 78%, #000 22%); }
@@ -271,7 +277,8 @@ const accent = manifest.chapters[0]
     width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     font-size: 15px; line-height: 26px; text-align: center;
-    transition: background 140ms, transform 110ms ease-out; backdrop-filter: blur(6px);
+    transition: background 140ms, transform 110ms ease-out;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   .book-exclude:hover { background: color-mix(in oklab, #c0392b 82%, transparent); }
   .book-exclude:active { transform: scale(0.88); }
@@ -282,7 +289,8 @@ const accent = manifest.chapters[0]
     width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 11px; line-height: 1; letter-spacing: -2px;
     background: color-mix(in oklab, #000 55%, transparent); border-radius: 999px;
-    backdrop-filter: blur(6px); cursor: grab; touch-action: none;
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    cursor: grab; touch-action: none;
   }
   .book-handle:active { cursor: grabbing; }
   .book-cell.touch-dragging { opacity: 0.4; z-index: 5; }
@@ -336,13 +344,41 @@ const accent = manifest.chapters[0]
     line-height: 1.5; padding: 0.6rem; font-family: var(--font-display); font-style: var(--title-style);
   }
   #book-noteedit-text:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
-  .book-noteedit-error { margin: 0; font-family: var(--font-label); font-size: 0.7rem; color: #c0392b; }
+  /* #c0392b measures ~3.5:1 on --bg, below the 4.5:1 floor for text this size —
+     everywhere else in the app an error/warning reads in #e0603a (~5.4:1)
+     instead, and #c0392b is reserved for filled backgrounds (remove buttons,
+     armed states) where a light glyph sits on top of it, not as text colour
+     on the dark ground itself. This was the one place that drifted. */
+  .book-noteedit-error { margin: 0; font-family: var(--font-label); font-size: 0.7rem; color: #e0603a; }
   .book-noteedit-error[hidden] { display: none; }
   .book-noteedit-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
 
   @media (max-width: 620px) {
     .book-page { padding: 7rem 5vw 14vh; }
     .book-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  }
+
+  /* Neither corner control ever got the touch-target pass the rest of the app's
+     icon buttons did (see .pin/.cell-remove's own transparent-ring fix) — both
+     sit at 26px, and .book-handle is the one control on this page meant to be
+     dragged, which is a worse miss on touch than a button that only needs one
+     accurate tap. Same answer as everywhere else: the visible mark stays
+     26px, only the invisible target grows — held 9px off each edge, not 6,
+     because .book-cell clips its overflow (that's how the thumbnail itself
+     stays cropped square) and a ring hanging past the cell is clipped with
+     it. 9px off each side lands the full 44px ring flush inside even the
+     narrowest grid cell (96px on a phone), with room to spare between the
+     two corners. */
+  @media (pointer: coarse) {
+    .book-exclude { top: 9px; right: 9px; }
+    .book-handle { top: 9px; left: 9px; }
+    .book-exclude::after,
+    .book-handle::after {
+      content: '';
+      position: absolute;
+      inset: -9px;
+      border-radius: 50%;
+    }
   }
 </style>
 
