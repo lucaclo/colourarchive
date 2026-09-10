@@ -84,6 +84,15 @@ export function setMedium(id: string, medium: 'film' | 'digital'): Promise<Manif
     overrides.photos = overrides.photos ?? {};
     overrides.photos[id] = { ...overrides.photos[id], medium };
     await writeJson(OVERRIDES_PATH, overrides);
+    // Setting this by hand IS the review mediumUncertain was flagging as
+    // missing — clear it on the base record, whichever way the human set it,
+    // so the manage grid stops asking for a look it just got.
+    const photos = await readStore();
+    const photo = photos.find((p) => p.id === id);
+    if (photo?.mediumUncertain) {
+      photo.mediumUncertain = undefined;
+      await writeJson(STORE_PATH, photos);
+    }
     const manifest = await rebuild();
     scheduleDeploy();
     return manifest;

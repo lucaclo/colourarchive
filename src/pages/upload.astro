@@ -52,7 +52,12 @@ const accent = manifest.chapters[0]
       </div>
     </div>
 
-    <ul id="results" class="results" aria-live="polite"></ul>
+    {/* Was aria-live itself: fine for a handful of photos, but a 100+ batch
+        fired one announcement per row back to back. The visual list stays
+        the same; announcements now come from #upload-announce below,
+        throttled to every few files rather than every one. */}
+    <ul id="results" class="results"></ul>
+    <p id="upload-announce" class="sr-only" aria-live="polite"></p>
 
     {/* Rendered even when empty, so photos added in this session can drop
         straight into it without a page reload. */}
@@ -86,7 +91,16 @@ const accent = manifest.chapters[0]
           <figure class="cell" data-id={p.id} data-medium={p.medium} data-genre={p.genre ?? ''}>
             <img src={p.placeholder} data-src={p.derivatives[0].avif} alt="" loading="lazy" />
             <button class="cell-remove" type="button" data-remove={p.id} aria-label={`Remove ${p.filename}`}>×</button>
-            <button class="cell-medium" type="button" data-medium-btn={p.id} title="Toggle film / digital">{p.medium}</button>
+            {/* mediumUncertain: guessed with no EXIF signal at all (often a
+                paste/screenshot) rather than read confidently — worth a look,
+                not just a silent default. Clears once you touch this button. */}
+            <button
+              class="cell-medium"
+              class:list={{ 'cell-medium-uncertain': p.mediumUncertain }}
+              type="button"
+              data-medium-btn={p.id}
+              title={p.mediumUncertain ? 'Toggle film / digital — guessed with no EXIF to go on, worth checking' : 'Toggle film / digital'}
+            >{p.medium}{p.mediumUncertain && <span class="cell-medium-flag" aria-label="unconfirmed guess">?</span>}</button>
             <button class="cell-genre" type="button" data-genre-btn={p.id} title="Change genre">{p.genre ? GENRE_LABEL[p.genre] : '— genre'}</button>
             <span class="cell-select-mark" aria-hidden="true">✓</span>
             <figcaption>{p.chapterName}</figcaption>
@@ -153,6 +167,18 @@ const accent = manifest.chapters[0]
   :global(.results .fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.results .ch) { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; }
   :global(.results .skip) { color: var(--muted); font-style: italic; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+  :global(.results .skip[data-jump-to]) { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+  :global(.results .skip[data-jump-to]:hover) { color: var(--fg); }
+  :global(.cell-flash) { animation: cellFlash 1000ms var(--ease); }
+  @keyframes cellFlash {
+    0%, 100% { box-shadow: none; }
+    25% { box-shadow: 0 0 0 3px color-mix(in oklab, #fff 70%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) { :global(.cell-flash) { animation: none; } }
   :global(.results .err) { color: #e0603a; }
   /* Issue #61 — a chapter-fit verdict, on its own line under the row it
      belongs to (flex-basis 100% wraps it there without a second list item). */
@@ -270,6 +296,8 @@ const accent = manifest.chapters[0]
   :global(.cell[data-medium='digital'] .cell-medium) { background: color-mix(in oklab, #4a6fa5 78%, #000); }
   :global(.cell-medium:hover) { filter: brightness(1.2); }
   :global(.cell-medium:active) { transform: scale(0.94); }
+  :global(.cell-medium-uncertain) { outline: 1px dashed color-mix(in oklab, #fff 55%, transparent); outline-offset: 2px; }
+  :global(.cell-medium-flag) { margin-left: 0.2em; opacity: 0.8; }
   :global(.cell-genre) {
     position: absolute; left: 6px; top: 6px; z-index: 2; max-width: calc(100% - 12px);
     border: 0; cursor: pointer; border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -312,7 +340,27 @@ const accent = manifest.chapters[0]
   const bar = document.getElementById('bar');
   const statusText = document.getElementById('status-text');
   const results = document.getElementById('results');
+  const announce = document.getElementById('upload-announce');
   const bartop = document.getElementById('topbar');
+
+  // "Already added" is findable, not just named — jump to and flash the
+  // existing cell in the manage grid below, so it's not a dead end.
+  function jumpToCell(id) {
+    const cell = document.querySelector(`.cell[data-id="${CSS.escape(id)}"]`);
+    if (!cell) return;
+    cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    cell.classList.remove('cell-flash'); void cell.offsetWidth; cell.classList.add('cell-flash');
+    setTimeout(() => cell.classList.remove('cell-flash'), 1000);
+  }
+  results?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-jump-to]');
+    if (chip) jumpToCell(chip.dataset.jumpTo);
+  });
+  results?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const chip = e.target.closest('[data-jump-to]');
+    if (chip) { e.preventDefault(); jumpToCell(chip.dataset.jumpTo); }
+  });
 
   // Top bar auto-hide
   let lastY = window.scrollY;
@@ -471,6 +519,11 @@ const accent = manifest.chapters[0]
         }
         done++;
         paint();
+        // Every 5th file and always the last one — a screen reader hears a
+        // running count instead of one announcement per photo in a big batch.
+        if (done % 5 === 0 || done === files.length) {
+          announce.textContent = `${done} of ${files.length} processed · ${added} added${failed ? ` · ${failed} skipped` : ''}`;
+        }
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
@@ -507,7 +560,19 @@ const accent = manifest.chapters[0]
   function renderRow(r) {
     const li = document.createElement('li');
     if (r.status === 'skipped') {
-      li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch skip">already added</span>`;
+      const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = 'transparent';
+      const fn = document.createElement('span'); fn.className = 'fn'; fn.textContent = r.filename;
+      const chip = document.createElement('span'); chip.className = 'ch skip'; chip.textContent = 'already added';
+      // Findable, not just named: r.id is the existing photo already in the
+      // grid below (the API returns it for a skip same as for an add) — a
+      // click jumps to and flashes that cell, rather than leaving "already
+      // added" as a dead end you'd have to go searching for yourself.
+      if (r.id) {
+        chip.dataset.jumpTo = r.id;
+        chip.setAttribute('role', 'button');
+        chip.tabIndex = 0;
+      }
+      li.append(sw, fn, chip);
     } else if (r.status === 'unsupported' || r.status === 'error') {
       li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch err">${esc(r.error || r.status)}</span>`;
     } else {
@@ -555,10 +620,22 @@ const accent = manifest.chapters[0]
     cap.textContent = r.chapterName || '';
     const mark = document.createElement('span');
     mark.className = 'cell-select-mark'; mark.setAttribute('aria-hidden', 'true'); mark.textContent = '✓';
+    const mediumBtn = btn('cell-medium', r.medium || 'digital', 'mediumBtn', r.id);
+    // mediumUncertain: guessed with no EXIF signal at all (often a
+    // paste/screenshot) rather than read confidently — same marker the
+    // server-rendered grid gives an existing photo, so a photo added without
+    // a reload doesn't look more confidently labelled than it actually is.
+    if (r.mediumUncertain) {
+      mediumBtn.classList.add('cell-medium-uncertain');
+      mediumBtn.title = 'Toggle film / digital — guessed with no EXIF to go on, worth checking';
+      const flag = document.createElement('span');
+      flag.className = 'cell-medium-flag'; flag.setAttribute('aria-label', 'unconfirmed guess'); flag.textContent = '?';
+      mediumBtn.append(flag);
+    }
     fig.append(
       img,
       btn('cell-remove', '×', 'remove', r.id, `Remove ${r.filename}`),
-      btn('cell-medium', r.medium || 'digital', 'mediumBtn', r.id),
+      mediumBtn,
       btn('cell-genre', r.genre ? GENRE_LABELS[r.genre] : '— genre', 'genreBtn', r.id),
       mark,
       cap,
@@ -748,9 +825,12 @@ const accent = manifest.chapters[0]
     if (target.classList.contains('cell-medium')) {
       const prev = cell.dataset.medium;
       const next = prev === 'film' ? 'digital' : 'film';
-      cell.dataset.medium = next; target.textContent = next;      // optimistic
+      const wasUncertain = target.classList.contains('cell-medium-uncertain');
+      cell.dataset.medium = next; target.textContent = next;      // optimistic (also drops the "?" flag)
+      target.classList.remove('cell-medium-uncertain');
       if (!(await post('/api/label', { id: cell.dataset.id, medium: next }))) {
         cell.dataset.medium = prev; target.textContent = prev;    // revert
+        if (wasUncertain) target.classList.add('cell-medium-uncertain');
       }
       return;
     }

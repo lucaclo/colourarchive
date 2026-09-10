@@ -43,6 +43,12 @@ export interface Photo {
   chapter: string; // effective chapter key (after overrides)
   autoMedium: Medium; // guessed film|digital (before overrides)
   medium: Medium; // effective film|digital (after overrides)
+  // True when the medium guess had no real signal to go on (no EXIF camera
+  // metadata AND no scanner hint) and defaulted to film purely for lack of a
+  // better answer — a paste/screenshot, most often. Distinguishes a confident
+  // guess from a shrug, without a third Medium value everything that switches
+  // on film|digital would otherwise need to handle.
+  mediumUncertain?: boolean;
   autoGenre?: Genre; // CLIP-guessed genre (before overrides); optional for legacy records
   genre?: Genre; // effective genre (after overrides)
   placeholder: string; // tiny blurred data URI
