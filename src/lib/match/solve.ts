@@ -1028,6 +1028,49 @@ function extremeControls(a: Adjustments): string[] {
   return hit;
 }
 
+// Region keys whose coverage reflects framing/composition rather than tone —
+// used to catch a reference that's cropped differently from the working
+// photo. `global` and the `zone.*` luminance bands always cover ~100% of
+// either frame by construction, so they carry no framing signal; these are
+// the ones segmentation actually varies in size, so a big share difference
+// between the two photos means the composition changed (commonly: the
+// reference was cropped), not that a Ground region got a different grade.
+const FRAMING_KEYS: RegionKey[] = [
+  'scene.sky',
+  'scene.foliage',
+  'scene.water',
+  'scene.built',
+  'scene.ground',
+  'background',
+  'subject',
+];
+/** Below this coverage a region is too small a sliver for its share to mean
+ *  anything — don't let noise there trigger a framing caution. */
+const FRAMING_MIN_COVERAGE = 0.05;
+/** Above this cover-share ratio, a region shared by both photos occupies a
+ *  different enough fraction of each frame that framing likely changed. */
+const FRAMING_MISMATCH_RATIO = 1.5;
+
+/** The largest coverage-ratio mismatch among regions both photos share at
+ *  meaningful size, or null if none are comparable. Exposure and the tone
+ *  curve are fit against whole-frame luminance percentiles (see `fitCurve`
+ *  below); when the reference is cropped differently from the working photo,
+ *  that fit is absorbing a composition difference and reporting it as a tonal
+ *  one — a Ground region that's 2x the share of the frame in an uncropped RAW
+ *  that it is in a reference cropped to remove it pulls the whole-frame
+ *  histogram apart even when the actual grade barely differs. */
+function framingMismatch(ref: PhotoAnalysis, mine: PhotoAnalysis): { key: RegionKey; ratio: number } | null {
+  let worst: { key: RegionKey; ratio: number } | null = null;
+  for (const key of FRAMING_KEYS) {
+    const r = ref.regions[key]?.coverage;
+    const m = mine.regions[key]?.coverage;
+    if (r == null || m == null || r < FRAMING_MIN_COVERAGE || m < FRAMING_MIN_COVERAGE) continue;
+    const ratio = Math.max(r, m) / Math.min(r, m);
+    if (!worst || ratio > worst.ratio) worst = { key, ratio };
+  }
+  return worst;
+}
+
 /** Confidence in the whole result, from baseline fidelity and comparability. */
 function computeConfidence(ref: PhotoAnalysis, mine: PhotoAnalysis): number {
   const base = Math.min(BASELINE_FIDELITY[ref.baseline], BASELINE_FIDELITY[mine.baseline]);
@@ -1036,7 +1079,10 @@ function computeConfidence(ref: PhotoAnalysis, mine: PhotoAnalysis): number {
   const shared = Object.keys(mine.regions).filter((k) => refKeys.has(k)).length;
   const coverage = Math.min(1, shared / 6);
   const textureOk = textureComparable(ref.texture, mine.texture) ? 1 : 0.9;
-  return Math.max(0, Math.min(1, base * (0.65 + 0.35 * coverage) * textureOk));
+  const framing = framingMismatch(ref, mine);
+  const framingOk =
+    framing && framing.ratio > FRAMING_MISMATCH_RATIO ? Math.max(0.5, FRAMING_MISMATCH_RATIO / framing.ratio) : 1;
+  return Math.max(0, Math.min(1, base * (0.65 + 0.35 * coverage) * textureOk * framingOk));
 }
 
 /**
@@ -1269,6 +1315,18 @@ export function solveMatch(
       severity: 'caution',
       panel: 'Baseline',
       text: "One photo was read from a camera-embedded preview, which carries the camera's picture profile rather than Lightroom's baseline. Directions are right; magnitudes are approximate.",
+    });
+  }
+
+  const framing = framingMismatch(mergedRef, mine);
+  if (framing && framing.ratio > FRAMING_MISMATCH_RATIO) {
+    notes.unshift({
+      severity: 'caution',
+      panel: 'Light',
+      text:
+        `${REGION_LABEL[framing.key]} covers a very different share of each frame (${framing.ratio.toFixed(1)}x) — ` +
+        'the reference is likely cropped or framed differently from your photo. Exposure and Contrast are fit ' +
+        'against the whole frame, so they may be reacting to that difference in composition rather than the grade.',
     });
   }
 
