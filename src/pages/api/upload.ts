@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import os from 'node:os';
 import { saveOriginal, processPhoto } from '../../lib/ingest';
-import { addPhotos, readStore, readOverrides } from '../../lib/manifest';
+import { addPhotos, readOverrides } from '../../lib/manifest';
 import { defaultChapterName, oklchCss } from '../../lib/color';
 import { mapPool } from '../../lib/pool';
 import type { Photo } from '../../lib/types';
@@ -15,6 +15,11 @@ export const prerender = false;
 // rather than failing with a cryptic error mid-batch.
 const RAW_EXT = /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2|pef|srw|x3f)$/i;
 const CONCURRENCY = Math.max(2, Math.min(8, os.cpus().length - 2));
+// Generous for a single frame (the archive's own RAWs run ~50MB before export
+// shrinks them) — this exists to turn an accidental video or a mis-renamed
+// huge TIFF into a clean rejected row instead of fully buffering it (up to
+// CONCURRENCY times over) before anything downstream has a chance to notice.
+const MAX_FILE_BYTES = 150 * 1024 * 1024;
 
 // Local ingest: receive originals, save them untouched, run the pipeline in
 // parallel, append to the manifest in one write. Runs entirely on this machine.
@@ -26,7 +31,6 @@ export const POST: APIRoute = async ({ request }) => {
       return json({ ok: false, error: 'No files received.' }, 400);
     }
 
-    const existing = new Set((await readStore()).map((p) => p.id));
     const overrides = await readOverrides();
     const chapterLabel = (key: string) => overrides.chapters?.[key] ?? defaultChapterName(key);
 
@@ -37,7 +41,7 @@ export const POST: APIRoute = async ({ request }) => {
       // Enough for the client to add the photo to its manage grid immediately —
       // it used to need a full page reload before a new photo could be
       // relabelled or removed.
-      thumb?: string; placeholder?: string; genre?: string;
+      thumb?: string; placeholder?: string; genre?: string; mediumUncertain?: boolean;
       // Issue #61: how this photo's own measured look sits against the
       // chapter it just landed in. `null` means the chapter has too few
       // *other* photos yet to have a settled look worth comparing to —
@@ -49,10 +53,26 @@ export const POST: APIRoute = async ({ request }) => {
       if (RAW_EXT.test(file.name)) {
         return { result: { filename: file.name, id: '', chapterKey: '', chapterName: '', swatch: '', medium: '', status: 'unsupported', error: 'Camera RAW not supported — export to JPEG/TIFF/HEIC first.' } };
       }
+      if (file.size > MAX_FILE_BYTES) {
+        return {
+          result: {
+            filename: file.name, id: '', chapterKey: '', chapterName: '', swatch: '', medium: '',
+            status: 'unsupported',
+            error: `Too large (${(file.size / (1024 * 1024)).toFixed(0)}MB, max ${MAX_FILE_BYTES / (1024 * 1024)}MB) — is this really a photo?`,
+          },
+        };
+      }
       try {
         const buf = Buffer.from(await file.arrayBuffer());
         const { id, filename, existed } = await saveOriginal(buf, file.name);
-        if (existed && existing.has(id)) {
+        // saveOriginal now serialises concurrent saves of the same content
+        // (see its own comment), so `existed` alone is reliable for both a
+        // photo already in the archive before this upload AND a duplicate of
+        // another file within this same batch — the latter used to slip
+        // through and run the full pipeline a second time, because it could
+        // only be checked against a snapshot of the store taken before the
+        // batch started.
+        if (existed) {
           return { result: { filename, id, chapterKey: '', chapterName: '', swatch: '', medium: '', status: 'skipped' } };
         }
         const photo = await processPhoto(buf, id, filename);
@@ -68,6 +88,7 @@ export const POST: APIRoute = async ({ request }) => {
             thumb: photo.derivatives[0]?.avif,
             placeholder: photo.placeholder,
             genre: photo.genre ?? '',
+            mediumUncertain: photo.mediumUncertain,
           },
         };
       } catch (err) {

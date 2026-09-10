@@ -43,8 +43,10 @@ async function main() {
     // picked up for photos ingested before they existed.
     const meta = await sharp(buf, { failOn: 'none' }).metadata();
     photo.exif = parseExif(meta.exif);
-    photo.autoMedium = guessMedium(photo.exif);
+    const { medium, uncertain } = guessMedium(photo.exif);
+    photo.autoMedium = medium;
     photo.medium = photo.autoMedium;
+    photo.mediumUncertain = uncertain || undefined;
     // Backfill similarity signatures (only if missing — embeddings are stable).
     if (!photo.colourGrid) photo.colourGrid = await spatialSignature(buf);
     if (!photo.embedding) {

@@ -28,6 +28,27 @@ export function hashBuffer(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex').slice(0, 16);
 }
 
+// Serialises saveOriginal's exists-check + write per content hash. Two copies
+// of the same file in one upload batch (or two overlapping drags) both used
+// to pass fs.access() before either had written, so both wrote (or worse,
+// both believed they needed to) and both ran the full downstream pipeline
+// before anything caught the duplicate. Keyed by hash rather than a single
+// global lock, so an unrelated file in the same batch never waits on this.
+const saveChains = new Map<string, Promise<unknown>>();
+async function withHashLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const prior = saveChains.get(id) ?? Promise.resolve();
+  const run = prior.then(fn, fn);
+  const settled = run.catch(() => {});
+  saveChains.set(id, settled);
+  try {
+    return await run;
+  } finally {
+    // Only clear the entry if nobody queued behind us — otherwise this would
+    // drop the next caller's place in line.
+    if (saveChains.get(id) === settled) saveChains.delete(id);
+  }
+}
+
 /** Save an uploaded/original file into /photos untouched (deduped by content
  *  hash). Returns the on-disk filename and the stable id. */
 export async function saveOriginal(
@@ -42,13 +63,15 @@ export async function saveOriginal(
   const safeBase = base.replace(/[^a-zA-Z0-9-_]+/g, '-').slice(0, 60);
   const filename = `${safeBase}.${id}${ext}`;
   const dest = path.join(PHOTOS_DIR, filename);
-  try {
-    await fs.access(dest);
-    return { id, filename, existed: true };
-  } catch {
-    await fs.writeFile(dest, buf); // exact bytes, never re-encoded
-    return { id, filename, existed: false };
-  }
+  return withHashLock(id, async () => {
+    try {
+      await fs.access(dest);
+      return { id, filename, existed: true };
+    } catch {
+      await fs.writeFile(dest, buf); // exact bytes, never re-encoded
+      return { id, filename, existed: false };
+    }
+  });
 }
 
 export function parseExif(raw: Buffer | undefined): Exif {
@@ -82,13 +105,17 @@ export function parseExif(raw: Buffer | undefined): Exif {
 // this is a best-effort default — relabelable per photo on the Add/Remove page.
 const SCANNER_HINT = /noritsu|frontier|fuji.*sp-?\d|silverfast|vuescan|plustek|primefilm|reflecta|imacon|flextight|coolscan|pakon|epson scan|scanner/i;
 
-export function guessMedium(exif: Exif): Medium {
+export function guessMedium(exif: Exif): { medium: Medium; uncertain: boolean } {
   const hay = `${exif.camera ?? ''} ${exif.software ?? ''}`;
-  if (SCANNER_HINT.test(hay)) return 'film';
+  if (SCANNER_HINT.test(hay)) return { medium: 'film', uncertain: false };
   // A real digital camera signature: a model plus exposure metadata.
-  if (exif.camera && (exif.iso || exif.shutter || exif.aperture)) return 'digital';
-  // No camera metadata at all → most likely a film scan.
-  return 'film';
+  if (exif.camera && (exif.iso || exif.shutter || exif.aperture)) return { medium: 'digital', uncertain: false };
+  // No camera metadata at all — a scanner-less film scan looks like this, but
+  // so does a screenshot or a paste from another app, which the paste button
+  // (⌘V) exists specifically to bring in. Defaulting to film here used to
+  // read as a confident guess; it's actually a coin flip with no evidence
+  // behind it, which `uncertain` now says plainly rather than hiding.
+  return { medium: 'film', uncertain: true };
 }
 
 function formatShutter(s: number): string {
@@ -176,7 +203,7 @@ export async function processPhoto(
   const placeholder = `data:image/webp;base64,${placeholderBuf.toString('base64')}`;
 
   const exif = parseExif(meta.exif);
-  const medium = guessMedium(exif);
+  const { medium, uncertain: mediumUncertain } = guessMedium(exif);
 
   // Similarity signatures + genre. All best-effort — if a model is
   // unavailable, ingest still succeeds (that feature just skips this photo).
@@ -207,6 +234,7 @@ export async function processPhoto(
     chapter, // effective; overrides applied later during manifest assembly
     autoMedium: medium,
     medium, // effective; overrides applied later during manifest assembly
+    mediumUncertain: mediumUncertain || undefined, // omit rather than store `false` on every photo
     autoGenre: genre,
     genre, // effective; overrides applied later during manifest assembly
     placeholder,
