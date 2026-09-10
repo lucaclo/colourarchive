@@ -287,6 +287,75 @@ describe('the baseline note', () => {
   });
 });
 
+/* ── Framing-mismatch note ─────────────────────────────────────────────────── */
+//
+// A reference cropped differently from the working photo — the most common
+// case being a reference exported from an edit that also cropped it — throws
+// off the whole-frame tone fit (Exposure, and everything read off the curve:
+// Contrast, Highlights, Shadows, Whites, Blacks) without either photo being
+// mismeasured. A scene region covering a very different share of each frame
+// is the signal: it means the composition changed, not just the grade.
+
+describe('the framing-mismatch note', () => {
+  it('warns when a scene region covers a very different share of each frame', () => {
+    const ref = photo('framing-ref', {
+      regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.08 }) },
+    });
+    const mine = photo('framing-mine', {
+      regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.24 }) },
+    });
+    const sol = solveMatch(ref, mine);
+    const note = sol.notes.find((n) => n.panel === 'Light' && n.text.includes('Ground'));
+    assert.ok(note, 'expected a framing-mismatch note naming Ground');
+    assert.equal(note!.severity, 'caution');
+  });
+
+  it('is silent when a shared region covers a similar share of each frame', () => {
+    const ref = photo('framing-ok-ref', {
+      regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.1 }) },
+    });
+    const mine = photo('framing-ok-mine', {
+      regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.1 }) },
+    });
+    const sol = solveMatch(ref, mine);
+    assert.ok(!sol.notes.some((n) => n.text.includes('Ground')), 'unexpected framing note for matched framing');
+  });
+
+  it('is silent when the mismatched region is a negligible sliver in both photos', () => {
+    const ref = photo('framing-tiny-ref', {
+      regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.01 }) },
+    });
+    const mine = photo('framing-tiny-mine', {
+      regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.04 }) },
+    });
+    const sol = solveMatch(ref, mine);
+    assert.ok(!sol.notes.some((n) => n.text.includes('Ground')), 'unexpected framing note for two negligible regions');
+  });
+
+  it('pulls confidence down relative to an identically-framed pair', () => {
+    const mismatched = solveMatch(
+      photo('framing-cmp-ref', {
+        regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.08 }) },
+      }),
+      photo('framing-cmp-mine', {
+        regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.24 }) },
+      }),
+    );
+    const matched = solveMatch(
+      photo('framing-cmp-ref-2', {
+        regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.1 }) },
+      }),
+      photo('framing-cmp-mine-2', {
+        regionsOverride: { 'scene.ground': region('scene.ground', { L: 0.4, coverage: 0.1 }) },
+      }),
+    );
+    assert.ok(
+      mismatched.confidence < matched.confidence,
+      `expected mismatched framing (${mismatched.confidence}) to score below matched framing (${matched.confidence})`,
+    );
+  });
+});
+
 /* ── Extreme-controls note ────────────────────────────────────────────────── */
 
 describe('the extreme-controls note', () => {
