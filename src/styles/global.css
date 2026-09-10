@@ -719,6 +719,8 @@ body {
 }
 .search-box input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.6); }
 .search-box input::placeholder { color: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; font-size: var(--label-size); }
+.search-status { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.65rem; color: #e0603a; }
+.search-status[hidden] { display: none; }
 
 /* --- Cover: the title page. First thing seen; photos begin below. -------- */
 .cover {

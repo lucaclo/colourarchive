@@ -233,6 +233,10 @@ const auroraCss = hasPhotos
         <input type="search" id="search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
       </div>
     )}
+    {/* A failed search used to fail silently — the archive just stayed
+        unfiltered, indistinguishable from "nothing matches your search" or
+        from search having quietly done nothing at all. This says so. */}
+    {!STATIC && hasPhotos && <p class="search-status" id="search-status" role="alert" hidden></p>}
     <span class="topbar-right">
       {/* Inspiration is the editing workbench — it writes to disk and shows
           other people's photographs pending credit, so it stays on the Mac.
@@ -368,7 +372,7 @@ const auroraCss = hasPhotos
                         loading={aboveFold ? 'eager' : 'lazy'}
                         fetchpriority={aboveFold ? 'high' : undefined}
                         decoding="async"
-                        alt=""
+                        alt={`${p.genre ? `${GENRE_LABEL[p.genre]} photograph` : 'Photograph'}, ${ch.name} chapter`}
                       />
                     </figure>
                   );
@@ -416,8 +420,14 @@ const auroraCss = hasPhotos
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
           <button class="lb-tool" id="lb-info" aria-label="Photo details" title="Photo details" aria-pressed="false">i</button>
-          <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">≈</button>
-          <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">◐</button>
+          {/* Both need /api routes the static export doesn't ship — same gate
+              the search box and Inspiration/Book/Add nav links already use. */}
+          {!STATIC && (
+            <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">≈</button>
+          )}
+          {!STATIC && (
+            <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">◐</button>
+          )}
           <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close">×</button>
         </div>
         <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous">‹</button>
@@ -453,11 +463,13 @@ const auroraCss = hasPhotos
         <div class="insights-inner">
           <button class="insights-close" id="insights-close" aria-label="Close">×</button>
           <h2>Insights</h2>
-          <p class="insights-sub">
+          <p class="insights-sub" id="insights-sub">
             {manifest.count} photographs · {mediumCounts.digital} digital · {mediumCounts.film} film · {manifest.chapters.length} chapters
-            {daysSinceLastShot !== undefined && (
-              <> · last shot {daysSinceLastShot === 0 ? 'today' : daysSinceLastShot === 1 ? 'yesterday' : `${daysSinceLastShot} days ago`}</>
-            )}
+            {/* Built-time value, shown until openInsights() below recomputes it
+                from data already on the page — see the note there on why. */}
+            <span id="last-shot" hidden={daysSinceLastShot === undefined}>
+              {' '}· last shot {daysSinceLastShot === 0 ? 'today' : daysSinceLastShot === 1 ? 'yesterday' : `${daysSinceLastShot} days ago`}
+            </span>
           </p>
 
           <section>
@@ -504,19 +516,21 @@ const auroraCss = hasPhotos
             </section>
           )}
 
-          {onThisDay.length > 0 && (
-            <section>
-              <h3>On this day</h3>
-              <div class="otd-strip">
-                {onThisDay.slice(0, 10).map((p) => (
-                  <figure class="otd-item" style={`aspect-ratio:${p.width}/${p.height}`}>
-                    <img src={p.derivatives[0].avif} alt="" loading="lazy" />
-                    <figcaption>{new Date(p.exif.capturedAt!).getFullYear()}</figcaption>
-                  </figure>
-                ))}
-              </div>
-            </section>
-          )}
+          {/* Built at the last publish, from Date.now() — see the comment by
+              onThisDay above. Always rendered (rather than only when it has
+              matches) so openInsights() below can hide/show and rebuild this
+              from the live date without adding a section that wasn't there. */}
+          <section id="otd-section" hidden={onThisDay.length === 0}>
+            <h3>On this day</h3>
+            <div class="otd-strip" id="otd-strip">
+              {onThisDay.slice(0, 10).map((p) => (
+                <figure class="otd-item" style={`aspect-ratio:${p.width}/${p.height}`}>
+                  <img src={p.derivatives[0].avif} alt={p.genre ? `${GENRE_LABEL[p.genre]} photograph` : 'Photograph'} loading="lazy" />
+                  <figcaption>{new Date(p.exif.capturedAt!).getFullYear()}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
 
           {insights.years.length > 0 && (
             <section>
@@ -1127,7 +1141,10 @@ const auroraCss = hasPhotos
     lbImg.srcset = f.dataset.set || '';
     lbImg.src = f.dataset.full || f.querySelector('img.photo')?.currentSrc || '';
     lbCap.innerHTML = captionHtml(f);
-    lbImg.alt = `${f.dataset.chapter || ''} — ${f.dataset.file || 'photograph'}`;
+    // Reuses the grid thumbnail's own alt (genre + chapter) rather than
+    // rebuilding it — that <img> already carries the real one, and the
+    // filename this used to fall back to is a hash, not a description.
+    lbImg.alt = f.querySelector('img.photo')?.alt || f.dataset.chapter || 'Photograph';
     currentOrig = f.dataset.orig || '';
     origSwapped = false;
     resetZoom();
@@ -1351,7 +1368,7 @@ const auroraCss = hasPhotos
       .sort((a, b) => a.score - b.score)
       .slice(0, 30);
     arcSimilarGrid.innerHTML = scored.map((m) =>
-      `<figure data-id="${m.id}" style="aspect-ratio:${m.w}/${m.h}"><img loading="lazy" src="${m.avif}" alt=""><span class="pct">${Math.round((1 - m.score) * 100)}</span></figure>`
+      `<figure data-id="${m.id}" style="aspect-ratio:${m.w}/${m.h}"><img loading="lazy" src="${m.avif}" alt="Similar photograph"><span class="pct">${Math.round((1 - m.score) * 100)}</span></figure>`
     ).join('');
     arcSimilarGrid.querySelectorAll('img').forEach((img) => {
       if (img.complete) img.classList.add('on');
@@ -1505,8 +1522,60 @@ const auroraCss = hasPhotos
   // ======================================================================
   const insightsEl = document.getElementById('insights');
   const insightsOpen = () => insightsEl && !insightsEl.hidden;
+
+  // "On this day" and "last shot N days ago" were computed once at build
+  // time (Date.now(), see the frontmatter comments above) — exact when astro
+  // dev renders per request, but on the published static site that's frozen
+  // at the last publish and wrong 364 days out of 365. Recomputed here from
+  // data already on every .frame (data-captured), each time Insights opens —
+  // cheap (no network), and the panel is only ever built on demand anyway.
+  const otdSection = document.getElementById('otd-section');
+  const otdStrip = document.getElementById('otd-strip');
+  const lastShotEl = document.getElementById('last-shot');
+  function refreshDateBasedInsights() {
+    const frames = [...document.querySelectorAll('.frame[data-captured]')]
+      .map((f) => ({ f, d: new Date(f.dataset.captured) }))
+      .filter(({ d }) => !Number.isNaN(d.getTime()));
+    if (lastShotEl && frames.length) {
+      const newest = new Date(Math.max(...frames.map(({ d }) => d.getTime())));
+      const days = Math.floor((Date.now() - newest.getTime()) / 86_400_000);
+      lastShotEl.textContent = ` · last shot ${days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`}`;
+      lastShotEl.hidden = false;
+    }
+    if (!otdSection || !otdStrip) return;
+    const now = new Date();
+    const matches = frames
+      .filter(({ d }) => d.getMonth() === now.getMonth() && d.getDate() === now.getDate() && d.getFullYear() !== now.getFullYear())
+      .sort((a, b) => b.d.getTime() - a.d.getTime())
+      .slice(0, 10);
+    otdSection.hidden = matches.length === 0;
+    if (matches.length) {
+      // DOM nodes, not innerHTML — src/alt come from data already on the
+      // page, but there is no reason to parse markup to render a thumbnail.
+      otdStrip.replaceChildren(...matches.map(({ f, d }) => {
+        // Smallest derivative (first entry in the srcset already on the
+        // frame) — this strip's thumbnails don't need the full-size one the
+        // grid keeps in data-full. Reuses the grid photo's own alt text
+        // rather than rebuilding it from data attributes GENRE_LABEL isn't
+        // available client-side to decode.
+        const src = (f.dataset.set || '').split(',')[0]?.trim().split(' ')[0] || f.querySelector('img.photo')?.currentSrc || '';
+        const alt = f.querySelector('img.photo')?.alt || 'Photograph';
+        const figure = document.createElement('figure');
+        figure.className = 'otd-item';
+        figure.style.aspectRatio = f.style.aspectRatio;
+        const img = document.createElement('img');
+        img.src = src; img.alt = alt; img.loading = 'lazy';
+        const caption = document.createElement('figcaption');
+        caption.textContent = String(d.getFullYear());
+        figure.append(img, caption);
+        return figure;
+      }));
+    }
+  }
+
   const openInsights = () => {
     if (!insightsEl || insightsOpen()) return;
+    refreshDateBasedInsights();
     insightsEl.hidden = false;
     lockScroll();
     requestAnimationFrame(() => {
@@ -1706,8 +1775,17 @@ const auroraCss = hasPhotos
   //  faster later one and clobbering it.
   // ======================================================================
   const searchInput = document.getElementById('search-input');
+  const searchStatus = document.getElementById('search-status');
   let searchTimer = 0;
   let searchToken = 0;
+  function showSearchError(text) {
+    if (!searchStatus) return;
+    searchStatus.textContent = text;
+    searchStatus.hidden = false;
+  }
+  function clearSearchError() {
+    if (searchStatus) searchStatus.hidden = true;
+  }
   function applySearchIds(ids) {
     searchIds = ids;
     layoutAll();      // repack visible frames into tight columns
@@ -1715,16 +1793,25 @@ const auroraCss = hasPhotos
   }
   async function runSearch(q) {
     const token = ++searchToken;
-    if (!q) { applySearchIds(null); return; }
+    if (!q) { clearSearchError(); applySearchIds(null); return; }
     let data;
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
       data = await res.json();
-    } catch (err) { return; } // offline / server-only route missing (e.g. static export) — leave unfiltered
+    } catch (err) {
+      // offline / server-only route missing (e.g. static export) — leave the
+      // archive unfiltered, but say so instead of looking like nothing
+      // matched or the query silently did nothing.
+      if (token === searchToken) showSearchError('Search unavailable right now — showing everything.');
+      return;
+    }
     if (token !== searchToken) return; // a newer query has since started; this response is stale
-    // Not ready (nothing embedded yet) or a server-side failure: refuse rather
-    // than filter the archive down to a meaningless ranking — leave it as-is.
-    if (!data.ok || !data.ready) return;
+    if (!data.ok) { showSearchError('Search failed — showing everything.'); return; }
+    // Not ready (nothing embedded yet) is a real, temporary state, not a
+    // failure — refuse rather than filter the archive down to a meaningless
+    // ranking, but don't alarm anyone over it either.
+    if (!data.ready) { clearSearchError(); return; }
+    clearSearchError();
     applySearchIds(new Set(data.matches.map((m) => m.id)));
   }
   searchInput?.addEventListener('input', (e) => {
