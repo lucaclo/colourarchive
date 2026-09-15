@@ -186,6 +186,24 @@ describe('summariseHour', () => {
   it('says nothing when there is nothing', () => {
     assert.equal(summariseHour(null), '');
   });
+
+  it('leaves out a breeze too light for a tripod to notice', () => {
+    assert.ok(!summariseHour(hour({ temperatureC: 10, windSpeedKmh: 8 })).includes('wind'));
+  });
+
+  it('names a wind worth planning around', () => {
+    assert.equal(summariseHour(hour({ temperatureC: 10, windSpeedKmh: 22 })), '10°C · 22 km/h wind');
+  });
+
+  it('calls out a gust well above the sustained speed', () => {
+    const line = summariseHour(hour({ temperatureC: 10, windSpeedKmh: 20, windGustKmh: 40 }));
+    assert.equal(line, '10°C · 20 km/h wind, gusting 40');
+  });
+
+  it('does not bother naming a gust barely above the sustained speed', () => {
+    const line = summariseHour(hour({ temperatureC: 10, windSpeedKmh: 20, windGustKmh: 25 }));
+    assert.equal(line, '10°C · 20 km/h wind');
+  });
 });
 
 describe('stalenessNote', () => {
@@ -230,6 +248,8 @@ const hour = (over: Partial<WeatherHour> = {}): WeatherHour => ({
   precipitationChance: null,
   weatherCode: null,
   visibilityM: null,
+  windSpeedKmh: null,
+  windGustKmh: null,
   ...over,
 });
 

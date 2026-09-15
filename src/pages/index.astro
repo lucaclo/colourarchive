@@ -416,8 +416,8 @@ const auroraCss = hasPhotos
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
           <button class="lb-tool" id="lb-info" aria-label="Photo details" title="Photo details" aria-pressed="false">i</button>
-          <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">≈</button>
-          <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">◐</button>
+          {!STATIC && <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">≈</button>}
+          {!STATIC && <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">◐</button>}
           <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close">×</button>
         </div>
         <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous">‹</button>

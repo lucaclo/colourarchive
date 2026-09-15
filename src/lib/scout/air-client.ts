@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SCOUT_AIR_DIR } from '../paths';
 import { airQualityUrl, parseAirQuality, type AirReport } from './air';
+import { sweepStaleCache } from './cache-sweep';
 
 /**
  * Fetching the aerosol forecast. Server-side and cached, for the same reasons
@@ -19,6 +20,10 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 /** One hour. CAMS itself only publishes a few times a day. */
 export const AIR_TTL_MS = 60 * 60_000;
+
+// See weather-client.ts — a spot not revisited within the TTL otherwise
+// leaves its file behind forever.
+sweepStaleCache(SCOUT_AIR_DIR, AIR_TTL_MS).catch(() => {});
 
 /** Two decimals is about 1.1 km — far finer than a global aerosol model resolves. */
 const cacheKey = (lat: number, lon: number) =>

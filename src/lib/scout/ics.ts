@@ -26,6 +26,12 @@ export interface IcsEvent {
   /** Defaults to 30 — long enough to say "be there", never claimed as the
    *  length of the light itself, which this file does not model. */
   durationMinutes?: number;
+  /**
+   * Minutes before `at` a reminder alarm should fire. Defaults to 60 — these
+   * are alignments that usually need travel and setup time, not a meeting a
+   * notification five minutes out is early enough for. `0` omits the alarm.
+   */
+  alarmMinutesBefore?: number;
 }
 
 function pad(n: number, width = 2): string {
@@ -73,6 +79,7 @@ function fold(line: string): string {
 }
 
 const DEFAULT_DURATION_MINUTES = 30;
+const DEFAULT_ALARM_MINUTES_BEFORE = 60;
 
 /**
  * Serializes a list of instants as a `.ics` calendar. Every event gets its
@@ -97,6 +104,14 @@ export function buildIcs(
     lines.push(fold(`SUMMARY:${icsText(event.summary)}`));
     if (event.description) lines.push(fold(`DESCRIPTION:${icsText(event.description)}`));
     if (event.location) lines.push(fold(`LOCATION:${icsText(event.location)}`));
+    const alarmMinutes = event.alarmMinutesBefore ?? DEFAULT_ALARM_MINUTES_BEFORE;
+    if (alarmMinutes > 0) {
+      lines.push('BEGIN:VALARM');
+      lines.push('ACTION:DISPLAY');
+      lines.push(fold(`DESCRIPTION:${icsText(event.summary)}`));
+      lines.push(`TRIGGER:-PT${Math.round(alarmMinutes)}M`);
+      lines.push('END:VALARM');
+    }
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');

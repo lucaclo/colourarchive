@@ -44,6 +44,11 @@ export const NOTABLE_PHOTOGRAPHERS_PATH = path.join(ROOT, 'src', 'data', 'notabl
 // artefacts into the published archive.
 export const MATCH_CACHE_DIR = path.join(ROOT, '.match-cache');
 export const MATCH_KEPT_DIR = path.join(ROOT, 'src', 'data', 'match');
+// A separate top-level directory, not a subfolder of MATCH_CACHE_DIR: the
+// startup sweep in session.ts deletes anything under MATCH_CACHE_DIR that
+// isn't a kept match's id, and a subfolder here would look exactly like one
+// of those to it.
+export const MATCH_ANALYSIS_CACHE_DIR = path.join(ROOT, '.match-analysis-cache');
 
 // Scout. Geocoding answers are cached to disk and never expire on their own:
 // places do not move, Nominatim asks to be used sparingly, and a scouted area

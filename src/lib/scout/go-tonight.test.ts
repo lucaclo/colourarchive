@@ -36,6 +36,8 @@ function reportAround(at: Date, cover: { low: number; mid: number; high: number 
       precipitationChance: 0,
       weatherCode: 0,
       visibilityM: 20000,
+      windSpeedKmh: null,
+      windGustKmh: null,
     });
   }
   return { latitude: CALTON.lat, longitude: CALTON.lon, fetchedAt: Date.now(), current: null, hours };

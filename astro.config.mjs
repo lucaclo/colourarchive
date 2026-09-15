@@ -22,6 +22,10 @@ try {
 // on this machine. Originals never leave disk; sharp runs locally = zero
 // network round-trip = zero quality/colour risk.
 export default defineConfig({
+  // The published origin (src/lib/publish.ts's SITE_URL) — needed so
+  // Astro.site can turn Layout's canonical/og:image links into real
+  // absolute URLs instead of resolving against a build-time placeholder.
+  site: process.env.SITE_URL ?? 'https://colourarchive.netlify.app',
   output: 'server',
   adapter: node({ mode: 'standalone' }),
   // Stamps the build with what it contains, and refuses to finish if a

@@ -45,6 +45,8 @@ function weatherWith(hours: Array<{ iso: string; cloudCover: number }>): Weather
     precipitationChance: 0,
     weatherCode: 0,
     visibilityM: 20000,
+    windSpeedKmh: null,
+    windGustKmh: null,
   }));
   return { latitude: 0, longitude: 0, fetchedAt: Date.now(), current: null, hours: wh };
 }

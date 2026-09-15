@@ -4,6 +4,14 @@
 # hides the server-only chrome (Add/Remove, Inspiration, original-image zoom).
 # Pinning it here means every deploy — CLI, drag-drop, or the auto-deploy
 # watcher — produces the same correct build, regardless of any UI settings.
+#
+# This is a security boundary, not only a UI one: `publish = "dist/client"`
+# ships prerendered HTML/JS/images with no server behind them, so the
+# `prerender = false` API routes (upload, remove, label, notes, book, search,
+# similar) never run on the public deployment at all — they have no auth of
+# their own, and rely entirely on this file never switching to an SSR/functions
+# publish target that would put them on the open internet.
+
 [build]
   command = "PUBLIC_STATIC=true astro build"
   publish = "dist/client"

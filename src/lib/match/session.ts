@@ -299,6 +299,31 @@ export async function loadKeptMatches(): Promise<void> {
   }
 }
 
+/**
+ * Delete every `MATCH_CACHE_DIR` folder that isn't a kept match.
+ *
+ * `evictOldUnkept` only ever prunes what's in the in-memory `records` map,
+ * which starts empty on every restart — so every unkept comparison from a
+ * process that has since exited (a dev-server restart, a serverless cold
+ * start) was never reachable again and never deleted either. Call this once,
+ * right after `loadKeptMatches` has populated `records` with the ones that
+ * *are* meant to survive, so anything left over on disk is provably orphaned.
+ */
+async function sweepOrphanedCacheDirs(): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(MATCH_CACHE_DIR);
+  } catch {
+    return;
+  }
+  const kept = new Set(records.keys());
+  await Promise.all(
+    entries
+      .filter((id) => !kept.has(id))
+      .map((id) => fs.rm(path.join(MATCH_CACHE_DIR, id), { recursive: true, force: true }).catch(() => {})),
+  );
+}
+
 // `loadKeptMatches` exists specifically so a kept report survives a restart,
 // but nothing ever called it — every kept match was actually gone the moment
 // the dev server (or the Netlify function's cold container) restarted, silent
@@ -308,3 +333,4 @@ export async function loadKeptMatches(): Promise<void> {
 // called from the same request — Node resolves an importer's own top-level
 // code only after an awaited import's has finished.
 await loadKeptMatches();
+sweepOrphanedCacheDirs().catch(() => {});

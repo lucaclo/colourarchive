@@ -26,13 +26,26 @@ interface Props {
    * before this existed.
    */
   accent?: string;
+  /**
+   * Social-preview image, relative to site root. Defaults to the app icon —
+   * a PNG, not one of the archive's AVIF exports, because Facebook's and
+   * some other crawlers still don't unfurl AVIF into a link preview.
+   */
+  image?: string;
 }
 const {
   title = 'Colour Archive',
   description = 'A photographic archive as one continuous scroll — grouped into chapters by dominant colour, ordered along the hue.',
   preconnect = [],
   accent,
+  image = '/icon-512.png',
 } = Astro.props;
+// Astro.site (set in astro.config.mjs) is what turns these into real
+// absolute URLs a crawler can fetch; without it they resolve against
+// whatever origin the page happened to build under, which is wrong for a
+// production social-preview card.
+const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? Astro.url);
+const ogImageURL = new URL(image, Astro.site ?? Astro.url);
 ---
 
 <!doctype html>
@@ -45,10 +58,15 @@ const {
     <!-- The palette is fixed; tell the UA so form controls, scrollbars and
          the pre-paint canvas match instead of flashing white. -->
     <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href={canonicalURL} />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:image" content={ogImageURL} />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImageURL} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

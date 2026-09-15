@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-28T21:39:52.462Z",
-  "count": 11,
+  "generatedAt": "2026-09-10T16:04:57.726Z",
+  "count": 12,
   "chapters": [
     {
       "key": "achromatic",
@@ -59,36 +59,36 @@
       },
       "photos": [
         {
-          "id": "28708e9677e8d570",
-          "filename": "715059760_18002567435936155_1541617333202851161_n.28708e9677e8d570.jpg",
+          "id": "501746f35d844be5",
+          "filename": "753275708_18009819413936155_5352116710144668229_n.501746f35d844be5.jpg",
           "ext": "jpg",
-          "width": 1500,
-          "height": 1071,
-          "bytes": 294042,
+          "width": 1835,
+          "height": 1223,
+          "bytes": 279731,
           "oklch": {
-            "L": 0.619,
-            "C": 0.104,
-            "H": 35.1
+            "L": 0.598,
+            "C": 0.152,
+            "H": 41.3
           },
           "autoChapter": "red",
           "chapter": "red",
           "autoMedium": "film",
           "medium": "film",
-          "autoGenre": "landscape",
-          "genre": "landscape",
-          "placeholder": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAABwBACdASoYABEAPu1mqk2ppaQiMAgBMB2JQBYdg9K0Lep+663Vji8jueyTQAD+e9xwRqVjklJOpFiaNKTQ1kNjxuK68BszpaYEPMBds/bv3Z5OqoY4pISWFfa+YCWRBZlQAA==",
+          "autoGenre": "portrait",
+          "genre": "portrait",
+          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAADwAwCdASoYABAAPu1iqk2ppaQiMAgBMB2JQBOgBApR5wK64PG8xuQCAP3e8IXNSLKIuFoND8gGijWs+r4eTGHbOXJtrahQMsvt1zpjjUHx6LPjlhUZkY3fa4AAAA==",
           "derivatives": [
             {
               "width": 640,
-              "avif": "/img/28708e9677e8d570-640.avif"
+              "avif": "/img/501746f35d844be5-640.avif"
             },
             {
               "width": 1280,
-              "avif": "/img/28708e9677e8d570-1280.avif"
+              "avif": "/img/501746f35d844be5-1280.avif"
             }
           ],
           "exif": {},
-          "addedAt": "2026-08-28T21:39:51.143Z"
+          "addedAt": "2026-08-28T21:39:51.662Z"
         },
         {
           "id": "7150c54bfe25f2e0",
@@ -127,38 +127,6 @@
           "addedAt": "2026-08-28T21:39:52.460Z"
         },
         {
-          "id": "501746f35d844be5",
-          "filename": "753275708_18009819413936155_5352116710144668229_n.501746f35d844be5.jpg",
-          "ext": "jpg",
-          "width": 1835,
-          "height": 1223,
-          "bytes": 279731,
-          "oklch": {
-            "L": 0.598,
-            "C": 0.152,
-            "H": 41.3
-          },
-          "autoChapter": "red",
-          "chapter": "red",
-          "autoMedium": "film",
-          "medium": "film",
-          "autoGenre": "portrait",
-          "genre": "portrait",
-          "placeholder": "data:image/webp;base64,UklGRmgAAABXRUJQVlA4IFwAAADwAwCdASoYABAAPu1iqk2ppaQiMAgBMB2JQBOgBApR5wK64PG8xuQCAP3e8IXNSLKIuFoND8gGijWs+r4eTGHbOXJtrahQMsvt1zpjjUHx6LPjlhUZkY3fa4AAAA==",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/501746f35d844be5-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/501746f35d844be5-1280.avif"
-            }
-          ],
-          "exif": {},
-          "addedAt": "2026-08-28T21:39:51.662Z"
-        },
-        {
           "id": "4dcc897807f397b8",
           "filename": "DSC00424-2.4dcc897807f397b8.jpg",
           "ext": "jpg",
@@ -193,6 +161,38 @@
           ],
           "exif": {},
           "addedAt": "2026-07-29T08:19:30.820Z"
+        },
+        {
+          "id": "28708e9677e8d570",
+          "filename": "715059760_18002567435936155_1541617333202851161_n.28708e9677e8d570.jpg",
+          "ext": "jpg",
+          "width": 1500,
+          "height": 1071,
+          "bytes": 294042,
+          "oklch": {
+            "L": 0.619,
+            "C": 0.104,
+            "H": 35.1
+          },
+          "autoChapter": "red",
+          "chapter": "red",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAABwBACdASoYABEAPu1mqk2ppaQiMAgBMB2JQBYdg9K0Lep+663Vji8jueyTQAD+e9xwRqVjklJOpFiaNKTQ1kNjxuK68BszpaYEPMBds/bv3Z5OqoY4pISWFfa+YCWRBZlQAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/28708e9677e8d570-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/28708e9677e8d570-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-08-28T21:39:51.143Z"
         }
       ]
     },
@@ -200,9 +200,9 @@
       "key": "orange",
       "name": "Orange",
       "oklch": {
-        "L": 0.652,
-        "C": 0.069,
-        "H": 70.5
+        "L": 0.656,
+        "C": 0.068,
+        "H": 75
       },
       "photos": [
         {
@@ -328,6 +328,51 @@
           ],
           "exif": {},
           "addedAt": "2026-08-21T14:21:47.955Z"
+        },
+        {
+          "id": "47428f4538360e9c",
+          "filename": "DSC06792.47428f4538360e9c.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1153,
+          "bytes": 1007669,
+          "oklch": {
+            "L": 0.68,
+            "C": 0.072,
+            "H": 101.5
+          },
+          "autoChapter": "yellow",
+          "chapter": "yellow",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAwCdASoYAA4APu1mqk2ppaQiMAgBMB2JZQCdABtHxb2xEb/18YIAAP4H7xVMqbxa2R0NsP7NcsAzo0zd6bQ7W8Ji6MxSjlQMwT2NVVja6xkz/XUU72VOZZmo7b4fAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/47428f4538360e9c-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/47428f4538360e9c-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/47428f4538360e9c-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T15:33:46.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/13s",
+            "iso": 50,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T16:04:57.724Z"
         },
         {
           "id": "568ab0b23a39eeca",

@@ -56,10 +56,30 @@ describe('buildIcs', () => {
   });
 
   it('omits DESCRIPTION and LOCATION lines when neither is given', () => {
-    const minimal: IcsEvent = { uid: fixture.uid, at: fixture.at, summary: fixture.summary };
+    // alarmMinutesBefore: 0 — the alarm's own DESCRIPTION (RFC 5545 requires
+    // one on a DISPLAY action) is a separate concern from the VEVENT's.
+    const minimal: IcsEvent = { uid: fixture.uid, at: fixture.at, summary: fixture.summary, alarmMinutesBefore: 0 };
     const out = lines(buildIcs([minimal]));
     assert.ok(!out.some((l) => l.startsWith('DESCRIPTION')));
     assert.ok(!out.some((l) => l.startsWith('LOCATION')));
+  });
+
+  it('adds a 60-minute-before reminder alarm by default', () => {
+    const out = lines(buildIcs([fixture]));
+    assert.ok(out.includes('BEGIN:VALARM'));
+    assert.ok(out.includes('ACTION:DISPLAY'));
+    assert.ok(out.includes('TRIGGER:-PT60M'));
+    assert.ok(out.includes('END:VALARM'));
+  });
+
+  it('honours a custom alarm offset', () => {
+    const out = lines(buildIcs([{ ...fixture, alarmMinutesBefore: 15 }]));
+    assert.ok(out.includes('TRIGGER:-PT15M'));
+  });
+
+  it('omits the alarm entirely when alarmMinutesBefore is 0', () => {
+    const out = lines(buildIcs([{ ...fixture, alarmMinutesBefore: 0 }]));
+    assert.ok(!out.includes('BEGIN:VALARM'));
   });
 
   it('escapes commas, semicolons and backslashes in text values', () => {

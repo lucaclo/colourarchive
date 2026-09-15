@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SCOUT_WEATHER_DIR } from '../paths';
+import { sweepStaleCache } from './cache-sweep';
 import { destination } from './geo';
 import { parseForecast, type WeatherReport } from './weather';
 
@@ -28,6 +29,12 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 /** Twenty minutes. Open-Meteo updates hourly; this is well inside that. */
 export const WEATHER_TTL_MS = 20 * 60_000;
+
+// A spot rarely revisited within the TTL leaves its file behind forever
+// otherwise — sweep it once per process start. Historical entries (`hist_`)
+// are excluded: `readCache` never expires them by design, so a sweep must not
+// either.
+sweepStaleCache(SCOUT_WEATHER_DIR, WEATHER_TTL_MS, (name) => !name.startsWith('hist_')).catch(() => {});
 
 /**
  * Coordinates rounded before they become a cache key.
@@ -96,7 +103,7 @@ export async function fetchForecast(latitude: number, longitude: number): Promis
   // meaning cirrus over a clear sun. See `cloudStructure` for what reads them.
   url.searchParams.set(
     'current',
-    'temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high',
+    'temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m',
   );
   url.searchParams.set(
     'hourly',
@@ -104,8 +111,11 @@ export async function fetchForecast(latitude: number, longitude: number): Promis
     // the only published number that says how much water is in the column above
     // the pin, which `precipitableWater` turns into Bird's water term — and
     // that term had been a fixed 1.5 cm everywhere from the Sahara to Bergen.
-    'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,visibility',
+    // Wind rides along the same way: a tripod and a long exposure are already
+    // this page's subject, and Open-Meteo answers it on the same request.
+    'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability,visibility,wind_speed_10m,wind_gusts_10m',
   );
+  url.searchParams.set('wind_speed_unit', 'kmh');
   url.searchParams.set('forecast_days', '7');
   // UTC throughout. Scout already knows the place's IANA zone and does its own
   // formatting; asking the API to localise as well is two chances to be wrong.
@@ -163,8 +173,9 @@ export async function fetchHistoricalWeather(
   // asking for a measured record instead of a chance is the honest request.
   url.searchParams.set(
     'hourly',
-    'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high',
+    'temperature_2m,dew_point_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m',
   );
+  url.searchParams.set('wind_speed_unit', 'kmh');
   url.searchParams.set('timezone', 'UTC');
 
   let response: Response;

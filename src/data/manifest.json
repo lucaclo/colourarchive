@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-29T17:41:00.241Z",
-  "count": 97,
+  "generatedAt": "2026-09-10T17:53:29.076Z",
+  "count": 110,
   "chapters": [
     {
       "key": "achromatic",
@@ -692,9 +692,9 @@
       "key": "orange",
       "name": "Camel",
       "oklch": {
-        "L": 0.596,
-        "C": 0.08,
-        "H": 60.6
+        "L": 0.595,
+        "C": 0.078,
+        "H": 59.8
       },
       "photos": [
         {
@@ -1054,6 +1054,43 @@
           "addedAt": "2026-08-13T10:55:20.365Z"
         },
         {
+          "id": "a554ae0a0e9ba2b0",
+          "filename": "DSC06730.a554ae0a0e9ba2b0.jpg",
+          "ext": "jpg",
+          "width": 1152,
+          "height": 2048,
+          "bytes": 1201206,
+          "oklch": {
+            "L": 0.584,
+            "C": 0.087,
+            "H": 46.9
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRrwAAABXRUJQVlA4ILAAAABwBgCdASoYACsAPuFko02opiMiNVv4ARAcCUAW33fITGQBd/5KojjoY1pBzwkHwJr9ESfsvSb3g5DKVwAA/emz5fW237k2aNIAvu27GZ3gGvJEaTuW5Q/7bs472Osud3eGga0pB+1ePWEAvB0amZ/YFMl4Ov8oQg0pcAN6jlbhJA8hwAo9qjwBKXtLKFgB33LF7E0Uu5Oiw47gcKaacpnxd9EQY+gjK1+yrlyO5gAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/a554ae0a0e9ba2b0-640.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:24:59.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/80s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:27.282Z"
+        },
+        {
           "id": "697e9dd28d1caea2",
           "filename": "IMG_4472.697e9dd28d1caea2.jpg",
           "ext": "jpg",
@@ -1218,6 +1255,51 @@
             "software": "Adobe Lightroom 11.4.0 (iOS)"
           },
           "addedAt": "2026-07-28T07:18:07.261Z"
+        },
+        {
+          "id": "718762237a142dbd",
+          "filename": "DSC06736.718762237a142dbd.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1152,
+          "bytes": 845047,
+          "oklch": {
+            "L": 0.539,
+            "C": 0.07,
+            "H": 52.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRloAAABXRUJQVlA4IE4AAADwAwCdASoYAA4APu1iqk4ppaQiMAgBMB2JQBWAAsD/1Q7u+4p3pYrIAP2KIVBe/fSmdS2yBUaMhNv5z9waHG0qzZ0RIztC7EQEZyhAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/718762237a142dbd-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/718762237a142dbd-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/718762237a142dbd-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:37:33.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/11",
+            "shutter": "1/60s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:29.204Z"
         },
         {
           "id": "de0a1553f0fabdf6",
@@ -1428,6 +1510,51 @@
           "genre": "street"
         },
         {
+          "id": "008f7d3eff93aa1f",
+          "filename": "DSC06740.008f7d3eff93aa1f.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1152,
+          "bytes": 741809,
+          "oklch": {
+            "L": 0.5,
+            "C": 0.065,
+            "H": 60.6
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAwCdASoYAA4APu1kq04ppaQiMAgBMB2JYwCdMoADOlKIzUQntHbEAP7TMFfJF4byTzM+hYKs6yMIF/sueNxgG+GYdkKl4BhTSL1MCZcVaQ4372CRGGPCmCczLEqgAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/008f7d3eff93aa1f-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/008f7d3eff93aa1f-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/008f7d3eff93aa1f-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:45:04.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/11",
+            "shutter": "1/125s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:31.822Z"
+        },
+        {
           "id": "02933f839dd4de37",
           "filename": "IMG_4790.02933f839dd4de37.jpg",
           "ext": "jpg",
@@ -1467,6 +1594,51 @@
           "genre": "architecture"
         },
         {
+          "id": "85e40178e4db5616",
+          "filename": "DSC06739.85e40178e4db5616.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1152,
+          "bytes": 786994,
+          "oklch": {
+            "L": 0.598,
+            "C": 0.064,
+            "H": 61.5
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAABQBACdASoYAA4APu1kqk2ppaQiMAgBMB2JZgCdMoMYAMkw6IP00W46PCAAAP4X4O1IFjaNWDfp6VxLesXVXFlfr8RPtiRR7eNFbz0b20TEkb7RZn1L+RfAAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/85e40178e4db5616-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/85e40178e4db5616-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/85e40178e4db5616-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:42:17.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/11",
+            "shutter": "1/125s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:30.448Z"
+        },
+        {
           "id": "e84aade9d6949b1b",
           "filename": "IMG_3213.e84aade9d6949b1b.jpg",
           "ext": "jpg",
@@ -1504,6 +1676,51 @@
           "addedAt": "2026-07-26T13:07:35.743Z",
           "autoGenre": "architecture",
           "genre": "architecture"
+        },
+        {
+          "id": "8446eb73049a6848",
+          "filename": "DSC06809.8446eb73049a6848.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1153,
+          "bytes": 968897,
+          "oklch": {
+            "L": 0.722,
+            "C": 0.057,
+            "H": 59.4
+          },
+          "autoChapter": "orange",
+          "chapter": "orange",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRlgAAABXRUJQVlA4IEwAAACwAwCdASoYAA4ALrV2u12jqampiYC0SxgE6AGiKzMJ4L5N0rC5wAD+10/SQh/5ZKWKWF5Yx0b6EZ8omNC4cyDULWxERXAH70JagAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/8446eb73049a6848-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/8446eb73049a6848-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/8446eb73049a6848-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T15:59:22.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/25s",
+            "iso": 50,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:27.282Z"
         },
         {
           "id": "a1c6ea8fe4d48668",
@@ -3455,9 +3672,9 @@
       "key": "blue",
       "name": "Blue",
       "oklch": {
-        "L": 0.514,
-        "C": 0.087,
-        "H": 238.9
+        "L": 0.58,
+        "C": 0.092,
+        "H": 237.4
       },
       "photos": [
         {
@@ -3551,6 +3768,125 @@
           "addedAt": "2026-08-09T22:21:38.349Z"
         },
         {
+          "id": "27ed8a98e1740614",
+          "filename": "DSC06753.27ed8a98e1740614.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1152,
+          "bytes": 889334,
+          "oklch": {
+            "L": 0.738,
+            "C": 0.111,
+            "H": 226.2
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADwAwCdASoYAA4APu1krU2ppaSiMAgBMB2JbACdMoR8eBIraQ59Ok1wANaT0O3mB8cbZZuVDh8YHauhfS/yM2iniTebjvUPekC9CsqROjtx/lSra3Vj2CbvL8TFM+g133Ql0Y6LSdXAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/27ed8a98e1740614-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/27ed8a98e1740614-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/27ed8a98e1740614-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T13:16:57.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/400s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:31.961Z"
+        },
+        {
+          "id": "d034b91fd14687a7",
+          "filename": "DSC06734.d034b91fd14687a7.jpg",
+          "ext": "jpg",
+          "width": 1152,
+          "height": 2048,
+          "bytes": 859212,
+          "oklch": {
+            "L": 0.811,
+            "C": 0.109,
+            "H": 229.8
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAADwBQCdASoYACsAPu1orlEppaQiqrgKATAdiUAW2QFbxkP7yIfuvWFQW4c1j4a+dhO12q+bhcmSgAD+Us1id4UV5CccF9U/l6Va3v+9G7k6mF00FmsXepzAE5cTkQdCW2s3DxClrWUTMlREPi3ODPgfSe1YuecvK57AHtkFXCtttT4LvPQuEYESpkFLrZwHALsPwoATW0Jzp7s7wAAAAA==",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/d034b91fd14687a7-640.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:27:10.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/13",
+            "shutter": "1/60s",
+            "iso": 160,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:28.554Z"
+        },
+        {
+          "id": "745405523b9f8ed9",
+          "filename": "DSC06732.745405523b9f8ed9.jpg",
+          "ext": "jpg",
+          "width": 1152,
+          "height": 2048,
+          "bytes": 960542,
+          "oklch": {
+            "L": 0.784,
+            "C": 0.106,
+            "H": 235.5
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRr4AAABXRUJQVlA4ILIAAADwBgCdASoYACsAPu1krE6ppSQiMBVaqTAdiWQAtRsy8kwYLG9/YVnf+aUKrYbtN3lpLEwmeN/18mOisCwdTEygAP6QH1UeLCYKa/GDe5614qkj8m9dxtrb7z8cuT0S2mTdAgMYaSm3icD+6go5ylCXWczEZIJU1u6m4DNtQo2YIH57vQHy75l0lbb3+fc1/bePQtYIvphJoJ66+/EkQI64KPyS+hRoWL2aY7BA2JvM8AAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/745405523b9f8ed9-640.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:26:56.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/60s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:27.282Z"
+        },
+        {
           "id": "54ad7a9a4ae5a375",
           "filename": "IMG_3370.54ad7a9a4ae5a375.jpg",
           "ext": "jpg",
@@ -3589,6 +3925,129 @@
           "addedAt": "2026-07-26T13:07:44.229Z",
           "autoGenre": "architecture",
           "genre": "architecture"
+        },
+        {
+          "id": "b3d045e22c1e3800",
+          "filename": "DSC06735.b3d045e22c1e3800.jpg",
+          "ext": "jpg",
+          "width": 1152,
+          "height": 2048,
+          "bytes": 651748,
+          "oklch": {
+            "L": 0.801,
+            "C": 0.104,
+            "H": 239.3
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRpQAAABXRUJQVlA4IIgAAACwBQCdASoYACsAPuFcp02opSOiNVgMARAcCUAYoPiwJkKdlPbH30uTyPRMzp4bGV42AR+WgUAA/sO5ANyCPVNXnXcqRg2/VwIGfH9cqR2iP4O6R/EFoEDdhy80PPDKy/ezucMN9zgGJk9EtWkfW9NMelwgtHxALDYTlbAhPcmkv2UjLZ93CvAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/b3d045e22c1e3800-640.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:27:17.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/11",
+            "shutter": "1/125s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:28.135Z"
+        },
+        {
+          "id": "5a18b6a8fedae760",
+          "filename": "DSC06758.5a18b6a8fedae760.jpg",
+          "ext": "jpg",
+          "width": 1365,
+          "height": 2048,
+          "bytes": 540146,
+          "oklch": {
+            "L": 0.553,
+            "C": 0.103,
+            "H": 236.5
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRpYAAABXRUJQVlA4IIoAAABwBgCdASoYACQAPu1qqE4ppqOiMBVaqTAdiWIAwB92pJAQnukF6s9aRXWA+CcGr6Owy6HYt2zGZGVFZeAA/uMP5lm/cJ7DH25m0xQ7/FbRG7AoOxe/dS9dcpTIjrc/GesOZ9LDsbp3pPEOv0gL7UMV/JoJUXCd2cmomiX7BudpROXtteO73afOAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/5a18b6a8fedae760-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/5a18b6a8fedae760-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T13:19:20.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/400s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:34.016Z"
+        },
+        {
+          "id": "29c3368fad1684c3",
+          "filename": "DSC06754.29c3368fad1684c3.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1280,
+          "bytes": 803544,
+          "oklch": {
+            "L": 0.503,
+            "C": 0.102,
+            "H": 236.9
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAAAQBACdASoYAA8APu1iqk2ppaQiMAgBMB2JbACdLwAB0cVOXNbNxb5TAAD+y4n0a9jieF9Vfq33UNhP/69kSoSGTL9gI33RmVlI5kGiqmoUwIaEkLq1HEgA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/29c3368fad1684c3-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/29c3368fad1684c3-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/29c3368fad1684c3-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T13:17:06.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/400s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:34.403Z"
         },
         {
           "id": "56cc4159dc4c2cf4",
@@ -3630,6 +4089,51 @@
           "addedAt": "2026-07-27T13:21:07.877Z",
           "autoGenre": "landscape",
           "genre": "landscape"
+        },
+        {
+          "id": "e208bf19eff6f5ad",
+          "filename": "DSC06742.e208bf19eff6f5ad.jpg",
+          "ext": "jpg",
+          "width": 2048,
+          "height": 1365,
+          "bytes": 572226,
+          "oklch": {
+            "L": 0.802,
+            "C": 0.098,
+            "H": 248.7
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAADwAwCdASoYABAAPu1kqk4ppaQiMAgBMB2JZACdACHYnGnoDiccv8EwAP6uluoecOVSMWu3+GMT5K1CdwdbsMdgrkJOJSDM5qZCOf3WiWEoQOlbtrCUAAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/e208bf19eff6f5ad-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/e208bf19eff6f5ad-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/e208bf19eff6f5ad-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T11:45:20.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/11",
+            "shutter": "1/160s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:31.717Z"
         },
         {
           "id": "42605e496d4fb8e9",
@@ -3896,6 +4400,47 @@
             "software": "Adobe Lightroom 9.5 (Macintosh)"
           },
           "addedAt": "2026-08-29T17:40:46.608Z"
+        },
+        {
+          "id": "7e92c929556120e9",
+          "filename": "DSC06759.7e92c929556120e9.jpg",
+          "ext": "jpg",
+          "width": 1365,
+          "height": 2048,
+          "bytes": 559109,
+          "oklch": {
+            "L": 0.627,
+            "C": 0.083,
+            "H": 225.8
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAAAQBQCdASoYACQAPu1qrk6ppjMjKrgMAmAdiUAXYAm40W3vJ0d4WXOOqaHhG2huLUAAAP607MvzF3kdhC0bX+K/lV3X4OjPHa4pkdTFtI+QgyvZzHO97/OF4dGL9fIxReH4JJFwaiLT69dXcAERgAAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/7e92c929556120e9-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/7e92c929556120e9-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-07T13:19:31.000Z",
+            "camera": "SONY ILCE-7CM2",
+            "lens": "FE 35mm F2.8 ZA",
+            "focalLength": "35mm",
+            "aperture": "f/9",
+            "shutter": "1/400s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-10T14:15:34.226Z"
         },
         {
           "id": "7d15327c24f21fbd",

@@ -122,6 +122,14 @@ export interface WeatherHour {
   weatherCode: number | null;
   /** Metres. Open-Meteo only carries this in some model domains. */
   visibilityM: number | null;
+  /**
+   * km/h at 10 m. Worth carrying because this page already plans around a
+   * tripod and a long exposure — wind is what shakes the one and is the
+   * difference between a sharp ten-second frame and a soft one, and it's the
+   * one weather figure a drone flight also needs before takeoff.
+   */
+  windSpeedKmh: number | null;
+  windGustKmh: number | null;
 }
 
 export interface WeatherReport {
@@ -447,6 +455,15 @@ export function summariseHour(hour: WeatherHour | null): string {
   if (hour.precipitationChance != null && hour.precipitationChance >= 20) {
     parts.push(`${Math.round(hour.precipitationChance)}% rain`);
   }
+  // Below this a tripod shrugs it off; only worth a line once it's the kind
+  // of wind a long exposure or a drone would actually feel.
+  if (hour.windSpeedKmh != null && hour.windSpeedKmh >= 15) {
+    const gust =
+      hour.windGustKmh != null && hour.windGustKmh >= hour.windSpeedKmh + 10
+        ? `, gusting ${Math.round(hour.windGustKmh)}`
+        : '';
+    parts.push(`${Math.round(hour.windSpeedKmh)} km/h wind${gust}`);
+  }
   return parts.join(' · ');
 }
 
@@ -506,6 +523,8 @@ export function parseForecast(body: unknown, fetchedAt: number): WeatherReport {
   const precipitation = column('precipitation_probability');
   const codes = column('weather_code');
   const visibility = column('visibility');
+  const windSpeed = column('wind_speed_10m');
+  const windGusts = column('wind_gusts_10m');
 
   const hours: WeatherHour[] = [];
   for (let i = 0; i < times.length; i++) {
@@ -522,6 +541,8 @@ export function parseForecast(body: unknown, fetchedAt: number): WeatherReport {
       precipitationChance: numberOrNull(precipitation[i]),
       weatherCode: numberOrNull(codes[i]),
       visibilityM: numberOrNull(visibility[i]),
+      windSpeedKmh: numberOrNull(windSpeed[i]),
+      windGustKmh: numberOrNull(windGusts[i]),
     });
   }
 
@@ -541,6 +562,8 @@ export function parseForecast(body: unknown, fetchedAt: number): WeatherReport {
           precipitationChance: null,
           weatherCode: numberOrNull(currentRaw.weather_code),
           visibilityM: null,
+          windSpeedKmh: numberOrNull(currentRaw.wind_speed_10m),
+          windGustKmh: numberOrNull(currentRaw.wind_gusts_10m),
         };
 
   return {

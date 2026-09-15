@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { MATCH_ANALYSIS_CACHE_DIR } from '../paths';
 import { toWorkingImage } from './decode';
 import { segmentRegions, type RegionMasks } from './regions';
 import { measureRegions, measureVignette } from './stats';
@@ -34,6 +37,35 @@ function remember(key: string, analysis: PhotoAnalysis): void {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
     cache.delete(oldest);
+  }
+}
+
+/**
+ * The in-memory cache above is content-addressed but process-local — every
+ * restart re-pays the decode/segment/measure pipeline (the comment above
+ * `cache` calls it "real time") for every reference photo already analysed
+ * before, even though the result is provably identical. `key` is already a
+ * stable hash, so it doubles as a safe filename once its one reserved
+ * character (`:`, between hash and baseline) is swapped out.
+ */
+const diskPath = (key: string) => path.join(MATCH_ANALYSIS_CACHE_DIR, `${key.replace(':', '_')}.json`);
+
+async function readPersisted(key: string): Promise<PhotoAnalysis | null> {
+  try {
+    return JSON.parse(await fs.readFile(diskPath(key), 'utf8')) as PhotoAnalysis;
+  } catch {
+    return null;
+  }
+}
+
+async function persist(key: string, analysis: PhotoAnalysis): Promise<void> {
+  try {
+    await fs.mkdir(MATCH_ANALYSIS_CACHE_DIR, { recursive: true });
+    await fs.writeFile(diskPath(key), JSON.stringify(analysis));
+  } catch (err) {
+    // A cache that cannot be written costs a re-analysis next time, not
+    // correctness now.
+    console.warn('[match] could not persist analysis', err);
   }
 }
 

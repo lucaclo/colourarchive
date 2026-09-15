@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SCOUT_SEEING_DIR } from '../paths';
+import { sweepStaleCache } from './cache-sweep';
 import { parseSeeingForecast, seeingForecastUrl, type SeeingForecast } from './seeing';
 
 /**
@@ -18,6 +19,10 @@ const REQUEST_TIMEOUT_MS = 8000;
  * itself changes would only be asking the same question again.
  */
 export const SEEING_TTL_MS = 3 * 60 * 60_000;
+
+// See weather-client.ts — a spot not revisited within the TTL otherwise
+// leaves its file behind forever.
+sweepStaleCache(SCOUT_SEEING_DIR, SEEING_TTL_MS).catch(() => {});
 
 /** Three decimals, matching what the URL itself is built to. */
 const cacheKey = (lat: number, lon: number) =>

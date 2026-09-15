@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import tzLookup from 'tz-lookup';
 import { SCOUT_GEOCODE_DIR } from '../paths';
+import { sweepStaleCache } from './cache-sweep';
 import { wrapLongitude, clampLatitude } from './geo';
 
 /**
@@ -77,6 +78,13 @@ function serialise<T>(task: () => Promise<T>): Promise<T> {
 /** Bumped when the cached shape changes, so stale entries are ignored rather
  *  than served without their newer fields. */
 const CACHE_VERSION = 2;
+
+// Places don't move, so an entry is never stale by content — but one bumping
+// CACHE_VERSION orphans every file under the old hash forever, and a query
+// typed once and never again just sits on disk. Half a year unused is a safe
+// line for "let it go and re-fetch if it's ever asked for again."
+const GEOCODE_MAX_AGE_MS = 180 * 24 * 60 * 60_000;
+sweepStaleCache(SCOUT_GEOCODE_DIR, GEOCODE_MAX_AGE_MS).catch(() => {});
 
 const cacheKey = (query: string, limit: number) =>
   createHash('sha1')
