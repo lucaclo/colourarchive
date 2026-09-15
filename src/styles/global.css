@@ -469,6 +469,25 @@ body {
 .pr-seg.passed { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .pr-seg { transition: opacity 200ms linear; } }
 
+/* --- Progress hairline: a fine, continuous read-position line under the
+   coarse per-chapter segments above — how far into *today's* scroll you are,
+   not just which chapter. A pure CSS scroll() timeline: no scroll listener,
+   and (unlike .reveal/.enter's one-way JS) correctly reverses on scroll-up,
+   because a read position is real, not an event to remember. Stays at
+   scaleX(0) — invisible — everywhere the @supports/@media gate below doesn't
+   apply, so it degrades to exactly the pre-existing segments-only rail. */
+.pr-hairline {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--fg); opacity: 0.4;
+  transform: scaleX(0); transform-origin: left;
+}
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .pr-hairline { animation: pr-hairline-fill linear both; animation-timeline: scroll(root block); }
+  }
+}
+@keyframes pr-hairline-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
 /* --- Cursor ring: a hairline circle tinted to the in-view chapter's colour,
    difference-blended so it stays visible over any photograph or background.
    Desktop/mouse only — hidden outright on touch, where a synthetic cursor

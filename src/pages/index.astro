@@ -190,6 +190,12 @@ const auroraCss = hasPhotos
       {manifest.chapters.map((ch, ci) => (
         <span class="pr-seg" data-ci={ci} style={`background:${oklchCss(ch.oklch)};flex-grow:${Math.max(1, ch.photos.length)}`} />
       ))}
+      {/* Continuous scroll-linked companion to the discrete chapter segments
+          above — a native scroll() timeline, so it needs no scroll listener
+          and stays correctly reversible (unlike .reveal/.enter). Invisible
+          without support for the feature or with reduced motion requested;
+          see the @supports/@media gate in global.css. */}
+      <span class="pr-hairline" />
     </div>
   )}
   <header class="topbar" id="topbar">
