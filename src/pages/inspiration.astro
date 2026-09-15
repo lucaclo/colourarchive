@@ -973,9 +973,25 @@ const accent = manifest.chapters[0]
      scoped styles work by stamping a data-astro-* attribute onto elements in
      the TEMPLATE, and nodes created at runtime never receive it — so these
      rules must be :global() or they simply do not apply. */
-  .mx-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  :global(.mx-badge) { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--border); padding: 0.3rem 0.6rem; border-radius: 999px; }
-  :global(.mx-badge.warn) { border-color: #e0603a; color: #e0603a; }
+  .mx-badges { display: flex; flex-direction: column; gap: 0.7rem; }
+  /* Numeric readings: a measured value, not a note about one — the largest,
+     most figure-like thing in the panel, spec-sheet style (tabular mono
+     figure + a small unit riding its baseline, a smaller caption below). */
+  /* :global: this wrapper, like .mx-stat below, is injected client-side by
+     renderBadges() and so never gets Astro's scoping attribute. */
+  :global(.mx-stats) { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+  :global(.mx-stat) { display: flex; flex-direction: column; gap: 0.18rem; }
+  :global(.mx-stat .mx-stat-figure) { font-family: var(--font-label); font-variant-numeric: tabular-nums; font-size: 1.7rem; line-height: 1; letter-spacing: -0.01em; color: var(--fg); }
+  :global(.mx-stat .mx-stat-unit) { font-size: 0.95rem; margin-left: 0.06rem; color: var(--muted); }
+  :global(.mx-stat .mx-stat-label) { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  :global(.mx-stat.warn .mx-stat-figure) { color: #e0603a; }
+  /* Structural caveats: not a reading, an honesty note about one — no pill,
+     no mono, no uppercase. Quiet italic Fraunces (the site's display cut,
+     already italic via --title-style) reads as prose aside rather than
+     data, which is the whole point of separating it from .mx-stat. */
+  :global(.mx-caveats) { display: flex; flex-direction: column; gap: 0.3rem; }
+  :global(.mx-caveat) { margin: 0; font-family: var(--font-display); font-style: var(--title-style); font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+  :global(.mx-caveat.warn) { color: #e0603a; }
 
   .mx-notes { display: grid; gap: 0.5rem; }
   :global(.mx-noterow) {
@@ -2553,11 +2569,19 @@ const accent = manifest.chapters[0]
   });
 
   // ── Badges ─────────────────────────────────────────────────────────────
+  // Two distinct kinds share this panel and now get distinct chrome: a
+  // *reading* (confidence, gap — a number the solver measured) renders as a
+  // spec-sheet figure; a *caveat* (calibration, reference counts, refusal
+  // prose — a note about the measurement rather than one) renders as a quiet
+  // italic annotation. Same underlying honesty-as-UI content, typography
+  // only — every caveat/refusal string below is unchanged from before.
   function renderBadges(data: any) {
     const s = data.solution;
-    const badges: Array<[string, boolean]> = [
-      [`Measurement confidence ${Math.round(s.confidence * 100)}%`, s.confidence < 0.7],
-      [`Gap closable ${Math.round(s.reachability * 100)}%`, s.reachability < 0.55],
+    const stats: Array<[string, number, boolean]> = [
+      ['Measurement confidence', Math.round(s.confidence * 100), s.confidence < 0.7],
+      ['Gap closable', Math.round(s.reachability * 100), s.reachability < 0.55],
+    ];
+    const caveats: Array<[string, boolean]> = [
       [`Your photo read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL]}`, data.mine.baseline === 'preview'],
       ['Slider calibration: estimated', true],
     ];
@@ -2566,18 +2590,23 @@ const accent = manifest.chapters[0]
     // to be measured, not this, because this can't exist yet at that point.
     if (data.referenceCount > 1) {
       const n = (data.outlierIds || []).length;
-      badges.push([`Blended from ${data.referenceCount} references`, false]);
+      caveats.push([`Blended from ${data.referenceCount} references`, false]);
       if (n) {
-        badges.push([
+        caveats.push([
           `${n} reference${n === 1 ? '' : 's'} measure${n === 1 ? 's' : ''} like a different edit`,
           true,
         ]);
       }
     }
-    if (data.local) badges.unshift(['Measured on this device — no masks', true]);
-    $('mx-badges').innerHTML = badges
-      .map(([t, warn]) => `<span class="mx-badge${warn ? ' warn' : ''}">${esc(t)}</span>`)
-      .join('');
+    if (data.local) caveats.unshift(['Measured on this device — no masks', true]);
+    $('mx-badges').innerHTML =
+      `<div class="mx-stats">${stats
+        .map(
+          ([label, value, warn]) =>
+            `<span class="mx-stat${warn ? ' warn' : ''}"><span class="mx-stat-figure">${value}<span class="mx-stat-unit">%</span></span><span class="mx-stat-label">${esc(label)}</span></span>`,
+        )
+        .join('')}</div>` +
+      `<div class="mx-caveats">${caveats.map(([t, warn]) => `<p class="mx-caveat${warn ? ' warn' : ''}">${esc(t)}</p>`).join('')}</div>`;
     // Keeping a report writes it to the Mac, which is exactly what is missing.
     const keep = $<HTMLButtonElement>('mx-keep');
     keep.disabled = Boolean(data.local);
