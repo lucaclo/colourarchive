@@ -55,6 +55,7 @@ import {
   pastelIconless,
   pastelMix,
   pastelOverrides,
+  treeColours,
   daylightWash,
   directionalIntensity,
   extrusionLightColour,
@@ -302,6 +303,8 @@ import {
 } from './state';
 import { WIDTH, inkColour, liftColour, rgbOf } from './palette';
 import { buildingRamp, shadowDarkness, shadowFade } from './shading';
+import { mappedTreesIn } from './tree-client';
+import { scatterTrees, treeParts, type ScatterArea, type Tree } from '../trees';
 import { bearingLabel, formatCoords, moonDiscPath, shadowCaveat } from './format';
 import {
   SPOTS_KEY,
@@ -360,6 +363,12 @@ export async function startScout(): Promise<void> {
 
   /** OpenMapTiles only carries building footprints from z14. */
   const BUILDING_MIN_ZOOM = 14;
+  /** Trees appear a step closer in than buildings: below this a tree is a
+   *  pixel, and five thousand of them are overdraw for nothing. */
+  const TREE_MIN_ZOOM = 14.5;
+  const TREE_SOURCE = 'scout-trees';
+  /** Metres round the middle of the view that trees are gathered in. */
+  const TREE_REACH_M = 700;
   const MAX_SHADOW_BUILDINGS = 4000;
   /**
    * How far out a building can still put a point in shade — `buildSkyline`'s
@@ -1610,6 +1619,32 @@ export async function startScout(): Promise<void> {
       BELOW_LABELS,
     );
 
+    // --- Trees ------------------------------------------------------------
+    // Drawn from a trunk and two tiers of crown (see `treeParts`), lit by the
+    // same sun as the buildings. Estimated trees are drawn the same as mapped
+    // ones — the difference is carried by their shadows, and by the facts.
+    map.addSource(TREE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    for (const part of ['trunk', 'crown'] as const) {
+      map.addLayer(
+        {
+          id: `scout-tree-${part}s`,
+          type: 'fill-extrusion',
+          source: TREE_SOURCE,
+          minzoom: TREE_MIN_ZOOM,
+          filter: ['==', ['get', 'part'], part],
+          layout: { visibility: shown.trees ? 'visible' : 'none' },
+          paint: {
+            'fill-extrusion-color': part === 'crown' ? treeColours(WELCOME_ALTITUDE).crown : treeColours(WELCOME_ALTITUDE).trunk,
+            'fill-extrusion-base': ['get', 'base'],
+            'fill-extrusion-height': ['get', 'top'],
+            'fill-extrusion-opacity': 1,
+            'fill-extrusion-vertical-gradient': true,
+          },
+        },
+        BELOW_LABELS,
+      );
+    }
+
     // A fixed hairline around every footprint. `fill-extrusion` cannot draw
     // its own outline, so without this a row of similarly-lit buildings at a
     // low angle reads as one shape rather than as buildings — see
@@ -1684,6 +1719,7 @@ export async function startScout(): Promise<void> {
     // correctly for wherever the view actually lands.
     if (freeLookCleanup) return;
     collectBuildings();
+    collectTrees();
     refreshTerrain();
   });
 
@@ -1735,6 +1771,7 @@ export async function startScout(): Promise<void> {
     gatherQueued = requestAnimationFrame(() => {
       gatherQueued = 0;
       collectBuildings();
+      collectTrees();
     });
   });
   // The dome stands on the ground under the pin, and that height is unknown
@@ -3030,6 +3067,9 @@ export async function startScout(): Promise<void> {
     shadowLayer.opacity = cloudScale();
     set('scout-slab-shadow', 'fill-opacity', 0.55 * cloudScale());
     set('scout-buildings', 'fill-extrusion-color', buildingRamp(altitude, themeOf(basemap)));
+    const leaves = treeColours(altitude);
+    set('scout-tree-crowns', 'fill-extrusion-color', leaves.crown);
+    set('scout-tree-trunks', 'fill-extrusion-color', leaves.trunk);
     applySky(altitude, air);
   }
 
@@ -3165,6 +3205,117 @@ export async function startScout(): Promise<void> {
    * Gather the footprints worth casting. Expensive, and deliberately not on the
    * slider's path: `querySourceFeatures` walks every loaded tile.
    */
+  /* ── Trees ───────────────────────────────────────────────────────────────
+     Mapped trees where OpenStreetMap has them, estimated ones in the parks
+     and woods where it does not — see `trees.ts` for why the two are kept
+     apart. The shadow blockers built here feed the *drawing* only; they are
+     never added to `castable`, so no estimated tree ever moves a light window
+     or a hotspot's ranking. */
+  let treeBlockers: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
+  let treeSignature = '';
+  let treeTally = { mapped: 0, estimated: 0, pending: 0, failed: 0 };
+
+  function collectTrees() {
+    if (!map || !styleReady) return;
+    const source = map.getSource(TREE_SOURCE) as GeoJSONSource | undefined;
+    if (!source) return;
+    if (!shown.trees || map.getZoom() < TREE_MIN_ZOOM) {
+      if (treeSignature) {
+        treeSignature = '';
+        treeBlockers = [];
+        treeTally = { mapped: 0, estimated: 0, pending: 0, failed: 0 };
+        source.setData({ type: 'FeatureCollection', features: [] });
+        invalidate({ shadows: true });
+      }
+      return;
+    }
+
+    const bounds = map.getBounds();
+    const middle = map.getCenter();
+    const [rw, rs, re, rn] = boundingBox({ lat: middle.lat, lon: middle.lng }, TREE_REACH_M);
+    const box = {
+      west: Math.max(bounds.getWest(), rw),
+      south: Math.max(bounds.getSouth(), rs),
+      east: Math.min(bounds.getEast(), re),
+      north: Math.min(bounds.getNorth(), rn),
+    };
+
+    const areas: ScatterArea[] = [];
+    const addAreas = (features: GeoJSON.Feature[], kindOf: (p: Record<string, unknown>) => ScatterArea['kind'] | null) => {
+      for (const feature of features) {
+        const kind = kindOf((feature.properties ?? {}) as Record<string, unknown>);
+        if (!kind) continue;
+        const g = feature.geometry;
+        const polygons = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+        for (const polygon of polygons) if (polygon[0]) areas.push({ ring: polygon[0] as Ring, kind });
+      }
+    };
+    try {
+      // Parks proper — not national parks or reserves, which run across
+      // mountains and lakes and would be planted like a lawn.
+      addAreas(map.querySourceFeatures('openmaptiles', { sourceLayer: 'park' }), (p) =>
+        p.class === 'park' || p.class === 'garden' ? 'park' : null,
+      );
+      addAreas(map.querySourceFeatures('openmaptiles', { sourceLayer: 'landcover' }), (p) =>
+        p.class === 'wood' || p.subclass === 'forest' || p.subclass === 'wood' ? 'wood' : p.subclass === 'park' ? 'park' : null,
+      );
+    } catch {
+      return;
+    }
+
+    const water: Ring[] = [];
+    try {
+      for (const feature of map.querySourceFeatures('openmaptiles', { sourceLayer: 'water' })) {
+        const g = feature.geometry;
+        const polygons = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+        for (const polygon of polygons) if (polygon[0] && ringIntersects(polygon[0] as Ring, box)) water.push(polygon[0] as Ring);
+      }
+    } catch {
+      /* no water layer, no exclusion */
+    }
+
+    const known = mappedTreesIn(box, () => collectTrees());
+    // Tiles clip polygons with a buffer, so a park on a seam arrives as two
+    // overlapping pieces. The scatter is anchored to the world, so both pieces
+    // grow the same tree in the overlap — dedupe by position.
+    const seen = new Set<string>();
+    const trees: Tree[] = [];
+    for (const tree of [...known.trees, ...scatterTrees(areas, box, known.trees, 2500, water)]) {
+      const key = `${tree.lon.toFixed(6)},${tree.lat.toFixed(6)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      trees.push(tree);
+    }
+
+    const signature = `${trees.length}:${trees[0]?.lon ?? 0}:${trees[trees.length - 1]?.lat ?? 0}:${known.pending}`;
+    if (signature === treeSignature) return;
+    treeSignature = signature;
+
+    const features: GeoJSON.Feature[] = [];
+    const blockers: typeof treeBlockers = [];
+    for (const tree of trees) {
+      const parts = treeParts(tree);
+      for (const { ring, base, top, part } of parts) {
+        features.push({
+          type: 'Feature',
+          properties: { part, base, top, estimated: tree.estimated },
+          geometry: { type: 'Polygon', coordinates: [ring] },
+        });
+      }
+      blockers.push({ ring: parts[1].ring, height: tree.heightM, estimated: tree.estimated });
+    }
+    source.setData({ type: 'FeatureCollection', features });
+    treeBlockers = blockers;
+    treeTally = {
+      mapped: known.trees.length,
+      estimated: trees.length - known.trees.length,
+      pending: known.pending,
+      failed: known.failed,
+    };
+    invalidate({ shadows: true });
+    renderFacts();
+  }
+
   function collectBuildings() {
     if (!map || !styleReady || !centre) return;
 
@@ -3324,7 +3475,7 @@ export async function startScout(): Promise<void> {
    * by reference so that re-gathering invalidates it on its own, and the two
    * numbers that decide where a shadow lands.
    */
-  let lastCast: { set: typeof castable; azimuth: number; ratio: number } | null = null;
+  let lastCast: { set: typeof castable; trees: typeof treeBlockers; azimuth: number; ratio: number } | null = null;
 
   /** Cast the gathered set at the sun of the moment. Cheap enough for a frame. */
   function castCurrentShadows() {
@@ -3333,7 +3484,9 @@ export async function startScout(): Promise<void> {
     if (!source) return;
 
     const now = current();
-    if (!now || now.altitude <= 0 || !shown.buildings || !castable.length) {
+    const buildingsCast = shown.buildings && castable.length > 0;
+    const treesCast = shown.trees && treeBlockers.length > 0 && glShadows;
+    if (!now || now.altitude <= 0 || (!buildingsCast && !treesCast)) {
       source.setData({ type: 'FeatureCollection', features: [] });
       shadowLayer.setShadows(EMPTY_GEOMETRY);
       shadowLayer.setWalls(EMPTY_GEOMETRY);
@@ -3356,6 +3509,7 @@ export async function startScout(): Promise<void> {
     if (
       lastCast &&
       lastCast.set === castable &&
+      lastCast.trees === treeBlockers &&
       Math.abs(now.azimuth - lastCast.azimuth) < 0.1 &&
       Math.abs(ratio - lastCast.ratio) < 0.005 * lastCast.ratio
     ) {
@@ -3365,7 +3519,7 @@ export async function startScout(): Promise<void> {
     const options = { maxLengthM: maxShadowLength(now.altitude) };
 
     if (glShadows) {
-      const result = castPrisms(castable, now.azimuth, now.altitude, options);
+      const result = castPrisms(buildingsCast ? castable : [], now.azimuth, now.altitude, options);
       const geometry = new ShadowGeometry(projectFlat);
       // Issue #51's wall curtains bbox-prune every building against every
       // cast shadow below, so each prism's own box and re-based anchor
@@ -3404,6 +3558,26 @@ export async function startScout(): Promise<void> {
         );
       }
 
+      // Trees, into the same pass so crossing shadows take the darker rather
+      // than pooling. A shade under a building's — a crown lets some light
+      // through — and a clear step lighter when the tree itself is an
+      // estimate: a shadow from a tree nobody mapped must not read as
+      // confidently as one from a wall. (At half strength they measured about
+      // 0.23 opacity on the pastel map, which reads as no shadow at all.)
+      if (treesCast) {
+        for (const tree of treeBlockers) {
+          const shadow = castShadow(tree.ring, tree.height, now.azimuth, now.altitude, options);
+          if (!shadow) continue;
+          const baseElevM = groundElevationAt(shadow.anchorLon, shadow.anchorLat);
+          geometry.addShadow(
+            shadow.ring,
+            shadow.ceilings.map((c) => baseElevM + c),
+            shadow.ring.map(([lon, lat]) => groundElevationAt(lon, lat)),
+            shadowDarkness(shadow.lengthM, now.altitude) * (tree.estimated ? 0.7 : 0.95),
+          );
+        }
+      }
+
       // Issue #51: wall curtains — one shaded band around each building's own
       // outline, base to roof, rather than the shadow stopping dead at the
       // roofline the way the ground/roof mask alone leaves it.
@@ -3416,7 +3590,7 @@ export async function startScout(): Promise<void> {
       // against a shadow whose box does not even reach it would be most of
       // this loop's cost for none of its answer, on a view that can hold a
       // few thousand of each.
-      if (result.prisms.length) {
+      if (result.prisms.length && buildingsCast) {
         for (const building of castable) {
           if (!(building.height > 0) || !building.hull || !building.bbox) continue;
           const [anchorLon, anchorLat] = building.ring[0];
@@ -3458,7 +3632,7 @@ export async function startScout(): Promise<void> {
       shadowStats.longestM = result.longestM;
     }
 
-    lastCast = { set: castable, azimuth: now.azimuth, ratio };
+    lastCast = { set: castable, trees: treeBlockers, azimuth: now.azimuth, ratio };
   }
 
   const EMPTY_GEOMETRY = new Float32Array(0);
@@ -3956,6 +4130,22 @@ export async function startScout(): Promise<void> {
       cell.textContent = shadowStats.omitted
         ? `${shadowStats.cast} tallest of ${(shadowStats.cast + shadowStats.omitted).toLocaleString('en-GB')}${guessed}`
         : `${shadowStats.cast} casting${guessed}`;
+    }
+
+    // Which trees are surveyed and which are guessed, said every time — the
+    // estimated ones look the same as the rest on the map, by design, so
+    // this is the only place the difference is stated.
+    const treesCell = $('f-trees');
+    const { mapped, estimated, pending, failed } = treeTally;
+    if (!shown.trees) treesCell.textContent = 'off';
+    else if (!mapped && !estimated) treesCell.textContent = map && map.getZoom() < TREE_MIN_ZOOM ? 'zoom in for trees' : 'none in view';
+    else {
+      const parts = [];
+      if (mapped) parts.push(`${mapped} mapped`);
+      if (estimated) parts.push(`${estimated} estimated`);
+      if (pending) parts.push('asking OpenStreetMap…');
+      else if (failed) parts.push('OpenStreetMap unreachable');
+      treesCell.textContent = parts.join(' · ');
     }
 
     const photos = $('f-photos');
@@ -5771,7 +5961,10 @@ export async function startScout(): Promise<void> {
     // Only ever one of these two is up: the custom layer when the context can
     // run it, the flat fill when it cannot.
     set('scout-shadows', shown.buildings && !glShadows);
-    set('scout-shadows-gl', shown.buildings && glShadows);
+    // Trees cast only through the GL layer, so it stays up for them alone.
+    set('scout-shadows-gl', (shown.buildings || shown.trees) && glShadows);
+    set('scout-tree-trunks', shown.trees);
+    set('scout-tree-crowns', shown.trees);
     set('scout-sun-events', shown.sunPath);
     for (const id of ['scout-photos', 'scout-photos-halo', 'scout-photos-count']) {
       set(id, shown.photos);
@@ -5827,6 +6020,11 @@ export async function startScout(): Promise<void> {
       if (key === 'solstice' && !solsticeDays) rebuildSolstices();
       if (key === 'monolith') drawSlab();
       if (key === 'buildings') collectBuildings();
+      if (key === 'trees') {
+        treeSignature = '';
+        collectTrees();
+        invalidate({ shadows: true });
+      }
       if (key === 'landform') refreshTerrain();
       if (key === 'stars' && shown.stars) void ensureStarsLoaded();
       if (key === 'frame') {

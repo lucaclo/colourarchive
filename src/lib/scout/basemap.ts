@@ -577,3 +577,18 @@ export function pastelIconless(layers: MinimalLayer[]): string[] {
 /** The daylight fraction the palette is mixed at, exposed so the page can
  *  skip repainting sixty layers when the mix has not visibly changed. */
 export const pastelMix = (altitude: number) => Math.round(daylight(altitude) * 40) / 40;
+
+/* ── Trees ─────────────────────────────────────────────────────────────────── */
+
+const TREE_CROWN: Pair = ['#8cc275', '#1d3226'];
+const TREE_TRUNK: Pair = ['#a08e7b', '#2a2b30'];
+
+/**
+ * Crown and trunk colours for this sun, turning over on the same civil
+ * twilight as the ground and the buildings. The crown is a fresh mid green —
+ * a step darker than the park under it so a tree stands out of its own lawn.
+ */
+export function treeColours(altitude: number): { crown: string; trunk: string } {
+  const t = daylight(altitude);
+  return { crown: mixHex(TREE_CROWN, t), trunk: mixHex(TREE_TRUNK, t) };
+}

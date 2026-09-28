@@ -467,7 +467,8 @@ const accent = '#f0b866';
                 <div><dt>Radius</dt><dd id="f-radius">—</dd></div>
                 <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="A worked example of the Shadow ratio above, in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
                 <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow this minute. Near the horizon a whole city can be in range, so this is capped at the 4,000 tallest and says so rather than passing triage off as complete.">i</button></dt><dd id="f-buildings">—</dd></div>
-                <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin itself is in the shadow of a hill or ridge, from the same elevation data as the map's terrain shading — with the grid size it was read at.">i</button></dt><dd id="f-landform">—</dd></div>
+                <div><dt>Trees<button class="infotip" type="button" aria-label="What this means" data-tip="Trees mapped in OpenStreetMap where someone has surveyed them, and estimated ones scattered through parks and woods where nobody has. Estimated trees cast lighter shadows and are never used for the light windows or the hotspot ranking — they are a picture, not a measurement.">i</button></dt><dd id="f-trees">—</dd></div>
+            <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin itself is in the shadow of a hill or ridge, from the same elevation data as the map's terrain shading — with the grid size it was read at.">i</button></dt><dd id="f-landform">—</dd></div>
                 <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Peer-reviewed photographs from Wikimedia Commons, plus Flickr when a key is configured, clustered into hotspots near this spot — not every photo ever taken here. A photograph by someone on the curated notable-photographer list is marked and ranked above the rest.">i</button></dt><dd id="f-photos">—</dd></div>
                 <div>
                   <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The sunlight's own colour and contrast this minute — kelvin, and stops of shadow fill. Modelled for a clear sky; cloud is not an input to this figure, see the weather note above for that.">i</button></dt>
@@ -705,6 +706,7 @@ const accent = '#f0b866';
         </div>
         <p class="layers-head">Show</p>
         <label class="toggle"><input type="checkbox" id="t-buildings" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Building shadows</span></label>
+        <label class="toggle"><input type="checkbox" id="t-trees" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Trees</span></label>
         <label class="toggle"><input type="checkbox" id="t-landform" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Landform shadows</span></label>
         <label class="toggle"><input type="checkbox" id="t-hillshade" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Hillshade</span></label>
         <label class="toggle"><input type="checkbox" id="t-sunpath" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Sun path</span></label>

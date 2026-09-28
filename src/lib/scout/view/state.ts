@@ -50,6 +50,8 @@ export interface Shown {
   sight: boolean;
   /** The catalogue sky: stars, their constellations, and the galactic plane. */
   stars: boolean;
+  /** Trees — mapped from OpenStreetMap, estimated in parks and woods. */
+  trees: boolean;
 }
 
 export const defaultShown = (): Shown => ({
@@ -65,6 +67,7 @@ export const defaultShown = (): Shown => ({
   frame: false,
   sight: false,
   stars: false,
+  trees: true,
 });
 
 /**
@@ -97,6 +100,7 @@ export const LAYER_TOGGLES: ReadonlyArray<readonly [id: string, key: keyof Shown
   ['t-frame', 'frame'],
   ['t-sight', 'sight'],
   ['t-stars', 'stars'],
+  ['t-trees', 'trees'],
   ['t-moonpath-night', 'moonPath'],
   ['t-core-night', 'corePath'],
   ['t-solstice-night', 'solstice'],
