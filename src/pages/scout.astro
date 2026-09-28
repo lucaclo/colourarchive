@@ -51,7 +51,7 @@ const accent = '#f0b866';
   ]}
 >
   <main class="scout">
-    <div class="scout-stage">
+    <div class="scout-stage" data-glass="light">
       <div class="scout-map" id="map"></div>
 
       <!-- Both ways in, because on a published build without functions the
@@ -99,459 +99,543 @@ const accent = '#f0b866';
         <p id="infotip-pop-text"></p>
       </div>
 
-      <!-- ── The panel ──────────────────────────────────────────────────────
-           Collapsed to a single line by default, because the map is the point
-           and this used to cover a quarter of it. Hovering — or tapping, where
-           there is no hover — opens the whole stack. -->
-      <section class="panel" id="panel" hidden>
-        <button
-          class="panel-head"
-          id="panel-head"
-          type="button"
-          aria-expanded="false"
-          aria-controls="panel-body"
-        >
-          <span class="panel-name" id="panel-name"></span>
-          <span class="panel-glance" id="panel-glance"></span>
-          <span class="panel-cue" aria-hidden="true"></span>
+      <!-- ── The sheet ──────────────────────────────────────────────────────
+           One surface for place, time and everything Scout knows about both,
+           resting at three heights (peek, half, full) the way Apple Maps' own
+           card does. Peek is the place and the day's strip; half adds the date,
+           the jumps and the summary; full is the whole stack. On a wide screen
+           it docks as a sidebar instead. -->
+      <section class="dock" id="dock" data-detent="peek" aria-label="Place and time">
+        <button class="dock-grabber" id="dock-grabber" type="button" aria-label="Resize the sheet" aria-describedby="dock-detent-say">
+          <span aria-hidden="true"></span>
         </button>
-
-        <div class="panel-body" id="panel-body">
-          <p class="panel-detail" id="panel-detail"></p>
-
-          <!-- Weather. Kept at the top and kept visibly apart from the
-               arithmetic below it: everything else on this panel is computed,
-               this one thing is a forecast and can simply be wrong. -->
-          <button class="wx" id="wx" type="button" hidden>
-            <span class="wx-icon" id="wx-icon" aria-hidden="true"></span>
-            <span class="wx-text">
-              <span class="wx-label" id="wx-label"></span>
-              <span class="wx-sum" id="wx-sum"></span>
-            </span>
-            <span class="wx-stale" id="wx-stale"></span>
-          </button>
-          <p class="wx-note" id="wx-note"></p>
-          <!-- The three decks. One total cannot tell cirrus over a clear sun
-               from a grey afternoon, and they are opposite photographs. -->
-          <p class="wx-decks" id="wx-decks"></p>
-          <!-- The sky the light has to come through, which is not this one. -->
-          <p class="wx-horizon" id="wx-horizon"></p>
-
-          <div class="cards" id="cards">
-            <div class="card"><span class="card-k">Azimuth<button class="infotip" type="button" aria-label="What azimuth means" data-tip="The compass bearing to the sun from here — 0°/360° north, 90° east, 180° south, 270° west.">i</button></span><span class="card-v" id="c-azimuth">—</span></div>
-            <div class="card"><span class="card-k">Altitude<button class="infotip" type="button" aria-label="What altitude means" data-tip="How high the sun sits above the horizon — 0° is right on it, 90° is straight overhead.">i</button></span><span class="card-v" id="c-altitude">—</span></div>
-            <div class="card"><span class="card-k">Shadow<button class="infotip" type="button" aria-label="What the shadow ratio means" data-tip="A multiple of an object's own height — 1 : 2.4 means a metre of height throws 2.4 metres of shadow. Grows as the sun sinks, and stops meaning anything once it's below the horizon.">i</button></span><span class="card-v" id="c-shadow">—</span></div>
-            <div class="card"><span class="card-k">Elevation<button class="infotip" type="button" aria-label="What elevation means" data-tip="The ground's own height above sea level here, read from the elevation model — not the sun's altitude above it.">i</button></span><span class="card-v" id="c-elevation">—</span></div>
-          </div>
-
-          <ul class="events" id="events"></ul>
-
-          <details class="fold" id="fold-twilight">
-            <summary>Twilight</summary>
-            <ul class="events events-sub" id="twilight"></ul>
-          </details>
-
-          <details class="fold" id="fold-moon">
-            <summary>Moon</summary>
-            <div class="moon">
-              <svg class="moon-disc" id="moon-disc" viewBox="-13 -13 26 26" aria-hidden="true">
-                <circle cx="0" cy="0" r="12" class="moon-dark"></circle>
-                <path id="moon-lit" class="moon-lit" d=""></path>
-                <circle cx="0" cy="0" r="12" class="moon-rim"></circle>
+        <span class="sr" id="dock-detent-say">Collapsed</span>
+        <div class="sheet" id="sheet">
+          <div class="sheet-row">
+            <button class="round" id="search-button" type="button" aria-expanded="false" aria-controls="searchbox" title="Search for a place">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span class="sr">Search for a place</span>
+            </button>
+            <div class="sheet-place">
+              <p class="sheet-name" id="sheet-name">Nowhere yet</p>
+              <p class="sheet-zone" id="sheet-zone"></p>
+            </div>
+            <button class="round" id="star" type="button" aria-pressed="false" title="Keep this spot" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" id="star-mark">
+                <path d="m12 3.6 2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 10l6-.8Z"/>
               </svg>
-              <div class="moon-text">
-                <p class="moon-phase" id="moon-phase">—</p>
-                <p class="moon-line" id="moon-times">—</p>
-                <p class="moon-line" id="moon-now">—</p>
-                <p class="moon-note" id="moon-note"></p>
-              </div>
+              <span class="sr">Keep this spot</span>
+            </button>
+            <button class="round" id="radius-button" type="button" aria-expanded="false" aria-controls="radiusbox" title="Radius">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+              <span class="sr">Radius</span>
+            </button>
+          </div>
+
+          <div class="searchbox" id="searchbox" hidden>
+            <input
+              id="place"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="A city, a street, a hill"
+              aria-expanded="false"
+              aria-controls="place-results"
+              role="combobox"
+            />
+            <ul class="results" id="place-results" role="listbox" aria-label="Places" hidden></ul>
+            <!-- Shown when the field is empty, which is exactly when you are
+                 looking for somewhere you have already been. -->
+            <div class="kept" id="kept" hidden>
+              <p class="kept-head">Kept spots</p>
+              <ul class="results" id="kept-list" aria-label="Kept spots"></ul>
             </div>
-          </details>
-
-          <!-- ── Tide ──────────────────────────────────────────────────────
-               Issue #71: none of the apps Scout was benchmarked against join
-               tide state with light, and it matters for seascape and
-               long-exposure work — golden hour alone cannot say whether the
-               rock or sand a low tide would expose is actually dry then.
-               This repo has no coastline dataset, so it is gated on the one
-               thing that isn't invented: whether WorldTides can find a real
-               harmonic station within `tide.ts`'s MAX_STATION_DISTANCE_KM.
-               Hidden by default — shown only once that check comes back
-               coastal, or honestly blocked on a missing API key. See
-               `tide-panel.ts`'s header for the three states in full. -->
-          <details class="fold" id="fold-tide" hidden>
-            <summary>Tide</summary>
-            <div class="tide-strip" id="tide-strip" hidden></div>
-            <ul class="events events-sub" id="tide-events"></ul>
-            <p class="tide-note" id="tide-note"></p>
-          </details>
-
-          <!-- The core is the one subject here whose answer is usually "no":
-               it has to be above the horizon, the sky has to be astronomically
-               dark and the moon has to be down, all at once. Each line is one
-               of those conditions, so a refusal says which one failed. -->
-          <details class="fold" id="fold-core">
-            <summary>Milky Way core</summary>
-            <p class="core-line" id="core-times">—</p>
-            <p class="core-line" id="core-window">—</p>
-            <p class="core-note" id="core-note"></p>
-            <!-- Where the core falls in the picture, and how long the shutter
-                 can stay open before the stars stop being points. The framing
-                 needs an aim, so it appears only once the frame layer is on —
-                 asserting one from a bearing nobody chose is the fabrication
-                 `lighting.ts` refuses for a photograph. The shutter needs only
-                 the lens, so it is always offered. -->
-            <p class="core-line" id="core-frame"></p>
-            <p class="core-note" id="core-extent"></p>
-            <p class="core-note" id="core-exposure"></p>
-            <!-- Issue #47. Optional and quiet about it: no forecast this far
-                 out, no server behind the published build, or 7Timer simply
-                 not answering all mean the same thing here — nothing to add,
-                 so nothing is shown. -->
-            <p class="core-note" id="core-seeing" hidden></p>
-            <!-- Only meaningful once the star layer has something to name —
-                 hidden the rest of the time rather than printing "—", which
-                 would read as a measurement that came back empty. -->
-            <p class="core-note" id="core-stars-note" hidden></p>
-            <p class="core-caveat">Light pollution is not modelled.</p>
-            <p class="core-caveat">Stars to magnitude 4, dimmed for altitude and moonlight but not for cloud. Constellation lines are computed from the catalogue, not the IAU's own figures.</p>
-          </details>
-
-          <!-- Issue #69. Kp, Bz and the solar wind, joined with the same
-               darkness and moon gates the Milky Way core above uses, plus a
-               cloud reading and the oval's own reach for tonight's Kp. This
-               is always a reading of *right now* — NOAA's feeds here are
-               observations, not a forecast, so unlike everything else in
-               this panel it does not follow the slider or the date picker. -->
-          <details class="fold" id="fold-aurora">
-            <summary>Aurora</summary>
-            <p class="core-line" id="aurora-line">—</p>
-            <p class="core-note" id="aurora-note"></p>
-            <p class="core-note" id="aurora-space"></p>
-            <p class="core-note" id="aurora-stale"></p>
-            <button class="ghost" id="aurora-refresh" type="button">Check now</button>
-            <p class="core-caveat">A real-time reading, not a forecast — refresh before heading out.</p>
-            <p class="core-caveat">Oval reach from NOAA SWPC's own published Kp-to-latitude guidance, an average rather than a prediction for any one night.</p>
-          </details>
-
-          <!-- The per-spot answer: not where the shade is, but when the light
-               gets here. The thing every other readout on the page is for. -->
-          <div class="spot" id="spot">
-            <p class="spot-line" id="spot-windows">—</p>
-            <p class="spot-next" id="spot-next"></p>
-            <p class="spot-basis" id="spot-basis"></p>
           </div>
 
-          <!-- Where the sun falls relative to the picture, rather than
-               relative to north. -->
-          <div class="framing" id="framing" hidden>
-            <p class="framing-head" id="framing-lens">—</p>
-            <p class="framing-line" id="framing-sun">—</p>
-            <!-- The join, for the pin: the aim above crossed with whether the
-                 light actually gets here. Only meaningful once an aim exists,
-                 which is why it lives with the lens and not with the spot. -->
-            <p class="framing-line framing-light" id="framing-light"></p>
-            <p class="framing-line framing-moon" id="framing-moon"></p>
-            <p class="framing-note" id="framing-width"></p>
+          <div class="radiusbox" id="radiusbox" hidden>
+            <input id="radius" type="range" min="1" max="50" step="1" value="10" aria-label="Radius" />
+            <output class="radius-out" id="radius-out" for="radius">10 km</output>
           </div>
+        </div>
 
-          <!-- ── Best right now ────────────────────────────────────────────
-               Every hotspot near the pin, ordered by what the light is doing
-               at the minute on the slider. The order is four stated criteria
-               in a stated priority — lit, then light remaining, then how many
-               people photographed it, then how far — and never a score: a
-               number nobody can reproduce is exactly what this project
-               refuses to publish about sunsets, and it would be no better
-               here. Each row prints the facts it was ordered by. -->
-          <div class="best" id="best" hidden>
-            <p class="best-head">Best right now</p>
-            <ol class="best-list" id="best-list"></ol>
-            <p class="best-note" id="best-note"></p>
+        <!-- ── Time, right edge ────────────────────────────────────────────── -->
+        <div class="edge edge-right" id="edge-time" hidden>
+          <button
+            class="chip chip-strong"
+            id="chip-play"
+            type="button"
+            aria-pressed="false"
+            title="Run the day (space)"
+          >
+            <span id="play-label">Play</span>
+          </button>
+          <button
+            class="chip chip-strong"
+            id="chip-now"
+            type="button"
+            aria-pressed="false"
+            title="Follow the clock (n)"
+          >Now</button>
+          <span class="chip chip-clock" id="chip-clock">--:--</span>
+          <span class="chip chip-phase" id="chip-phase"></span>
+        </div>
+
+        <div class="scout-time" id="timebar" hidden>
+          <input
+            class="scout-slider"
+            id="time"
+            type="range"
+            min="0"
+            max="1440"
+            step="1"
+            value="720"
+            aria-label="Time of day"
+          />
+          <div class="jumps" id="jumps">
+            <button type="button" data-jump="civilDawn">Dawn</button>
+            <button type="button" data-jump="sunrise">Sunrise</button>
+            <button type="button" data-jump="goldenMorning">Golden</button>
+            <button type="button" data-jump="solarNoon">Noon</button>
+            <button type="button" data-jump="goldenEvening">Golden</button>
+            <button type="button" data-jump="sunset">Sunset</button>
+            <button type="button" data-jump="civilDusk">Dusk</button>
           </div>
+        </div>
 
-          <!-- The ground between here and there, and whether it is in the way. -->
-          <div class="sightline" id="sightline" hidden>
-            <svg class="sight-chart" id="sight-chart" viewBox="0 0 320 84" preserveAspectRatio="none" aria-hidden="true">
-              <path class="sight-ground" id="sight-ground" d="" />
-              <path class="sight-ray" id="sight-ray" d="" />
-              <circle class="sight-block" id="sight-block" r="3" cx="-10" cy="-10" />
-            </svg>
-            <p class="sight-line" id="sight-verdict">—</p>
-            <p class="sight-note" id="sight-detail"></p>
+        <!-- ── Date, left edge ─────────────────────────────────────────────── -->
+        <div class="edge edge-left" id="edge-date" hidden>
+          <button class="chip chip-strong" id="chip-today" type="button">Today</button>
+          <div class="stepper">
+            <button class="chip chip-step" id="day-back" type="button" aria-label="A day earlier">−</button>
+            <button class="chip chip-date" id="chip-date" type="button">—</button>
+            <button class="chip chip-step" id="day-forward" type="button" aria-label="A day later">+</button>
           </div>
+        </div>
 
-          <!-- ── The alignment finder ──────────────────────────────────────
-               The one question this page could answer for a moment but never
-               for a year: not "where is the sun now" but "on what dates does
-               it go behind *that*". The bearing is the sightline ring's, so it
-               is something pointed at rather than a number typed; the height
-               it has to reach is the real skyline on that bearing rather than
-               the flat horizon every other planner matches against. -->
-          <details class="fold" id="fold-align">
-            <summary>Behind a target</summary>
-            <div class="align">
-              <div class="align-controls">
-                <div class="seg" id="align-body">
-                  <button type="button" data-body="sun" class="on">Sun</button>
-                  <button type="button" data-body="moon">Moon</button>
+        <div class="dock-body" id="dock-body">
+          <!-- ── The panel ──────────────────────────────────────────────────────
+               Collapsed to a single line by default, because the map is the point
+               and this used to cover a quarter of it. Hovering — or tapping, where
+               there is no hover — opens the whole stack. -->
+          <section class="panel" id="panel" hidden>
+            <button
+              class="panel-head"
+              id="panel-head"
+              type="button"
+              aria-expanded="false"
+              aria-controls="panel-body"
+            >
+              <span class="panel-name" id="panel-name"></span>
+              <span class="panel-glance" id="panel-glance"></span>
+              <span class="panel-cue" aria-hidden="true"></span>
+            </button>
+
+            <div class="panel-body" id="panel-body">
+              <p class="panel-detail" id="panel-detail"></p>
+
+              <!-- Weather. Kept at the top and kept visibly apart from the
+                   arithmetic below it: everything else on this panel is computed,
+                   this one thing is a forecast and can simply be wrong. -->
+              <button class="wx" id="wx" type="button" hidden>
+                <span class="wx-icon" id="wx-icon" aria-hidden="true"></span>
+                <span class="wx-text">
+                  <span class="wx-label" id="wx-label"></span>
+                  <span class="wx-sum" id="wx-sum"></span>
+                </span>
+                <span class="wx-stale" id="wx-stale"></span>
+              </button>
+              <p class="wx-note" id="wx-note"></p>
+              <!-- The three decks. One total cannot tell cirrus over a clear sun
+                   from a grey afternoon, and they are opposite photographs. -->
+              <p class="wx-decks" id="wx-decks"></p>
+              <!-- The sky the light has to come through, which is not this one. -->
+              <p class="wx-horizon" id="wx-horizon"></p>
+
+              <div class="cards" id="cards">
+                <div class="card"><span class="card-k">Azimuth<button class="infotip" type="button" aria-label="What azimuth means" data-tip="The compass bearing to the sun from here — 0°/360° north, 90° east, 180° south, 270° west.">i</button></span><span class="card-v" id="c-azimuth">—</span></div>
+                <div class="card"><span class="card-k">Altitude<button class="infotip" type="button" aria-label="What altitude means" data-tip="How high the sun sits above the horizon — 0° is right on it, 90° is straight overhead.">i</button></span><span class="card-v" id="c-altitude">—</span></div>
+                <div class="card"><span class="card-k">Shadow<button class="infotip" type="button" aria-label="What the shadow ratio means" data-tip="A multiple of an object's own height — 1 : 2.4 means a metre of height throws 2.4 metres of shadow. Grows as the sun sinks, and stops meaning anything once it's below the horizon.">i</button></span><span class="card-v" id="c-shadow">—</span></div>
+                <div class="card"><span class="card-k">Elevation<button class="infotip" type="button" aria-label="What elevation means" data-tip="The ground's own height above sea level here, read from the elevation model — not the sun's altitude above it.">i</button></span><span class="card-v" id="c-elevation">—</span></div>
+              </div>
+
+              <ul class="events" id="events"></ul>
+
+              <details class="fold" id="fold-twilight">
+                <summary>Twilight</summary>
+                <ul class="events events-sub" id="twilight"></ul>
+              </details>
+
+              <details class="fold" id="fold-moon">
+                <summary>Moon</summary>
+                <div class="moon">
+                  <svg class="moon-disc" id="moon-disc" viewBox="-13 -13 26 26" aria-hidden="true">
+                    <circle cx="0" cy="0" r="12" class="moon-dark"></circle>
+                    <path id="moon-lit" class="moon-lit" d=""></path>
+                    <circle cx="0" cy="0" r="12" class="moon-rim"></circle>
+                  </svg>
+                  <div class="moon-text">
+                    <p class="moon-phase" id="moon-phase">—</p>
+                    <p class="moon-line" id="moon-times">—</p>
+                    <p class="moon-line" id="moon-now">—</p>
+                    <p class="moon-note" id="moon-note"></p>
+                  </div>
                 </div>
-                <button class="ghost" id="align-run" type="button">Find dates</button>
-                <button class="ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">Add to calendar</button>
+              </details>
+
+              <!-- ── Tide ──────────────────────────────────────────────────────
+                   Issue #71: none of the apps Scout was benchmarked against join
+                   tide state with light, and it matters for seascape and
+                   long-exposure work — golden hour alone cannot say whether the
+                   rock or sand a low tide would expose is actually dry then.
+                   This repo has no coastline dataset, so it is gated on the one
+                   thing that isn't invented: whether WorldTides can find a real
+                   harmonic station within `tide.ts`'s MAX_STATION_DISTANCE_KM.
+                   Hidden by default — shown only once that check comes back
+                   coastal, or honestly blocked on a missing API key. See
+                   `tide-panel.ts`'s header for the three states in full. -->
+              <details class="fold" id="fold-tide" hidden>
+                <summary>Tide</summary>
+                <div class="tide-strip" id="tide-strip" hidden></div>
+                <ul class="events events-sub" id="tide-events"></ul>
+                <p class="tide-note" id="tide-note"></p>
+              </details>
+
+              <!-- The core is the one subject here whose answer is usually "no":
+                   it has to be above the horizon, the sky has to be astronomically
+                   dark and the moon has to be down, all at once. Each line is one
+                   of those conditions, so a refusal says which one failed. -->
+              <details class="fold" id="fold-core">
+                <summary>Milky Way core</summary>
+                <p class="core-line" id="core-times">—</p>
+                <p class="core-line" id="core-window">—</p>
+                <p class="core-note" id="core-note"></p>
+                <!-- Where the core falls in the picture, and how long the shutter
+                     can stay open before the stars stop being points. The framing
+                     needs an aim, so it appears only once the frame layer is on —
+                     asserting one from a bearing nobody chose is the fabrication
+                     `lighting.ts` refuses for a photograph. The shutter needs only
+                     the lens, so it is always offered. -->
+                <p class="core-line" id="core-frame"></p>
+                <p class="core-note" id="core-extent"></p>
+                <p class="core-note" id="core-exposure"></p>
+                <!-- Issue #47. Optional and quiet about it: no forecast this far
+                     out, no server behind the published build, or 7Timer simply
+                     not answering all mean the same thing here — nothing to add,
+                     so nothing is shown. -->
+                <p class="core-note" id="core-seeing" hidden></p>
+                <!-- Only meaningful once the star layer has something to name —
+                     hidden the rest of the time rather than printing "—", which
+                     would read as a measurement that came back empty. -->
+                <p class="core-note" id="core-stars-note" hidden></p>
+                <p class="core-caveat">Light pollution is not modelled.</p>
+                <p class="core-caveat">Stars to magnitude 4, dimmed for altitude and moonlight but not for cloud. Constellation lines are computed from the catalogue, not the IAU's own figures.</p>
+              </details>
+
+              <!-- Issue #69. Kp, Bz and the solar wind, joined with the same
+                   darkness and moon gates the Milky Way core above uses, plus a
+                   cloud reading and the oval's own reach for tonight's Kp. This
+                   is always a reading of *right now* — NOAA's feeds here are
+                   observations, not a forecast, so unlike everything else in
+                   this panel it does not follow the slider or the date picker. -->
+              <details class="fold" id="fold-aurora">
+                <summary>Aurora</summary>
+                <p class="core-line" id="aurora-line">—</p>
+                <p class="core-note" id="aurora-note"></p>
+                <p class="core-note" id="aurora-space"></p>
+                <p class="core-note" id="aurora-stale"></p>
+                <button class="ghost" id="aurora-refresh" type="button">Check now</button>
+                <p class="core-caveat">A real-time reading, not a forecast — refresh before heading out.</p>
+                <p class="core-caveat">Oval reach from NOAA SWPC's own published Kp-to-latitude guidance, an average rather than a prediction for any one night.</p>
+              </details>
+
+              <!-- The per-spot answer: not where the shade is, but when the light
+                   gets here. The thing every other readout on the page is for. -->
+              <div class="spot" id="spot">
+                <p class="spot-line" id="spot-windows">—</p>
+                <p class="spot-next" id="spot-next"></p>
+                <p class="spot-basis" id="spot-basis"></p>
               </div>
-              <p class="align-basis" id="align-basis">—</p>
-              <ol class="align-list" id="align-list"></ol>
-              <p class="align-note" id="align-note"></p>
-              <!-- Which fraction of the moon is worth going out for is the
-                   reader's call, so this starts at nothing hidden: the filter
-                   can only ever be something they turned on. -->
-              <label class="align-phase" id="align-phase-row" hidden>
-                <span>Moon at least <output id="align-phase-out">0%</output> lit</span>
-                <input id="align-phase" type="range" min="0" max="100" step="5" value="0" />
-              </label>
+
+              <!-- Where the sun falls relative to the picture, rather than
+                   relative to north. -->
+              <div class="framing" id="framing" hidden>
+                <p class="framing-head" id="framing-lens">—</p>
+                <p class="framing-line" id="framing-sun">—</p>
+                <!-- The join, for the pin: the aim above crossed with whether the
+                     light actually gets here. Only meaningful once an aim exists,
+                     which is why it lives with the lens and not with the spot. -->
+                <p class="framing-line framing-light" id="framing-light"></p>
+                <p class="framing-line framing-moon" id="framing-moon"></p>
+                <p class="framing-note" id="framing-width"></p>
+              </div>
+
+              <!-- ── Best right now ────────────────────────────────────────────
+                   Every hotspot near the pin, ordered by what the light is doing
+                   at the minute on the slider. The order is four stated criteria
+                   in a stated priority — lit, then light remaining, then how many
+                   people photographed it, then how far — and never a score: a
+                   number nobody can reproduce is exactly what this project
+                   refuses to publish about sunsets, and it would be no better
+                   here. Each row prints the facts it was ordered by. -->
+              <div class="best" id="best" hidden>
+                <p class="best-head">Best right now</p>
+                <ol class="best-list" id="best-list"></ol>
+                <p class="best-note" id="best-note"></p>
+              </div>
+
+              <!-- The ground between here and there, and whether it is in the way. -->
+              <div class="sightline" id="sightline" hidden>
+                <svg class="sight-chart" id="sight-chart" viewBox="0 0 320 84" preserveAspectRatio="none" aria-hidden="true">
+                  <path class="sight-ground" id="sight-ground" d="" />
+                  <path class="sight-ray" id="sight-ray" d="" />
+                  <circle class="sight-block" id="sight-block" r="3" cx="-10" cy="-10" />
+                </svg>
+                <p class="sight-line" id="sight-verdict">—</p>
+                <p class="sight-note" id="sight-detail"></p>
+              </div>
+
+              <!-- ── The alignment finder ──────────────────────────────────────
+                   The one question this page could answer for a moment but never
+                   for a year: not "where is the sun now" but "on what dates does
+                   it go behind *that*". The bearing is the sightline ring's, so it
+                   is something pointed at rather than a number typed; the height
+                   it has to reach is the real skyline on that bearing rather than
+                   the flat horizon every other planner matches against. -->
+              <details class="fold" id="fold-align">
+                <summary>Behind a target</summary>
+                <div class="align">
+                  <div class="align-controls">
+                    <div class="seg" id="align-body">
+                      <button type="button" data-body="sun" class="on">Sun</button>
+                      <button type="button" data-body="moon">Moon</button>
+                    </div>
+                    <button class="ghost" id="align-run" type="button">Find dates</button>
+                    <button class="ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">Add to calendar</button>
+                  </div>
+                  <p class="align-basis" id="align-basis">—</p>
+                  <ol class="align-list" id="align-list"></ol>
+                  <p class="align-note" id="align-note"></p>
+                  <!-- Which fraction of the moon is worth going out for is the
+                       reader's call, so this starts at nothing hidden: the filter
+                       can only ever be something they turned on. -->
+                  <label class="align-phase" id="align-phase-row" hidden>
+                    <span>Moon at least <output id="align-phase-out">0%</output> lit</span>
+                    <input id="align-phase" type="range" min="0" max="100" step="5" value="0" />
+                  </label>
+                </div>
+              </details>
+
+              <!-- ── Go tonight ────────────────────────────────────────────────
+                   Issue #64: `alignment.ts` (which dates a kept spot's bearing
+                   meets the sun or moon) and `weather.ts`'s horizon read (is the
+                   sky actually open) never looked at each other until now. One
+                   line: which kept spot, if any, is both due soon and currently
+                   forecast clear. -->
+              <details class="fold" id="fold-tonight">
+                <summary>Go tonight</summary>
+                <div class="tonight">
+                  <button class="ghost" id="tonight-run" type="button">Check tonight</button>
+                  <div class="tonight-pick" id="tonight-pick"></div>
+                  <p id="tonight-note"></p>
+                </div>
+              </details>
+
+              <!-- ── Missing colours ──────────────────────────────────────────
+                   The archive's own gap analysis (issue #59), inverted: instead
+                   of checking a place and reading off the light, this starts
+                   from a colour the archive has never shot and asks the sun
+                   engine when *here* would produce it. The gap list itself is
+                   baked at build time from the manifest — see `gap-data` below
+                   — only the search against the place on screen runs live. -->
+              <details class="fold" id="fold-gaps">
+                <summary>Missing colours</summary>
+                <div class="gaps">
+                  <div class="gap-controls">
+                    <button class="ghost" id="gap-run" type="button">Find opportunities</button>
+                    <!-- Issue #67: weighs the dates above against this week's
+                         forecast and re-ranks by confirmed-soonest. A separate
+                         press because it is a separate fetch. -->
+                    <button class="ghost" id="gap-weather" type="button" disabled>Check weather</button>
+                  </div>
+                  <ol class="gap-list" id="gap-list"></ol>
+                  <p id="gap-note"></p>
+                </div>
+              </details>
+
+              <dl class="facts">
+                <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
+                <div><dt>Radius</dt><dd id="f-radius">—</dd></div>
+                <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="A worked example of the Shadow ratio above, in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
+                <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow this minute. Near the horizon a whole city can be in range, so this is capped at the 4,000 tallest and says so rather than passing triage off as complete.">i</button></dt><dd id="f-buildings">—</dd></div>
+                <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin itself is in the shadow of a hill or ridge, from the same elevation data as the map's terrain shading — with the grid size it was read at.">i</button></dt><dd id="f-landform">—</dd></div>
+                <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Peer-reviewed photographs from Wikimedia Commons, plus Flickr when a key is configured, clustered into hotspots near this spot — not every photo ever taken here. A photograph by someone on the curated notable-photographer list is marked and ranked above the rest.">i</button></dt><dd id="f-photos">—</dd></div>
+                <div>
+                  <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The sunlight's own colour and contrast this minute — kelvin, and stops of shadow fill. Modelled for a clear sky; cloud is not an input to this figure, see the weather note above for that.">i</button></dt>
+                  <dd id="f-light">
+                    <!-- The colour, as a colour. A number in kelvin is a fact about
+                         the light that a photographer has to translate; the swatch
+                         is the same fact, already translated. -->
+                    <span class="light-swatch" id="light-swatch" aria-hidden="true"></span>
+                    <span id="light-text">—</span>
+                  </dd>
+                </div>
+              </dl>
+
+              <!-- The day's light as one picture. The row above is the light at
+                   one minute, which is what you set a camera by; this is the shape
+                   of the whole day, which is what you plan by — and both come out
+                   of the same spectral computation, so they cannot disagree. -->
+              <div class="lightday" id="lightday" hidden>
+                <div class="lightday-strip" id="lightday-strip"></div>
+                <p class="lightday-note" id="lightday-note"></p>
+              </div>
+
+              <!-- ── The notebook ───────────────────────────────────────────────
+                   Only for a kept spot. A place you are passing through does not
+                   need a note, and a note with nowhere to live would be lost the
+                   moment the pin moved — so the star is what opens this. -->
+              <details class="fold" id="fold-note" hidden>
+                <summary>Notebook</summary>
+                <div class="note">
+                  <textarea
+                    class="note-text"
+                    id="note-text"
+                    rows="3"
+                    maxlength="600"
+                    placeholder="What is worth remembering about this spot?"
+                    aria-label="Note about this spot"
+                  ></textarea>
+                  <p class="note-kept" id="note-kept"></p>
+                  <ul class="note-photos" id="note-photos"></ul>
+                  <div class="note-add">
+                    <input
+                      class="note-url"
+                      id="note-url"
+                      type="url"
+                      inputmode="url"
+                      placeholder="Link a reference photograph"
+                      aria-label="Reference photograph URL"
+                    />
+                    <button class="ghost" id="note-add" type="button">Add</button>
+                  </div>
+                  <p class="note-say" id="note-say"></p>
+
+                  <!-- Issue #66. Crowd-verified light: a photo — yours, or one
+                       that arrived on a shared link from someone else — claimed
+                       for a specific instant, and cross-checked against Scout's
+                       own computed geometry for that same moment rather than
+                       taken on faith. Opt-in and self-contained: nothing here
+                       touches a server, a proof only travels because a link
+                       carrying it was actually sent. -->
+                  <ul class="note-photos" id="proof-list"></ul>
+                  <div class="note-add">
+                    <input
+                      class="note-url"
+                      id="proof-url"
+                      type="url"
+                      inputmode="url"
+                      placeholder="Link the photo"
+                      aria-label="Proof photo URL"
+                    />
+                    <input
+                      class="note-url proof-when"
+                      id="proof-when"
+                      type="datetime-local"
+                      aria-label="When it was taken"
+                    />
+                  </div>
+                  <div class="note-add">
+                    <input
+                      class="note-url"
+                      id="proof-claim"
+                      type="text"
+                      maxlength="200"
+                      placeholder="What does it show? e.g. “sun clears the ridge here”"
+                      aria-label="What this photo is evidence of"
+                    />
+                    <button class="ghost" id="proof-add" type="button">Add proof</button>
+                  </div>
+                  <p class="note-say" id="proof-say"></p>
+                  <button class="wide" id="proof-copy-link" type="button">Copy a link with these proofs</button>
+
+                  <!-- Issue #45. The note above is written once, when the place is
+                       kept; this is written every time you actually go, and is the
+                       only part of the notebook that can say whether a return trip
+                       was any good. -->
+                  <p class="note-kept" id="visit-match" hidden></p>
+                  <ul class="visit-list" id="visit-list"></ul>
+
+                  <!-- Issue #75. Follow-up to #58's retroactive light
+                       reconstruction: instead of typing a past photo's date and
+                       coordinate by hand, pick it here and let its own EXIF
+                       timestamp — and GPS, on the rare frame that carries one —
+                       drive the slider straight to it. Same picker shape as
+                       Style Match's own reference strip. -->
+                  <div class="visit-photo" id="visit-photo">
+                    <button type="button" class="mx-addref-toggle" id="visit-photo-toggle" aria-expanded="false" hidden>
+                      + Attach an archive photo
+                    </button>
+                    <ul class="mx-addref-strip" id="visit-photo-strip" hidden></ul>
+                    <p class="visit-photo-picked" id="visit-photo-picked" hidden></p>
+                  </div>
+
+                  <div class="note-add">
+                    <input
+                      class="note-url"
+                      id="visit-outcome"
+                      type="text"
+                      maxlength="600"
+                      placeholder="What actually happened? (optional)"
+                      aria-label="What happened on this visit"
+                    />
+                    <button class="ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider — set it to a past photo's own capture time to log a reconstruction instead of today">Log this visit</button>
+                  </div>
+                  <p class="note-say" id="visit-say"></p>
+
+                  <!-- Issue #50. A drone survey or LiDAR tile for this one spot,
+                       layered over the free global DEM wherever it covers the
+                       point — sharper ground for the vantage point actually worth
+                       surveying, without touching the terrain anywhere else. -->
+                  <p class="note-kept" id="dem-kept"></p>
+                  <ul class="visit-list" id="dem-list"></ul>
+                  <div class="note-add">
+                    <input
+                      class="note-url"
+                      id="dem-file"
+                      type="file"
+                      accept=".tif,.tiff,image/tiff"
+                      aria-label="Upload a GeoTIFF elevation survey"
+                    />
+                    <button class="ghost" id="dem-add" type="button">Upload</button>
+                  </div>
+                  <p class="note-say" id="dem-say"></p>
+                </div>
+              </details>
+
+              <!-- ── The day plan ──────────────────────────────────────────────
+                   Every other answer on this page is about one place. A day of
+                   shooting is several, and the two constraints pull against each
+                   other: each spot's light is fixed by the sun, the travel between
+                   them by geography. Pick two to six kept spots and the solver in
+                   `itinerary.ts` orders them exhaustively — reporting whatever it
+                   could not fit rather than quietly leaving it out. -->
+              <details class="fold" id="fold-plan" hidden>
+                <summary>Day plan</summary>
+                <div class="plan">
+                  <p class="plan-help" id="plan-help">Choose two to six kept spots.</p>
+                  <ul class="plan-pick" id="plan-pick"></ul>
+                  <ol class="plan-stops" id="plan-stops"></ol>
+                  <p class="plan-total" id="plan-total"></p>
+                  <ul class="plan-trouble" id="plan-trouble"></ul>
+                  <p class="plan-assume" id="plan-assume"></p>
+                  <button class="ghost" id="plan-copy" type="button" hidden>Copy the day</button>
+                  <p class="note-say" id="plan-say"></p>
+                </div>
+              </details>
             </div>
-          </details>
-
-          <!-- ── Go tonight ────────────────────────────────────────────────
-               Issue #64: `alignment.ts` (which dates a kept spot's bearing
-               meets the sun or moon) and `weather.ts`'s horizon read (is the
-               sky actually open) never looked at each other until now. One
-               line: which kept spot, if any, is both due soon and currently
-               forecast clear. -->
-          <details class="fold" id="fold-tonight">
-            <summary>Go tonight</summary>
-            <div class="tonight">
-              <button class="ghost" id="tonight-run" type="button">Check tonight</button>
-              <div class="tonight-pick" id="tonight-pick"></div>
-              <p id="tonight-note"></p>
-            </div>
-          </details>
-
-          <!-- ── Missing colours ──────────────────────────────────────────
-               The archive's own gap analysis (issue #59), inverted: instead
-               of checking a place and reading off the light, this starts
-               from a colour the archive has never shot and asks the sun
-               engine when *here* would produce it. The gap list itself is
-               baked at build time from the manifest — see `gap-data` below
-               — only the search against the place on screen runs live. -->
-          <details class="fold" id="fold-gaps">
-            <summary>Missing colours</summary>
-            <div class="gaps">
-              <div class="gap-controls">
-                <button class="ghost" id="gap-run" type="button">Find opportunities</button>
-                <!-- Issue #67: weighs the dates above against this week's
-                     forecast and re-ranks by confirmed-soonest. A separate
-                     press because it is a separate fetch. -->
-                <button class="ghost" id="gap-weather" type="button" disabled>Check weather</button>
-              </div>
-              <ol class="gap-list" id="gap-list"></ol>
-              <p id="gap-note"></p>
-            </div>
-          </details>
-
-          <dl class="facts">
-            <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
-            <div><dt>Radius</dt><dd id="f-radius">—</dd></div>
-            <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="A worked example of the Shadow ratio above, in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
-            <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow this minute. Near the horizon a whole city can be in range, so this is capped at the 4,000 tallest and says so rather than passing triage off as complete.">i</button></dt><dd id="f-buildings">—</dd></div>
-            <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin itself is in the shadow of a hill or ridge, from the same elevation data as the map's terrain shading — with the grid size it was read at.">i</button></dt><dd id="f-landform">—</dd></div>
-            <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Peer-reviewed photographs from Wikimedia Commons, plus Flickr when a key is configured, clustered into hotspots near this spot — not every photo ever taken here. A photograph by someone on the curated notable-photographer list is marked and ranked above the rest.">i</button></dt><dd id="f-photos">—</dd></div>
-            <div>
-              <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The sunlight's own colour and contrast this minute — kelvin, and stops of shadow fill. Modelled for a clear sky; cloud is not an input to this figure, see the weather note above for that.">i</button></dt>
-              <dd id="f-light">
-                <!-- The colour, as a colour. A number in kelvin is a fact about
-                     the light that a photographer has to translate; the swatch
-                     is the same fact, already translated. -->
-                <span class="light-swatch" id="light-swatch" aria-hidden="true"></span>
-                <span id="light-text">—</span>
-              </dd>
-            </div>
-          </dl>
-
-          <!-- The day's light as one picture. The row above is the light at
-               one minute, which is what you set a camera by; this is the shape
-               of the whole day, which is what you plan by — and both come out
-               of the same spectral computation, so they cannot disagree. -->
-          <div class="lightday" id="lightday" hidden>
-            <div class="lightday-strip" id="lightday-strip"></div>
-            <p class="lightday-note" id="lightday-note"></p>
-          </div>
-
-          <!-- ── The notebook ───────────────────────────────────────────────
-               Only for a kept spot. A place you are passing through does not
-               need a note, and a note with nowhere to live would be lost the
-               moment the pin moved — so the star is what opens this. -->
-          <details class="fold" id="fold-note" hidden>
-            <summary>Notebook</summary>
-            <div class="note">
-              <textarea
-                class="note-text"
-                id="note-text"
-                rows="3"
-                maxlength="600"
-                placeholder="What is worth remembering about this spot?"
-                aria-label="Note about this spot"
-              ></textarea>
-              <p class="note-kept" id="note-kept"></p>
-              <ul class="note-photos" id="note-photos"></ul>
-              <div class="note-add">
-                <input
-                  class="note-url"
-                  id="note-url"
-                  type="url"
-                  inputmode="url"
-                  placeholder="Link a reference photograph"
-                  aria-label="Reference photograph URL"
-                />
-                <button class="ghost" id="note-add" type="button">Add</button>
-              </div>
-              <p class="note-say" id="note-say"></p>
-
-              <!-- Issue #66. Crowd-verified light: a photo — yours, or one
-                   that arrived on a shared link from someone else — claimed
-                   for a specific instant, and cross-checked against Scout's
-                   own computed geometry for that same moment rather than
-                   taken on faith. Opt-in and self-contained: nothing here
-                   touches a server, a proof only travels because a link
-                   carrying it was actually sent. -->
-              <ul class="note-photos" id="proof-list"></ul>
-              <div class="note-add">
-                <input
-                  class="note-url"
-                  id="proof-url"
-                  type="url"
-                  inputmode="url"
-                  placeholder="Link the photo"
-                  aria-label="Proof photo URL"
-                />
-                <input
-                  class="note-url proof-when"
-                  id="proof-when"
-                  type="datetime-local"
-                  aria-label="When it was taken"
-                />
-              </div>
-              <div class="note-add">
-                <input
-                  class="note-url"
-                  id="proof-claim"
-                  type="text"
-                  maxlength="200"
-                  placeholder="What does it show? e.g. “sun clears the ridge here”"
-                  aria-label="What this photo is evidence of"
-                />
-                <button class="ghost" id="proof-add" type="button">Add proof</button>
-              </div>
-              <p class="note-say" id="proof-say"></p>
-              <button class="wide" id="proof-copy-link" type="button">Copy a link with these proofs</button>
-
-              <!-- Issue #45. The note above is written once, when the place is
-                   kept; this is written every time you actually go, and is the
-                   only part of the notebook that can say whether a return trip
-                   was any good. -->
-              <p class="note-kept" id="visit-match" hidden></p>
-              <ul class="visit-list" id="visit-list"></ul>
-
-              <!-- Issue #75. Follow-up to #58's retroactive light
-                   reconstruction: instead of typing a past photo's date and
-                   coordinate by hand, pick it here and let its own EXIF
-                   timestamp — and GPS, on the rare frame that carries one —
-                   drive the slider straight to it. Same picker shape as
-                   Style Match's own reference strip. -->
-              <div class="visit-photo" id="visit-photo">
-                <button type="button" class="mx-addref-toggle" id="visit-photo-toggle" aria-expanded="false" hidden>
-                  + Attach an archive photo
-                </button>
-                <ul class="mx-addref-strip" id="visit-photo-strip" hidden></ul>
-                <p class="visit-photo-picked" id="visit-photo-picked" hidden></p>
-              </div>
-
-              <div class="note-add">
-                <input
-                  class="note-url"
-                  id="visit-outcome"
-                  type="text"
-                  maxlength="600"
-                  placeholder="What actually happened? (optional)"
-                  aria-label="What happened on this visit"
-                />
-                <button class="ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider — set it to a past photo's own capture time to log a reconstruction instead of today">Log this visit</button>
-              </div>
-              <p class="note-say" id="visit-say"></p>
-
-              <!-- Issue #50. A drone survey or LiDAR tile for this one spot,
-                   layered over the free global DEM wherever it covers the
-                   point — sharper ground for the vantage point actually worth
-                   surveying, without touching the terrain anywhere else. -->
-              <p class="note-kept" id="dem-kept"></p>
-              <ul class="visit-list" id="dem-list"></ul>
-              <div class="note-add">
-                <input
-                  class="note-url"
-                  id="dem-file"
-                  type="file"
-                  accept=".tif,.tiff,image/tiff"
-                  aria-label="Upload a GeoTIFF elevation survey"
-                />
-                <button class="ghost" id="dem-add" type="button">Upload</button>
-              </div>
-              <p class="note-say" id="dem-say"></p>
-            </div>
-          </details>
-
-          <!-- ── The day plan ──────────────────────────────────────────────
-               Every other answer on this page is about one place. A day of
-               shooting is several, and the two constraints pull against each
-               other: each spot's light is fixed by the sun, the travel between
-               them by geography. Pick two to six kept spots and the solver in
-               `itinerary.ts` orders them exhaustively — reporting whatever it
-               could not fit rather than quietly leaving it out. -->
-          <details class="fold" id="fold-plan" hidden>
-            <summary>Day plan</summary>
-            <div class="plan">
-              <p class="plan-help" id="plan-help">Choose two to six kept spots.</p>
-              <ul class="plan-pick" id="plan-pick"></ul>
-              <ol class="plan-stops" id="plan-stops"></ol>
-              <p class="plan-total" id="plan-total"></p>
-              <ul class="plan-trouble" id="plan-trouble"></ul>
-              <p class="plan-assume" id="plan-assume"></p>
-              <button class="ghost" id="plan-copy" type="button" hidden>Copy the day</button>
-              <p class="note-say" id="plan-say"></p>
-            </div>
-          </details>
+          </section>
         </div>
       </section>
-
-      <!-- ── Date, left edge ─────────────────────────────────────────────── -->
-      <div class="edge edge-left" id="edge-date" hidden>
-        <button class="chip chip-strong" id="chip-today" type="button">Today</button>
-        <div class="stepper">
-          <button class="chip chip-step" id="day-back" type="button" aria-label="A day earlier">−</button>
-          <button class="chip chip-date" id="chip-date" type="button">—</button>
-          <button class="chip chip-step" id="day-forward" type="button" aria-label="A day later">+</button>
-        </div>
-      </div>
-
-      <!-- ── Time, right edge ────────────────────────────────────────────── -->
-      <div class="edge edge-right" id="edge-time" hidden>
-        <button
-          class="chip chip-strong"
-          id="chip-play"
-          type="button"
-          aria-pressed="false"
-          title="Run the day (space)"
-        >
-          <span id="play-label">Play</span>
-        </button>
-        <button
-          class="chip chip-strong"
-          id="chip-now"
-          type="button"
-          aria-pressed="false"
-          title="Follow the clock (n)"
-        >Now</button>
-        <span class="chip chip-clock" id="chip-clock">--:--</span>
-        <span class="chip chip-phase" id="chip-phase"></span>
-      </div>
 
       <!-- ── Top right: view controls ────────────────────────────────────── -->
       <div class="tools" id="tools" hidden>
@@ -833,76 +917,6 @@ const accent = '#f0b866';
       </div>
 
       <!-- ── Bottom: place sheet, then the day ───────────────────────────── -->
-      <div class="sheet" id="sheet">
-        <div class="sheet-row">
-          <button class="round" id="search-button" type="button" aria-expanded="false" aria-controls="searchbox" title="Search for a place">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <span class="sr">Search for a place</span>
-          </button>
-          <div class="sheet-place">
-            <p class="sheet-name" id="sheet-name">Nowhere yet</p>
-            <p class="sheet-zone" id="sheet-zone"></p>
-          </div>
-          <button class="round" id="star" type="button" aria-pressed="false" title="Keep this spot" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true" id="star-mark">
-              <path d="m12 3.6 2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 10l6-.8Z"/>
-            </svg>
-            <span class="sr">Keep this spot</span>
-          </button>
-          <button class="round" id="radius-button" type="button" aria-expanded="false" aria-controls="radiusbox" title="Radius">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
-            <span class="sr">Radius</span>
-          </button>
-        </div>
-
-        <div class="searchbox" id="searchbox" hidden>
-          <input
-            id="place"
-            type="search"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="A city, a street, a hill"
-            aria-expanded="false"
-            aria-controls="place-results"
-            role="combobox"
-          />
-          <ul class="results" id="place-results" role="listbox" aria-label="Places" hidden></ul>
-          <!-- Shown when the field is empty, which is exactly when you are
-               looking for somewhere you have already been. -->
-          <div class="kept" id="kept" hidden>
-            <p class="kept-head">Kept spots</p>
-            <ul class="results" id="kept-list" aria-label="Kept spots"></ul>
-          </div>
-        </div>
-
-        <div class="radiusbox" id="radiusbox" hidden>
-          <input id="radius" type="range" min="1" max="50" step="1" value="10" aria-label="Radius" />
-          <output class="radius-out" id="radius-out" for="radius">10 km</output>
-        </div>
-      </div>
-
-      <div class="scout-time" id="timebar" hidden>
-        <input
-          class="scout-slider"
-          id="time"
-          type="range"
-          min="0"
-          max="1440"
-          step="1"
-          value="720"
-          aria-label="Time of day"
-        />
-        <div class="jumps" id="jumps">
-          <button type="button" data-jump="civilDawn">Dawn</button>
-          <button type="button" data-jump="sunrise">Sunrise</button>
-          <button type="button" data-jump="goldenMorning">Golden</button>
-          <button type="button" data-jump="solarNoon">Noon</button>
-          <button type="button" data-jump="goldenEvening">Golden</button>
-          <button type="button" data-jump="sunset">Sunset</button>
-          <button type="button" data-jump="civilDusk">Dusk</button>
-        </div>
-      </div>
-
       <!-- The date sheet, opened from the date chip. -->
       <div class="datesheet" id="datesheet" hidden>
         <div class="datesheet-row">
@@ -3587,6 +3601,330 @@ const accent = '#f0b866';
       inset: -9px;
       border-radius: 50%;
     }
+  }
+
+  /* ══ Map-first layout ═══════════════════════════════════════════════════════
+     The map takes the screen. Everything Scout says about a place and a day
+     lives in one sheet (`#dock`) resting at peek / half / full, and the map's
+     own controls float in a single row just above it — reachable with the
+     thumb that is also holding the phone. Id-qualified on purpose: the older
+     per-element placement rules above are layered with `:has()` fixes that
+     outweigh a bare class, and none of them apply inside the sheet.
+
+     The measured stack: `--dock-now` is the sheet's visible height, published
+     by `page.ts`. `--dock-h` (which toasts, the date and layers panels and
+     the photo sheet were already built on) is derived from it, so they all
+     sit above the sheet without being told about it. */
+  .scout-stage {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --dock-now: 0px;
+    --dock-floor: calc(var(--tabbar-space) - 0.35rem);
+    --dock-h: calc(var(--dock-now) + var(--dock-floor));
+    --sheet-h: 0px;
+    --edge-h: 0px;
+    --sheet-curve: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  @media (max-width: 820px) {
+    .scout-stage { --stage-top: calc(var(--safe-top) + 0.75rem); }
+  }
+
+  /* ── Adaptive glass ───────────────────────────────────────────────────────
+     Over the pale day map, dark glass reads as black stickers on paper. The
+     tokens are re-declared on body so the tab bar turns with the rest — every
+     derived token has to be re-declared too, since each was resolved against
+     the dark --bg at :root and would otherwise keep that value. */
+  :global(body:has(.scout-stage[data-glass='light'])) {
+    --bg: #f5f3ef;
+    --fg: #1b1a18;
+    --muted: #625e58;       /* 5.9:1 on --bg */
+    --secondary: #46433e;
+    --border: rgb(0 0 0 / 0.1);
+    --accent: var(--fg);
+    --accent-mix: color-mix(in oklab, var(--accent) 45%, var(--fg));
+    --accent-hair: color-mix(in oklab, var(--accent) 30%, var(--hair));
+    --hair: color-mix(in oklab, var(--fg) 12%, transparent);
+    --surface-1: color-mix(in oklab, var(--fg) 4%, var(--bg));
+    --surface-2: color-mix(in oklab, var(--fg) 7%, var(--bg));
+    --surface-3: color-mix(in oklab, var(--fg) 11%, var(--bg));
+    --fill: color-mix(in oklab, var(--fg) 7%, transparent);
+    --fill-hover: color-mix(in oklab, var(--fg) 11%, transparent);
+    --fill-active: color-mix(in oklab, var(--fg) 16%, transparent);
+    --separator: color-mix(in oklab, var(--fg) 10%, transparent);
+    --glass-bg: color-mix(in oklab, var(--bg) 62%, transparent);
+    --glass-bg-strong: color-mix(in oklab, var(--bg) 84%, transparent);
+    --glass-edge: rgb(255 255 255 / 0.7);
+    --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 10px 30px -10px rgb(0 0 0 / 0.28),
+      0 1px 4px rgb(0 0 0 / 0.12);
+    color-scheme: light;
+  }
+  /* Reduce Transparency gets a solid surface, not a thinner blur. */
+  @media (prefers-reduced-transparency: reduce) {
+    #dock, #tools .seg, #tools .round { background: var(--bg) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  }
+
+  /* ── The sheet ──────────────────────────────────────────────────────────── */
+  #dock {
+    position: absolute;
+    z-index: 24;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: var(--dock-floor);
+    height: 8rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: var(--r-lg);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-edge);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    color: var(--fg);
+    transition: height 420ms var(--sheet-curve), background-color 600ms ease;
+    contain: layout paint;
+  }
+  .scout-stage.dock-dragging #dock { transition: none; }
+
+  .dock-grabber {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    cursor: grab;
+    touch-action: none;
+  }
+  .dock-grabber span {
+    width: 36px;
+    height: 5px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--fg) 28%, transparent);
+  }
+  .dock-grabber:active { cursor: grabbing; }
+
+  /* Everything inside sits on the sheet's own glass — no glass on glass. */
+  #dock .sheet,
+  #dock .panel,
+  #dock .chip,
+  #dock .round,
+  #dock .seg {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  #dock .sheet {
+    position: static;
+    transform: none;
+    width: auto;
+    padding: 0 0.75rem 0.35rem;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    touch-action: none;
+  }
+  #dock .sheet .searchbox,
+  #dock .sheet .radiusbox { touch-action: auto; }
+  #dock .sheet-name {
+    font-size: var(--t-headline);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  #dock .sheet-zone { font-size: var(--t-caption); letter-spacing: 0.02em; }
+  #dock .round { background: var(--fill); border: 0; }
+  #dock .round:hover { background: var(--fill-hover); }
+
+  /* Search results and kept spots were dropdowns that opened *upward* over
+     the map. In a sheet they are simply the next thing in the list. */
+  #dock .results,
+  #dock .kept {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin-top: 0.4rem;
+    box-shadow: none;
+  }
+
+  /* The clock row: the time you are looking at, big, and the two things
+     that change what time that is. */
+  #dock .edge {
+    position: static;
+    transform: none;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.1rem 0.75rem;
+    max-width: none;
+  }
+  #dock .edge[hidden] { display: none; }
+  #dock .chip {
+    background: var(--fill);
+    border: 0;
+    min-height: 36px;
+  }
+  #dock .chip:hover { background: var(--fill-hover); }
+  #dock .chip.on { background: var(--fg); color: var(--bg); }
+  #dock #chip-clock {
+    order: -2;
+    background: none;
+    padding: 0;
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    min-height: 0;
+  }
+  #dock #chip-phase {
+    order: -1;
+    background: none;
+    padding: 0 0 0 0.2rem;
+    margin-right: auto;
+    font-size: var(--t-footnote);
+    min-height: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
+    justify-content: flex-start;
+  }
+
+  /* The strip: the whole day, the one thing you drag. Bigger than the old
+     hairline track because it is now the primary way to move time. */
+  #dock .scout-time {
+    position: static;
+    padding: 0.45rem 0.75rem 0.4rem;
+    background: none;
+  }
+  #dock .scout-slider {
+    height: 30px;
+    border-radius: 9px;
+    border: 0;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 12%, transparent);
+  }
+  #dock .scout-slider::-webkit-slider-thumb {
+    width: 6px;
+    height: 40px;
+    margin-top: -5px;
+    border-radius: 3px;
+    background: #fff;
+    border: 0;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35);
+  }
+  #dock .scout-slider::-moz-range-thumb {
+    width: 6px;
+    height: 40px;
+    border-radius: 3px;
+    background: #fff;
+    border: 0;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35);
+  }
+  #dock .jumps {
+    margin: 0.55rem -0.75rem 0;
+    padding-inline: 0.75rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: safe center;
+    scrollbar-width: none;
+  }
+  #dock .jumps::-webkit-scrollbar { display: none; }
+  #dock .jumps button {
+    flex: 0 0 auto;
+    background: var(--fill);
+    border: 0;
+    color: var(--secondary);
+    font-size: var(--t-footnote);
+    min-height: 36px;
+    padding: 0.4rem 0.8rem;
+  }
+  #dock .edge-left { padding-bottom: 0.6rem; }
+  #dock .edge-left .stepper { flex: 1; justify-content: flex-end; }
+
+  #dock-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-top: 1px solid var(--separator);
+    scrollbar-width: thin;
+  }
+  #dock .panel {
+    position: static;
+    width: auto;
+    max-width: none;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+  #dock .panel-head { display: none; }
+  #dock .panel-body {
+    max-height: none;
+    opacity: 1;
+    overflow: visible;
+    padding: 0.6rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* What is below the fold of the current height is not reachable by focus
+     either — a clipped control you can tab into is a trap. */
+  #dock[data-detent='peek'] .jumps,
+  #dock[data-detent='peek'] #edge-date,
+  #dock[data-detent='peek'] #dock-body { visibility: hidden; }
+
+  /* ── The map's own controls, one row above the sheet ───────────────────── */
+  @media (max-width: 820px) {
+    #tools {
+      top: auto;
+      right: auto;
+      left: 50%;
+      bottom: calc(var(--dock-h) + 0.6rem);
+      transform: translateX(-50%);
+      transition: bottom 420ms var(--sheet-curve), opacity 200ms var(--ease);
+    }
+    .scout-stage.dock-dragging #tools { transition: opacity 200ms var(--ease); }
+    #dock[data-detent='full'] ~ #tools { opacity: 0; pointer-events: none; }
+    #tools .seg,
+    #tools .round {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-edge);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-shadow);
+    }
+    #tools .round { width: 44px; height: 44px; }
+    #tools .seg button { min-height: 44px; min-width: 44px; font-weight: 600; }
+
+    /* Layers and the night panel open upward from the controls. */
+    .scout-stage .layers {
+      top: auto;
+      bottom: calc(var(--dock-h) + 0.6rem + 44px + 0.6rem);
+      max-height: calc(100svh - var(--dock-h) - 44px - 1.8rem - var(--safe-top) - var(--stage-top));
+    }
+    .scout-stage .datesheet { bottom: calc(var(--dock-h) + 0.6rem); }
+
+    .scout-map :global(.maplibregl-ctrl-bottom-right) { top: var(--stage-top); }
+  }
+
+  /* ── Wide: the sheet is a sidebar ─────────────────────────────────────────
+     Apple Maps on the Mac: the card docks to the left edge at full height and
+     stays there. No detents, no grabber — there is room for all of it. */
+  @media (min-width: 821px) {
+    #dock {
+      top: calc(var(--safe-top) + 0.9rem);
+      bottom: var(--dock-floor);
+      left: 0.9rem;
+      right: auto;
+      width: 24rem;
+      height: auto !important;
+    }
+    .dock-grabber { display: none; }
+    #dock .sheet { padding-top: 0.75rem; touch-action: auto; }
+    #dock[data-detent] .jumps,
+    #dock[data-detent] #edge-date,
+    #dock[data-detent] #dock-body { visibility: visible; }
+    .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 25.8rem; }
   }
 </style>
 

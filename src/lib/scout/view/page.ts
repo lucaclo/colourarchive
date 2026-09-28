@@ -1039,7 +1039,20 @@ export async function startScout(): Promise<void> {
    * can catch it. `style.load` calls `applyView`, which puts terrain back if
    * the view still wants it.
    */
+  /**
+   * The floating chrome takes its tone from the map under it, as Liquid Glass
+   * does (HIG `liquid-glass.md`: small controls adapt light or dark to the
+   * content beneath). Pale paper gets light glass; the dark style and imagery
+   * get dark. Keyed off the basemap for the same reason the map's own inks
+   * are — `theme()` calls satellite light, and imagery is not.
+   */
+  function applyGlass() {
+    const stageEl = document.querySelector<HTMLElement>('.scout-stage');
+    if (stageEl) stageEl.dataset.glass = basemap === 'light' ? 'light' : 'dark';
+  }
+
   function swapStyle() {
+    applyGlass();
     if (!map) return;
     styleReady = false;
     try {
@@ -8838,50 +8851,182 @@ export async function startScout(): Promise<void> {
     }
   }
 
-  /* ── What the bottom of the screen is actually doing ──────────────────────
-     The timebar, the place sheet and the time row are stacked up from the
-     bottom edge, and until now each knew how much to clear by a number counted
-     in rem. That is a guess about content, and it was wrong: below ~390px the
-     jump row wraps to two lines, the timebar grows by 37px, and the sheet — 5.2
-     rem off the bottom — comes to rest on top of the time slider. Measured on a
-     375px viewport, a tap in the middle of the slider hit the *Keep this spot*
-     star. The control the page exists to drive was covered by another button.
+  /* ── The sheet's three heights ─────────────────────────────────────────────
+     Place, time and the whole information stack share one bottom sheet that
+     rests at peek, half or full — Apple Maps' card, and HIG `sheets.md`: a
+     medium detent for progressive disclosure, and a grabber that cycles the
+     detents on a tap so the sheet can be resized without dragging at all
+     (which is also the WCAG 2.2 single-pointer alternative to the drag).
 
-     So the heights are measured and published as custom properties, and the CSS
-     stacks on those. Nothing here decides layout — it only reports what the
-     browser already laid out, which is the one source that cannot disagree with
-     the screen. Content-box height is deliberate: `getBoundingClientRect` would
-     be the same number here, but a transform on any of these (the sheet has one)
-     would make it lie. */
+     Peek is *measured*, never counted: it ends a little under the day's strip,
+     or under the place row before there is a day. Whatever the place row does
+     — the search field opening, results arriving, a long name — the peek
+     follows it, because the anchor is a live element and not a number.
+
+     The visible height is published as `--dock-now`, which everything else
+     that floats (the map controls, toasts, the date and layers panels) stacks
+     on. On a wide screen the sheet is a sidebar, has no detents, and
+     publishes nothing. */
   const stage = document.querySelector<HTMLElement>('.scout-stage');
-  if (stage && typeof ResizeObserver !== 'undefined') {
-    const measured: Array<[string, string]> = [
-      ['timebar', '--dock-h'],
-      ['sheet', '--sheet-h'],
-      ['edge-time', '--edge-h'],
-    ];
-    const publish = () => {
-      for (const [id, prop] of measured) {
-        const el = document.getElementById(id);
-        // A hidden bar has no height and must not collapse the stack onto the
-        // map's own controls, so its variable is left at the CSS fallback.
-        if (!el || el.hidden) continue;
-        stage.style.setProperty(prop, `${Math.round(el.offsetHeight)}px`);
-      }
+  const dock = document.getElementById('dock');
+  if (stage && dock) {
+    type Detent = 'peek' | 'half' | 'full';
+    const order: Detent[] = ['peek', 'half', 'full'];
+    const spoken: Record<Detent, string> = { peek: 'Collapsed', half: 'Half height', full: 'Full height' };
+    const wideQuery = window.matchMedia('(min-width: 821px)');
+    let detent: Detent = 'peek';
+
+    const peekHeight = () => {
+      const timebar = document.getElementById('timebar');
+      const anchor = timebar && !timebar.hidden ? document.getElementById('time') : document.getElementById('sheet');
+      if (!anchor) return 120;
+      return Math.ceil(anchor.getBoundingClientRect().bottom - dock.getBoundingClientRect().top + 14);
     };
-    const observer = new ResizeObserver(publish);
-    for (const [id] of measured) {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    }
-    // `hidden` flips on these three once a place is chosen, and that is not a
-    // resize — without this the first measurement is of three hidden bars.
-    new MutationObserver(publish).observe(stage, {
-      attributes: true,
-      attributeFilter: ['hidden'],
-      subtree: true,
+    const fullHeight = () => {
+      const top = parseFloat(getComputedStyle(stage).getPropertyValue('--safe-top')) || 0;
+      const bottom = stage.clientHeight - (dock.offsetTop + dock.offsetHeight);
+      return Math.max(0, stage.clientHeight - bottom - top - 12);
+    };
+    const heightOf = (d: Detent) => {
+      const peek = peekHeight();
+      const full = Math.max(peek, fullHeight());
+      if (d === 'full') return full;
+      if (d === 'half') return Math.min(full, Math.max(peek + 140, Math.round(stage.clientHeight * 0.5)));
+      return peek;
+    };
+
+    const publish = (px: number) => {
+      stage.style.setProperty('--dock-now', `${Math.round(px)}px`);
+    };
+
+    /* The pin stays in the part of the map you can still see: the camera is
+       padded by whatever the sheet covers. Never mid-flight — `easeTo` would
+       cancel the `flyTo` that brings a new place in, stranding the camera on
+       the globe — so a padding asked for while the map is moving waits for
+       it to land. */
+    let lastPadding = '';
+    let pendingPadding: { left: number; bottom: number } | null = null;
+    const padMap = (left: number, bottom: number) => {
+      if (!map) return;
+      const key = `${left}/${bottom}`;
+      if (key === lastPadding) return;
+      if (map.isMoving()) {
+        if (!pendingPadding) map.once('moveend', () => {
+          const next = pendingPadding;
+          pendingPadding = null;
+          if (next) padMap(next.left, next.bottom);
+        });
+        pendingPadding = { left, bottom };
+        return;
+      }
+      lastPadding = key;
+      map.easeTo({ padding: { top: 0, right: 0, left, bottom }, duration: reducedMotion?.matches ? 0 : 380 });
+    };
+
+    const setDetent = (next: Detent) => {
+      detent = next;
+      dock.dataset.detent = next;
+      document.getElementById('dock-detent-say')!.textContent = spoken[next];
+      if (wideQuery.matches) {
+        dock.style.height = '';
+        publish(0);
+        padMap(Math.round(dock.offsetLeft + dock.offsetWidth), 0);
+        return;
+      }
+      const px = heightOf(next);
+      dock.style.height = `${px}px`;
+      publish(px);
+      // Only up to half: a full sheet is for reading, and pushing the camera
+      // up off the top of the screen behind it would be motion for nothing.
+      padMap(0, Math.round(Math.min(px, heightOf('half'))));
+    };
+
+    // Tap cycles, as a grabber does on iOS: up through the heights, then home.
+    const cycle = () => setDetent(order[(order.indexOf(detent) + 1) % order.length]);
+
+    /* Drag from the grabber or the place row. A move of under 6px is a tap;
+       otherwise the sheet follows the finger and, on release, settles on the
+       nearest height — or the next one along, if it was flicked. */
+    let drag: { y: number; h: number; t: number; lastY: number; lastT: number; id: number; moved: boolean } | null = null;
+    const draggable = (target: EventTarget | null) => {
+      const el = target instanceof Element ? target : null;
+      if (!el || wideQuery.matches) return false;
+      if (el.closest('#dock-grabber')) return true;
+      return !!el.closest('.sheet-row') && !el.closest('button, input, a, select, label');
+    };
+    dock.addEventListener('pointerdown', (event) => {
+      if (!draggable(event.target)) return;
+      const now = performance.now();
+      drag = { y: event.clientY, h: dock.offsetHeight, t: now, lastY: event.clientY, lastT: now, id: event.pointerId, moved: false };
     });
-    publish();
+    dock.addEventListener('pointermove', (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const dy = event.clientY - drag.y;
+      if (!drag.moved && Math.abs(dy) < 6) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        dock.setPointerCapture(event.pointerId);
+        stage.classList.add('dock-dragging');
+      }
+      const h = Math.min(heightOf('full'), Math.max(heightOf('peek') - 24, drag.h - dy));
+      dock.style.height = `${h}px`;
+      publish(h);
+      drag.lastY = event.clientY;
+      drag.lastT = performance.now();
+    });
+    const release = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const was = drag;
+      drag = null;
+      stage.classList.remove('dock-dragging');
+      if (!was.moved) return;
+      const h = dock.offsetHeight;
+      const velocity = (event.clientY - was.lastY) / Math.max(1, performance.now() - was.lastT);
+      const byDistance = order.reduce((best, d) =>
+        Math.abs(heightOf(d) - h) < Math.abs(heightOf(best) - h) ? d : best, detent);
+      const i = order.indexOf(byDistance);
+      // Flicks overrule distance: down is a step lower, up a step higher.
+      const flicked = velocity > 0.45 ? order[Math.max(0, i - (heightOf(byDistance) < h ? 0 : 1))]
+        : velocity < -0.45 ? order[Math.min(order.length - 1, i + (heightOf(byDistance) > h ? 0 : 1))]
+        : byDistance;
+      setDetent(flicked);
+    };
+    dock.addEventListener('pointerup', release);
+    dock.addEventListener('pointercancel', release);
+    // A drag that ends on the grabber also produces a click; only a real tap cycles.
+    let suppressClick = false;
+    dock.addEventListener('pointerup', () => { suppressClick = stage.classList.contains('dock-dragging'); }, { capture: true });
+    on('dock-grabber', 'click', () => {
+      if (suppressClick) { suppressClick = false; return; }
+      cycle();
+    });
+
+    // Opening search wants room for its results; so does picking a place
+    // the first time, which is when there is suddenly a sheet worth reading.
+    on('search-button', 'click', () => {
+      if (!document.getElementById('searchbox')!.hidden && detent === 'peek') setDetent('half');
+    });
+
+    /* Content that changes the peek — the search field, a place arriving and
+       the strip appearing with it — re-settles the sheet at the height it is
+       already at, without animating a height nobody asked to change. */
+    const resettle = () => { if (!drag) setDetent(detent); };
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(resettle);
+      for (const id of ['sheet', 'timebar']) {
+        const el = document.getElementById(id);
+        if (el) ro.observe(el);
+      }
+      ro.observe(stage);
+    }
+    new MutationObserver(resettle).observe(dock, { attributes: true, attributeFilter: ['hidden'], subtree: true });
+    wideQuery.addEventListener('change', resettle);
+    window.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || wideQuery.matches || detent === 'peek') return;
+      const typing = event.target instanceof HTMLElement && event.target.closest('input, select, textarea');
+      if (!typing) setDetent('peek');
+    });
+    setDetent('peek');
   }
 
   /* ── Saying that the row runs on ────────────────────────────────────────
