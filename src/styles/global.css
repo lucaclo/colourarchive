@@ -601,6 +601,16 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 .cursor-ring.hover { width: 54px; height: 54px; background: color-mix(in oklab, var(--accent-mix) 22%, transparent); }
 .cursor-ring.down { width: 20px; height: 20px; }
 @media (hover: none), (pointer: coarse) { .cursor-ring { display: none; } }
+/* On the pages that opt in (see `ringPointer` in Layout.astro) the ring *is*
+   the pointer: the system arrow, hand and zoom glass go, on mouse and
+   trackpad only. Text fields keep their I-beam — a caret you cannot see is
+   a field you cannot place the cursor in. */
+@media (hover: hover) and (pointer: fine) {
+  body.ring-pointer,
+  body.ring-pointer *:not(input[type='text'], input[type='search'], input[type='url'], input[type='email'], input[type='number'], input:not([type]), textarea, [contenteditable='true']) {
+    cursor: none !important;
+  }
+}
 @media (prefers-reduced-motion: reduce) { .cursor-ring { transition: opacity 150ms linear; } }
 
 /* The bar itself is clear — only a soft scrim for the status area — and the

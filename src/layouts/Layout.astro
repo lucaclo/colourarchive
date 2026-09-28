@@ -55,6 +55,12 @@ const {
   tab,
   cursor = true,
 } = Astro.props;
+/**
+ * Where the ring *replaces* the system pointer rather than riding beside it.
+ * Upload is left out on purpose: it is a page of file pickers and forms,
+ * where the platform's own pointer is part of how those controls read.
+ */
+const ringPointer = cursor && (['archive', 'inspiration', 'book', 'scout'] as const).some((t) => t === tab);
 // Astro.site (set in astro.config.mjs) is what turns these into real
 // absolute URLs a crawler can fetch; without it they resolve against
 // whatever origin the page happened to build under, which is wrong for a
@@ -108,7 +114,7 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
         handshake is paid twice and the hint is worse than nothing. */}
     {preconnect.map((href) => <link rel="preconnect" href={href} crossorigin />)}
   </head>
-  <body class={tab ? 'has-tabbar' : undefined}>
+  <body class={[tab && 'has-tabbar', ringPointer && 'ring-pointer'].filter(Boolean).join(' ') || undefined}>
     <slot />
     {tab && <TabBar current={tab} />}
     {cursor && <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>}

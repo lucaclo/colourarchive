@@ -4013,16 +4013,8 @@ const accent = '#f0b866';
     .scout-stage[data-sidebar='hidden'] .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 0; }
   }
 
-  /* ── The circle cursor ────────────────────────────────────────────────────
-     The app's own ring stands in for the pointer on Scout — over the map,
-     the controls and the sheet alike — rather than riding beside a system
-     arrow or grab hand. Mouse and trackpad only; touch has no cursor. */
-  @media (hover: hover) and (pointer: fine) {
-    .scout,
-    .scout :global(*),
-    :global(body:has(.scout) .tabbar),
-    :global(body:has(.scout) .tabbar *) { cursor: none !important; }
-  }
+  /* The ring replaces the system pointer here — see `.ring-pointer` in
+     global.css, which Scout shares with Archive, Inspiration and Book. */
 
   /* The ring, made for a map. Elsewhere it is a 1.5px hairline blended by
      difference, which over the pale day map came out as a faint grey trace.
