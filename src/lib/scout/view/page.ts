@@ -51,6 +51,10 @@ import { SUN_ALTITUDE, shadowBearing, shadowLengthRatio, sunPosition, type SunSa
 import {
   BUILDING_EDGE_COLOUR,
   contrastOverrides,
+  pastelHidden,
+  pastelIconless,
+  pastelMix,
+  pastelOverrides,
   daylightWash,
   directionalIntensity,
   extrusionLightColour,
@@ -421,6 +425,10 @@ export async function startScout(): Promise<void> {
   let day: ScoutDay | null = null;
   /** Minutes into the solar day — the slider's unit. */
   let minute = 720;
+  /** The pastel palette's last applied mix, and the glass tone's — declared up
+   *  here because `style.load` can reach both before the code beside them runs. */
+  let lastPastel = -1;
+  let glassMix = 1;
   /** The date being scouted, as `YYYY-MM-DD` where the place is. */
   let isoDate = '';
   let moonSamples: MoonSample[] = [];
@@ -1046,9 +1054,12 @@ export async function startScout(): Promise<void> {
    * get dark. Keyed off the basemap for the same reason the map's own inks
    * are — `theme()` calls satellite light, and imagery is not.
    */
-  function applyGlass() {
+  function applyGlass(mix = glassMix) {
+    glassMix = mix;
     const stageEl = document.querySelector<HTMLElement>('.scout-stage');
-    if (stageEl) stageEl.dataset.glass = basemap === 'light' ? 'light' : 'dark';
+    // On the pastel map the glass follows the ground into the night: light
+    // over paper, dark once the map is more dark than light.
+    if (stageEl) stageEl.dataset.glass = basemap === 'light' && mix >= 0.5 ? 'light' : 'dark';
   }
 
   function swapStyle() {
@@ -1475,6 +1486,23 @@ export async function startScout(): Promise<void> {
       } catch {
         /* a layer the style no longer has is not worth failing over */
       }
+    }
+
+    // The pastel treatment: shields, arrows and small POIs out, the big POIs
+    // keep their names without their icons, and the palette is laid down for
+    // whatever hour it is — forced, because the style just arrived in its own
+    // stock colours whatever the last mix was.
+    if (basemap === 'light') {
+      const styleLayers = map.getStyle().layers ?? [];
+      for (const id of pastelHidden(styleLayers)) map.setLayoutProperty(id, 'visibility', 'none');
+      for (const id of pastelIconless(styleLayers)) {
+        try {
+          map.setPaintProperty(id, 'icon-opacity', 0);
+        } catch {
+          /* no icon on this one */
+        }
+      }
+      applyPastel(current()?.altitude ?? WELCOME_ALTITUDE, true);
     }
 
     // The style's own building layers step aside: ours are lit by the sun and
@@ -2883,6 +2911,26 @@ export async function startScout(): Promise<void> {
     return altitude > 0 && air ? beamColour(altitude, air) : sunlightColour(altitude);
   }
 
+  /**
+   * The light basemap's own colours for this sun — see `pastelOverrides`.
+   * Sixty-odd paint properties, so only repainted when the quantised mix
+   * actually moves, which is only ever during twilight.
+   */
+  function applyPastel(altitude: number, force = false) {
+    const mixNow = pastelMix(altitude);
+    applyGlass(mixNow);
+    if (!map || basemap !== 'light') return;
+    if (!force && mixNow === lastPastel) return;
+    lastPastel = mixNow;
+    for (const { layerId, property, value } of pastelOverrides(map.getStyle().layers ?? [], altitude)) {
+      try {
+        map.setPaintProperty(layerId, property, value);
+      } catch {
+        /* a layer the style no longer has is not worth failing over */
+      }
+    }
+  }
+
   function applySunLight() {
     if (!map || !styleReady) return;
     const now = current();
@@ -2907,8 +2955,8 @@ export async function startScout(): Promise<void> {
       // multiplies one by the other, so a literal sunlight colour here crushes
       // the whole city towards black at exactly the hours worth scouting.
       position: lightPosition(azimuth, altitude),
-      color: extrusionLightColour(altitude),
-      intensity: directionalIntensity(altitude),
+      color: extrusionLightColour(altitude, themeOf(basemap)),
+      intensity: directionalIntensity(altitude, themeOf(basemap)),
     });
 
     const set = (layer: string, property: string, value: unknown) => {
@@ -2919,9 +2967,16 @@ export async function startScout(): Promise<void> {
       }
     };
 
+    // The pastel map carries the time of day in its own colours now, so the
+    // wash over it only has to add the warmth of the low sun, not the dark.
     const wash = daylightWash(altitude);
     set('scout-daylight', 'fill-color', wash.colour);
-    set('scout-daylight', 'fill-opacity', globeWashOpacity(wash.opacity, altitude));
+    set(
+      'scout-daylight',
+      'fill-opacity',
+      globeWashOpacity(basemap === 'light' ? wash.opacity * 0.4 : wash.opacity, altitude),
+    );
+    applyPastel(centre ? altitude : WELCOME_ALTITUDE);
 
     set('scout-hillshade', 'hillshade-illumination-direction', Math.round(azimuth) % 360);
     set('scout-hillshade', 'hillshade-highlight-color', sunPaintColour(altitude, air));
@@ -9148,6 +9203,10 @@ export async function startScout(): Promise<void> {
     }
     new MutationObserver(resettle).observe(dock, { attributes: true, attributeFilter: ['hidden'], subtree: true });
     wideQuery.addEventListener('change', resettle);
+    // The sheet clips rather than scrolls (its body is the scroller), but a
+    // clipped box can still be scrolled by focus — a control below the fold
+    // taking focus slid the place row up out of sight. Hold it at the top.
+    dock.addEventListener('scroll', () => { if (dock.scrollTop) dock.scrollTop = 0; });
     window.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || wideQuery.matches || detent === 'peek') return;
       const typing = event.target instanceof HTMLElement && event.target.closest('input, select, textarea');

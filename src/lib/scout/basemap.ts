@@ -219,11 +219,14 @@ export type BasemapTheme = 'light' | 'dark';
  * the way to white, because the faces turned away from the sun are lit by the
  * sky rather than by the sun and should not take the full amber.
  */
-export function extrusionLightColour(altitude: number): string {
+export function extrusionLightColour(altitude: number, theme: BasemapTheme = 'dark'): string {
   const raw = ramp(LIGHT_RAMP, altitude);
   const peak = Math.max(...raw, 1);
   const normalised = raw.map((c) => (c * 255) / peak) as [number, number, number];
-  return hex(mix(normalised, [255, 255, 255], 0.4));
+  // The pastel map keeps most of the cast out of the walls: at 0.4 a pale
+  // grey city turned uniformly cream by mid-morning and brown by evening.
+  // The warmth still shows, but on the lit faces rather than as a stain.
+  return hex(mix(normalised, [255, 255, 255], theme === 'light' ? 0.72 : 0.4));
 }
 
 /**
@@ -237,10 +240,16 @@ export function extrusionLightColour(altitude: number): string {
  * beam strength here made dawn — the one hour this tab exists for — the flattest
  * light of the day.
  */
-export function directionalIntensity(altitude: number): number {
+export function directionalIntensity(altitude: number, theme: BasemapTheme = 'dark'): number {
   // Below the horizon there is no direction to light from, so the shading goes
   // flat rather than inventing a side for the light to come from.
   if (altitude <= 0) return 0.08;
+  // MapLibre leaves a face turned from the light at (1 − intensity) of its
+  // colour. On the dark map that is the drama; on pale paper 0.78 put every
+  // shaded wall at 22% — chocolate brown. The pastel map keeps shaded faces
+  // between half and two-thirds lit, the way skylight actually fills them,
+  // and still rakes harder at dawn than at noon.
+  if (theme === 'light') return 0.32 + 0.2 * clamp01(1 - altitude / 25);
   return 0.42 + 0.36 * clamp01(1 - altitude / 25);
 }
 
@@ -268,7 +277,11 @@ const BUILDING_ENDS: Record<
   { night: [string, string]; day: [string, string] }
 > = {
   dark: { night: ['#14161c', '#2b313c'], day: ['#2e323a', '#626b79'] },
-  light: { night: ['#2c3140', '#545d73'], day: ['#bfb8ac', '#f4efe6'] },
+  // Pale and nearly neutral by day, like the paper map under them — the old
+  // tan read as brown cardboard at street zoom. Night matches the pastel
+  // map's own night ground (see `PASTEL`), a step lighter so towers still
+  // stand up out of it.
+  light: { night: ['#2b3140', '#4d566b'], day: ['#d3d2cf', '#efeeeb'] },
 };
 
 const rgb = (value: string): [number, number, number] => [
@@ -435,3 +448,132 @@ export function contrastRatio(a: string, b: string): number {
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+/* ── The pastel basemap, day into night ────────────────────────────────────── */
+
+/**
+ * The light basemap, recoloured into a muted, Apple-Maps-like paper map — and
+ * taken down into a night palette as the sun sets, rather than only washed
+ * over.
+ *
+ * HIG `maps.md`: a *muted* emphasis style "is great if you have a lot of
+ * information-rich content that you want to stand out against the map." That
+ * is this page exactly: the arc, the rays, the shadows and the pins are the
+ * content, and OpenFreeMap Liberty's saturated orange roads and yellow
+ * highways were competing with all of them.
+ *
+ * Each entry is a day colour and a night colour; `pastelOverrides` mixes them
+ * across civil twilight, the same span `buildingColours` turns over on, so the
+ * ground and the buildings standing on it darken together.
+ */
+type Pair = readonly [day: string, night: string];
+
+const PASTEL = {
+  background: ['#f2efe9', '#1b202b'],
+  residential: ['#ebe7e0', '#1e2330'],
+  park: ['#cfe6bd', '#1c2a25'],
+  wood: ['#bddba8', '#1a2822'],
+  sand: ['#f1ead2', '#2a2a2c'],
+  ice: ['#eef3f4', '#252b36'],
+  civic: ['#ece8e1', '#20242f'],
+  water: ['#a9d3f0', '#142339'],
+  aeroway: ['#e7e4de', '#232835'],
+  road: ['#ffffff', '#394052'],
+  roadMajor: ['#ffffff', '#434b5e'],
+  motorway: ['#fbe3a8', '#56545a'],
+  casing: ['#cdc7bc', '#2a303d'],
+  path: ['#faf8f4', '#2d3342'],
+  rail: ['#c8c4bd', '#3a4050'],
+  building: ['#e2ded7', '#282d3a'],
+  buildingEdge: ['#d2cdc4', '#323948'],
+  boundary: ['#b9b5ae', '#4a5062'],
+  label: ['#5d6168', '#aab1be'],
+  placeLabel: ['#2b2e33', '#d8dce4'],
+  waterLabel: ['#4f7fa8', '#7f9fc4'],
+  halo: ['#ffffff', '#12161f'],
+} as const satisfies Record<string, Pair>;
+
+const mixHex = ([day, night]: Pair, t: number) => hex(mix(rgb(night), rgb(day), t));
+
+/**
+ * Paint overrides for the light style at a given sun altitude. Driven off the
+ * OpenMapTiles source-layer, like `contrastOverrides`, with the class read
+ * from the layer id only where OpenMapTiles already splits one layer per class.
+ */
+export function pastelOverrides(layers: MinimalLayer[], altitude: number): PaintOverride[] {
+  const t = daylight(altitude);
+  const out: PaintOverride[] = [];
+  const push = (layerId: string, property: string, pair: Pair, at = t) =>
+    out.push({ layerId, property, value: mixHex(pair, at) });
+  // Text and its halo cannot be mixed at all: any midpoint puts a mid-grey
+  // label on a mid-grey halo (measured 1.08:1 at the horizon). They switch
+  // together, once, in the middle of twilight — dark ink on white until the
+  // ground is darker than it is light, pale ink on near-black after.
+  const textT = t >= 0.5 ? 1 : 0;
+
+  for (const layer of layers) {
+    const { id, type } = layer;
+    const source = layer['source-layer'];
+    if (type === 'background') {
+      push(id, 'background-color', PASTEL.background);
+    } else if (source === 'water' && type === 'fill') {
+      push(id, 'fill-color', PASTEL.water);
+    } else if (source === 'waterway' && type === 'line') {
+      push(id, 'line-color', PASTEL.water);
+    } else if (source === 'park' && type === 'fill') {
+      push(id, 'fill-color', PASTEL.park);
+    } else if (source === 'park' && type === 'line') {
+      push(id, 'line-color', PASTEL.park);
+    } else if ((source === 'landcover' || source === 'landuse') && type === 'fill') {
+      if (/wood|forest/i.test(id)) push(id, 'fill-color', PASTEL.wood);
+      else if (/grass|park|pitch|golf|track|cemetery|wetland/i.test(id)) push(id, 'fill-color', PASTEL.park);
+      else if (/sand|beach/i.test(id)) push(id, 'fill-color', PASTEL.sand);
+      else if (/ice|glacier/i.test(id)) push(id, 'fill-color', PASTEL.ice);
+      else if (/residential/i.test(id)) push(id, 'fill-color', PASTEL.residential);
+      else push(id, 'fill-color', PASTEL.civic);
+    } else if (source === 'aeroway') {
+      if (type === 'fill') push(id, 'fill-color', PASTEL.aeroway);
+      else if (type === 'line') push(id, 'line-color', PASTEL.aeroway);
+    } else if (source === 'transportation' && type === 'line') {
+      if (/casing/i.test(id)) push(id, 'line-color', PASTEL.casing);
+      else if (/rail/i.test(id)) push(id, 'line-color', PASTEL.rail);
+      else if (/motorway/i.test(id)) push(id, 'line-color', PASTEL.motorway);
+      else if (/trunk|primary|secondary|tertiary|link/i.test(id)) push(id, 'line-color', PASTEL.roadMajor);
+      else if (/path|pedestrian/i.test(id)) push(id, 'line-color', PASTEL.path);
+      else push(id, 'line-color', PASTEL.road);
+    } else if (source === 'building' && type === 'fill') {
+      push(id, 'fill-color', PASTEL.building);
+      push(id, 'fill-outline-color', PASTEL.buildingEdge);
+    } else if (source === 'boundary' && type === 'line') {
+      push(id, 'line-color', PASTEL.boundary);
+    } else if (type === 'symbol') {
+      const pair = /water/i.test(id) ? PASTEL.waterLabel : source === 'place' ? PASTEL.placeLabel : PASTEL.label;
+      push(id, 'text-color', pair, textT);
+      push(id, 'text-halo-color', PASTEL.halo, textT);
+    }
+  }
+  return out;
+}
+
+/**
+ * Layers the pastel map leaves out altogether: road shields, one-way arrows
+ * and point-of-interest icons. The reference this was designed against shows
+ * none of them, and on a map whose subject is light and shadow every shop
+ * glyph and interstate badge is a mark competing with the arc for attention.
+ * The biggest POIs keep their *names* — see `pastelIconless`.
+ */
+export function pastelHidden(layers: MinimalLayer[]): string[] {
+  return layers
+    .filter((l) => l.type === 'symbol')
+    .filter((l) => /shield|one_way|poi_r20|poi_r7|poi_transit/i.test(l.id))
+    .map((l) => l.id);
+}
+
+/** POI layers kept for their names, with the icon itself taken off. */
+export function pastelIconless(layers: MinimalLayer[]): string[] {
+  return layers.filter((l) => l.type === 'symbol' && /^poi_r1$|aerodrome|airport/i.test(l.id)).map((l) => l.id);
+}
+
+/** The daylight fraction the palette is mixed at, exposed so the page can
+ *  skip repainting sixty layers when the mix has not visibly changed. */
+export const pastelMix = (altitude: number) => Math.round(daylight(altitude) * 40) / 40;

@@ -7,6 +7,10 @@ import {
   buildingColours,
   contrastOverrides,
   contrastRatio,
+  pastelHidden,
+  pastelIconless,
+  pastelMix,
+  pastelOverrides,
   daylightWash,
   directionalIntensity,
   extrusionLightColour,
@@ -356,5 +360,69 @@ describe('building edge colour', () => {
   it('is a valid colour, distinct from the flat building fill', () => {
     assert.ok(isHex(BUILDING_EDGE_COLOUR));
     assert.notEqual(BUILDING_EDGE_COLOUR, '#24262c');
+  });
+});
+
+describe('pastelOverrides', () => {
+  const layers = [
+    { id: 'background', type: 'background' },
+    { id: 'water', type: 'fill', 'source-layer': 'water' },
+    { id: 'park', type: 'fill', 'source-layer': 'park' },
+    { id: 'landcover_wood', type: 'fill', 'source-layer': 'landcover' },
+    { id: 'road_minor', type: 'line', 'source-layer': 'transportation' },
+    { id: 'road_minor_casing', type: 'line', 'source-layer': 'transportation' },
+    { id: 'road_motorway', type: 'line', 'source-layer': 'transportation' },
+    { id: 'label_city', type: 'symbol', 'source-layer': 'place' },
+    { id: 'highway-shield-us-interstate', type: 'symbol', 'source-layer': 'transportation_name' },
+    { id: 'poi_r20', type: 'symbol', 'source-layer': 'poi' },
+    { id: 'poi_r1', type: 'symbol', 'source-layer': 'poi' },
+  ];
+  const value = (altitude: number, id: string, property: string) =>
+    String(pastelOverrides(layers, altitude).find((o) => o.layerId === id && o.property === property)?.value);
+
+  it('is the day palette in daylight and the night palette in the dark', () => {
+    assert.equal(value(40, 'background', 'background-color'), '#f2efe9');
+    assert.equal(value(-20, 'background', 'background-color'), '#1b202b');
+  });
+
+  it('turns over across civil twilight, not at the horizon', () => {
+    const dusk = value(0, 'background', 'background-color');
+    assert.notEqual(dusk, value(40, 'background', 'background-color'));
+    assert.notEqual(dusk, value(-20, 'background', 'background-color'));
+  });
+
+  it('keeps roads readable against the ground by day and by night', () => {
+    // A white road on paper is a low-contrast mark by design (muted style);
+    // the casing carries it, and must clear the ground.
+    const day = value(40, 'background', 'background-color');
+    assert.ok(contrastRatio(value(40, 'road_minor_casing', 'line-color'), day) > 1.3);
+    assert.ok(contrastRatio(value(-20, 'road_minor', 'line-color'), value(-20, 'background', 'background-color')) > 1.5);
+  });
+
+  it('keeps place labels legible on their halo at every hour', () => {
+    for (const altitude of [40, 3, 1, 0, -1, -3, -20]) {
+      const ratio = contrastRatio(value(altitude, 'label_city', 'text-color'), value(altitude, 'label_city', 'text-halo-color'));
+      assert.ok(ratio >= 4.5, `label contrast ${ratio.toFixed(2)} at ${altitude}°`);
+    }
+  });
+
+  it('colours water, parks and woods apart from the ground', () => {
+    const ground = value(40, 'background', 'background-color');
+    for (const [id, prop] of [['water', 'fill-color'], ['park', 'fill-color'], ['landcover_wood', 'fill-color']]) {
+      assert.notEqual(value(40, id, prop), ground);
+    }
+  });
+
+  it('hides shields and small POIs, and keeps the big POI names', () => {
+    const hidden = pastelHidden(layers);
+    assert.ok(hidden.includes('highway-shield-us-interstate'));
+    assert.ok(hidden.includes('poi_r20'));
+    assert.ok(!hidden.includes('poi_r1'));
+    assert.deepEqual(pastelIconless(layers), ['poi_r1']);
+  });
+
+  it('quantises the mix so an unchanged palette is not repainted', () => {
+    assert.equal(pastelMix(30), pastelMix(50));
+    assert.notEqual(pastelMix(0), pastelMix(3));
   });
 });
