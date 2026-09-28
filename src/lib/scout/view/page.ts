@@ -6287,13 +6287,34 @@ export async function startScout(): Promise<void> {
     const x = merc.x;
     const y = merc.y;
     const z = merc.z;
+    const apply = (mat: number[], vx: number, vy: number, vz: number) => [
+      mat[0] * vx + mat[4] * vy + mat[8] * vz + mat[12],
+      mat[1] * vx + mat[5] * vy + mat[9] * vz + mat[13],
+      mat[3] * vx + mat[7] * vy + mat[11] * vz + mat[15],
+    ];
     // Column-major 4×4, the layout `gl.uniformMatrix4fv(..., false, m)`
-    // already assumes — the same multiply `scoutProject`'s non-globe branch
-    // does in GLSL, just run once in JS instead of once per vertex on the
-    // GPU.
-    const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
-    const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
-    const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+    // already assumes. On mercator the main matrix is the whole answer.
+    let [cx, cy, cw] = apply(m, x, y, z);
+    // Mid-way between globe and mercator (roughly zooms 9–12, which is where
+    // a freshly chosen place lands), the shader blends the two — see
+    // `scoutProject` in projection.ts — and the main matrix is the *globe's*,
+    // taking a point on the unit sphere. Leaving that out put the sun some
+    // 600px off-screen at zoom 11. Same sphere as MapLibre's
+    // `projectToSphere`, same lift as ours.
+    const t = projection.projectionTransition;
+    const fallback = projection.fallbackMatrix ? Array.from(projection.fallbackMatrix) : null;
+    if (t !== undefined && fallback?.length === 16) {
+      const lonR = x * Math.PI * 2 + Math.PI;
+      const latR = 2 * Math.atan(Math.exp(Math.PI - y * Math.PI * 2)) - Math.PI / 2;
+      const lift = 1 + (altitudeM + domeBaseM) / 6371008.8;
+      const len = Math.cos(latR);
+      const globe = apply(m, Math.sin(lonR) * len * lift, Math.sin(latR) * lift, Math.cos(lonR) * len * lift);
+      const flat = apply(fallback, x, y, z);
+      const mix = (a: number, b: number) => a + (b - a) * Math.min(1, t);
+      cx = mix(flat[0], globe[0]);
+      cy = mix(flat[1], globe[1]);
+      cw = mix(flat[2], globe[2]);
+    }
     // Behind the camera — the same test the vertex shader makes before it
     // discards a point outright rather than projecting it through infinity.
     if (cw <= 0) return null;
@@ -8390,6 +8411,112 @@ export async function startScout(): Promise<void> {
       setMinute(target);
     }
   });
+
+  /* ── Dragging the sun ──────────────────────────────────────────────────
+     The second way to move time, and the direct one: put a finger on the sun
+     where it is drawn and carry it round its own path. The strip in the sheet
+     stays the precise instrument and the single-pointer alternative (WCAG 2.2
+     2.5.7); this is the one that makes the ring feel like an object.
+
+     Hit-testing uses `projectToScreen`, the same elevation-aware projection
+     the star taps use, so the grab lands on the disc as drawn — lifted on the
+     dome in 3D — and not on its shadow on the ground. While dragging, time
+     follows the nearest point of the day's path to the finger, searched near
+     the current minute first so the pre-dawn and post-dusk halves of the ring,
+     which pass close to each other, cannot make the sun jump across the day. */
+  const SUN_GRAB_RADIUS_PX = 34;
+  let sunDrag: { id: number; path: Array<{ x: number; y: number } | null> } | null = null;
+
+  const canvasPoint = (event: PointerEvent) => {
+    const rect = map!.getCanvas().getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+
+  function sunScreenPath(): Array<{ x: number; y: number } | null> {
+    if (!day || !centre) return [];
+    const radius = domeRadiusFor(radiusKm * 1000);
+    return day.samples.map((sample) => {
+      const at = domePosition(centre!, sample.azimuth, sample.altitude, radius);
+      return projectToScreen(at.lon, at.lat, at.altitudeM);
+    });
+  }
+
+  function nearestMinute(path: Array<{ x: number; y: number } | null>, x: number, y: number, from: number, to: number) {
+    let best = -1;
+    let bestSq = Infinity;
+    for (let i = Math.max(0, from); i <= Math.min(path.length - 1, to); i++) {
+      const p = path[i];
+      if (!p) continue;
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < bestSq) { bestSq = d; best = i; }
+    }
+    return { minute: best, distance: Math.sqrt(bestSq) };
+  }
+
+  const mapEl = document.getElementById('map');
+  mapEl?.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!map || !day || !shown.sunPath || event.button > 0) return;
+      const sun = current();
+      if (!sun || sun.altitude <= -1) return;
+      const here = canvasPoint(event);
+      const path = sunScreenPath();
+      const disc = path[minute];
+      if (!disc || Math.hypot(disc.x - here.x, disc.y - here.y) > SUN_GRAB_RADIUS_PX) return;
+      // Ours now: the map must not also start panning under the same finger.
+      event.stopPropagation();
+      event.preventDefault();
+      map.dragPan.disable();
+      map.touchZoomRotate.disable();
+      mapEl.setPointerCapture(event.pointerId);
+      mapEl.classList.add('sun-dragging');
+      sunDrag = { id: event.pointerId, path };
+      scrubbing = true;
+      handsOnTheClock();
+    },
+    { capture: true },
+  );
+  mapEl?.addEventListener(
+    'pointermove',
+    (event) => {
+      if (!sunDrag || event.pointerId !== sunDrag.id) {
+        // With a mouse, hovering the disc says it can be picked up.
+        if (!sunDrag && map && centre && event.pointerType === 'mouse') {
+          const sun = current();
+          const at = sun && sun.altitude > -1
+            ? domePosition(centre, sun.azimuth, sun.altitude, domeRadiusFor(radiusKm * 1000))
+            : null;
+          const disc = at && projectToScreen(at.lon, at.lat, at.altitudeM);
+          const here = canvasPoint(event);
+          mapEl.classList.toggle(
+            'sun-grabbable',
+            !!disc && shown.sunPath && Math.hypot(disc.x - here.x, disc.y - here.y) <= SUN_GRAB_RADIUS_PX,
+          );
+        }
+        return;
+      }
+      event.stopPropagation();
+      const here = canvasPoint(event);
+      const near = nearestMinute(sunDrag.path, here.x, here.y, minute - 90, minute + 90);
+      const pick = near.distance < 90 ? near : nearestMinute(sunDrag.path, here.x, here.y, 0, sunDrag.path.length - 1);
+      if (pick.minute >= 0) {
+        scrubbing = true;
+        setMinute(pick.minute);
+      }
+    },
+    { capture: true },
+  );
+  const dropSun = (event: PointerEvent) => {
+    if (!sunDrag || event.pointerId !== sunDrag.id || !map) return;
+    sunDrag = null;
+    map.dragPan.enable();
+    map.touchZoomRotate.enable();
+    mapEl?.classList.remove('sun-dragging');
+    scheduleSettle();
+  };
+  mapEl?.addEventListener('pointerup', dropSun, { capture: true });
+  mapEl?.addEventListener('pointercancel', dropSun, { capture: true });
 
   /* ── The keyboard ──────────────────────────────────────────────────────
      A time slider is a pointer instrument, and scrubbing to an exact minute

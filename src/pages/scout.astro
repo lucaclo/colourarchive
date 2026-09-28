@@ -3926,6 +3926,10 @@ const accent = '#f0b866';
     #dock[data-detent] #dock-body { visibility: visible; }
     .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 25.8rem; }
   }
+
+  /* The sun can be picked up (see "Dragging the sun" in page.ts). */
+  .scout-map.sun-grabbable :global(canvas) { cursor: grab; }
+  .scout-map.sun-dragging :global(canvas) { cursor: grabbing; }
 </style>
 
 <script>
