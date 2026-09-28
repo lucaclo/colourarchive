@@ -4023,6 +4023,37 @@ const accent = '#f0b866';
     :global(body:has(.scout) .tabbar),
     :global(body:has(.scout) .tabbar *) { cursor: none !important; }
   }
+
+  /* The ring, made for a map. Elsewhere it is a 1.5px hairline blended by
+     difference, which over the pale day map came out as a faint grey trace.
+     Here it is a white stroke with a dark halo either side — legible on
+     paper, imagery and the night palette alike — and a centre dot, because
+     on a map the ring is aimed, not just waved about. */
+  :global(body:has(.scout) .cursor-ring) {
+    width: 30px;
+    height: 30px;
+    border: 2.5px solid #fff;
+    mix-blend-mode: normal;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55), inset 0 0 0 1px rgb(0 0 0 / 0.45), 0 2px 8px rgb(0 0 0 / 0.35);
+  }
+  :global(body:has(.scout) .cursor-ring)::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+    transform: translate(-50%, -50%);
+  }
+  :global(body:has(.scout) .cursor-ring.hover) {
+    width: 50px;
+    height: 50px;
+    background: rgb(255 255 255 / 0.18);
+  }
+  :global(body:has(.scout) .cursor-ring.down) { width: 22px; height: 22px; }
 </style>
 
 <script>
