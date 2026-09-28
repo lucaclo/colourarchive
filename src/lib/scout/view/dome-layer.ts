@@ -150,6 +150,7 @@ const POINT_VERTEX = (prelude: string, define: string) => `
   attribute float a_size;
   attribute float a_glow;
   uniform mediump float u_halo;
+  uniform mediump float u_ratio;
   varying mediump vec4 v_colour;
   void main() {
     vec4 c = scoutProject(a_pos, a_up.x, a_up.y);
@@ -165,8 +166,13 @@ const POINT_VERTEX = (prelude: string, define: string) => `
     // On the halo pass a point with no glow gets no size, and rasterises to
     // nothing — cheaper than sorting the buffer into two. Clamped because a
     // sprite of a few hundred pixels is all overdraw and no information.
-    float size = u_halo > 0.5 ? a_size * a_glow : a_size;
-    gl_PointSize = clamp(size, 0.0, 96.0);
+    //
+    // Sizes are CSS pixels; gl_PointSize is device pixels. Without the
+    // ratio every sprite — the arc's weight, the beads, the sun's disc — drew
+    // at half its intended size on every 2× screen, which is every phone and
+    // iPad this page is for.
+    float size = (u_halo > 0.5 ? a_size * a_glow : a_size) * u_ratio;
+    gl_PointSize = clamp(size, 0.0, 192.0);
     v_colour = a_colour;
   }`;
 
@@ -265,7 +271,7 @@ export function createDomeLayer(id: string): DomeLayer {
       POINT_VERTEX(shader.vertexShaderPrelude, shader.define),
       POINT_FRAGMENT,
       ['a_pos', 'a_up', 'a_colour', 'a_size', 'a_glow'],
-      [...PROJECTION_UNIFORMS, 'u_halo'],
+      [...PROJECTION_UNIFORMS, 'u_halo', 'u_ratio'],
     );
     variant = shader.variantName;
   }
@@ -373,6 +379,7 @@ export function createDomeLayer(id: string): DomeLayer {
         const count = data.points.length / POINT_STRIDE;
         // Halo first and additively, so the core sits *in* its own light rather
         // than under a wash of it.
+        gl.uniform1f(p.uniforms.u_ratio, Math.max(1, window.devicePixelRatio || 1));
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
         gl.uniform1f(p.uniforms.u_halo, 1);
         gl.drawArrays(gl.POINTS, 0, count);

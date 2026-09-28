@@ -1213,6 +1213,28 @@ export async function startScout(): Promise<void> {
     // is the mark that says which way the light is coming from.
     map.addLayer(
       {
+        id: 'scout-sun-riseset-casing',
+        type: 'line',
+        source: SUN_SOURCE,
+        filter: ['==', ['get', 'kind'], 'riseset'],
+        layout: { 'line-cap': 'round' },
+        paint: { 'line-color': 'rgba(12,14,20,0.28)', 'line-width': 6, 'line-blur': 1.5 },
+      },
+      BELOW_LABELS,
+    );
+    map.addLayer(
+      {
+        id: 'scout-sun-riseset',
+        type: 'line',
+        source: SUN_SOURCE,
+        filter: ['==', ['get', 'kind'], 'riseset'],
+        layout: { 'line-cap': 'round' },
+        paint: { 'line-color': ['get', 'colour'], 'line-width': 3.2, 'line-opacity': 0.95 },
+      },
+      BELOW_LABELS,
+    );
+    map.addLayer(
+      {
         id: 'scout-sun-shadow-casing',
         type: 'line',
         source: SUN_SOURCE,
@@ -1263,10 +1285,10 @@ export async function startScout(): Promise<void> {
         source: SUN_SOURCE,
         filter: ['==', ['get', 'kind'], 'event'],
         paint: {
-          'circle-radius': 5.5,
+          'circle-radius': 6.5,
           'circle-color': ['get', 'colour'],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': 'rgba(12,14,20,0.75)',
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#ffffff',
         },
       },
       BELOW_LABELS,
@@ -1833,18 +1855,26 @@ export async function startScout(): Promise<void> {
     };
 
     // Sunrise and sunset sit on the ring where the sun will actually come up and
-    // go down, so the ring doubles as a compass for the day.
+    // go down, so the ring doubles as a compass for the day — and each gets a
+    // ray from where you stand, cool for the morning and warm for the evening,
+    // so the two directions of the day read from across the room.
     for (const [when, colour] of [
-      [day.times.sunrise, '#f0b866'],
-      [day.times.sunset, '#e0603a'],
+      [day.times.sunrise, '#8cc3ea'],
+      [day.times.sunset, '#f08a3c'],
     ] as const) {
       if (!when) continue;
       const index = Math.round((when.getTime() - day.dayStart.getTime()) / 60_000);
       const sample = day.samples[Math.min(day.samples.length - 1, Math.max(0, index))];
+      const edge = onRing(sample.azimuth);
+      features.push({
+        type: 'Feature',
+        properties: { kind: 'riseset', colour },
+        geometry: { type: 'LineString', coordinates: [[at.lon, at.lat], edge] },
+      });
       features.push({
         type: 'Feature',
         properties: { kind: 'event', colour },
-        geometry: { type: 'Point', coordinates: onRing(sample.azimuth) },
+        geometry: { type: 'Point', coordinates: edge },
       });
     }
 
@@ -2401,8 +2431,8 @@ export async function startScout(): Promise<void> {
       // hours became unreadable.
       const marks = hourMarks(centre, coarse, radius, timeZone);
       if (marks.length) {
-        geometry.push(marks, 'points', [...liftColour(basemap).slice(0, 3), 0.55] as RGBA, 8.5);
-        geometry.push(marks, 'points', [0.99, 0.99, 1, 0.95] as RGBA, 4.5, 2);
+        geometry.push(marks, 'points', [...liftColour(basemap).slice(0, 3), 0.6] as RGBA, 11);
+        geometry.push(marks, 'points', [0.99, 0.99, 1, 0.97] as RGBA, 6, 2);
       }
     }
 
@@ -2616,9 +2646,11 @@ export async function startScout(): Promise<void> {
       // over a white plaza is nothing. The seat is only a little wider than the
       // core — enough to give it an edge, not enough to read as a ring of its
       // own — and the halo is wider than both.
-      moving.push([sun], 'points', [lift[0], lift[1], lift[2], lift[3] * 0.9] as RGBA, 16);
-      moving.push([sun], 'points', [...lit, 0.95] as RGBA, 26, 3.4);
-      moving.push([sun], 'points', core, 13);
+      // Big enough to be picked up: the disc is also the handle for dragging
+      // time (see "Dragging the sun"), so it is drawn at a fingertip's size.
+      moving.push([sun], 'points', [lift[0], lift[1], lift[2], lift[3] * 0.9] as RGBA, 24);
+      moving.push([sun], 'points', [...lit, 0.95] as RGBA, 38, 3.4);
+      moving.push([sun], 'points', core, 19);
     }
 
     // The catalogue sky: stars, their constellations, and the galactic

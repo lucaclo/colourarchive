@@ -48,7 +48,7 @@ export const inkColour = (basemap: Basemap): [number, number, number] =>
  * mechanism issue #23 established, turned up once more.
  */
 export const liftColour = (basemap: Basemap): RGBA =>
-  basemap === 'light' ? [0.08, 0.09, 0.11, 0.62] : [0, 0, 0, 0.58];
+  basemap === 'light' ? [0.08, 0.09, 0.11, 0.74] : [0, 0, 0, 0.58];
 
 /**
  * The frame wedge's ink.
@@ -87,7 +87,9 @@ export const rgbOf = (hex: string): [number, number, number] => [
 export const WIDTH = {
   // Issue #23: the loudest mark on the page needed to actually read as one at
   // a glance, on the basemap that gave it the least contrast to work with.
-  arc: 4.6,
+  // Raised again (4.6 → 6.4) for the map-first redesign: with the chrome
+  // gone from over the map, the ring is the page's signature element.
+  arc: 6.4,
   ray: 3.0,
   plumb: 1.4,
   horizon: 2.6,
@@ -108,5 +110,5 @@ export const WIDTH = {
    */
   frameOverlay: 2.4,
   /** How much wider the lift stroke is than the mark it sits under. */
-  lift: 3.4,
+  lift: 4.2,
 };

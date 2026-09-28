@@ -3930,6 +3930,41 @@ const accent = '#f0b866';
   /* The sun can be picked up (see "Dragging the sun" in page.ts). */
   .scout-map.sun-grabbable :global(canvas) { cursor: grab; }
   .scout-map.sun-dragging :global(canvas) { cursor: grabbing; }
+
+  /* ── The empty state, on glass ────────────────────────────────────────────
+     The hint used to be display italic with a dark glow, drawn straight on the
+     map — fine on the old dark chrome, a smudge on pale paper. Both it and the
+     first-visit note are now the same glass as everything else floating here,
+     so they turn with the map instead of fighting it. */
+  .scout-hint {
+    padding: 0.6rem 1rem;
+    border-radius: var(--r-pill);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-edge);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    font-family: var(--font-ui);
+    font-style: normal;
+    font-size: var(--t-body);
+    font-weight: 600;
+    color: var(--fg);
+    text-shadow: none;
+    width: max-content;
+    max-width: calc(100vw - 2.4rem);
+  }
+  .first-visit {
+    top: calc(42% + 2.2rem);
+    padding: 0.85rem 0.9rem;
+    border-radius: var(--r-md);
+    border: 1px solid var(--glass-edge);
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
+  .first-visit p { font-size: var(--t-footnote); color: var(--secondary); }
+  .first-visit button { min-width: 28px; min-height: 28px; }
 </style>
 
 <script>
