@@ -54,20 +54,11 @@ const accent = manifest.chapters[0]
   : undefined;
 ---
 
-<Layout title="The book — Colour Archive" accent={accent}>
-  <header class="topbar" id="topbar">
-    <span class="brand">Colour Archive</span>
-    <span class="topbar-right">
-      <a href="/">Archive</a>
-      <a href="/inspiration">Inspiration</a>
-      <a href="/scout">Scout</a>
-      <a href="/upload">Add<span class="wide-only"> / Remove</span></a>
-    </span>
-  </header>
+<Layout title="The book — Colour Archive" accent={accent} tab="book">
 
   <main class="book-page">
     <header class="book-head">
-      <p class="kicker">Colour Archive</p>
+      <p class="cover-kicker page-kicker">Print sequence</p>
       <h1>The book</h1>
       <p class="lead">
         The sequence <code>export:sequence</code> and <code>export:print</code> build — drag the handle to reorder
@@ -193,8 +184,8 @@ const accent = manifest.chapters[0]
 </Layout>
 
 <style>
-  .book-page { max-width: 72rem; margin: 0 auto; padding: 8rem 6vw 12vh; }
-  .kicker { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .book-page { max-width: 72rem; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) 6vw calc(var(--tabbar-space) + 6rem); }
+  .kicker { font-size: var(--t-caption); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0; }
   .book-head h1 {
     font-family: var(--font-display); font-weight: var(--title-weight); font-style: var(--title-style);
     font-size: clamp(2.2rem, 5.5vw, 3.8rem); letter-spacing: var(--title-tracking);
@@ -213,7 +204,7 @@ const accent = manifest.chapters[0]
   }
   .book-chapter-count { font-family: var(--font-label); font-size: 0.85rem; color: var(--muted); }
   .book-dup-summary {
-    font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: var(--t-caption);
     color: #c9973a; padding: 0.15rem 0.5rem; border-radius: 999px; background: color-mix(in oklab, #c9973a 14%, transparent);
   }
 
@@ -242,7 +233,7 @@ const accent = manifest.chapters[0]
   }
   .book-caption {
     pointer-events: auto; appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
-    padding: 0; font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.02em;
+    padding: 0; font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.02em;
     color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
   }
   .book-caption:hover, .book-caption:focus-visible { color: var(--accent-mix, #fff); }
@@ -254,7 +245,7 @@ const accent = manifest.chapters[0]
   .book-move {
     pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
-    font-family: var(--font-label); font-size: 0.5rem; letter-spacing: 0.02em;
+    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.02em;
     padding: 0.2rem 0.4rem; max-width: 5.2rem; flex: none;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
@@ -264,7 +255,7 @@ const accent = manifest.chapters[0]
   .book-dup {
     pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
     background: color-mix(in oklab, #c9973a 55%, #000 45%); color: #fff;
-    font-family: var(--font-label); font-size: 0.5rem; letter-spacing: 0.01em;
+    font-family: var(--font-ui); font-size: 0.6875rem;
     padding: 0.2rem 0.4rem; flex: none;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     transition: transform 110ms ease-out, background 140ms;
@@ -298,25 +289,26 @@ const accent = manifest.chapters[0]
   .book-undo, .book-savebar {
     position: fixed; left: 50%; transform: translateX(-50%); z-index: 40;
     display: flex; align-items: center; gap: 1rem;
-    padding: 0.6rem 0.6rem 0.6rem 1rem; border-radius: 999px;
-    background: color-mix(in oklab, var(--bg) 90%, #000); border: 1px solid var(--border);
-    box-shadow: 0 10px 30px -10px color-mix(in oklab, black 55%, transparent);
+    padding: 0.4rem 0.4rem 0.4rem 1.1rem; border-radius: 999px;
+    background: var(--glass-bg-strong); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   }
-  .book-undo { bottom: 5.2rem; }
-  .book-savebar { bottom: 1.4rem; }
+  /* Stacked above the tab bar, save nearest the thumb. */
+  .book-savebar { bottom: calc(var(--tabbar-space) + 0.25rem); }
+  .book-undo { bottom: calc(var(--tabbar-space) + 4rem); }
   .book-undo[hidden], .book-savebar[hidden] { display: none; }
-  #book-undo-text { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
+  #book-undo-text { font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--muted); }
   #book-undo-btn {
-    appearance: none; cursor: pointer; border: 0; background: none; color: var(--accent-mix, var(--fg));
-    font-family: var(--font-label); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
-    padding: 0.3rem 0.2rem; text-decoration: underline; text-underline-offset: 2px;
+    appearance: none; cursor: pointer; border: 0; border-radius: 999px; background: var(--fill-hover); color: var(--fg);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
+    min-height: 2.5rem; padding: 0 1.1rem;
   }
-  #book-savebar-text { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
+  #book-savebar-text { font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--muted); }
   #book-save {
     appearance: none; cursor: pointer; border: 0; border-radius: 999px;
-    background: var(--fg); color: var(--bg); font-family: var(--font-label);
-    font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
-    padding: 0.55rem 1.1rem; transition: transform 110ms ease-out, opacity 140ms;
+    background: var(--fg); color: var(--bg); font-family: var(--font-ui);
+    font-size: var(--t-footnote); font-weight: 600;
+    min-height: 2.5rem; padding: 0 1.2rem; transition: transform 110ms ease-out, opacity 140ms;
   }
   #book-save:active { transform: scale(0.96); }
   #book-save:disabled { opacity: 0.6; cursor: default; }
@@ -337,7 +329,7 @@ const accent = manifest.chapters[0]
   @media (prefers-reduced-motion: reduce) { .book-noteedit, .book-noteedit-body { transition: none; } }
   .book-noteedit-body img { width: 9rem; height: 9rem; object-fit: cover; border-radius: 3px; flex: 0 0 auto; background: var(--border); }
   .book-noteedit-form { display: flex; flex-direction: column; gap: 0.6rem; flex: 1 1 auto; min-width: 0; }
-  .book-noteedit-name { margin: 0; font-family: var(--font-label); font-size: 0.72rem; color: var(--muted); }
+  .book-noteedit-name { margin: 0; font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); }
   #book-noteedit-text {
     flex: 1 1 auto; resize: vertical; min-height: 6rem; background: color-mix(in oklab, var(--fg) 4%, transparent);
     border: 1px solid var(--border); border-radius: 3px; color: var(--fg); font: inherit; font-size: 0.86rem;
@@ -349,12 +341,12 @@ const accent = manifest.chapters[0]
      instead, and #c0392b is reserved for filled backgrounds (remove buttons,
      armed states) where a light glyph sits on top of it, not as text colour
      on the dark ground itself. This was the one place that drifted. */
-  .book-noteedit-error { margin: 0; font-family: var(--font-label); font-size: 0.7rem; color: #e0603a; }
+  .book-noteedit-error { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: #e0603a; }
   .book-noteedit-error[hidden] { display: none; }
   .book-noteedit-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
 
   @media (max-width: 620px) {
-    .book-page { padding: 7rem 5vw 14vh; }
+    .book-page { padding: calc(env(safe-area-inset-top, 0px) + 3rem) 5vw calc(var(--tabbar-space) + 7rem); }
     .book-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
   }
 

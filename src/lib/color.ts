@@ -172,3 +172,32 @@ export function oklchCss(o: OKLCH, alpha = 1): string {
   const a = alpha === 1 ? '' : ` / ${alpha}`;
   return `oklch(${o.L.toFixed(3)} ${o.C.toFixed(3)} ${o.H.toFixed(1)}${a})`;
 }
+
+/** OKLCH -> WCAG relative luminance (0..1), gamut-clipped to sRGB. */
+export function oklchLuminance(o: OKLCH): number {
+  const h = (o.H * Math.PI) / 180;
+  const a = o.C * Math.cos(h);
+  const b = o.C * Math.sin(h);
+  const l_ = o.L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = o.L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = o.L - 0.0894841775 * a - 1.291485548 * b;
+  const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+  const clip = (x: number) => Math.min(1, Math.max(0, x));
+  const r = clip(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s);
+  const g = clip(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s);
+  const bl = clip(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+}
+
+/** Ink for text laid directly on an OKLCH ground — whichever of the archive's
+ *  paper white or near-black has the higher WCAG contrast against it. A fixed
+ *  lightness cut-off (`L > 0.62`) used to decide this, and mid-tone greys and
+ *  camels fell on the wrong side of it: white small caps at ~3:1. */
+export const INK_LIGHT = '#f6f6f4';
+export const INK_DARK = '#0a0a0a';
+export function readableInk(o: OKLCH): string {
+  const bg = oklchLuminance(o);
+  const onLight = (bg + 0.05) / (0.0033 + 0.05);   // INK_DARK's luminance
+  const onDark = (0.9206 + 0.05) / (bg + 0.05);    // INK_LIGHT's luminance
+  return onLight >= onDark ? INK_DARK : INK_LIGHT;
+}

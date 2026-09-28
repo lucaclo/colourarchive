@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { readManifest } from '../lib/manifest';
-import { oklchCss } from '../lib/color';
+import { oklchCss, readableInk } from '../lib/color';
 import { GENRES, GENRE_LABEL } from '../lib/types';
 import { findColourGaps, findGenreColourGaps } from '../lib/gaps';
 import { looksFor, photoLookRequest, type LookRequest } from '../lib/match/looks';
@@ -153,7 +153,17 @@ function lensSwatch(preset: GearPreset): string {
 const builtAt = new Date();
 const builtLabel = builtAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-const titleFg = (L: number) => (L > 0.62 ? '#0a0a0a' : '#f6f6f4');
+// Ink for the chapter opener: whichever of paper white / near-black actually
+// reads best on the chapter's colour (WCAG contrast, see readableInk) — the
+// old `L > 0.62` cut-off put white small caps on mid greys at ~3:1.
+const titleFg = (o: { L: number; C: number; H: number }) => readableInk(o);
+// A chapter's palette: its own photographs' dominant colours, sampled evenly
+// in the order they appear below, so the opener previews what's coming.
+const PALETTE_MAX = 14;
+const chapterPalette = (photos: { oklch: { L: number; C: number; H: number } }[]) => {
+  if (photos.length <= PALETTE_MAX) return photos.map((p) => p.oklch);
+  return Array.from({ length: PALETTE_MAX }, (_, i) => photos[Math.round((i * (photos.length - 1)) / (PALETTE_MAX - 1))].oklch);
+};
 // Seeds --accent before any scroll happens — otherwise the topbar/cover sit
 // at the neutral default until the scroll tracker (index.astro's inline
 // script) takes over and starts overwriting it per chapter.
@@ -179,7 +189,7 @@ const auroraCss = hasPhotos
   : undefined;
 ---
 
-<Layout title={SITE_TITLE} accent={initialAccent}>
+<Layout title={SITE_TITLE} accent={initialAccent} tab="archive">
   {/* A persistent 3px reading-progress rail across the very top edge — the
       archive's real chapter colours, dim until you've scrolled into or past
       them. Independent of the side/foot spectrum scrubber (that one jumps to
@@ -200,57 +210,60 @@ const auroraCss = hasPhotos
   )}
   <header class="topbar" id="topbar">
     <button type="button" class="brand" id="to-top" aria-label="Back to the cover">{SITE_TITLE}</button>
-    {showMediumToggle && (
-      <nav class="view-toggle" id="view-toggle" aria-label="Medium">
-        <button type="button" data-view="all" aria-pressed="true">All</button>
-        <button type="button" data-view="digital">Digital</button>
-        <button type="button" data-view="film">Film</button>
-      </nav>
-    )}
-    {showGenreDrop && (
-      <div class="genre-drop" id="genre-drop">
-        <button type="button" class="genre-btn" id="genre-btn" aria-haspopup="listbox" aria-expanded="false">
-          <span id="genre-current">All genres</span>
-          <svg class="genre-caret" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <ul class="genre-menu" id="genre-menu" role="listbox" aria-label="Genre" hidden>
-          <li role="option" data-genre="all" aria-selected="true" tabindex="-1">All genres</li>
-          {presentGenres.map((g) => (
-            <li
-              role="option"
-              data-genre={g}
-              data-label={GENRE_LABEL[g]}
-              data-count-all={genreCounts[g]}
-              data-count-film={genreCountsByMedium.film[g]}
-              data-count-digital={genreCountsByMedium.digital[g]}
-              aria-selected="false"
-              tabindex="-1"
-            >
-              <span class="genre-name">{GENRE_LABEL[g]}</span>
-              <span class="genre-count" data-genre-count></span>
-            </li>
-          ))}
-        </ul>
+    {/* The archive's own tools — what to show, and finding a photograph.
+        Where to go next is the tab bar's job (components/TabBar.astro), so
+        none of the other pages are linked from here any more. */}
+    {(showMediumToggle || showGenreDrop) && (
+      <div class="tb-group">
+        {showMediumToggle && (
+          <nav class="view-toggle" id="view-toggle" aria-label="Medium">
+            <button type="button" data-view="all" aria-pressed="true">All</button>
+            <button type="button" data-view="digital">Digital</button>
+            <button type="button" data-view="film">Film</button>
+          </nav>
+        )}
+        {showMediumToggle && showGenreDrop && <span class="tb-sep" aria-hidden="true" />}
+        {showGenreDrop && (
+          <div class="genre-drop" id="genre-drop">
+            <button type="button" class="genre-btn" id="genre-btn" aria-haspopup="listbox" aria-expanded="false">
+              <span id="genre-current">All genres</span>
+              <svg class="genre-caret" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <ul class="genre-menu" id="genre-menu" role="listbox" aria-label="Genre" hidden>
+              <li role="option" data-genre="all" aria-selected="true" tabindex="-1">All genres</li>
+              {presentGenres.map((g) => (
+                <li
+                  role="option"
+                  data-genre={g}
+                  data-label={GENRE_LABEL[g]}
+                  data-count-all={genreCounts[g]}
+                  data-count-film={genreCountsByMedium.film[g]}
+                  data-count-digital={genreCountsByMedium.digital[g]}
+                  aria-selected="false"
+                  tabindex="-1"
+                >
+                  <span class="genre-name">{GENRE_LABEL[g]}</span>
+                  <span class="genre-count" data-genre-count></span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     )}
     {!STATIC && hasPhotos && (
-      <div class="search-box" id="search-box">
-        <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <input type="search" id="search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
+      <div class="tb-group tb-search">
+        <div class="search-box" id="search-box">
+          <svg class="search-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input type="search" id="search-input" placeholder="Search the archive" aria-label="Search the archive by description" autocomplete="off" />
+        </div>
       </div>
     )}
     <span class="topbar-right">
-      {/* Inspiration is the editing workbench — it writes to disk and shows
-          other people's photographs pending credit, so it stays on the Mac.
-          Scout reads nothing of yours and now prerenders, so it ships. */}
-      {!STATIC && <a href="/inspiration">Inspiration</a>}
-      <a href="/scout">Scout</a>
-      {!STATIC && <a href="/book">Book</a>}
-      <button type="button" class="ghost" id="insights-btn" aria-haspopup="dialog">Insights</button>
-      {/* "/ Remove" is dropped on a phone: the full label pushed this link off
-          the right edge of the screen, taking the way in to the upload page
-          with it. The page it opens says "Add & remove" either way. */}
-      {!STATIC && <a href="/upload">Add<span class="wide-only"> / Remove</span></a>}
+      <button type="button" class="tb-button" id="insights-btn" aria-haspopup="dialog" aria-label="Insights">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span class="tb-label">Insights</span>
+      </button>
     </span>
   </header>
 
@@ -292,7 +305,7 @@ const auroraCss = hasPhotos
         </div>
         {manifest.chapters.map((ch, ci) => {
           const bg = oklchCss(ch.oklch);
-          const fg = titleFg(ch.oklch.L);
+          const fg = titleFg(ch.oklch);
           const weight = chapterWeight(ch.photos.length);
           return (
             <>
@@ -307,7 +320,9 @@ const auroraCss = hasPhotos
                 <p class="chapter-index">Chapter {roman(ci)}</p>
                 <h2 class="chapter-title">{ch.name}</h2>
                 <p class="chapter-count">{ch.photos.length} photograph{ch.photos.length === 1 ? '' : 's'}</p>
-                <span class="chapter-swatch" style={`background:${bg}`} />
+                <ul class="chapter-palette" aria-hidden="true">
+                  {chapterPalette(ch.photos).map((o) => <li style={`background:${oklchCss(o)}`} />)}
+                </ul>
               </section>
               <div class="collage">
                 {ch.photos.map((p, pi) => {
@@ -592,9 +607,10 @@ const auroraCss = hasPhotos
      fixed to the bottom-right corner whenever it is open. */
   .colophon {
     display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
-    padding: 5rem 8vw 6.5rem;
+    /* Bottom padding clears the tab bar as well as the metadata panel. */
+    padding: 5rem 8vw calc(var(--tabbar-space) + 4rem);
     font-family: var(--font-label);
-    font-size: 0.7rem; letter-spacing: 0.06em;
+    font-size: var(--t-caption); letter-spacing: 0.04em;
     color: var(--muted); text-align: center;
   }
   .colophon p { margin: 0; }
@@ -616,10 +632,10 @@ const auroraCss = hasPhotos
     font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
     font-size: clamp(1.8rem, 4.5vw, 2.6rem); margin: 0;
   }
-  .arc-similar-hint { font-family: var(--font-label); color: var(--muted); font-size: 0.8rem; margin: 0.4rem 0 1.6rem; letter-spacing: 0.04em; }
+  .arc-similar-hint { font-family: var(--font-ui); color: var(--secondary); font-size: var(--t-body); margin: 0.5rem 0 1.6rem; }
   .arc-similar-controls {
     display: flex; align-items: center; gap: 0.8rem; margin: 0 0 2rem; max-width: 26rem;
-    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary);
   }
   .arc-similar-controls input { flex: 1; accent-color: var(--fg); }
   /* Injected via innerHTML at runtime, same as inspiration.astro's .sim-grid —

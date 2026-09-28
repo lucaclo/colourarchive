@@ -16,20 +16,11 @@ const accent = manifest.chapters[0]
   : undefined;
 ---
 
-<Layout title="Add & remove — Colour Archive" accent={accent}>
-  <header class="topbar" id="topbar">
-    <span class="brand">Colour Archive</span>
-    <span class="topbar-right">
-      <a href="/">Archive</a>
-      <a href="/inspiration">Inspiration</a>
-      <a href="/scout">Scout</a>
-      <a href="/book">Book</a>
-    </span>
-  </header>
+<Layout title="Add & remove — Colour Archive" accent={accent} tab="upload">
 
   <main class="ingest">
     <header class="ingest-head">
-      <p class="kicker">Colour Archive</p>
+      <p class="cover-kicker page-kicker">Library</p>
       <h1>Add &amp; remove</h1>
       <p class="lead">Drop them in. Colour does the rest.</p>
     </header>
@@ -98,8 +89,10 @@ const accent = manifest.chapters[0]
 </Layout>
 
 <style>
-  .ingest { max-width: 62rem; margin: 0 auto; padding: 8rem 6vw 10vh; }
-  .kicker { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  /* No topbar above this any more (the tab bar carries navigation), so the
+     page opens on its own title; the foot clears the tab bar. */
+  .ingest { max-width: 62rem; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) 6vw calc(var(--tabbar-space) + 4rem); }
+  .kicker { font-size: var(--t-caption); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0; }
   .ingest-head h1 {
     font-family: var(--font-display); font-weight: var(--title-weight); font-style: var(--title-style);
     font-size: clamp(2.2rem, 5.5vw, 3.8rem); letter-spacing: var(--title-tracking);
@@ -109,18 +102,18 @@ const accent = manifest.chapters[0]
 
   .drop { margin: 0; }
   .drop-inner {
-    border: 1px dashed var(--border); border-radius: 2px;
+    border: 1.5px dashed var(--glass-edge); border-radius: var(--r-lg);
     padding: 4.5rem 2rem; text-align: center; cursor: pointer;
     transition: border-color 160ms, background 160ms, transform 120ms ease-out;
-    background: color-mix(in oklab, var(--fg) 2%, transparent);
+    background: var(--surface-1);
   }
   .drop-inner:hover, .drop-inner:focus-visible, .drop-inner.over {
     border-color: var(--accent-mix); background: color-mix(in oklab, var(--accent-mix) 5%, transparent);
   }
   .drop-inner:active { transform: scale(0.995); }
   .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.6rem; margin: 0 0 0.5rem; }
-  .drop-sub { color: var(--muted); font-size: 0.82rem; margin: 0; letter-spacing: 0.02em; }
-  .drop-note { font-size: 0.72rem; margin-top: 0.5rem; opacity: 0.7; }
+  .drop-sub { color: var(--secondary); font-size: var(--t-footnote); margin: 0; }
+  .drop-note { font-size: var(--t-caption); margin-top: 0.5rem; opacity: 0.7; }
   .link { text-decoration: underline; text-underline-offset: 3px; }
 
   .status { margin-top: 1.6rem; }
@@ -130,8 +123,8 @@ const accent = manifest.chapters[0]
   .status-text { color: var(--muted); font-size: 0.82rem; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
   .cancel {
     appearance: none; background: transparent; border: 0; cursor: pointer; flex: 0 0 auto;
-    font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.18em;
-    text-transform: uppercase; color: var(--muted); padding: 0.3rem 0;
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
+    color: var(--secondary); padding: 0.3rem 0; min-height: var(--hit);
     border-bottom: 1px solid transparent; transition: color 180ms, border-color 180ms, transform 110ms ease-out;
   }
   .cancel:hover { color: var(--accent-mix); border-bottom-color: currentColor; }
@@ -151,12 +144,12 @@ const accent = manifest.chapters[0]
   @media (prefers-reduced-motion: reduce) { :global(.results li) { animation: none; } }
   :global(.results .sw) { width: 1.1rem; height: 1.1rem; border-radius: 50%; flex: 0 0 auto; border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); }
   :global(.results .fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  :global(.results .ch) { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; }
+  :global(.results .ch) { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: var(--t-caption); }
   :global(.results .skip) { color: var(--muted); font-style: italic; }
   :global(.results .err) { color: #e0603a; }
   /* Issue #61 — a chapter-fit verdict, on its own line under the row it
      belongs to (flex-basis 100% wraps it there without a second list item). */
-  :global(.results .fit) { flex-basis: 100%; font-size: 0.74rem; color: var(--muted); }
+  :global(.results .fit) { flex-basis: 100%; font-size: var(--t-footnote); color: var(--muted); }
   :global(.results .fit-keeps) { color: color-mix(in oklab, var(--fg) 70%, transparent); }
   :global(.results .fit-new-look) { color: #e0a63a; }
 
@@ -170,22 +163,22 @@ const accent = manifest.chapters[0]
 
   .bulk-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
-    margin: -0.4rem 0 1rem; padding: 0.6rem 0.9rem;
-    border: 1px solid var(--border); border-radius: 2px;
-    background: color-mix(in oklab, var(--fg) 3%, transparent);
+    margin: -0.4rem 0 1rem; padding: 0.45rem 0.45rem 0.45rem 1rem;
+    border: 1px solid var(--separator); border-radius: var(--r-pill);
+    background: var(--surface-1);
   }
   .bulk-count {
-    font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.14em;
+    font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.1em;
     text-transform: uppercase; color: var(--muted); flex: 0 0 auto;
   }
   .bulk-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .bulk-btn, .bulk-genre {
-    appearance: none; cursor: pointer; border: 1px solid var(--border); border-radius: 999px;
-    background: transparent; color: var(--fg);
-    font-family: var(--font-label); font-size: 0.64rem; letter-spacing: 0.08em;
-    padding: 0.32rem 0.7rem; transition: border-color 140ms, background 140ms;
+    appearance: none; cursor: pointer; border: 1px solid transparent; border-radius: 999px;
+    background: var(--fill); color: var(--fg);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
+    min-height: 2.25rem; padding: 0 0.95rem; transition: border-color 140ms, background 140ms;
   }
-  .bulk-btn:hover, .bulk-genre:hover { border-color: var(--accent-hair); }
+  .bulk-btn:hover, .bulk-genre:hover { background: var(--fill-hover); }
   .bulk-remove.armed { border-color: #c0392b; background: color-mix(in oklab, #c0392b 25%, transparent); }
 
   :global(.cell.selected) { box-shadow: 0 0 0 2px var(--accent-mix) inset; cursor: pointer; }
@@ -229,7 +222,7 @@ const accent = manifest.chapters[0]
   }
   :global(.cell figcaption) {
     position: absolute; left: 0; bottom: 0; right: 0;
-    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.1em; text-transform: uppercase;
     color: #fff; padding: 0.3rem 0.4rem;
     /* .cell-medium sits at left:6px on the same edge (bottom:6px), so this
        full-width caption needs to clear it or a long chapter name shows its
@@ -260,7 +253,7 @@ const accent = manifest.chapters[0]
   :global(.cell-medium) {
     position: absolute; left: 6px; bottom: 6px; z-index: 2;
     border: 0; cursor: pointer; border-radius: 999px;
-    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em;
+    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em;
     text-transform: uppercase; padding: 0.2rem 0.5rem;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
@@ -273,7 +266,7 @@ const accent = manifest.chapters[0]
   :global(.cell-genre) {
     position: absolute; left: 6px; top: 6px; z-index: 2; max-width: calc(100% - 12px);
     border: 0; cursor: pointer; border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em;
+    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em;
     text-transform: uppercase; padding: 0.2rem 0.5rem;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
@@ -299,7 +292,7 @@ const accent = manifest.chapters[0]
      it left visible. This is the size that fits without doing that. */
   @media (pointer: coarse) {
     :global(.cell-remove) { width: 32px; height: 32px; font-size: 17px; line-height: 32px; }
-    :global(.cell-medium), :global(.cell-genre) { min-height: 28px; padding: 0.35rem 0.6rem; font-size: 0.6rem; }
+    :global(.cell-medium), :global(.cell-genre) { min-height: 28px; padding: 0.35rem 0.6rem; font-size: var(--t-caption); }
   }
 
   .foot { margin-top: 3rem; }
@@ -312,15 +305,6 @@ const accent = manifest.chapters[0]
   const bar = document.getElementById('bar');
   const statusText = document.getElementById('status-text');
   const results = document.getElementById('results');
-  const bartop = document.getElementById('topbar');
-
-  // Top bar auto-hide
-  let lastY = window.scrollY;
-  addEventListener('scroll', () => {
-    const y = window.scrollY;
-    if (y > lastY && y > 90) bartop.classList.add('hidden'); else bartop.classList.remove('hidden');
-    lastY = y;
-  }, { passive: true });
 
   // Swap manage thumbnails from placeholder to the real derivative as they come
   // into view. This used to fire `new Image()` for every cell the instant the
@@ -695,11 +679,11 @@ const accent = manifest.chapters[0]
     bulkGenre.value = '';
   });
 
+  // No auto-expiry: an armed confirm only cancels on an explicit outside
+  // click (below), never just because the user paused to think it over.
   let bulkRemoveArmed = false;
-  let bulkRemoveTimer = 0;
   const disarmBulkRemove = () => {
     bulkRemoveArmed = false;
-    clearTimeout(bulkRemoveTimer);
     if (bulkRemove) { bulkRemove.textContent = 'Remove'; bulkRemove.classList.remove('armed'); }
   };
   bulkRemove?.addEventListener('click', async () => {
@@ -707,11 +691,8 @@ const accent = manifest.chapters[0]
       bulkRemoveArmed = true;
       bulkRemove.textContent = `Remove ${selected.size}? Click again`;
       bulkRemove.classList.add('armed');
-      clearTimeout(bulkRemoveTimer);
-      bulkRemoveTimer = setTimeout(disarmBulkRemove, 2600);
       return;
     }
-    clearTimeout(bulkRemoveTimer);
     bulkRemoveArmed = false;
     bulkRemove.textContent = '…';
     const ids = [...selected];
@@ -772,7 +753,6 @@ const accent = manifest.chapters[0]
         disarm();
         armed = target; target.textContent = '✓'; target.classList.add('armed');
         target.title = 'Click again to remove';
-        setTimeout(() => { if (armed === target) disarm(); }, 2600);
         return;
       }
       armed = null; target.textContent = '…';
@@ -785,11 +765,12 @@ const accent = manifest.chapters[0]
         if (manageSearchBox && grid.children.length === 0) manageSearchBox.hidden = true;
       } else {
         target.textContent = '×';
+        target.classList.remove('armed');
       }
     }
   });
   // Clicking anywhere else cancels an armed delete, rather than leaving a photo
-  // one stray click from removal for the next two and a half seconds.
+  // one stray click from removal indefinitely.
   document.addEventListener('click', (e) => { if (armed && !e.target.closest('.cell-remove')) disarm(); }, true);
 
   async function post(url, body) {

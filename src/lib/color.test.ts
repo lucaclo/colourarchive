@@ -25,11 +25,15 @@ import {
   chapterRank,
   classify,
   defaultChapterName,
+  INK_DARK,
+  INK_LIGHT,
   keyToHue,
   lightnessBand,
   linearRgbToOklab,
   nearestAnchor,
   oklchCss,
+  oklchLuminance,
+  readableInk,
   roundOklch,
   srgb255ToOklch,
   type Band,
@@ -354,5 +358,20 @@ describe('oklchCss', () => {
 
   it('includes " / alpha" when alpha is not 1', () => {
     assert.equal(oklchCss({ L: 0.5, C: 0.1, H: 200 }, 0.5), 'oklch(0.500 0.100 200.0 / 0.5)');
+  });
+});
+
+describe('readableInk', () => {
+  it('puts dark ink on light grounds and light ink on dark ones', () => {
+    assert.equal(readableInk({ L: 0.95, C: 0, H: 0 }), INK_DARK);
+    assert.equal(readableInk({ L: 0.2, C: 0, H: 0 }), INK_LIGHT);
+  });
+  it('picks dark ink on a mid grey, where the old L > 0.62 cut-off chose white', () => {
+    // L 0.6 grey is ~#7f7f7f: white on it is ~3.9:1, near-black ~5.2:1.
+    assert.equal(readableInk({ L: 0.6, C: 0.01, H: 90 }), INK_DARK);
+  });
+  it('matches the round-trip luminance of a known sRGB colour', () => {
+    const o = srgb255ToOklch(255, 255, 255);
+    assert.ok(Math.abs(oklchLuminance(o) - 1) < 1e-3);
   });
 });

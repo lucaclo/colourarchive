@@ -75,20 +75,11 @@ const accent = manifest.chapters[0]
   : undefined;
 ---
 
-<Layout title="Inspiration — Colour Archive" accent={accent}>
-  <header class="topbar" id="topbar">
-    <span class="brand">Colour Archive</span>
-    <span class="topbar-right">
-      <a href="/">Archive</a>
-      <a href="/scout">Scout</a>
-      <a href="/book">Book</a>
-      <a href="/upload">Add<span class="wide-only"> / Remove</span></a>
-    </span>
-  </header>
+<Layout title="Inspiration — Colour Archive" accent={accent} tab="inspiration">
 
   <main class="insp">
     <header class="insp-head">
-      <p class="cover-kicker">Inspiration</p>
+      <p class="cover-kicker page-kicker">Inspiration</p>
       <h1>Reference</h1>
       <p class="insp-lead">What catches the eye.</p>
     </header>
@@ -417,7 +408,7 @@ const accent = manifest.chapters[0]
 </Layout>
 
 <style>
-  .insp { max-width: 68rem; margin: 0 auto; padding: 8rem var(--edge) 12vh; }
+  .insp { max-width: 68rem; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) var(--edge) calc(var(--tabbar-space) + 5rem); }
   .insp-head h1 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2.2rem, 6vw, 4rem); margin: 0.3rem 0 0.6rem; line-height: 1; }
   .insp-lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 40rem; }
 
@@ -427,14 +418,12 @@ const accent = manifest.chapters[0]
   .kept { margin-bottom: 3.5rem; }
   .kept-head { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
   .kept-kicker {
-    margin: 0; font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.24em;
-    text-transform: uppercase; color: var(--muted);
+    margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted);
   }
   .kept-title {
-    margin: 0; font-family: var(--font-label); font-size: 0.85rem; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--fg);
+    margin: 0; font-family: var(--font-ui); font-size: 0.85rem; color: var(--fg);
   }
-  .kept-sub { margin: 0; font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); }
+  .kept-sub { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .kept-strip {
     list-style: none; margin: 0; padding: 0 0 0.5rem; display: flex; gap: 0.7rem; overflow-x: auto;
     scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
@@ -452,11 +441,11 @@ const accent = manifest.chapters[0]
     border-radius: 2px;
   }
   :global(.kept-name) {
-    display: block; margin-top: 0.35rem; font-family: var(--font-label); font-size: 0.62rem;
+    display: block; margin-top: 0.35rem; font-family: var(--font-ui); font-size: var(--t-caption);
     color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   :global(.kept-date) {
-    display: block; font-family: var(--font-label); font-size: 0.58rem; color: var(--muted);
+    display: block; font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted);
   }
   /* Same corner-circle language as .cell-remove on the archive/upload grids. */
   :global(.kept-remove) {
@@ -473,16 +462,17 @@ const accent = manifest.chapters[0]
   :global(.kept-remove:active) { transform: scale(0.88); }
   @media (hover: none), (pointer: coarse) { :global(.kept-remove) { opacity: 0.85; } }
   @media (max-width: 640px) { :global(.kept-strip li) { width: 42vw; max-width: 190px; } }
-  .drop { border: 1px dashed var(--border); border-radius: 2px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 160ms, background 160ms; background: color-mix(in oklab, var(--fg) 2%, transparent); }
+  .drop { border: 1.5px dashed var(--glass-edge); border-radius: var(--r-lg); padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 160ms, background 160ms; background: var(--surface-1); }
   .drop:hover, .drop:focus-visible, .drop.over { border-color: var(--accent-mix); background: color-mix(in oklab, var(--accent-mix) 5%, transparent); }
   .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.4rem; margin: 0 0 0.4rem; }
-  .drop-sub { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; margin: 0; }
+  .drop-sub { color: var(--secondary); font-size: var(--t-footnote); margin: 0; }
   .link { text-decoration: underline; text-underline-offset: 3px; }
   .urlrow { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.8rem; flex-wrap: wrap; }
-  .urlrow input { flex: 1 1 12rem; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-label); font-size: 0.8rem; padding: 0.6rem 0.8rem; border-radius: 2px; }
+  .urlrow input { flex: 1 1 12rem; background: var(--surface-1); border: 1px solid var(--separator); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-body); min-height: var(--hit); padding: 0 0.95rem; border-radius: var(--r-sm); }
+  .urlrow input::placeholder { color: var(--muted); }
   .urlrow input:focus-visible { outline: none; border-color: var(--accent-mix); }
-  .urlrow .or { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; flex: 0 0 auto; }
-  .urlrow button { flex: 0 0 auto; background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.62rem 1rem; border-radius: 2px; }
+  .urlrow .or { color: var(--muted); font-size: var(--t-footnote); flex: 0 0 auto; }
+  .urlrow button { flex: 0 0 auto; background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600; min-height: var(--hit); padding: 0 1.2rem; border-radius: var(--r-pill); }
   .status { margin-top: 1rem; } .bar { height: 2px; background: var(--border); overflow: hidden; } .bar-fill { height: 100%; width: 0; background: var(--fg); transition: width 200ms; }
   .status-text { color: var(--muted); font-size: 0.8rem; margin: 0.5rem 0 0; }
   /* The result rows are built by the script, so they never carry Astro's
@@ -491,24 +481,28 @@ const accent = manifest.chapters[0]
   .results :global(li) { display: flex; align-items: center; gap: 0.7rem; font-size: 0.82rem; border-bottom: 1px solid var(--border); padding: 0.5rem 0; }
   .results :global(.sw) { width: 1rem; height: 1rem; border-radius: 50%; flex: 0 0 auto; }
   .results :global(.fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .results :global(.ch) { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
+  .results :global(.ch) { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-caption); }
   .results :global(.err) { color: #e0603a; }
 
   .insp-groupby {
-    display: flex; gap: 0.3rem; margin: 0 0 1.6rem;
-    font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase;
+    /* A segmented control: one choice of three, on one capsule. */
+    display: inline-flex; gap: 2px; margin: 0 0 1.6rem; padding: 4px;
+    background: var(--surface-1); border: 1px solid var(--separator); border-radius: 999px;
   }
   .insp-groupby button {
-    background: transparent; border: 1px solid var(--border); color: var(--muted);
-    cursor: pointer; padding: 0.4rem 0.85rem; border-radius: 999px;
-    transition: border-color 140ms var(--ease), color 140ms var(--ease);
+    background: transparent; border: 0; color: var(--secondary);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
+    cursor: pointer; min-height: 2.25rem; padding: 0 0.95rem; border-radius: 999px;
+    transition: background 140ms var(--ease), color 140ms var(--ease);
   }
-  .insp-groupby button:hover { border-color: var(--accent-mix); color: var(--fg); }
-  .insp-groupby button.on { border-color: var(--fg); color: var(--fg); }
+  .insp-groupby button:hover { background: var(--fill); color: var(--fg); }
+  .insp-groupby button.on { background: var(--fill-active); color: var(--fg); }
   .insp-view[hidden] { display: none; }
 
   .insp-chapter { margin-bottom: 3rem; }
-  .insp-chtitle { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-label); font-size: 0.7rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.9rem; }
+  .insp-chtitle { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-ui); font-size: var(--t-caption); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.9rem;
+    font-weight: 600;
+  }
   .insp-chtitle .sw { width: 0.8rem; height: 0.8rem; border-radius: 50%; }
   .insp-chtitle .n { color: color-mix(in oklab, var(--muted) 70%, transparent); }
   .insp-collage { columns: 3; column-gap: 6px; }
@@ -516,7 +510,7 @@ const accent = manifest.chapters[0]
   .insp-frame { margin: 0 0 6px; cursor: zoom-in; }
   .insp-frame .src {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
-    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.04em;
+    font-family: var(--font-ui); font-size: var(--t-caption);
     color: #fff; padding: 0.5rem 0.6rem 0.5rem 2.1rem; line-height: 1.4;
     background: linear-gradient(to top, color-mix(in oklab, #000 78%, transparent), transparent);
     opacity: 0; transition: opacity 160ms var(--ease);
@@ -533,25 +527,23 @@ const accent = manifest.chapters[0]
      keep scrolling and tapping more tiles, which a panel that opens and
      closes would not. */
   .group-tray {
-    position: fixed; left: 50%; bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px)); z-index: 40;
+    position: fixed; left: 50%; bottom: calc(var(--tabbar-space) + 0.25rem); z-index: 40;
     display: flex; align-items: center; gap: 0.7rem;
-    padding: 0.5rem 0.55rem 0.5rem 1rem; border-radius: 999px;
-    background: color-mix(in oklab, var(--bg) 90%, #000); border: 1px solid var(--accent-hair);
-    /* Small-pill tier, same as .offline-pill/.toast. */
-    backdrop-filter: blur(12px) saturate(1.15); -webkit-backdrop-filter: blur(12px) saturate(1.15);
-    box-shadow: 0 8px 24px -8px color-mix(in oklab, black 55%, transparent), 0 1px 3px color-mix(in oklab, black 30%, transparent);
+    padding: 0.4rem 0.4rem 0.4rem 1.1rem; border-radius: 999px;
+    background: var(--glass-bg-strong); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
     opacity: 0; transform: translate(-50%, 12px); pointer-events: none;
     transition: opacity 200ms var(--ease), transform 200ms var(--ease);
   }
   .group-tray[hidden] { display: none; }
   .group-tray.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
   @media (prefers-reduced-motion: reduce) { .group-tray { transition: opacity 120ms linear; transform: translate(-50%, 0); } }
-  .group-tray-count { font-family: var(--font-label); font-size: 0.66rem; color: var(--fg); white-space: nowrap; padding-right: 0.1rem; }
+  .group-tray-count { font-family: var(--font-label); font-size: var(--t-caption); color: var(--fg); white-space: nowrap; padding-right: 0.1rem; }
   .group-tray-count b { font-variant-numeric: tabular-nums; }
-  .group-tray button { border: 0; cursor: pointer; font-family: var(--font-label); border-radius: 999px; white-space: nowrap; }
-  .group-tray-find { background: var(--fg); color: var(--bg); padding: 0.48rem 0.9rem; font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .group-tray button { border: 0; cursor: pointer; font-family: var(--font-ui); border-radius: 999px; white-space: nowrap; }
+  .group-tray-find { background: var(--fg); color: var(--bg); padding: 0.48rem 0.9rem; font-size: var(--t-footnote); font-weight: 600; }
   .group-tray-find:hover { background: color-mix(in oklab, var(--fg) 85%, var(--accent)); }
-  .group-tray-clear { background: transparent; color: var(--muted); padding: 0.48rem 0.4rem; font-size: 0.6rem; }
+  .group-tray-clear { background: transparent; color: var(--muted); padding: 0.48rem 0.4rem; font-size: var(--t-caption); }
   .group-tray-clear:hover { color: var(--fg); }
 
   /* Overlay entrance: a quick scale+fade, matching the archive's own lightbox
@@ -600,14 +592,14 @@ const accent = manifest.chapters[0]
   .insp-lb { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; background: color-mix(in oklab, var(--bg) 96%, #000); }
   .insp-lb[hidden] { display: none; }
   .insp-lb img { max-width: 92vw; max-height: 82vh; object-fit: contain; }
-  .lb-src { font-family: var(--font-label); font-size: 0.78rem; color: var(--muted); }
+  .lb-src { font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--muted); }
   .lb-src a { color: var(--fg); }
 
   /* Find-similar button on each reference */
   .cell-similar {
     position: absolute; left: 6px; top: 6px; z-index: 3;
     border: 0; cursor: pointer; border-radius: 999px;
-    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: 0.6875rem;
     padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     opacity: 0; transition: opacity 140ms, background 140ms;
@@ -647,7 +639,7 @@ const accent = manifest.chapters[0]
      than shrinking into a swatch, because "which one of these is dragging
      the match off" is a question you answer by looking at the photo, not a
      colour chip. */
-  .sim-count { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .sim-count { font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0; }
   .sim-strip { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-height: 40vh; overflow-y: auto; width: 100%; }
   .sim-strip[hidden] { display: none; }
   :global(.sim-strip figure) { position: relative; width: 84px; margin: 0; cursor: zoom-in; border-radius: 6px; overflow: hidden; background: var(--border); }
@@ -671,9 +663,9 @@ const accent = manifest.chapters[0]
     box-shadow: 0 0 0 2px color-mix(in oklab, #000 40%, transparent);
   }
   .sim-controls { width: min(100%, 26rem); }
-  .sim-slider { display: flex; align-items: center; gap: 0.8rem; font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .sim-slider { display: flex; align-items: center; gap: 0.8rem; font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .sim-slider input { flex: 1; accent-color: var(--fg); }
-  .sim-hint { font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.06em; color: var(--muted); text-align: center; margin: 0.8rem 0 0; }
+  .sim-hint { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); text-align: center; margin: 0.8rem 0 0; }
   .sim-right { overflow: auto; padding: calc(var(--edge) + 1.5rem) var(--edge); }
   /* The ranked grid is rendered by the script — :global() throughout. */
   :global(.sim-grid) { columns: 3; column-gap: 8px; }
@@ -681,7 +673,7 @@ const accent = manifest.chapters[0]
   :global(.sim-cell img) { width: 100%; display: block; opacity: 0; transition: opacity 300ms var(--ease); }
   :global(.sim-cell img.on) { opacity: 1; }
   /* Was 0.56rem (9px) — the only place the match percentage is readable. */
-  :global(.sim-cell .pct) { position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent); padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
+  :global(.sim-cell .pct) { position: absolute; left: 6px; bottom: 6px; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.04em; color: #fff; background: color-mix(in oklab, #000 62%, transparent); padding: 1px 7px; border-radius: 999px; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
   @media (max-width: 1100px) { .sim { grid-template-columns: 1fr; grid-template-rows: 42% 58%; } .sim-left { border-right: 0; border-bottom: 1px solid var(--accent-hair); } :global(.sim-grid) { columns: 4; } }
   #lb { z-index: 88; } /* enlarge sits above the split view */
 
@@ -698,13 +690,13 @@ const accent = manifest.chapters[0]
   @media (prefers-reduced-motion: reduce) { .curve-lb { transition: opacity 120ms linear; } .curve-lb-body { transition: none; transform: none; } }
   .curve-lb-body svg { width: min(60vh, 60vw, 480px); height: auto; color: var(--fg); background: color-mix(in oklab, var(--fg) 4%, transparent); border-radius: 4px; }
   .curve-lb-points { max-width: 22rem; }
-  .curve-lb-hint { font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.02em; color: var(--muted); line-height: 1.5; margin: 0 0 0.9rem; }
+  .curve-lb-hint { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); line-height: 1.5; margin: 0 0 0.9rem; }
   /* #curve-lb-list, not .curve-lb-list — the element carries the id, not a
      class of the same name. The container rule stays scoped (it's the real
      template element); the row rule is :global because those rows are built
      at runtime (openCurveLb's document.createElement) and never carry
      Astro's scoping attribute — same trap as astro-scoped-styles-runtime-elements. */
-  #curve-lb-list { display: flex; flex-direction: column; gap: 0.3rem; font-family: var(--font-label); font-size: 0.72rem; letter-spacing: 0.02em; }
+  #curve-lb-list { display: flex; flex-direction: column; gap: 0.3rem; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.02em; }
   :global(#curve-lb-list .row) { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0.6rem; border-radius: 3px; background: color-mix(in oklab, var(--fg) 4%, transparent); }
   :global(#curve-lb-list .row.identity) { color: var(--muted); }
 
@@ -717,7 +709,7 @@ const accent = manifest.chapters[0]
   .cell-match {
     position: absolute; left: 6px; top: 34px; z-index: 3;
     border: 0; cursor: pointer; border-radius: 999px;
-    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
     padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     opacity: 0; transition: opacity 140ms, background 140ms;
@@ -797,8 +789,10 @@ const accent = manifest.chapters[0]
   }
   .mx[hidden] { display: none; }
   .mx-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem var(--edge) 0.85rem; border-bottom: 1px solid var(--accent-hair); flex: 0 0 auto; }
-  .mx-kicker { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0; }
-  .mx-sub { font-family: var(--font-label); font-size: 0.76rem; color: var(--fg); margin: 0.28rem 0 0; }
+  .mx-kicker { font-family: var(--font-ui); font-size: var(--t-caption); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0;
+    font-weight: 600;
+  }
+  .mx-sub { font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg); margin: 0.28rem 0 0; }
   .mx-close { position: static; flex: 0 0 auto; }
   .mx-body { flex: 1 1 auto; overflow: hidden; display: flex; }
 
@@ -815,15 +809,14 @@ const accent = manifest.chapters[0]
   :global(.mx-ref) { display: flex; align-items: center; gap: 0.6rem; }
   :global(.mx-ref img) { width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: 2px; flex: 0 0 auto; }
   :global(.mx-ref .mx-ref-meta) { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1 1 auto; }
-  :global(.mx-ref .mx-ref-name) { font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  :global(.mx-ref .mx-ref-weight) { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  :global(.mx-ref .mx-ref-name) { font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.mx-ref .mx-ref-weight) { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   :global(.mx-ref .mx-ref-weight input) { width: 4.5rem; accent-color: var(--fg); }
   :global(.mx-ref-remove) { appearance: none; background: transparent; border: 0; cursor: pointer; color: var(--muted); font-size: 1rem; line-height: 1; padding: 0.2rem; flex: 0 0 auto; }
   :global(.mx-ref-remove:hover) { color: var(--fg); }
   .mx-addref-toggle {
     appearance: none; background: transparent; border: 1px dashed var(--border); color: var(--muted);
-    cursor: pointer; font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.08em;
-    text-transform: uppercase; padding: 0.5rem 0.7rem; border-radius: 2px; width: 100%; text-align: left;
+    cursor: pointer; font-family: var(--font-ui); font-size: var(--t-caption); padding: 0.5rem 0.7rem; border-radius: 2px; width: 100%; text-align: left;
     transition: border-color 160ms, color 160ms;
   }
   .mx-addref-toggle:hover { border-color: var(--fg); color: var(--fg); }
@@ -838,9 +831,9 @@ const accent = manifest.chapters[0]
   :global(.mx-addref-pick img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .mx-startcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
   .mx-zone { margin: 0; }
-  .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-label); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-  .mx-field select { width: 100%; max-width: 100%; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-label); font-size: 0.78rem; letter-spacing: 0; text-transform: none; padding: 0.6rem 0.7rem; border-radius: 2px; }
-  .mx-note { font-family: var(--font-label); font-size: 0.72rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+  .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
+  .mx-field select { width: 100%; max-width: 100%; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-footnote); letter-spacing: 0; text-transform: none; padding: 0.6rem 0.7rem; border-radius: 2px; }
+  .mx-note { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); margin: 0; min-height: 1.2em; }
   .mx-note :global(.err) { color: #e0603a; }
 
   /* Working state. The measurement is long and entirely invisible from here,
@@ -854,15 +847,16 @@ const accent = manifest.chapters[0]
   }
   .mx-workline {
     display: flex; align-items: baseline; gap: 0.7rem; margin: 0.6rem 0 0;
-    font-family: var(--font-label); font-size: 0.72rem; color: var(--muted);
+    font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted);
   }
   .mx-workline #mx-workstage { flex: 1 1 auto; color: var(--fg); }
   .mx-elapsed { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
   .mx-stop {
     flex: 0 0 auto; appearance: none; background: transparent; border: 0; cursor: pointer;
-    font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.16em;
+    font-family: var(--font-ui); font-size: var(--t-caption); letter-spacing: 0.06em;
     text-transform: uppercase; color: var(--muted); padding: 0;
     border-bottom: 1px solid transparent; transition: color 180ms, border-color 180ms;
+    font-weight: 600;
   }
   .mx-stop:hover { color: var(--accent-mix); border-bottom-color: currentColor; }
 
@@ -883,7 +877,7 @@ const accent = manifest.chapters[0]
   }
   .mx-fig figcaption {
     position: absolute; left: 8px; bottom: 8px;
-    font-family: var(--font-label); font-size: 0.54rem; letter-spacing: 0.12em; text-transform: uppercase;
+    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
     color: #fff; background: color-mix(in oklab, #000 62%, transparent);
     padding: 2px 8px; border-radius: 999px;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
@@ -898,21 +892,21 @@ const accent = manifest.chapters[0]
   }
   .mx-strength { display: flex; align-items: center; gap: 0.8rem; flex: 1 1 22rem; max-width: 30rem; }
   .mx-strength input { flex: 1; accent-color: var(--fg); }
-  .mx-end { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); flex: 0 0 auto; }
+  .mx-end { font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); flex: 0 0 auto; }
   /* The one line in this panel that reads as a verdict rather than a
      measurement ("Restrained — adopts the reference's character…") — the
      panel's single earned use of the display face, same idiom as the
      archive's own chapter titles, so the workbench still reads as part of
      the same system rather than a spreadsheet dropped into it. */
   .mx-strengthlabel { font-family: var(--font-display); font-style: var(--title-style); font-size: 1rem; color: var(--fg); margin: 0; flex: 0 1 auto; text-align: center; line-height: 1.3; }
-  .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); flex: 0 0 auto; cursor: pointer; }
+  .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); flex: 0 0 auto; cursor: pointer; }
   /* Chip treatment, matching the confidence/calibration badges below it —
      plain text here had no affordance at all on touch, where there is no
      hover to reveal it's tappable. */
   .mx-groupreveal {
     background: transparent; cursor: pointer; color: var(--muted);
     border: 1px solid var(--border); border-radius: 999px;
-    font-family: var(--font-label); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: 0.6875rem;
     padding: 0.3rem 0.7rem; flex: 0 0 auto; transition: color 140ms, border-color 140ms;
   }
   .mx-groupreveal:hover { color: var(--accent-mix); border-color: var(--accent-mix); }
@@ -925,12 +919,12 @@ const accent = manifest.chapters[0]
   .mx-groupslider { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 15rem; max-width: 20rem; }
   .mx-groupslider input { flex: 1; accent-color: var(--fg); }
   .mx-grouplabel {
-    font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: 0.6875rem;
     color: var(--muted); flex: 0 0 3.4rem;
   }
   .mx-unlink {
     background: transparent; border: 1px solid var(--hair); border-radius: 999px; cursor: pointer;
-    color: var(--muted); font-size: 0.6rem; line-height: 1; width: 1.4rem; height: 1.4rem; flex: 0 0 auto;
+    color: var(--muted); font-size: var(--t-caption); line-height: 1; width: 1.4rem; height: 1.4rem; flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center; transition: color 140ms, border-color 140ms;
   }
   .mx-unlink[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
@@ -948,14 +942,14 @@ const accent = manifest.chapters[0]
   }
   .mx-tabs button {
     position: relative; background: transparent; border: 0; cursor: pointer; color: var(--muted);
-    font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: var(--t-caption);
     padding: 0.78rem 0.95rem 0.7rem; white-space: nowrap; transition: color 140ms;
   }
   .mx-tabs button::after { content: ''; position: absolute; left: 0.95rem; right: 0.95rem; bottom: -1px; height: 1px; background: transparent; transition: background 140ms; }
   .mx-tabs button:hover { color: var(--accent-mix); }
   .mx-tabs button.on { color: var(--fg); }
   .mx-tabs button.on::after { background: var(--fg); }
-  .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.56rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
+  .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.6875rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
   .mx-tabs .count:empty { display: none; }
 
   /* --- Report ------------------------------------------------------------- */
@@ -965,8 +959,10 @@ const accent = manifest.chapters[0]
   /* Cards flow into columns on a wide screen instead of leaving half the
      panel empty, but never so narrow that a row wraps. */
   :global(.mx-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 0 0.9rem; align-items: start; }
-  .mx-h { font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem; }
-  :global(.mx-lede) { font-size: 0.76rem; color: var(--muted); margin: 0 0 1.1rem; max-width: 46rem; }
+  .mx-h { font-family: var(--font-ui); font-size: var(--t-caption); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem;
+    font-weight: 600;
+  }
+  :global(.mx-lede) { font-size: var(--t-footnote); color: var(--muted); margin: 0 0 1.1rem; max-width: 46rem; }
   /* Two columns only where a panel genuinely has two independent halves. */
   :global(.mx-two) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem; }
   /* Everything below is built with innerHTML from the module script. Astro's
@@ -983,25 +979,25 @@ const accent = manifest.chapters[0]
   :global(.mx-stat) { display: flex; flex-direction: column; gap: 0.18rem; }
   :global(.mx-stat .mx-stat-figure) { font-family: var(--font-label); font-variant-numeric: tabular-nums; font-size: 1.7rem; line-height: 1; letter-spacing: -0.01em; color: var(--fg); }
   :global(.mx-stat .mx-stat-unit) { font-size: 0.95rem; margin-left: 0.06rem; color: var(--muted); }
-  :global(.mx-stat .mx-stat-label) { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  :global(.mx-stat .mx-stat-label) { font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   :global(.mx-stat.warn .mx-stat-figure) { color: #e0603a; }
   /* Structural caveats: not a reading, an honesty note about one — no pill,
      no mono, no uppercase. Quiet italic Fraunces (the site's display cut,
      already italic via --title-style) reads as prose aside rather than
      data, which is the whole point of separating it from .mx-stat. */
   :global(.mx-caveats) { display: flex; flex-direction: column; gap: 0.3rem; }
-  :global(.mx-caveat) { margin: 0; font-family: var(--font-display); font-style: var(--title-style); font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+  :global(.mx-caveat) { margin: 0; font-family: var(--font-display); font-style: var(--title-style); font-size: var(--t-footnote); line-height: 1.4; color: var(--muted); }
   :global(.mx-caveat.warn) { color: #e0603a; }
 
   .mx-notes { display: grid; gap: 0.5rem; }
   :global(.mx-noterow) {
     display: grid; grid-template-columns: 8rem 1fr; gap: 0.2rem 1rem;
-    font-size: 0.79rem; line-height: 1.6; color: var(--muted);
+    font-size: var(--t-footnote); line-height: 1.6; color: var(--muted);
     border-left: 2px solid var(--border); padding: 0.55rem 0 0.55rem 0.9rem;
     background: color-mix(in oklab, var(--fg) 3%, transparent);
   }
   :global(.mx-noterow.caution) { border-left-color: #e0603a; color: var(--fg); background: color-mix(in oklab, #e0603a 8%, transparent); }
-  :global(.mx-noterow .panel) { font-family: var(--font-label); font-size: 0.56rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-top: 0.25rem; }
+  :global(.mx-noterow .panel) { font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); padding-top: 0.25rem; }
 
   .mx-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; }
 
@@ -1014,20 +1010,23 @@ const accent = manifest.chapters[0]
   }
   :global(.mx-grouphead) {
     display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem;
-    font-family: var(--font-label); font-size: 0.57rem; letter-spacing: 0.16em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--fg); margin-bottom: 0.45rem;
+    font-weight: 600;
   }
-  :global(.mx-grouphead .tag) { font-size: 0.52rem; letter-spacing: 0.1em; color: var(--muted); text-transform: none; }
-  :global(.mx-row) { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.79rem; padding: 0.2rem 0; font-variant-numeric: tabular-nums; }
+  :global(.mx-grouphead .tag) { font-size: 0.6875rem; letter-spacing: 0.1em; color: var(--muted); text-transform: none; }
+  :global(.mx-row) { display: flex; justify-content: space-between; gap: 1rem; font-size: var(--t-footnote); padding: 0.2rem 0; font-variant-numeric: tabular-nums; }
   :global(.mx-row + .mx-row) { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
   :global(.mx-row .k) { color: var(--muted); }
   :global(.mx-row .v) { font-family: var(--font-label); white-space: nowrap; }
-  :global(.mx-rowhint) { font-size: 0.7rem; color: var(--muted); line-height: 1.55; margin: 0.1rem 0 0.5rem; }
+  :global(.mx-rowhint) { font-size: var(--t-caption); color: var(--muted); line-height: 1.55; margin: 0.1rem 0 0.5rem; }
 
   /* Colour Mixer: one row per band with three aligned columns beats 24
      separate key/value rows for scanning. */
-  :global(.mx-mixer) { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 0.1rem 0.7rem; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
-  :global(.mx-mixer .hdr) { font-family: var(--font-label); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-bottom: 0.25rem; }
+  :global(.mx-mixer) { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 0.1rem 0.7rem; font-size: var(--t-footnote); font-variant-numeric: tabular-nums; }
+  :global(.mx-mixer .hdr) { font-family: var(--font-ui); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 0.25rem;
+    font-weight: 600;
+  }
   :global(.mx-mixer .band) { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); }
   :global(.mx-mixer .chip) { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: 0 0 auto; }
   :global(.mx-mixer .n) { text-align: right; font-family: var(--font-label); }
@@ -1049,7 +1048,7 @@ const accent = manifest.chapters[0]
   :global(.mx-wheelsmalls) { display: flex; flex-direction: column; gap: 0.9rem; }
   :global(.mx-wheelglobalbox) { display: flex; justify-content: center; }
   :global(.mx-globaltoggle) {
-    font-family: var(--font-label); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: var(--t-caption);
     color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 999px;
     padding: 0.3rem 0.8rem; cursor: pointer; transition: color 140ms, border-color 140ms;
   }
@@ -1085,22 +1084,22 @@ const accent = manifest.chapters[0]
     box-shadow: 0 0 0 1px color-mix(in oklab, #000 70%, transparent), 0 0 9px 1px color-mix(in oklab, var(--glow, transparent) 65%, transparent);
     transform: translate(-50%, -50%);
   }
-  :global(.mx-cw .nm) { font-family: var(--font-label); font-size: 0.55rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: block; }
-  :global(.mx-cw .v) { font-family: var(--font-label); font-size: 0.7rem; color: var(--fg); font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
+  :global(.mx-cw .nm) { font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: block; }
+  :global(.mx-cw .v) { font-family: var(--font-label); font-size: var(--t-caption); color: var(--fg); font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
   :global(.mx-cw.off .disc) { filter: grayscale(1); opacity: 0.28; }
   :global(.mx-cw.off .v) { color: var(--muted); }
 
   /* Tone curve, drawn. "0,0 28,26 56,50 …" is data, not a curve. */
   :global(.mx-curvebox) { display: flex; align-items: center; gap: 1rem; }
   :global(.mx-curvebox svg) { flex: 0 0 auto; background: color-mix(in oklab, var(--fg) 4%, transparent); border-radius: 2px; }
-  :global(.mx-curvebox .legend) { font-size: 0.72rem; color: var(--muted); line-height: 1.6; }
+  :global(.mx-curvebox .legend) { font-size: var(--t-caption); color: var(--muted); line-height: 1.6; }
 
   /* Evidence deltas, with a bar so direction and size read at a glance. */
-  :global(.mx-ev) { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 1rem; align-items: center; font-size: 0.79rem; }
+  :global(.mx-ev) { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 1rem; align-items: center; font-size: var(--t-footnote); }
   :global(.mx-ev .lbl) { color: var(--muted); }
-  :global(.mx-ev .val) { font-family: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.72rem; }
+  :global(.mx-ev .val) { font-family: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: var(--t-caption); }
   :global(.mx-bars) { grid-column: 1 / -1; display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.5rem; align-items: center; margin: 0.1rem 0 0.45rem; }
-  :global(.mx-bars .cap) { font-family: var(--font-label); font-size: 0.52rem; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--muted) 70%, transparent); }
+  :global(.mx-bars .cap) { font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--muted) 70%, transparent); }
   /* 3px read as near-identical regardless of how different two rows'
      magnitudes actually were — the bar DOES scale with the value (see
      `bar()`), it was just too thin to see it at a glance. */
@@ -1114,7 +1113,7 @@ const accent = manifest.chapters[0]
     padding: 0.85rem var(--edge); border-top: 1px solid var(--accent-hair);
     background: color-mix(in oklab, var(--bg) 96%, #000);
   }
-  .mx-actions button { background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.66rem 1.1rem; border-radius: 2px; }
+  .mx-actions button { background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-ui); font-size: var(--t-caption); padding: 0.66rem 1.1rem; border-radius: 2px; }
   .mx-actions button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
   .mx-actions button:disabled { opacity: 0.4; cursor: default; }
   .mx-actions button:not(:disabled):hover { opacity: 0.85; }
@@ -1133,13 +1132,14 @@ const accent = manifest.chapters[0]
   .already-head { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
   .already-kicker {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.6rem;
-    letter-spacing: 0.24em;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
+    font-weight: 600;
   }
-  .already-sub { margin: 0; font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); }
+  .already-sub { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .already-strip {
     list-style: none;
     margin: 0;
@@ -1176,20 +1176,20 @@ const accent = manifest.chapters[0]
     display: block;
     margin-top: 0.35rem;
     font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-size: var(--t-caption);
     color: var(--fg);
   }
   :global(.already-parts) {
     display: block;
     font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-size: 0.6875rem;
     line-height: 1.45;
     color: var(--muted);
   }
   .already-note {
     margin: 0.3rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     line-height: 1.55;
     color: var(--muted);
   }
@@ -1210,7 +1210,7 @@ const accent = manifest.chapters[0]
      phone is the same client one size down. Nothing here changes what the
      match does — only whether you can reach it with a thumb. */
   @media (max-width: 640px) {
-    .insp { padding: 5.5rem 1.1rem 12vh; }
+    .insp { padding: calc(env(safe-area-inset-top, 0px) + 3rem) 1.1rem calc(var(--tabbar-space) + 5rem); }
     .insp-head h1 { margin-bottom: 0.4rem; }
     .insp-lead { margin-bottom: 1.8rem; }
     .drop { padding: 2.2rem 1rem; }
@@ -1225,11 +1225,11 @@ const accent = manifest.chapters[0]
        screens of board to reach the fifth reference. */
     .insp-collage { columns: 2; column-gap: 4px; }
     .insp-frame { margin-bottom: 4px; }
-    .insp-frame .src { font-size: 0.54rem; padding: 0.4rem 0.45rem 0.4rem 1.9rem; }
+    .insp-frame .src { font-size: 0.6875rem; padding: 0.4rem 0.45rem 0.4rem 1.9rem; }
 
     /* Match panel */
     .mx-head { padding: 0.8rem 1.1rem 0.7rem; }
-    .mx-sub { font-size: 0.68rem; }
+    .mx-sub { font-size: var(--t-caption); }
     .mx-start { gap: 1.2rem; padding: 1.1rem; align-content: start; }
     :global(.mx-ref img) { width: 3.6rem; height: 3.6rem; }
     .mx-zone { padding: 1.8rem 1rem; }

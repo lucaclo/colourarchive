@@ -36,6 +36,8 @@ const accent = '#f0b866';
 ---
 
 <Layout
+  tab="scout"
+  cursor={false}
   title="Scout — Colour Archive"
   description="Type a place, set a radius, and see how the light falls inside it."
   accent={accent}
@@ -66,24 +68,9 @@ const accent = '#f0b866';
         <button type="button" id="first-visit-close" aria-label="Dismiss">×</button>
       </div>
 
-      <!-- ── Top left: the way back ──────────────────────────────────────────
-           Scout is a full-bleed map with no topbar, so the two links every
-           other page carries have nowhere to live. They go here, in the same
-           segmented control the view switch uses.
-
-           The *Archive* link is never hidden — being unable to pick a place is
-           the most likely reason to want to leave, so the way back has to
-           survive every width and every build. Inspiration is not in that
-           class: it stands down below 820px where the two controls would touch,
-           and it is absent altogether from a static publish, where the page it
-           points at does not exist. -->
-      <nav class="seg scout-nav" aria-label="Colour Archive">
-        <a href="/">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
-          Archive
-        </a>
-        {!STATIC && <a href="/inspiration">Inspiration</a>}
-      </nav>
+      <!-- The way back to the rest of the archive is the tab bar now
+           (components/TabBar.astro) — the same four sections on every page,
+           where this corner used to carry only two of them. -->
 
       <!-- A map that fails renders as a black rectangle and says nothing. Every
            way that can happen gets a sentence here instead. -->
@@ -1004,7 +991,10 @@ const accent = '#f0b866';
     min-height: 0;
     --stage-top: 3.4rem;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
-    --dock-h: 5.2rem;
+    /* The fallback includes the tab bar, because the measured value does: the
+       timebar pads itself by the bar's footprint (see `.scout-time`), so the
+       sheet and everything stacked on `--dock-h` clears it for free. */
+    --dock-h: calc(5.2rem + var(--tabbar-h) + var(--tabbar-inset) * 2);
     --sheet-h: 3.4rem;
     --edge-h: 2.2rem;
     /* Not measured like the three above — the panel head's content is a fixed
@@ -1017,6 +1007,12 @@ const accent = '#f0b866';
     /* What has to be cleared to sit above the timebar, and above the sheet. */
     --above-dock: calc(var(--dock-h) + 0.5rem);
     --above-sheet: calc(var(--dock-h) + var(--sheet-h) + 1rem);
+  }
+  /* The nav that used to sit above the panel is gone (the tab bar replaced
+     it), so on a wide screen the panel takes the corner. Below 820px the view
+     controls still share that top row with it, so it keeps its offset there. */
+  @media (min-width: 821px) {
+    .scout-stage { --stage-top: calc(env(safe-area-inset-top, 0px) + 0.9rem); }
   }
   .scout-map { position: absolute; inset: 0; }
 
@@ -1161,8 +1157,8 @@ const accent = '#f0b866';
   .first-visit[hidden] { display: none; }
   .first-visit p {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     line-height: 1.55;
     color: var(--fg);
   }
@@ -1189,16 +1185,14 @@ const accent = '#f0b866';
   .scout-mapmsg[hidden] { display: none; }
   .scout-mapmsg-title {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: #e0603a;
   }
   .scout-mapmsg-body {
     margin: 0.5rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.78rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-footnote);
     line-height: 1.6;
     color: var(--muted);
   }
@@ -1219,8 +1213,8 @@ const accent = '#f0b866';
     border-radius: 50%;
     background: transparent;
     color: var(--muted);
-    font-family: var(--font-label);
-    font-size: 0.5rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     font-style: italic;
     line-height: 1;
     cursor: pointer;
@@ -1275,20 +1269,13 @@ const accent = '#f0b866';
   }
   .infotip-pop p {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     line-height: 1.55;
     color: var(--fg);
   }
 
   /* ── The panel ────────────────────────────────────────────────────────── */
-
-  .scout-nav {
-    position: absolute;
-    left: 0.9rem;
-    top: 0.9rem;
-    z-index: 21;
-  }
 
   .panel {
     position: absolute;
@@ -1333,9 +1320,8 @@ const accent = '#f0b866';
   }
   .panel-glance {
     grid-column: 1 / -1;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
-    letter-spacing: 0.04em;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
@@ -1417,8 +1403,8 @@ const accent = '#f0b866';
 
   .panel-detail {
     margin: 0 0 0.6rem;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1447,26 +1433,24 @@ const accent = '#f0b866';
   .wx[hidden] { display: none; }
   .wx-icon { font-size: 1rem; line-height: 1; }
   .wx-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
-  .wx-label { font-family: var(--font-label); font-size: 0.76rem; }
+  .wx-label { font-family: var(--font-ui); font-size: var(--t-footnote); }
   .wx-sum {
-    font-family: var(--font-label);
+    font-family: var(--font-ui);
     /* Was 0.6rem — the cloud-deck readout, the one number under the headline
        condition, at a size step below what it needs to actually be read. */
-    font-size: 0.7rem;
+    font-size: var(--t-caption);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
   .wx-stale {
-    font-family: var(--font-label);
-    font-size: 0.52rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: #c1863c;
   }
   .wx-note {
     margin: 0 0 0.7rem;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1480,8 +1464,8 @@ const accent = '#f0b866';
     margin: -0.45rem 0 0.7rem;
     padding-left: 0.55rem;
     border-left: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.55;
     color: var(--muted);
   }
@@ -1503,23 +1487,24 @@ const accent = '#f0b866';
   .sightline[hidden] { display: none; }
   .framing-head {
     margin: 0 0 0.3rem;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
-    letter-spacing: 0.09em;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
+    font-weight: 600;
   }
   .framing-line {
     margin: 0 0 0.25rem;
-    font-size: 0.72rem;
+    font-size: var(--t-caption);
     line-height: 1.5;
     color: var(--fg);
   }
   .framing-line:empty { display: none; }
   .framing-note {
     margin: 0.25rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1538,11 +1523,12 @@ const accent = '#f0b866';
   .best[hidden] { display: none; }
   .best-head {
     margin: 0 0 0.4rem;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
-    letter-spacing: 0.09em;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
+    font-weight: 600;
   }
   .best-list {
     margin: 0;
@@ -1577,11 +1563,11 @@ const accent = '#f0b866';
   .best-list :global(li:active) { transform: scale(0.98); }
   .best-list :global(.best-rank) {
     font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-size: 0.6875rem;
     color: var(--muted);
   }
   .best-list :global(.best-name) {
-    font-size: 0.7rem;
+    font-size: var(--t-caption);
     line-height: 1.35;
     color: var(--fg);
     /* Commons titles run long and a wrapped one pushes the light off the row. */
@@ -1591,15 +1577,15 @@ const accent = '#f0b866';
   }
   .best-list :global(.best-where) {
     display: block;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
   }
   .best-list :global(.best-light) {
     justify-self: end;
     text-align: right;
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.4;
     white-space: nowrap;
   }
@@ -1610,8 +1596,8 @@ const accent = '#f0b866';
   .best-list :global(.best-light.is-down) { color: var(--muted); }
   .best-note {
     margin: 0.4rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1627,8 +1613,8 @@ const accent = '#f0b866';
   .align-controls .seg button { flex: 1; }
   .align-basis {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1663,15 +1649,15 @@ const accent = '#f0b866';
     outline: none;
   }
   .align-list :global(.align-row:active) { transform: scale(0.98); }
-  .align-list :global(.align-when) { font-size: 0.7rem; line-height: 1.3; }
+  .align-list :global(.align-when) { font-size: var(--t-caption); line-height: 1.3; }
   .align-list :global(.align-what) {
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: #f0b866;
   }
   .align-list :global(.align-detail) {
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.4;
     color: var(--muted);
   }
@@ -1685,8 +1671,8 @@ const accent = '#f0b866';
     border: 0;
     background: none;
     cursor: pointer;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.4;
     color: var(--muted);
     text-align: left;
@@ -1695,8 +1681,8 @@ const accent = '#f0b866';
   .align-list :global(.align-alt:hover) { color: var(--fg); }
   .align-note {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1705,7 +1691,7 @@ const accent = '#f0b866';
   .align-phase[hidden] { display: none; }
   .align-phase span {
     font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-size: 0.6875rem;
     color: var(--muted);
   }
 
@@ -1735,17 +1721,17 @@ const accent = '#f0b866';
     outline: none;
   }
   .tonight :global(.tonight-row:active) { transform: scale(0.98); }
-  .tonight :global(.tonight-head) { font-size: 0.72rem; line-height: 1.3; }
+  .tonight :global(.tonight-head) { font-size: var(--t-caption); line-height: 1.3; }
   .tonight :global(.tonight-detail) {
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.4;
     color: var(--muted);
   }
   #tonight-note {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1780,13 +1766,13 @@ const accent = '#f0b866';
   .gap-list :global(.gap-occ.gap-occ-confirmed) { color: #f0b866; font-weight: 600; }
   .gap-list :global(.gap-head) {
     margin: 0;
-    font-size: 0.7rem;
+    font-size: var(--t-caption);
     line-height: 1.3;
   }
   .gap-list :global(.gap-detail) {
     margin: 0.15rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.4;
     color: var(--muted);
   }
@@ -1805,8 +1791,8 @@ const accent = '#f0b866';
     background: none;
     cursor: pointer;
     text-align: left;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.4;
     color: #f0b866;
     transition: color 140ms;
@@ -1815,14 +1801,14 @@ const accent = '#f0b866';
   .gap-list :global(.gap-occ:focus-visible) { color: var(--fg); outline: none; }
   .gap-list :global(.gap-more) {
     margin: 0.15rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
   }
   #gap-note {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1831,7 +1817,7 @@ const accent = '#f0b866';
   /* ── The day plan ─────────────────────────────────────────────────────── */
 
   .plan { display: flex; flex-direction: column; gap: 0.45rem; }
-  .plan-help { margin: 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); }
+  .plan-help { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .plan-pick,
   .plan-stops,
   .plan-trouble { margin: 0; padding: 0; list-style: none; }
@@ -1847,8 +1833,8 @@ const accent = '#f0b866';
     padding: 0 0.5rem;
     border: 1px solid var(--border);
     border-radius: 999px;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--fg);
     cursor: pointer;
   }
@@ -1870,21 +1856,21 @@ const accent = '#f0b866';
   }
   .plan-stops :global(.plan-when) {
     font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-size: var(--t-caption);
     color: #f0b866;
     white-space: nowrap;
   }
-  .plan-stops :global(.plan-where) { font-size: 0.7rem; line-height: 1.35; color: var(--fg); }
+  .plan-stops :global(.plan-where) { font-size: var(--t-caption); line-height: 1.35; color: var(--fg); }
   .plan-stops :global(.plan-leg) {
     display: block;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
   }
   .plan-total {
     margin: 0;
     font-family: var(--font-label);
-    font-size: 0.6rem;
+    font-size: var(--t-caption);
     color: var(--fg);
   }
   .plan-total:empty { display: none; }
@@ -1892,8 +1878,8 @@ const accent = '#f0b866';
   /* What did not fit is not a footnote. It is the other half of the answer, so
      it is drawn as loudly as the plan itself. */
   .plan-trouble :global(li) {
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.45;
     color: #e8a0a0;
     padding-left: 0.7rem;
@@ -1901,8 +1887,8 @@ const accent = '#f0b866';
   }
   .plan-assume {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1920,11 +1906,11 @@ const accent = '#f0b866';
      stroke that resisted that would be the only thing on it that did. */
   .sight-ray { fill: none; stroke: #c1863c; stroke-width: 1.2; stroke-dasharray: 4 3; }
   .sight-block { fill: #c1863c; }
-  .sight-line { margin: 0; font-size: 0.72rem; line-height: 1.5; color: var(--fg); }
+  .sight-line { margin: 0; font-size: var(--t-caption); line-height: 1.5; color: var(--fg); }
   .sight-note {
     margin: 0.25rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -1951,11 +1937,12 @@ const accent = '#f0b866';
     align-items: center;
     justify-content: space-between;
     gap: 0.3rem;
-    font-family: var(--font-label);
-    font-size: 0.52rem;
-    letter-spacing: 0.14em;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
+    font-weight: 600;
   }
   .card-v {
     font-family: var(--font-label);
@@ -1987,21 +1974,19 @@ const accent = '#f0b866';
   .events :global(button:disabled) { cursor: default; opacity: 0.45; }
   .events :global(button:not(:disabled):hover) { background: color-mix(in oklab, var(--fg) 7%, transparent); }
   .events :global(button:not(:disabled):active) { transform: scale(0.98); }
-  .events :global(.ev-label) { font-family: var(--font-label); font-size: 0.68rem; color: var(--muted); }
+  .events :global(.ev-label) { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .events :global(.ev-time) {
     font-family: var(--font-label);
-    font-size: 0.78rem;
+    font-size: var(--t-footnote);
     font-variant-numeric: tabular-nums;
   }
   .events :global(.ev-now) { color: #f0b866; }
-  .events-sub :global(.ev-time) { font-size: 0.7rem; }
+  .events-sub :global(.ev-time) { font-size: var(--t-caption); }
 
   .fold { margin-bottom: 0.5rem; }
   .fold summary {
-    font-family: var(--font-label);
-    font-size: 0.55rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
     cursor: pointer;
     padding: 0.35rem 0;
@@ -2026,7 +2011,7 @@ const accent = '#f0b866';
 
   .monthgrid {
     position: absolute;
-    inset: var(--stage-top) 0.6rem calc(1rem + var(--safe-bottom));
+    inset: var(--stage-top) 0.6rem calc(1rem + var(--tabbar-space));
     z-index: 60;
     display: flex;
     flex-direction: column;
@@ -2047,10 +2032,11 @@ const accent = '#f0b866';
     margin: 0;
     flex: 1;
     text-align: center;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
-    letter-spacing: 0.14em;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    font-weight: 600;
   }
   .mg-close {
     border: 0;
@@ -2074,13 +2060,13 @@ const accent = '#f0b866';
     height: 100%;
     grid-auto-rows: minmax(12px, 1fr);
   }
-  .mg-legend { margin: 0; font-size: 0.62rem; color: var(--muted); line-height: 1.4; }
+  .mg-legend { margin: 0; font-size: var(--t-caption); color: var(--muted); line-height: 1.4; }
 
   /* Runtime-built, so scoping cannot reach it — see the notebook above. */
   .mg-body :global(.mg-row) { display: contents; }
   .mg-body :global(.mg-day) {
     font-family: var(--font-label);
-    font-size: 0.5rem;
+    font-size: 0.6875rem;
     letter-spacing: 0.06em;
     color: var(--muted);
     padding-right: 0.35rem;
@@ -2163,7 +2149,7 @@ const accent = '#f0b866';
     border-radius: 10px;
     background: rgba(0, 0, 0, 0.55);
     color: #fff;
-    font-size: 0.72rem;
+    font-size: var(--t-caption);
     line-height: 1.4;
   }
   /* The status — permission prompts and refusals — sits where a viewfinder's
@@ -2174,7 +2160,7 @@ const accent = '#f0b866';
   .ar-note {
     bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
     color: rgba(255, 255, 255, 0.75);
-    font-size: 0.64rem;
+    font-size: var(--t-caption);
   }
 
   /* ── Notebook ─────────────────────────────────────────────────────────── */
@@ -2184,7 +2170,7 @@ const accent = '#f0b866';
     width: 100%;
     resize: vertical;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--t-footnote);
     line-height: 1.45;
     color: var(--fg);
     background: color-mix(in oklab, var(--bg) 78%, var(--fg) 6%);
@@ -2192,7 +2178,7 @@ const accent = '#f0b866';
     border-radius: 8px;
     padding: 0.45rem 0.55rem;
   }
-  .note-kept, .note-say { font-size: 0.68rem; color: var(--muted); margin: 0; }
+  .note-kept, .note-say { font-size: var(--t-caption); color: var(--muted); margin: 0; }
   /* Every row in here is built by the script, and Astro's scoping only reaches
      elements that were in the markup — without `:global()` these fall back to
      the browser's own stylesheet, which is how the credits came out as default
@@ -2210,7 +2196,7 @@ const accent = '#f0b866';
   /* The credit is the reason these are references rather than copies, so it is
      never the thing that gets truncated away to nothing. */
   .note-photos :global(.cr) {
-    font-size: 0.68rem;
+    font-size: var(--t-caption);
     color: var(--muted);
     line-height: 1.3;
     min-width: 0;
@@ -2222,7 +2208,7 @@ const accent = '#f0b866';
     flex: 1;
     min-width: 0;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: var(--t-caption);
     color: var(--fg);
     background: color-mix(in oklab, var(--bg) 78%, var(--fg) 6%);
     border: 1px solid var(--border);
@@ -2234,10 +2220,8 @@ const accent = '#f0b866';
     border-radius: 8px;
     background: transparent;
     color: var(--fg);
-    font-family: var(--font-label);
-    font-size: 0.6rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     padding: 0 0.7rem;
     cursor: pointer;
     white-space: nowrap;
@@ -2258,7 +2242,7 @@ const accent = '#f0b866';
     justify-content: space-between;
     gap: 0.5rem;
     align-items: baseline;
-    font-size: 0.68rem;
+    font-size: var(--t-caption);
     color: var(--muted);
   }
   .visit-list :global(.visit-date) { color: var(--fg); flex: none; }
@@ -2314,8 +2298,7 @@ const accent = '#f0b866';
   .visit-photo { margin: 0.6rem 0; }
   .mx-addref-toggle {
     appearance: none; background: transparent; border: 1px dashed var(--border); color: var(--muted);
-    cursor: pointer; font-family: var(--font-label); font-size: 0.62rem; letter-spacing: 0.08em;
-    text-transform: uppercase; padding: 0.5rem 0.7rem; border-radius: 2px; width: 100%; text-align: left;
+    cursor: pointer; font-family: var(--font-ui); font-size: var(--t-caption); padding: 0.5rem 0.7rem; border-radius: 2px; width: 100%; text-align: left;
     transition: border-color 160ms, color 160ms;
   }
   .mx-addref-toggle:hover { border-color: var(--fg); color: var(--fg); }
@@ -2331,7 +2314,7 @@ const accent = '#f0b866';
   :global(.mx-addref-pick img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .visit-photo-picked {
     display: flex; align-items: center; gap: 0.45rem;
-    margin: 0.5rem 0 0; font-family: var(--font-label); font-size: 0.72rem; color: var(--muted);
+    margin: 0.5rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted);
   }
   .visit-photo-picked[hidden] { display: none; }
   :global(.visit-photo-picked img) {
@@ -2351,15 +2334,15 @@ const accent = '#f0b866';
   .moon-lit { fill: #e8e4dc; }
   .moon-rim { fill: none; stroke: color-mix(in oklab, var(--fg) 30%, transparent); stroke-width: 0.75; }
   .moon-text { min-width: 0; }
-  .moon-phase { margin: 0; font-family: var(--font-label); font-size: 0.74rem; color: var(--fg); }
+  .moon-phase { margin: 0; font-family: var(--font-label); font-size: var(--t-footnote); color: var(--fg); }
   .moon-line {
     margin: 0.15rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  .moon-note { margin: 0.25rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--muted); font-style: italic; }
+  .moon-note { margin: 0.25rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); font-style: italic; }
   .moon-note:empty { display: none; }
 
   /* ── The light's colour ───────────────────────────────────────────────── */
@@ -2386,8 +2369,8 @@ const accent = '#f0b866';
   }
   .lightday-note {
     margin: 0.25rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
     font-style: italic;
   }
@@ -2407,8 +2390,8 @@ const accent = '#f0b866';
   .tide-strip[hidden] { display: none; }
   .tide-note {
     margin: 0.3rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.6rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2418,12 +2401,12 @@ const accent = '#f0b866';
 
   .core-line {
     margin: 0.15rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  .core-note { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.6rem; color: var(--fg); }
+  .core-note { margin: 0.3rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--fg); }
   .core-note:empty { display: none; }
 
   /* The one line in this fold that names what is actually overhead, rather
@@ -2445,8 +2428,8 @@ const accent = '#f0b866';
      above it, not a footnote to whichever one is on screen. */
   .core-caveat {
     margin: 0.3rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
     font-style: italic;
   }
@@ -2460,14 +2443,14 @@ const accent = '#f0b866';
     border-left: 2px solid #c1863c;
     border-radius: 0 9px 9px 0;
   }
-  .spot-line { margin: 0; font-family: var(--font-label); font-size: 0.68rem; line-height: 1.55; color: var(--fg); }
-  .spot-next { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.68rem; color: #f0b866; }
+  .spot-line { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.55; color: var(--fg); }
+  .spot-next { margin: 0.3rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: #f0b866; }
   .spot-next:empty { display: none; }
   /* Matches .spot-line/.spot-next above, not a size of its own — this is the
      sentence explaining *why* a spot is lit, real reading content rather than
      a decorative label, and it was sitting a full step smaller than the two
      lines it supports. */
-  .spot-basis { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: 0.68rem; line-height: 1.5; color: var(--muted); }
+  .spot-basis { margin: 0.3rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--muted); }
   .spot-basis:empty { display: none; }
 
   /* ── Facts ────────────────────────────────────────────────────────────── */
@@ -2478,16 +2461,17 @@ const accent = '#f0b866';
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-family: var(--font-label);
-    font-size: 0.52rem;
-    letter-spacing: 0.14em;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
+    font-weight: 600;
   }
   .facts dd {
     margin: 0;
     font-family: var(--font-label);
-    font-size: 0.66rem;
+    font-size: var(--t-caption);
     color: var(--fg);
     font-variant-numeric: tabular-nums;
   }
@@ -2531,8 +2515,8 @@ const accent = '#f0b866';
     padding: 0.4rem 0.7rem;
     min-height: 34px;
     border-radius: 999px;
-    font-family: var(--font-label);
-    font-size: 0.66rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-footnote);
     color: var(--fg);
     cursor: pointer;
     font-variant-numeric: tabular-nums;
@@ -2546,7 +2530,9 @@ const accent = '#f0b866';
   }
   button.chip:hover { border-color: var(--accent-mix); }
   button.chip:active { transform: scale(0.96); }
-  .chip-strong { letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.56rem; }
+  /* Actions (Today, Play, Now) read as buttons: title case, semibold — not
+     the tracked caps that made them look like more readouts beside the clock. */
+  .chip-strong { font-size: var(--t-footnote); font-weight: 600; }
   /* Now is a mode, not a jump, so it has to look held down while it is on. */
   .chip.on { color: var(--bg); background: var(--fg); border-color: var(--fg); }
   /* Now specifically is *live* — following the real clock, not a fixed point
@@ -2560,7 +2546,7 @@ const accent = '#f0b866';
   }
   #chip-now.on { animation: nowPulse 2.6s ease-in-out infinite; }
   .chip-clock { font-size: 1rem; padding: 0.35rem 0.7rem; cursor: default; }
-  .chip-phase { font-size: 0.58rem; color: var(--muted); cursor: default; }
+  .chip-phase { font-size: 0.6875rem; color: var(--muted); cursor: default; }
   .chip-phase:empty { display: none; }
   .stepper { display: flex; gap: 0.25rem; align-items: center; }
   .chip-step { padding: 0.4rem 0.55rem; font-size: 0.9rem; line-height: 1; }
@@ -2588,9 +2574,8 @@ const accent = '#f0b866';
     border: 0;
     cursor: pointer;
     color: var(--muted);
-    font-family: var(--font-label);
-    font-size: 0.6rem;
-    letter-spacing: 0.14em;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     padding: 0.5rem 0.8rem;
     min-height: 36px;
     text-decoration: none;
@@ -2676,23 +2661,25 @@ const accent = '#f0b866';
   .star-info[hidden] { display: none; }
   .star-info-name {
     margin: 0;
-    font-family: var(--font-label);
-    font-size: 0.72rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--fg);
+    font-weight: 600;
   }
   .star-info-detail {
     margin: 0.2rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.6rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--muted);
   }
   .layers-head {
     margin: 0 0 0.4rem;
-    font-family: var(--font-label);
-    font-size: 0.52rem;
-    letter-spacing: 0.16em;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
+    font-weight: 600;
   }
   .toggle {
     display: flex;
@@ -2700,8 +2687,8 @@ const accent = '#f0b866';
     gap: 0.5rem;
     padding: 0.32rem 0;
     min-height: 34px;
-    font-family: var(--font-label);
-    font-size: 0.68rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--fg);
     cursor: pointer;
   }
@@ -2738,7 +2725,7 @@ const accent = '#f0b866';
     display: flex;
     justify-content: space-between;
     font-family: var(--font-label);
-    font-size: 0.6rem;
+    font-size: var(--t-caption);
     color: var(--muted);
     margin-bottom: 0.3rem;
   }
@@ -2746,7 +2733,7 @@ const accent = '#f0b866';
   .slab input[type='range'] { width: 100%; accent-color: var(--fg); }
   /* Same fix as .spot-basis — this is the note explaining what the shadow-ratio
      slider means, not a label, so it needs to actually be read. */
-  .slab-note { margin: 0.35rem 0 0; font-family: var(--font-label); font-size: 0.68rem; line-height: 1.5; color: var(--muted); }
+  .slab-note { margin: 0.35rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--muted); }
 
   .nd-countdown {
     margin: 0.5rem 0 0;
@@ -2759,12 +2746,12 @@ const accent = '#f0b866';
   .nd-countdown.done { color: var(--accent, var(--fg)); }
 
   .frame-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
-  .frame-field { flex: 1; display: grid; gap: 0.2rem; font-family: var(--font-label); font-size: 0.56rem; color: var(--muted); }
+  .frame-field { flex: 1; display: grid; gap: 0.2rem; font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); }
   .frame-field select {
     width: 100%;
     padding: 0.3rem 0.35rem;
     font: inherit;
-    font-size: 0.62rem;
+    font-size: var(--t-caption);
     color: var(--fg);
     background: transparent;
     border: 1px solid var(--border);
@@ -2782,8 +2769,8 @@ const accent = '#f0b866';
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--fg);
-    font-family: var(--font-label);
-    font-size: 0.64rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     cursor: pointer;
     transition: border-color 160ms var(--ease), transform 110ms ease-out;
   }
@@ -2812,7 +2799,7 @@ const accent = '#f0b866';
   .sheet-place { flex: 1; min-width: 0; text-align: center; }
   .sheet-name {
     margin: 0;
-    font-family: var(--font-label);
+    font-family: var(--font-ui);
     font-size: 0.8rem;
     color: var(--fg);
     overflow: hidden;
@@ -2821,10 +2808,8 @@ const accent = '#f0b866';
   }
   .sheet-zone {
     margin: 0.1rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.54rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
   }
 
@@ -2836,7 +2821,7 @@ const accent = '#f0b866';
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--fg);
-    font-family: var(--font-label);
+    font-family: var(--font-ui);
     font-size: 0.82rem;
     padding: 0.6rem 0.7rem;
     min-height: 40px;
@@ -2849,7 +2834,7 @@ const accent = '#f0b866';
   .radiusbox input[type='range'] { flex: 1; accent-color: var(--fg); min-width: 0; height: 34px; }
   .radius-out {
     font-family: var(--font-label);
-    font-size: 0.74rem;
+    font-size: var(--t-footnote);
     color: var(--fg);
     font-variant-numeric: tabular-nums;
     min-width: 4rem;
@@ -2901,11 +2886,11 @@ const accent = '#f0b866';
   .results :global(li[aria-selected='true'] .pin) { color: var(--fg); }
   .results :global(.pin svg) { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .results :global(.result-body) { display: block; min-width: 0; flex: 1; }
-  .results :global(.nm) { display: block; font-family: var(--font-label); font-size: 0.8rem; color: var(--fg); }
+  .results :global(.nm) { display: block; font-family: var(--font-ui); font-size: 0.8rem; color: var(--fg); }
   .results :global(.dt) {
     display: block;
-    font-family: var(--font-label);
-    font-size: 0.62rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--muted);
     margin-top: 0.1rem;
     overflow: hidden;
@@ -2914,14 +2899,12 @@ const accent = '#f0b866';
   }
   .results :global(.kd) {
     float: right;
-    font-family: var(--font-label);
-    font-size: 0.52rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: color-mix(in oklab, var(--muted) 70%, transparent);
     margin-left: 0.6rem;
   }
-  .results :global(.msg) { padding: 0.7rem; color: var(--muted); font-size: 0.74rem; cursor: default; }
+  .results :global(.msg) { padding: 0.7rem; color: var(--muted); font-size: var(--t-footnote); cursor: default; }
   .results :global(.msg.err) { color: #e0603a; }
 
   /* ── Kept spots ───────────────────────────────────────────────────────────
@@ -2938,10 +2921,8 @@ const accent = '#f0b866';
   .kept[hidden] { display: none; }
   .kept-head {
     margin: 0 0 0.3rem;
-    font-family: var(--font-label);
-    font-size: 0.52rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
   }
   /* The list inside is `.results`, which is absolutely placed for the search
@@ -2983,8 +2964,8 @@ const accent = '#f0b866';
     gap: 0.7rem;
     padding: 0.5rem 0.6rem 0.5rem 0.85rem;
     border-radius: 999px;
-    font-family: var(--font-label);
-    font-size: 0.68rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     color: var(--fg);
     background: color-mix(in oklab, var(--bg) 92%, #000);
     border: 1px solid var(--border);
@@ -3001,10 +2982,8 @@ const accent = '#f0b866';
     border-radius: 999px;
     padding: 0.3rem 0.7rem;
     min-height: 28px;
-    font-family: var(--font-label);
-    font-size: 0.6rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     transition: transform 110ms ease-out;
   }
   .toast-do:active { transform: scale(0.94); }
@@ -3026,9 +3005,11 @@ const accent = '#f0b866';
   }
   .photos[hidden] { display: none; }
   .photos-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
-  .photos-title { margin: 0; font-family: var(--font-label); font-size: 0.82rem; color: var(--fg); }
-  .photos-sub { margin: 0.15rem 0 0; font-family: var(--font-label); font-size: 0.62rem; color: var(--muted); }
-  .photos-light { margin: 0.2rem 0 0; font-family: var(--font-label); font-size: 0.62rem; line-height: 1.45; color: #f0b866; }
+  .photos-title { margin: 0; font-family: var(--font-ui); font-size: 0.82rem; color: var(--fg);
+    font-weight: 600;
+  }
+  .photos-sub { margin: 0.15rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
+  .photos-light { margin: 0.2rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.45; color: #f0b866; }
   .photos-light:empty { display: none; }
   .photo-grid {
     flex: 1 1 auto;
@@ -3061,14 +3042,12 @@ const accent = '#f0b866';
     margin: 0.35rem 0.4rem 0;
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
-    font-family: var(--font-label);
+    font-family: var(--font-ui);
     /* Was 0.48rem (7.68px) — the smallest text in the app, on a word
        ("Featured"/"Quality"/"Notable") that has to actually be legible to mean
        anything. Reused 0.62rem rather than inventing a new step — the size
        this app's own tracked-caps micro-labels already settle at elsewhere. */
-    font-size: 0.62rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-size: var(--t-caption);
   }
   .photo-grid :global(.acc-featured) { background: #e8b33a; color: #1a1408; }
   .photo-grid :global(.acc-quality) { background: color-mix(in oklab, #6fc3f0 70%, transparent); color: #08121c; }
@@ -3087,8 +3066,8 @@ const accent = '#f0b866';
   .photo-grid :global(.by) {
     display: block;
     padding: 0.35rem 0.4rem 0;
-    font-family: var(--font-label);
-    font-size: 0.58rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--fg);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3099,8 +3078,8 @@ const accent = '#f0b866';
   .photo-grid :global(.lic) {
     display: block;
     padding: 0 0.4rem 0.35rem;
-    font-family: var(--font-label);
-    font-size: 0.54rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3108,8 +3087,8 @@ const accent = '#f0b866';
   }
   .photos-note {
     margin: 0.6rem 0 0;
-    font-family: var(--font-label);
-    font-size: 0.55rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     line-height: 1.5;
     color: var(--muted);
   }
@@ -3141,8 +3120,8 @@ const accent = '#f0b866';
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--fg);
-    font-family: var(--font-label);
-    font-size: 0.74rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-footnote);
     padding: 0.45rem 0.5rem;
     min-height: 36px;
   }
@@ -3163,8 +3142,8 @@ const accent = '#f0b866';
     border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
     border-radius: 8px;
     color: var(--fg);
-    font-family: var(--font-label);
-    font-size: 0.64rem;
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
     cursor: pointer;
     text-align: left;
     transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 110ms ease-out;
@@ -3188,7 +3167,10 @@ const accent = '#f0b866';
     right: 0;
     bottom: 0;
     z-index: 18;
-    padding: 1.4rem 0.9rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
+    /* The tab bar floats over the foot of this gradient; padding by its
+       footprint keeps the slider clear of it and — since `--dock-h` is this
+       element's measured height — lifts everything stacked above too. */
+    padding: 1.4rem 0.9rem calc(0.4rem + var(--tabbar-space));
     background: linear-gradient(
       to top,
       color-mix(in oklab, var(--bg) 96%, #000) 0%,
@@ -3241,10 +3223,8 @@ const accent = '#f0b866';
     border-radius: 999px;
     color: var(--muted);
     cursor: pointer;
-    font-family: var(--font-label);
-    font-size: 0.54rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
     padding: 0.34rem 0.62rem;
     min-height: 30px;
     transition: color 140ms, border-color 140ms;
@@ -3318,10 +3298,10 @@ const accent = '#f0b866';
   .scout-map :global(.maplibregl-ctrl-attrib) {
     background: color-mix(in oklab, var(--bg) 78%, transparent);
     font-family: var(--font-label);
-    font-size: 0.56rem;
+    font-size: 0.6875rem;
   }
   .scout-map :global(.maplibregl-ctrl-attrib a) { color: var(--muted); }
-  .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: 5.2rem; }
+  .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: calc(5.2rem + var(--tabbar-space)); }
 
   @media (max-width: 820px) {
     .panel { width: calc(100vw - 1.8rem); }
@@ -3357,11 +3337,6 @@ const accent = '#f0b866';
       .layers:not([hidden]) { transform: translateX(-50%) scale(0.95); }
     }
     .datesheet { top: auto; bottom: calc(var(--above-sheet) + var(--safe-bottom)); transform: none; }
-    /* The nav and the view controls share the top row, and on a phone there is
-       not room for both at full width — measured, they touch at 390px. The way
-       back is the one that has to survive, so Inspiration stands down; it is
-       one tap away through the archive. */
-    .scout-nav a[href='/inspiration'] { display: none; }
     .cards { grid-template-columns: repeat(2, 1fr); }
 
     /* The seven jumps want more width than a phone has, and trimming the padding
@@ -3558,7 +3533,6 @@ const accent = '#f0b866';
     .align-list :global(.align-row) { min-height: 44px; }
     .align-list :global(.align-alt) { min-height: 44px; }
     .align-phase input[type='range'] { min-height: 44px; }
-    .scout-nav a { min-height: 44px; display: inline-flex; align-items: center; }
     /* − and + were 28px wide. Tall enough and half the width of a thumb, which
        is the more common way to miss a stepper: you hit the date between them. */
     .chip-step { min-width: 44px; }

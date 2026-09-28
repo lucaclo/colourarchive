@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import TabBar, { type Tab } from '../components/TabBar.astro';
 
 interface Props {
   title?: string;
@@ -32,6 +33,19 @@ interface Props {
    * some other crawlers still don't unfurl AVIF into a link preview.
    */
   image?: string;
+  /**
+   * Which section of the tab bar this page is. Omitted, the page carries no
+   * tab bar at all — the read-only book share link is the one that should
+   * not: it is handed to someone outside the archive, and the rest of the
+   * app is not theirs to wander into.
+   */
+  tab?: Tab;
+  /**
+   * The custom cursor ring. Off where the pointer is a precision tool with a
+   * meaning of its own — Scout's map, where the system's grab/crosshair
+   * cursors are the feedback, and a trailing ring only blurs the aim.
+   */
+  cursor?: boolean;
 }
 const {
   title = 'Colour Archive',
@@ -39,6 +53,8 @@ const {
   preconnect = [],
   accent,
   image = '/icon-512.png',
+  tab,
+  cursor = true,
 } = Astro.props;
 // Astro.site (set in astro.config.mjs) is what turns these into real
 // absolute URLs a crawler can fetch; without it they resolve against
@@ -93,9 +109,10 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
         handshake is paid twice and the hint is worse than nothing. */}
     {preconnect.map((href) => <link rel="preconnect" href={href} crossorigin />)}
   </head>
-  <body>
+  <body class={tab ? 'has-tabbar' : undefined}>
     <slot />
-    <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>
+    {tab && <TabBar current={tab} />}
+    {cursor && <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>}
     <script is:inline>
       // Custom cursor: a ring tinted to whatever --accent currently is (set
       // per-page/per-chapter elsewhere), difference-blended so it reads over
@@ -286,7 +303,11 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
             showPill(`No room left · ${d.have} of ${d.total} saved`, true);
             return;
           }
-          showPill(d.added > 0 ? 'Saved for offline' : 'Up to date offline');
+          // Only news is worth a pill. "Up to date offline" was announced on
+          // every page load, centre-screen, about nothing having changed —
+          // hidePill() still clears a progress count left over from the run.
+          if (d.added > 0) showPill('Saved for offline');
+          else hidePill();
         }
         // Viewing a cached snapshot with nothing behind it is a different state
         // from being live, and the archive looks identical either way. Say so.
