@@ -37,7 +37,6 @@ const accent = '#f0b866';
 
 <Layout
   tab="scout"
-  cursor={false}
   title="Scout — Colour Archive"
   description="Type a place, set a radius, and see how the light falls inside it."
   accent={accent}
@@ -637,6 +636,13 @@ const accent = '#f0b866';
           </section>
         </div>
       </section>
+
+      <!-- Wide screens only: hides the sidebar for the whole map, the way the
+           sidebar button does in Apple Maps on the Mac. -->
+      <button class="dock-toggle" id="dock-toggle" type="button" aria-controls="dock" aria-expanded="true" title="Hide sidebar (⌃⌘S)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M9.5 5v14"/><path d="M5.8 8.5h1.6M5.8 11h1.6M5.8 13.5h1.6" stroke-linecap="round"/></svg>
+        <span class="sr" id="dock-toggle-say">Hide sidebar</span>
+      </button>
 
       <!-- ── Top right: view controls ────────────────────────────────────── -->
       <div class="tools" id="tools" hidden>
@@ -3929,10 +3935,6 @@ const accent = '#f0b866';
     .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 25.8rem; }
   }
 
-  /* The sun can be picked up (see "Dragging the sun" in page.ts). */
-  .scout-map.sun-grabbable :global(canvas) { cursor: grab; }
-  .scout-map.sun-dragging :global(canvas) { cursor: grabbing; }
-
   /* ── The empty state, on glass ────────────────────────────────────────────
      The hint used to be display italic with a dark glow, drawn straight on the
      map — fine on the old dark chrome, a smudge on pale paper. Both it and the
@@ -3967,6 +3969,60 @@ const accent = '#f0b866';
   }
   .first-visit p { font-size: var(--t-footnote); color: var(--secondary); }
   .first-visit button { min-width: 28px; min-height: 28px; }
+
+  /* ── Sidebar toggle ───────────────────────────────────────────────────────
+     Wide screens only — on a phone the sheet already gets out of the way by
+     collapsing to its peek. Sits just past the sidebar's edge while it is
+     open and slides to the corner when it is hidden, so it is always the
+     same button in the same row. */
+  .dock-toggle { display: none; }
+  @media (min-width: 821px) {
+    .dock-toggle {
+      position: absolute;
+      z-index: 25;
+      top: calc(var(--safe-top) + 0.9rem);
+      left: calc(0.9rem + 24rem + 0.6rem);
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: var(--r-pill);
+      color: var(--fg);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-edge);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-shadow);
+      transition: left 420ms var(--sheet-curve), transform 110ms ease-out, background 160ms var(--ease);
+    }
+    .dock-toggle:hover { background: var(--glass-bg-strong); }
+    .dock-toggle:active { transform: scale(0.92); }
+    .dock-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+    .scout-stage[data-sidebar='hidden'] .dock-toggle { left: 0.9rem; }
+
+    #dock {
+      transition: transform 420ms var(--sheet-curve), opacity 300ms var(--ease), visibility 0s linear 0s;
+    }
+    .scout-stage[data-sidebar='hidden'] #dock {
+      transform: translateX(calc(-100% - 1.5rem));
+      opacity: 0;
+      visibility: hidden;
+      transition: transform 420ms var(--sheet-curve), opacity 300ms var(--ease), visibility 0s linear 420ms;
+    }
+    .scout-stage[data-sidebar='hidden'] .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 0; }
+  }
+
+  /* ── The circle cursor ────────────────────────────────────────────────────
+     The app's own ring stands in for the pointer on Scout — over the map,
+     the controls and the sheet alike — rather than riding beside a system
+     arrow or grab hand. Mouse and trackpad only; touch has no cursor. */
+  @media (hover: hover) and (pointer: fine) {
+    .scout,
+    .scout :global(*),
+    :global(body:has(.scout) .tabbar),
+    :global(body:has(.scout) .tabbar *) { cursor: none !important; }
+  }
 </style>
 
 <script>

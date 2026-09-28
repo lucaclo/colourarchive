@@ -8774,10 +8774,11 @@ export async function startScout(): Promise<void> {
             : null;
           const disc = at && projectToScreen(at.lon, at.lat, at.altitudeM);
           const here = canvasPoint(event);
-          mapEl.classList.toggle(
-            'sun-grabbable',
-            !!disc && shown.sunPath && Math.hypot(disc.x - here.x, disc.y - here.y) <= SUN_GRAB_RADIUS_PX,
-          );
+          const grabbable = !!disc && shown.sunPath && Math.hypot(disc.x - here.x, disc.y - here.y) <= SUN_GRAB_RADIUS_PX;
+          mapEl.classList.toggle('sun-grabbable', grabbable);
+          // The circle cursor swells over the sun, the same "you can take
+          // hold of this" it gives a button.
+          document.getElementById('cursor-ring')?.classList.toggle('hover', grabbable);
         }
         return;
       }
@@ -9335,6 +9336,17 @@ export async function startScout(): Promise<void> {
       map.easeTo({ padding: { top: 0, right: 0, left, bottom }, duration: reducedMotion?.matches ? 0 : 380 });
     };
 
+    /* The sidebar can be put away on a wide screen, for the whole map.
+       Remembered per browser — a preference about this screen, not state
+       anyone else needs. */
+    let sidebarHidden = false;
+    try {
+      sidebarHidden = localStorage.getItem('scout.sidebar') === 'hidden';
+    } catch {
+      /* storage blocked: start shown */
+    }
+    const sidebarToggle = document.getElementById('dock-toggle');
+
     const setDetent = (next: Detent) => {
       detent = next;
       dock.dataset.detent = next;
@@ -9342,7 +9354,7 @@ export async function startScout(): Promise<void> {
       if (wideQuery.matches) {
         dock.style.height = '';
         publish(0);
-        padMap(Math.round(dock.offsetLeft + dock.offsetWidth), 0);
+        padMap(sidebarHidden ? 0 : Math.round(dock.offsetLeft + dock.offsetWidth), 0);
         return;
       }
       const px = heightOf(next);
@@ -9352,6 +9364,36 @@ export async function startScout(): Promise<void> {
       // up off the top of the screen behind it would be motion for nothing.
       padMap(0, Math.round(Math.min(px, heightOf('half'))));
     };
+
+    const applySidebar = () => {
+      const hidden = sidebarHidden && wideQuery.matches;
+      stage.dataset.sidebar = hidden ? 'hidden' : 'shown';
+      // Hidden means out of reach for focus and screen readers too, not only
+      // out of sight.
+      dock.inert = hidden;
+      const say = hidden ? 'Show sidebar' : 'Hide sidebar';
+      sidebarToggle?.setAttribute('aria-expanded', String(!hidden));
+      sidebarToggle?.setAttribute('title', `${say} (⌃⌘S)`);
+      const label = document.getElementById('dock-toggle-say');
+      if (label) label.textContent = say;
+      setDetent(detent);
+    };
+    const toggleSidebar = () => {
+      sidebarHidden = !sidebarHidden;
+      try {
+        localStorage.setItem('scout.sidebar', sidebarHidden ? 'hidden' : 'shown');
+      } catch {
+        /* not remembered, still toggled */
+      }
+      applySidebar();
+    };
+    sidebarToggle?.addEventListener('click', toggleSidebar);
+    // ⌃⌘S — the Mac's own shortcut for showing and hiding a sidebar.
+    window.addEventListener('keydown', (event) => {
+      if (!wideQuery.matches || !event.ctrlKey || !event.metaKey || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      toggleSidebar();
+    });
 
     // Tap cycles, as a grabber does on iOS: up through the heights, then home.
     const cycle = () => setDetent(order[(order.indexOf(detent) + 1) % order.length]);
@@ -9432,7 +9474,7 @@ export async function startScout(): Promise<void> {
       ro.observe(stage);
     }
     new MutationObserver(resettle).observe(dock, { attributes: true, attributeFilter: ['hidden'], subtree: true });
-    wideQuery.addEventListener('change', resettle);
+    wideQuery.addEventListener('change', () => applySidebar());
     // The sheet clips rather than scrolls (its body is the scroller), but a
     // clipped box can still be scrolled by focus — a control below the fold
     // taking focus slid the place row up out of sight. Hold it at the top.
@@ -9443,6 +9485,7 @@ export async function startScout(): Promise<void> {
       if (!typing) setDetent('peek');
     });
     setDetent('peek');
+    applySidebar();
   }
 
   /* ── Saying that the row runs on ────────────────────────────────────────
