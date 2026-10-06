@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-10T17:53:29.076Z",
-  "count": 110,
+  "generatedAt": "2026-10-02T12:32:40.860Z",
+  "count": 111,
   "chapters": [
     {
       "key": "achromatic",
@@ -27,6 +27,8 @@
           "chapter": "achromatic",
           "autoMedium": "film",
           "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
           "placeholder": "data:image/webp;base64,UklGRlAAAABXRUJQVlA4IEQAAABwAwCdASoYABAAPu1qrU8ppiQiMAgBMB2JZwAAW9IvdzssAcAA/mNMWGNGQrp/+Fh6fqnSQz25qJbPFd84fLjvsBAAAA==",
           "derivatives": [
             {
@@ -47,9 +49,7 @@
             "camera": "NORITSU KOKI EZ Controller",
             "software": "EZ Controller 6.10.011  (130930)"
           },
-          "addedAt": "2026-07-26T13:07:34.440Z",
-          "autoGenre": "landscape",
-          "genre": "landscape"
+          "addedAt": "2026-09-21T14:20:54.322Z"
         },
         {
           "id": "6bc75e8b9e1e1814",
@@ -67,6 +67,8 @@
           "chapter": "achromatic",
           "autoMedium": "film",
           "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
           "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAACQBACdASoYACAAPuVepk2pJSOiN/VYASAciWcAwcxFX7/aEBohxgExJdcUCKAA/ucLlQFsPqoxx628CYPeq28k7YcHFW4n81mMOsz3ndnHTYqm/J1hFi4A",
           "derivatives": [
             {
@@ -82,9 +84,7 @@
             "capturedAt": "2025-03-22T16:33:01.000Z",
             "camera": "NORITSU KOKI EZ Controller"
           },
-          "addedAt": "2026-07-26T13:07:28.873Z",
-          "autoGenre": "landscape",
-          "genre": "landscape"
+          "addedAt": "2026-09-21T14:20:52.207Z"
         },
         {
           "id": "7b1f1207fb43e10a",
@@ -217,6 +217,8 @@
           "chapter": "achromatic",
           "autoMedium": "film",
           "medium": "film",
+          "autoGenre": "landscape",
+          "genre": "landscape",
           "placeholder": "data:image/webp;base64,UklGRl4AAABXRUJQVlA4IFIAAADwAwCdASoYABAALrV2u12jqampiYC0SygF+cI//UvJrlGUzcjuZ2R4AP7XDlRgdoPvrTJcSDeRIK3shU+ejuJq2BFh/wZaJ9BWHhSy+q2yAAAA",
           "derivatives": [
             {
@@ -237,9 +239,7 @@
             "camera": "NORITSU KOKI EZ Controller",
             "software": "EZ Controller 6.10.011  (130930)"
           },
-          "addedAt": "2026-07-27T13:21:15.649Z",
-          "autoGenre": "landscape",
-          "genre": "landscape"
+          "addedAt": "2026-09-21T14:23:22.062Z"
         },
         {
           "id": "f104248915053a6b",
@@ -692,9 +692,9 @@
       "key": "orange",
       "name": "Camel",
       "oklch": {
-        "L": 0.595,
+        "L": 0.596,
         "C": 0.078,
-        "H": 59.8
+        "H": 60.1
       },
       "photos": [
         {
@@ -964,51 +964,6 @@
           "genre": "architecture"
         },
         {
-          "id": "b8c8da0d26097286",
-          "filename": "DSC06420.b8c8da0d26097286.jpg",
-          "ext": "jpg",
-          "width": 6409,
-          "height": 4006,
-          "bytes": 21472301,
-          "oklch": {
-            "L": 0.62,
-            "C": 0.087,
-            "H": 58.5
-          },
-          "autoChapter": "orange",
-          "chapter": "orange",
-          "autoMedium": "digital",
-          "medium": "digital",
-          "autoGenre": "architecture",
-          "genre": "architecture",
-          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAACwAwCdASoYAA8APu1mqk4ppaOiMAgBMB2JQBOgA82Nn2ZxP9kaPAD1VcAdpv+0wWs38xGv13eQYeDWwRGovKxRpZc4ud1aAkOpbhy42Aer6+cSFL4gQgE4qAA=",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/b8c8da0d26097286-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/b8c8da0d26097286-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/b8c8da0d26097286-2000.avif"
-            }
-          ],
-          "exif": {
-            "capturedAt": "2026-08-06T14:50:35.000Z",
-            "camera": "SONY ILCE-7CM2",
-            "lens": "FE 24-50mm F2.8 G",
-            "focalLength": "50mm",
-            "aperture": "f/8",
-            "shutter": "1/200s",
-            "iso": 100,
-            "software": "Adobe Lightroom 9.5 (Macintosh)"
-          },
-          "addedAt": "2026-08-29T17:40:43.447Z"
-        },
-        {
           "id": "2693d07bb4650ac8",
           "filename": "DSC06420-2.2693d07bb4650ac8.jpg",
           "ext": "jpg",
@@ -1255,51 +1210,6 @@
             "software": "Adobe Lightroom 11.4.0 (iOS)"
           },
           "addedAt": "2026-07-28T07:18:07.261Z"
-        },
-        {
-          "id": "718762237a142dbd",
-          "filename": "DSC06736.718762237a142dbd.jpg",
-          "ext": "jpg",
-          "width": 2048,
-          "height": 1152,
-          "bytes": 845047,
-          "oklch": {
-            "L": 0.539,
-            "C": 0.07,
-            "H": 52.6
-          },
-          "autoChapter": "orange",
-          "chapter": "orange",
-          "autoMedium": "digital",
-          "medium": "digital",
-          "autoGenre": "street",
-          "genre": "street",
-          "placeholder": "data:image/webp;base64,UklGRloAAABXRUJQVlA4IE4AAADwAwCdASoYAA4APu1iqk4ppaQiMAgBMB2JQBWAAsD/1Q7u+4p3pYrIAP2KIVBe/fSmdS2yBUaMhNv5z9waHG0qzZ0RIztC7EQEZyhAAAA=",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/718762237a142dbd-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/718762237a142dbd-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/718762237a142dbd-2000.avif"
-            }
-          ],
-          "exif": {
-            "capturedAt": "2026-09-07T11:37:33.000Z",
-            "camera": "SONY ILCE-7CM2",
-            "lens": "FE 35mm F2.8 ZA",
-            "focalLength": "35mm",
-            "aperture": "f/11",
-            "shutter": "1/60s",
-            "iso": 100,
-            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
-          },
-          "addedAt": "2026-09-10T14:15:29.204Z"
         },
         {
           "id": "de0a1553f0fabdf6",
@@ -3153,9 +3063,9 @@
       "key": "teal",
       "name": "Teal",
       "oklch": {
-        "L": 0.629,
-        "C": 0.068,
-        "H": 215.1
+        "L": 0.615,
+        "C": 0.064,
+        "H": 214.1
       },
       "photos": [
         {
@@ -3585,6 +3495,51 @@
           "genre": "landscape"
         },
         {
+          "id": "c723d22e133a3ae5",
+          "filename": "R0000475.c723d22e133a3ae5.jpg",
+          "ext": "jpg",
+          "width": 4000,
+          "height": 6000,
+          "bytes": 6900745,
+          "oklch": {
+            "L": 0.63,
+            "C": 0.049,
+            "H": 216.5
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRpYAAABXRUJQVlA4IIoAAAAwBQCdASoYACQAPulgpk2pJaOiNVgIASAdCUAZC4itsXSo1ucPiTdD9yrFkzLDV2inQAD+94DA9Z50cbY4ABc0/swMo0bYgEkZjDCvqbckgPzEb+bR5zT73wGP1yrolHZ96wEYXg4YcFgkSHL6B3ptmZvLg0zZ4n9OLpBs++WZdM+ZovKdn14AAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c723d22e133a3ae5-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c723d22e133a3ae5-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/c723d22e133a3ae5-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-19T13:15:10.000Z",
+            "camera": "RICOH IMAGING COMPANY, LTD. RICOH GR IIIx",
+            "lens": "GR LENS 26mm F2.8",
+            "focalLength": "26mm",
+            "aperture": "f/8",
+            "shutter": "1/250s",
+            "iso": 200,
+            "software": "Adobe Lightroom 11.5.21 (iOS)"
+          },
+          "addedAt": "2026-10-02T12:32:40.839Z"
+        },
+        {
           "id": "344d2ee73c19ef55",
           "filename": "DSC06034.344d2ee73c19ef55.jpg",
           "ext": "jpg",
@@ -3665,6 +3620,51 @@
           "addedAt": "2026-07-26T13:07:38.369Z",
           "autoGenre": "architecture",
           "genre": "architecture"
+        },
+        {
+          "id": "092f3591cbe4e075",
+          "filename": "R0000481.092f3591cbe4e075.jpg",
+          "ext": "jpg",
+          "width": 6000,
+          "height": 4000,
+          "bytes": 11104959,
+          "oklch": {
+            "L": 0.434,
+            "C": 0.039,
+            "H": 191.5
+          },
+          "autoChapter": "teal",
+          "chapter": "teal",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "street",
+          "genre": "street",
+          "placeholder": "data:image/webp;base64,UklGRk4AAABXRUJQVlA4IEIAAADQAwCdASoYABAAPu1mq04ppaQiMAgBMB2JZwDCgBXuh7ncEyI0AgAA/vLYjhNMoR9cvLSzNWS6XxB8+P/npSFEAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/092f3591cbe4e075-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/092f3591cbe4e075-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/092f3591cbe4e075-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-19T13:27:00.000Z",
+            "camera": "RICOH IMAGING COMPANY, LTD. RICOH GR IIIx",
+            "lens": "GR LENS 26mm F2.8",
+            "focalLength": "26mm",
+            "aperture": "f/6.3",
+            "shutter": "1/320s",
+            "iso": 200,
+            "software": "Adobe Lightroom 11.5.21 (iOS)"
+          },
+          "addedAt": "2026-10-02T12:32:40.732Z"
         }
       ]
     },
@@ -3672,9 +3672,9 @@
       "key": "blue",
       "name": "Blue",
       "oklch": {
-        "L": 0.58,
-        "C": 0.092,
-        "H": 237.4
+        "L": 0.575,
+        "C": 0.091,
+        "H": 237.7
       },
       "photos": [
         {
@@ -4400,6 +4400,47 @@
             "software": "Adobe Lightroom 9.5 (Macintosh)"
           },
           "addedAt": "2026-08-29T17:40:46.608Z"
+        },
+        {
+          "id": "2983dd25741dc027",
+          "filename": "R0005458.2983dd25741dc027.jpg",
+          "ext": "jpg",
+          "width": 1365,
+          "height": 2048,
+          "bytes": 344435,
+          "oklch": {
+            "L": 0.46,
+            "C": 0.083,
+            "H": 245
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "landscape",
+          "genre": "landscape",
+          "placeholder": "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAAAwBQCdASoYACQAPu1kqE4ppaOiNVQIATAdiUAXZnCfgQEnidx+Pb2ezM9w/lATWVt+wAD+qYK0mTRvjnk54pD1lHQSe6cC/kzk/tTy6svZM8CkXhaDb5koju4u7ZvMNQPq8e45v8Znx6HxHteij4i5IfACou9039Oz6IAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/2983dd25741dc027-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/2983dd25741dc027-1280.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-29T19:01:31.000Z",
+            "camera": "RICOH IMAGING COMPANY, LTD. RICOH GR IIIx",
+            "lens": "GR LENS 26mm F2.8",
+            "focalLength": "26mm",
+            "aperture": "f/2.8",
+            "shutter": "1/30s",
+            "iso": 100,
+            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
+          },
+          "addedAt": "2026-09-30T16:39:27.672Z"
         },
         {
           "id": "7e92c929556120e9",

@@ -2,8 +2,8 @@
  * Colours the archive doesn't have yet.
  *
  * Every chapter already sits at one of a fixed set of perceptual hue anchors
- * (`ANCHORS` in `color.ts`) — the same wheel the spectrum scrubber and the
- * cover aurora paint from. An anchor with no chapter isn't a rounding
+ * (`ANCHORS` in `color.ts`) — the same wheel the spectrum scrubber paints
+ * from. An anchor with no chapter isn't a rounding
  * artefact, it's a hue the shutter has never actually recorded: the wheel has
  * eight fixed positions and the archive has only filled some of them.
  *

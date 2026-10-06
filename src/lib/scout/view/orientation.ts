@@ -38,7 +38,10 @@ export function createFirstVisitOrientation(): FirstVisitOrientation {
     // Private browsing or storage disabled — treat every visit as first
     // rather than throwing on what is meant to be a quiet courtesy line.
   }
-  if (!seen) el.hidden = false;
+  // The orientation card is retired: the page keeps text to the essentials,
+  // and the search hint already says how to start. Kept as a no-op so the
+  // callers that dismiss it need no change.
+  void seen;
 
   function dismiss(): void {
     if (el.hidden) return;

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { getMatch } from '../../../lib/match/session';
 import { atGroupStrength } from '../../../lib/match/adjustments';
 import { buildPresetFiles } from '../../../lib/match/xmp';
+import { recordDownload } from '../../../lib/match/roundtrip-store';
 
 export const prerender = false;
 
@@ -54,6 +55,22 @@ export const GET: APIRoute = async ({ url }) => {
     // buildPresetFiles returns the masked preset first when masks exist, and
     // always ends with the mask-free one.
     const chosen = variant === 'safe' ? files[files.length - 1] : files[0];
+
+    // What this file sets, recorded now — the only moment it is certain —
+    // so a later round trip can be checked against it. See roundtrip-store.ts.
+    const hadMasks = variant === 'full' && files.length > 1;
+    await recordDownload({
+      matchId: record.id,
+      strength: groupStrength,
+      variant,
+      hadMasks,
+      // Only the masks the file can carry — a 'manual' one is described, never written.
+      applied: { ...adj, masks: hadMasks ? adj.masks.filter((m) => m.kind !== 'manual') : [] },
+      mine: record.mine,
+      reference: record.reference,
+      myName: record.myName,
+      referenceName: record.referenceName,
+    }).catch((err) => console.error('[match/preset] could not record the download', err));
 
     return new Response(chosen.contents, {
       status: 200,

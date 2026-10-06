@@ -183,6 +183,11 @@ html, body { margin: 0; padding: 0; }
   --dur-med: 260ms;
   --dur-slow: 480ms;
   --spring: cubic-bezier(0.34, 1.36, 0.64, 1);  /* a small settle, not a bounce */
+  /* A real damped spring (ζ 0.82, ~1% overshoot) sampled into linear() — the
+     curve UIKit uses for things that move from one place to another, like a
+     photo lifting out of the grid. Falls back to --ease where linear() isn't
+     supported (Safari < 17.2). */
+  --spring-move: var(--ease);
 
   /* --- Tab bar: every page reserves this much at the foot of the screen so
      nothing it owns lands underneath the floating bar. ------------------ */
@@ -211,7 +216,7 @@ html, body { margin: 0; padding: 0; }
      nothing but colour in an eight-chapter archive. Still a pause, still the
      colour wash; the first photographs now rise into view beneath the title. */
   --gap: 58svh;
-  --fade: 620ms;              /* photo entrance */
+  --fade: 280ms;              /* photo entrance */
 
   --grain-opacity: 0.12;      /* a little bit of grain */
 
@@ -238,8 +243,24 @@ html, body { margin: 0; padding: 0; }
   --label-size: 0.75rem;
   --label-track: 0.2em;
 
+  /* --- Notebook (Scout + Inspiration). Labels written in, not stamped on:
+     sentence-case Fraunces italic in place of tracked capitals, hairline
+     rules in place of boxed cards, dotted leaders between a name and its
+     value the way a contact-sheet log is ruled. ------------------------ */
+  --font-note: var(--font-display);   /* always set italic */
+  --t-note: 0.95rem;
+  --rule: color-mix(in oklab, var(--fg) 16%, transparent);
+  --leader: color-mix(in oklab, var(--fg) 24%, transparent);
+  --mark: color-mix(in oklab, var(--fg) 55%, transparent);
+
   --wipe: 900ms;                            /* chapter-to-chapter colour handoff */
   --cover-title-size: clamp(3.2rem, 10vw, 8.5rem);
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --spring-move: linear(0, 0.03, 0.103, 0.2, 0.308, 0.416, 0.519, 0.613, 0.695, 0.766, 0.825, 0.873,
+      0.911, 0.941, 0.964, 0.98, 0.992, 1.001, 1.006, 1.009, 1.011, 1.011, 1.011, 1.01, 1);
+  }
 }
 
 body {
@@ -342,14 +363,15 @@ body {
    photograph that already resolved. */
 .frame img.photo {
   filter: grayscale(0.85) blur(6px) brightness(0.8) saturate(0.55);
-  transition: opacity var(--fade) var(--ease), transform 900ms var(--ease), filter 900ms var(--ease);
+  transition: opacity var(--fade) var(--ease), transform 320ms var(--ease), filter 320ms var(--ease);
 }
 .frame.reveal img.photo { filter: none; transform: none; }
+/* Hover lifts the photograph a touch and nothing more. It used to saturate
+   it and cast a tinted shadow — in an archive about colour, a hover should
+   never show a photograph in colours it doesn't have. */
 @media (hover: hover) {
-  .frame { transition: box-shadow 420ms var(--ease); }
-  .frame.reveal img.photo { transition: opacity var(--fade) var(--ease), transform 480ms var(--ease), filter 900ms var(--ease); }
-  .frame.reveal:hover img.photo { transform: scale(1.035); filter: saturate(1.08); }
-  .frame.reveal:hover { box-shadow: 0 22px 60px -14px color-mix(in oklab, var(--accent) 35%, black 65%); }
+  .frame.reveal img.photo { transition: opacity var(--fade) var(--ease), transform 260ms var(--ease), filter 320ms var(--ease); }
+  .frame.reveal:hover img.photo { transform: scale(1.02); }
 }
 @media (prefers-reduced-motion: reduce) {
   .frame img.photo { filter: none; }
@@ -387,10 +409,28 @@ body {
   display: grid;
   grid-template-columns: repeat(var(--ocols, 8), 1fr);
   gap: 0;
-  animation: wallIn 460ms var(--ease); /* photos ease into the wall, not snap */
+  animation: wallIn 300ms var(--ease); /* photos ease into the wall, not snap */
 }
 @keyframes wallIn { from { opacity: 0.35; transform: scale(0.985); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .archive.overview { animation: none; } }
+/* A level change from a tap is a view transition (index.astro › morph): the
+   photos travel themselves, so the wall's own fade-in would only fight it. */
+.archive.morphing, .archive.morphing.overview { animation: none; }
+.archive.morphing .frame img.photo { transition: none; }
+::view-transition-group(*.photo) {
+  animation-duration: 360ms;
+  animation-timing-function: var(--spring-move);
+}
+/* Masonry frames are their photo's shape; Overview tiles are square. Crop
+   through the move instead of squashing one shape into the other. */
+::view-transition-old(*.photo), ::view-transition-new(*.photo) {
+  height: 100%; object-fit: cover; overflow: clip;
+}
+/* Photos that are only on one side of the change (scrolled in or out by the
+   reflow) don't travel. Leaving ones clear out quickly and arriving ones wait
+   a beat, so the ones in motion never pass through a double exposure. */
+::view-transition-old(*.photo):only-child { animation: vtFadeOut 140ms ease-out both; }
+::view-transition-new(*.photo):only-child { animation: vtFadeIn 200ms ease-out 140ms both; }
 .archive.overview .chapter-gap { display: none; }
 /* Every photo — across all chapters — flows into one continuous grid, so the
    wall packs seamlessly with no per-chapter breaks. The .mcol wrappers also
@@ -408,6 +448,25 @@ body {
 }
 .archive.overview .frame .ph { object-fit: cover; }
 .archive.overview .frame { cursor: zoom-in; }
+/* The middle level: each chapter becomes a labelled strip. The opener keeps
+   its own colour and ink but shrinks to one line spanning the grid, so the
+   archive's structure reads at a glance; small gaps return between tiles so
+   a strip's photos read as separate pictures, not yet as one field. */
+.archive.overview.strips { gap: 3px; row-gap: 3px; }
+.archive.overview.strips .chapter-gap {
+  display: flex; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 0.7rem;
+  grid-column: 1 / -1; min-height: 0; padding: 0.7rem 0.9rem 0.6rem; margin-top: 1.1rem;
+  cursor: zoom-in;
+}
+.archive.overview.strips .chapter-gap:first-of-type { margin-top: 0; }
+.archive.overview.strips .chapter-index,
+.archive.overview.strips .chapter-palette { display: none; }
+.archive.overview.strips .chapter-title {
+  font-size: 1.35rem; max-width: none; text-align: left; line-height: 1.1;
+}
+.archive.overview.strips .chapter-title::after { display: none; }
+.archive.overview.strips .chapter-count { margin: 0; font-size: var(--t-caption); }
+.archive.overview.strips .chapter-gap * { animation: none !important; }
 
 /* Chapter gap: a held breath. Background = the chapter being entered. */
 .chapter-gap {
@@ -457,9 +516,9 @@ body {
   font-size: var(--label-size);
   letter-spacing: var(--label-track);
   text-transform: uppercase;
-  /* 0.8, not 0.55: the ink is already chosen for contrast against the
-     chapter's colour (readableInk), and fading it by half gave that away. */
-  opacity: 0.8;
+  /* Full strength: the ink is already chosen for contrast against the
+     chapter's colour (readableInk). At 0.8 these 12px labels measured
+     3.4–4.3:1 on Ash, Camel, Yellow, Teal and Blue — under AA's 4.5. */
   margin: 0 0 1.4rem;
   font-weight: 500;
 }
@@ -470,7 +529,6 @@ body {
   font-size: var(--label-size);
   letter-spacing: var(--label-track);
   text-transform: uppercase;
-  opacity: 0.8;
   margin: 0.9rem 0 0;
   font-weight: 500;
 }
@@ -491,30 +549,30 @@ body {
    between the gap entering the DOM's visible range and the observer firing —
    if JS never fires at all, no animation ever applies and both sit at their
    plain resting opacity instead of vanishing. */
-@keyframes chapterIndexIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 0.8; transform: none; } }
-@keyframes chapterTitleIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@keyframes chapterCountIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 0.8; transform: none; } }
+@keyframes chapterIndexIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes chapterTitleIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes chapterCountIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes paletteIn { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
-.chapter-gap.enter .chapter-index { animation: chapterIndexIn 650ms var(--ease) 20ms both; }
-.chapter-gap.enter .chapter-title { animation: chapterTitleIn 750ms var(--ease) 110ms both; }
-.chapter-gap.enter .chapter-count { animation: chapterCountIn 650ms var(--ease) 180ms both; }
+.chapter-gap.enter .chapter-index { animation: chapterIndexIn 300ms var(--ease) both; }
+.chapter-gap.enter .chapter-title { animation: chapterTitleIn 300ms var(--ease) 40ms both; }
+.chapter-gap.enter .chapter-count { animation: chapterCountIn 300ms var(--ease) 80ms both; }
 /* The swatches set down one after another, left to right — the chapter's
    colours arriving in the order its photographs will. */
-.chapter-gap.enter .chapter-palette li { animation: paletteIn 420ms var(--spring) both; }
-.chapter-gap.enter .chapter-palette li:nth-child(1) { animation-delay: 270ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(2) { animation-delay: 300ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(3) { animation-delay: 330ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(4) { animation-delay: 360ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(5) { animation-delay: 390ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(6) { animation-delay: 420ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(7) { animation-delay: 450ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(8) { animation-delay: 480ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(9) { animation-delay: 510ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(10) { animation-delay: 540ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(11) { animation-delay: 570ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(12) { animation-delay: 600ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(13) { animation-delay: 630ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(14) { animation-delay: 660ms; }
+.chapter-gap.enter .chapter-palette li { animation: paletteIn 160ms var(--spring) both; }
+.chapter-gap.enter .chapter-palette li:nth-child(1) { animation-delay: 60ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(2) { animation-delay: 70ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(3) { animation-delay: 80ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(4) { animation-delay: 90ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(5) { animation-delay: 100ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(6) { animation-delay: 110ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(7) { animation-delay: 120ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(8) { animation-delay: 130ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(9) { animation-delay: 140ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(10) { animation-delay: 150ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(11) { animation-delay: 160ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(12) { animation-delay: 170ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(13) { animation-delay: 180ms; }
+.chapter-gap.enter .chapter-palette li:nth-child(14) { animation-delay: 190ms; }
 @media (prefers-reduced-motion: reduce) {
   .chapter-gap.enter .chapter-index, .chapter-gap.enter .chapter-title,
   .chapter-gap.enter .chapter-count, .chapter-gap.enter .chapter-palette li { animation: none; }
@@ -718,9 +776,17 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 .tab:hover { color: var(--fg); background: var(--fill); }
 /* The current section: filled, full-strength, and tinted a breath toward
    whatever chapter colour the page is carrying. */
-.tab[aria-current='page'] {
-  color: var(--fg);
+.tab[aria-current='page'] { color: var(--fg); }
+.tab[aria-current='page']:hover { background: transparent; }
+/* The fill behind the current tab is its own element so that, moving between
+   sections, it can glide from the old tab to the new one (see the view
+   transition below) while the icons and labels simply cross-fade. */
+.tab { position: relative; isolation: isolate; }
+.tab-pill {
+  position: absolute; inset: 0; z-index: -1;
+  border-radius: inherit;
   background: color-mix(in oklab, var(--accent-mix) 16%, var(--fill-hover));
+  view-transition-name: tab-pill;
 }
 .tab[aria-current='page'] svg { stroke-width: 1.9; }
 .tabbar-add {
@@ -733,6 +799,37 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 .tabbar-add[aria-current='page'] { background: color-mix(in oklab, var(--accent-mix) 22%, var(--glass-bg-strong)); }
 .tab:active, .tabbar-add:active { transform: scale(0.94); }
 .tab:focus-visible, .tabbar-add:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+/* --- Moving between sections -----------------------------------------------
+   Each tab is its own page, so a tap used to be a hard cut: white-flash-free,
+   but the whole screen, bar included, blinked out and back. A cross-document
+   view transition keeps the tab bar in place, lets the current-tab fill slide
+   across to the new section on the same spring as the photo viewer, and
+   dissolves the page underneath. Browsers without it navigate as before. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+}
+.tabbar { view-transition-name: tabbar; }
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+::view-transition-group(tabbar) { animation-duration: 300ms; }
+::view-transition-group(tab-pill) {
+  animation-duration: 440ms;
+  animation-timing-function: var(--spring-move);
+}
+::view-transition-old(tab-pill), ::view-transition-new(tab-pill) {
+  /* Same fill on both ends — stretch, don't cross-fade two copies. */
+  animation: none; height: 100%;
+}
+::view-transition-old(tab-pill) { display: none; }
+/* To or from a page with no current tab (Add & remove, the share link):
+   nothing to slide to, so the fill just fades. */
+::view-transition-old(tab-pill):only-child { display: block; animation: vtFadeOut 200ms ease both; }
+::view-transition-new(tab-pill):only-child { animation: vtFadeIn 240ms ease both; }
+@keyframes vtFadeOut { to { opacity: 0; } }
+@keyframes vtFadeIn { from { opacity: 0; } }
 
 /* Minimised while scrolling down: icons only, 44px tall — still a full
    touch target, just not a band across the photographs. */
@@ -768,11 +865,13 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   position: fixed; inset: 0; z-index: 90; overflow: auto;
   display: flex; align-items: flex-start; justify-content: center;
   background: color-mix(in oklab, var(--bg) 92%, #000);
-  opacity: 0; transition: opacity 320ms var(--ease);
+  /* Leaving is quicker than arriving, and the JS hides it only once this
+     200ms has run — it used to fade over 320 and be cut off at 200. */
+  opacity: 0; transition: opacity 200ms ease-out;
   overscroll-behavior: contain;   /* don't hand the scroll to the archive behind */
 }
 .insights[hidden] { display: none; }
-.insights.show { opacity: 1; }
+.insights.show { opacity: 1; transition-duration: 320ms; transition-timing-function: var(--ease); }
 .insights-inner { max-width: 44rem; width: 100%; padding: 9vh 8vw 12vh; }
 .insights-inner h2 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2rem, 5vw, 3rem); margin: 0; }
 .insights-sub { font-family: var(--font-ui); color: var(--secondary); font-size: var(--t-body); margin: 0.5rem 0 2.4rem; }
@@ -786,7 +885,7 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .insights .barwrap { flex: 2 1 auto; height: 6px; background: color-mix(in oklab, var(--fg) 8%, transparent); border-radius: 999px; overflow: hidden; }
 .insights .bar {
   display: block; height: 100%; width: 0; background: var(--fg); border-radius: 999px;
-  transition: width 700ms var(--ease);
+  transition: width 350ms var(--ease);
 }
 @media (prefers-reduced-motion: reduce) { .insights .bar { transition: none; } }
 /* Row entrance: each stat/gear-stat row and "on this day" photo rises in on
@@ -800,7 +899,7 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 @keyframes insightsRowIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .insights.show .stat li.enter,
 .insights.show .gear-stat li.enter,
-.insights.show .otd-item.enter { animation: insightsRowIn 420ms var(--ease) both; }
+.insights.show .otd-item.enter { animation: insightsRowIn 260ms var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
   .insights.show .stat li.enter,
   .insights.show .gear-stat li.enter,
@@ -922,7 +1021,13 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .search-box:focus-within { color: var(--fg); background: var(--fill); }
-.search-icon { flex: 0 0 auto; }
+.search-icon { flex: 0 0 auto; transition: opacity var(--dur-fast) var(--ease); }
+/* A query in flight: the magnifier breathes until the answer lands. */
+@keyframes searchBusy { 50% { opacity: 0.35; } }
+.search-box.busy .search-icon { animation: searchBusy 900ms ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .search-box.busy .search-icon { animation: none; opacity: 0.45; }
+}
 .search-box input {
   appearance: none; border: 0; background: transparent; color: inherit;
   font-family: var(--font-ui); font-size: var(--t-footnote);
@@ -937,28 +1042,8 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   display: flex; flex-direction: column; justify-content: center; align-items: center;
   text-align: center; padding: 12vh var(--edge); gap: 1.5rem;
   position: relative;
-  overflow: hidden; /* clips the aurora, which is deliberately oversized */
+  overflow: hidden;
 }
-/* The aurora: a conic sweep built from every chapter's real OKLCH hue (see
-   --aurora, set inline from the manifest in index.astro) — not an invented
-   gradient. Oversized + blurred + screen-blended so it reads as ambient light
-   behind the title on the warm near-black ground, never as a competing image;
-   the file header's "the photograph is the only event" rule is about imagery,
-   and this is the archive's own colour data, nothing borrowed. */
-.cover-aurora {
-  position: absolute; top: 50%; left: 50%;
-  width: 150vmax; height: 150vmax;
-  transform: translate(-50%, -50%);
-  background: var(--aurora);
-  filter: blur(9vw) saturate(0.65);
-  opacity: 0.4;
-  mix-blend-mode: screen;
-  animation: auroraSpin 100s linear infinite;
-  pointer-events: none;
-}
-.cover > .cover-aurora { z-index: 0; }  /* more specific than `.cover > *`'s z-index: 1 above */
-@keyframes auroraSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .cover-aurora { animation: none; } }
 /* Kicker with flanking hairlines — a plate/frontispiece feel. */
 .cover-kicker {
   font-family: var(--font-label);
@@ -1001,10 +1086,16 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .cover-spectrum .cs-seg:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
 .cover-spectrum .cs-seg {
   position: relative; appearance: none; border: 0; padding: 0; margin: 0; cursor: pointer;
-  min-width: 2px; transition: transform 260ms var(--ease), filter 200ms var(--ease);
-  transform-origin: center;
+  min-width: 2px;
 }
-.cover-spectrum .cs-seg:hover { filter: brightness(1.3); transform: scaleY(2.6); }
+/* The swell on hover lives on a pseudo-element, not the segment. Scaling
+   the segment itself scaled its name tag with it, and the label came out
+   2.6× too tall and squeezed. */
+.cover-spectrum .cs-seg::before {
+  content: ''; position: absolute; inset: 0; background: inherit; border-radius: inherit;
+  transform-origin: center; transition: transform 260ms var(--ease), filter 200ms var(--ease);
+}
+.cover-spectrum .cs-seg:hover::before { filter: brightness(1.3); transform: scaleY(2.6); }
 /* Named on hover/focus, not just coloured — two adjacent hues can look the
    same shade of grey to a colour-blind visitor, and a label beats asking
    them to trust which segment their pointer is actually over. */
@@ -1036,18 +1127,18 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 /* First-load reveal: the frontispiece rises and settles, staggered — an
    unfurling rather than a fade, so the cover reads as an event rather than
    content simply appearing. */
-@keyframes riseIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
-.cover > * { animation: riseIn 1000ms var(--ease) both; }
-.cover-kicker { animation-delay: 80ms; }
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.cover > * { animation: riseIn 350ms var(--ease) both; }
+.cover-kicker { animation-delay: 0ms; }
 /* The title gets a touch of scale alongside the rise — the one place in the
    cover that carries real weight, so it is the one place that moves with it. */
-@keyframes titleIn { from { opacity: 0; transform: translateY(22px) scale(0.97); } to { opacity: 1; transform: none; } }
-.cover h1 { animation-name: titleIn; animation-delay: 220ms; }
-.cover-sub { animation-delay: 420ms; }
+@keyframes titleIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+.cover h1 { animation-name: titleIn; animation-delay: 60ms; }
+.cover-sub { animation-delay: 120ms; }
 /* The spectrum draws itself in (rather than rising) — a line being struck. */
-.cover-spectrum { animation-name: drawIn; animation-delay: 620ms; transform-origin: center; }
+.cover-spectrum { animation-name: drawIn; animation-delay: 160ms; transform-origin: center; }
 @keyframes drawIn { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
-.scroll-hint { animation-delay: 860ms; }
+.scroll-hint { animation-delay: 200ms; }
 /* .cover h1 is named explicitly, not just caught by `.cover > *`: its own
    rule above sets animation-name/-delay directly and is more specific
    (0-1-1 vs 0-1-0), so without a matching override here the title would
@@ -1087,7 +1178,7 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   position: fixed; inset: 0; z-index: 80;
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in oklab, var(--bg) 96%, #000);
-  opacity: 0; transition: opacity 320ms var(--ease);
+  opacity: 0; transition: opacity 200ms ease-out;   /* exit; .show sets the entrance */
   /* The stage owns every touch: pinch-zoom the photograph, never scroll the
      archive underneath (iOS ignores body overflow:hidden for touch drags). */
   touch-action: none; overscroll-behavior: contain;
@@ -1096,7 +1187,10 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
    `hidden` attribute's display:none and leave an invisible overlay eating every
    click on the page. Keep it truly gone until opened. */
 .lightbox[hidden] { display: none; }
-.lightbox.show { opacity: 1; }
+.lightbox.show { opacity: 1; transition-duration: 320ms; transition-timing-function: var(--ease); }
+/* Opened by a tap, focus goes to the viewer itself (see openLightbox) —
+   the dialog is not a control, so it draws no ring. */
+.lightbox:focus { outline: none; }
 .lb-stage { max-width: 94vw; max-height: 88vh; display: flex; }
 .lb-stage img {
   max-width: 94vw; max-height: 88vh; width: auto; height: auto;
@@ -1114,9 +1208,24 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
    the same tick; once it ends the two end states agree (both effectively
    scale(1), no translate), so there's no visible handoff jump. */
 @keyframes lbPopIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
-.lightbox.show .lb-stage img.pop-in { animation: lbPopIn 380ms var(--ease-io) both; }
+.lightbox.show .lb-stage img.pop-in { animation: lbPopIn 260ms var(--ease) both; }
 @media (prefers-reduced-motion: reduce) { .lb-stage img.pop-in { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .lb-stage img { transition: none; } }
+/* The photograph travelling between its place in the grid and the viewer —
+   a stand-in drawn from the thumbnail that is already decoded, so the move
+   starts on the frame you tap rather than after a 2000px file arrives. It
+   sits exactly where the viewer will show the photo and is pulled back to
+   the thumbnail with transform + clip-path (see flyPhoto in index.astro);
+   the clip is what lets a square-cropped Overview tile open into the full,
+   uncropped frame. Built at runtime, hence global. */
+.lb-ghost {
+  position: fixed; z-index: 81; margin: 0;
+  display: block; object-fit: cover;
+  transform-origin: 0 0; will-change: transform, clip-path;
+  pointer-events: none;
+}
+/* While the stand-in flies, the real image waits underneath, invisible. */
+.lb-stage img.lb-hold { opacity: 0; }
 /* `.lb-close` is used on its own by the inspiration board's three overlays
    (enlarge, split view, match panel), and clustered with `.lb-tool` in the
    archive's viewer. Both need the same round hairline button; only the
@@ -1161,8 +1270,15 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   .lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: none; }
 }
 .lb-tool[aria-pressed='true'] { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
-/* Info reads as the `i` key it mirrors. */
-#lb-info { font-family: var(--font-display); font-style: italic; font-size: 1.05rem; }
+/* One icon set for the viewer, drawn on the same 24-unit grid and stroke as
+   the tab bar, in place of the ‹ › × ≈ ◐ i characters it used to borrow from
+   whichever font was nearest. */
+.lb-icon {
+  width: 19px; height: 19px; flex: 0 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.lb-nav .lb-icon { width: 22px; height: 22px; stroke-width: 1.9; }
+.insights-close { display: grid; place-items: center; }
 /* One icon, two states — the slideshow button shows what pressing it does. */
 #lb-play .pause { display: none; }
 .lightbox.playing #lb-play .tri { display: none; }
@@ -1196,13 +1312,26 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 @media (prefers-reduced-motion: reduce) { .lightbox.playing .lb-progress { animation: none; transform: scaleX(1); } }
 .lb-prev { left: var(--edge); top: 50%; transform: translateY(-50%); }
 .lb-next { right: var(--edge); top: 50%; transform: translateY(-50%); }
+/* Sits in the margin under the photograph where there is one, and on the same
+   dark scrim as the count where there isn't — it used to be bare text drawn
+   straight onto the bottom of a landscape frame on the iPad, unreadable over
+   snow or sky. Fades in so pressing Info visibly answers the press. */
 .lb-caption {
-  position: fixed; left: 50%; bottom: 3.6rem; transform: translateX(-50%);
-  max-width: 90vw; text-align: center;
-  font-family: var(--font-label); font-size: var(--t-footnote); letter-spacing: 0.02em; line-height: 1.7; color: var(--fg);
-  display: none;
+  position: fixed; z-index: 81; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
+  transform: translate(-50%, 4px);
+  width: max-content; max-width: min(90vw, 56rem); text-align: center;
+  font-family: var(--font-label); font-size: var(--t-footnote); letter-spacing: 0.02em; line-height: 1.6; color: var(--fg);
+  padding: 0.3rem 0.95rem; border-radius: var(--r-md);
+  background: color-mix(in oklab, #000 45%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 160ms ease-out, transform 160ms ease-out, visibility 0s linear 160ms;
 }
-.lightbox.details .lb-caption { display: block; }
+.lightbox.details .lb-caption {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(-50%);
+  transition: opacity 200ms ease-out, transform 200ms ease-out, visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) { .lb-caption, .lightbox.details .lb-caption { transform: translateX(-50%); } }
 .lb-caption .k { color: var(--muted); }
 .meta a, .lb-caption a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .meta .meta-scout-link { display: block; margin-top: 0.25rem; }
@@ -1279,15 +1408,16 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
 
   /* Top bar on a phone: the tab bar already says where you are, so the title
      goes, and the controls keep their size — the capsules wrap, they never
-     shrink their type. Insights becomes its icon; search takes the rest of
-     the second row. */
+     shrink their type. Overview and Insights become icons and share the
+     second row with search, which takes whatever width they leave — two rows,
+     not three with a lone pair of buttons stranded on the middle one. */
   .topbar { padding-left: 0.6rem; padding-right: 0.6rem; gap: var(--sp-2); }
   .topbar .brand { display: none; }
-  .topbar-right { margin-left: auto; }
+  .topbar-right { margin-left: 0; order: 4; }
   .tb-button .tb-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .tb-button { padding: 0; width: var(--hit); justify-content: center; }
   .view-toggle button, .genre-btn { padding: 0 0.7rem; }
-  .tb-search { flex: 1 1 100%; order: 3; }
+  .tb-search { flex: 1 1 12rem; min-width: 0; order: 3; }
   .tb-search .search-box { flex: 1; }
   .search-box input { width: 100%; font-size: 16px; }   /* 16px: iOS won't zoom the page on focus */
   .wide-only { display: none; }
@@ -1301,11 +1431,22 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   /* Chapter dividers: a touch less air so they don't feel empty on a phone. */
   .chapter-gap { padding: 9vh var(--edge); }
 
-  /* Lightbox: smaller controls, touch-friendly. */
-  .lb-tool, .lb-close, .lb-nav { width: 40px; height: 40px; font-size: 1.05rem; }
-  .lb-count { line-height: 40px; }
-  .lb-stage, .lb-stage img { max-width: 100vw; max-height: 82vh; }
-  .lb-caption { bottom: 3rem; font-size: var(--t-caption); }
+  /* Lightbox on a phone, laid out the way Photos is: where you are and the
+     way out stay at the top, the actions sit in a bar at the foot where the
+     thumb already is. Six buttons across the top used to run over the count
+     and were shrunk to 40px to fit; here they keep the full 44. */
+  .lb-tools {
+    top: auto; left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+    justify-content: center; gap: 0.7rem;
+  }
+  .lb-tools .lb-close { position: fixed; top: var(--edge); right: var(--edge); }
+  .lb-count { line-height: var(--hit); }
+  .lb-stage, .lb-stage img { max-width: 100vw; max-height: 72vh; }
+  .lb-caption {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem + var(--hit) + 0.6rem);
+    font-size: var(--t-caption);
+  }
   /* Swipe carries navigation on a phone; the arrows only crowd the photograph. */
   .lb-nav { display: none; }
 
@@ -1406,4 +1547,38 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
     min-height: 44px;
     font-size: max(16px, 1em);
   }
+}
+
+/* ============================================================================
+   Notebook primitives — shared by Scout and Inspiration.
+   ========================================================================== */
+/* A label pencilled in beside the thing it names. */
+.note-label {
+  font-family: var(--font-note); font-style: italic; font-weight: 500;
+  font-size: var(--t-note); letter-spacing: 0; text-transform: none;
+  color: var(--secondary);
+}
+/* Printer's crop marks at the four corners, for anything you drop a file on.
+   Background layers, so the element keeps its own ::before and ::after. The
+   three properties live on :root too, so a scoped rule that has to restate
+   `background` can pull them back in. */
+:root {
+  --cm: 14px;
+  --cropmarks-image:
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark)),
+    linear-gradient(var(--mark), var(--mark)), linear-gradient(var(--mark), var(--mark));
+  --cropmarks-size:
+    var(--cm) 1px, 1px var(--cm), var(--cm) 1px, 1px var(--cm),
+    var(--cm) 1px, 1px var(--cm), var(--cm) 1px, 1px var(--cm);
+  --cropmarks-pos:
+    top left, top left, top right, top right,
+    bottom left, bottom left, bottom right, bottom right;
+}
+.cropmarks {
+  background-image: var(--cropmarks-image);
+  background-size: var(--cropmarks-size);
+  background-position: var(--cropmarks-pos);
+  background-repeat: no-repeat;
 }

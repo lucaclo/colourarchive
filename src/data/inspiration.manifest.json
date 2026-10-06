@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-10T16:04:57.726Z",
-  "count": 12,
+  "generatedAt": "2026-09-22T12:15:56.232Z",
+  "count": 13,
   "chapters": [
     {
       "key": "achromatic",
@@ -200,9 +200,9 @@
       "key": "orange",
       "name": "Orange",
       "oklch": {
-        "L": 0.656,
-        "C": 0.068,
-        "H": 75
+        "L": 0.679,
+        "C": 0.054,
+        "H": 78.5
       },
       "photos": [
         {
@@ -330,6 +330,40 @@
           "addedAt": "2026-08-21T14:21:47.955Z"
         },
         {
+          "id": "568ab0b23a39eeca",
+          "filename": "DSC00672.568ab0b23a39eeca.jpg",
+          "ext": "jpg",
+          "width": 2500,
+          "height": 1667,
+          "bytes": 1456575,
+          "oklch": {
+            "L": 0.59,
+            "C": 0.108,
+            "H": 129.1
+          },
+          "autoChapter": "green",
+          "chapter": "green",
+          "autoMedium": "film",
+          "medium": "film",
+          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADQBACdASoYABAAPu1kq04ppaQiMAgBMB2JQBWGUI8DBVYZUECIV4pxneKbTnjaAAD+46J9rtknc6WGKTIf4WRIjpC7H/McJ6xxm9EU54f7TCcAF97KpREIAAA=",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/568ab0b23a39eeca-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/568ab0b23a39eeca-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/568ab0b23a39eeca-2000.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-07-27T06:31:01.962Z"
+        },
+        {
           "id": "47428f4538360e9c",
           "filename": "DSC06792.47428f4538360e9c.jpg",
           "ext": "jpg",
@@ -375,40 +409,6 @@
           "addedAt": "2026-09-10T16:04:57.724Z"
         },
         {
-          "id": "568ab0b23a39eeca",
-          "filename": "DSC00672.568ab0b23a39eeca.jpg",
-          "ext": "jpg",
-          "width": 2500,
-          "height": 1667,
-          "bytes": 1456575,
-          "oklch": {
-            "L": 0.59,
-            "C": 0.108,
-            "H": 129.1
-          },
-          "autoChapter": "green",
-          "chapter": "green",
-          "autoMedium": "film",
-          "medium": "film",
-          "placeholder": "data:image/webp;base64,UklGRmYAAABXRUJQVlA4IFoAAADQBACdASoYABAAPu1kq04ppaQiMAgBMB2JQBWGUI8DBVYZUECIV4pxneKbTnjaAAD+46J9rtknc6WGKTIf4WRIjpC7H/McJ6xxm9EU54f7TCcAF97KpREIAAA=",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/568ab0b23a39eeca-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/568ab0b23a39eeca-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/568ab0b23a39eeca-2000.avif"
-            }
-          ],
-          "exif": {},
-          "addedAt": "2026-07-27T06:31:01.962Z"
-        },
-        {
           "id": "a7c5e21fa101fcda",
           "filename": "DSC02179.a7c5e21fa101fcda.jpg",
           "ext": "jpg",
@@ -443,6 +443,50 @@
           ],
           "exif": {},
           "addedAt": "2026-07-29T08:24:15.842Z"
+        },
+        {
+          "id": "c97ef78d4ee1dafa",
+          "filename": "R0000586.c97ef78d4ee1dafa.jpg",
+          "ext": "jpg",
+          "width": 6000,
+          "height": 4000,
+          "bytes": 12104678,
+          "oklch": {
+            "L": 0.84,
+            "C": 0.058,
+            "H": 227.9
+          },
+          "autoChapter": "blue",
+          "chapter": "blue",
+          "autoMedium": "digital",
+          "medium": "digital",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAADwAwCdASoYABAAPu1qrU8ppiQiMAgBMB2JQBOgBFSg2xLw5oZSddJgAP6Uy12MoHQCWRRSpv5SSfFuVxGkIcttOtqTKiJXLKam0rcmn/nii9JQAKaGKKAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/c97ef78d4ee1dafa-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/c97ef78d4ee1dafa-1280.avif"
+            },
+            {
+              "width": 2000,
+              "avif": "/img/c97ef78d4ee1dafa-2000.avif"
+            }
+          ],
+          "exif": {
+            "capturedAt": "2026-09-21T18:09:07.000Z",
+            "camera": "RICOH IMAGING COMPANY, LTD.   RICOH GR IIIx",
+            "focalLength": "26mm",
+            "aperture": "f/8",
+            "shutter": "1/25s",
+            "iso": 100,
+            "software": "RICOH GR IIIx Ver. 1.60      "
+          },
+          "addedAt": "2026-09-22T12:15:56.230Z"
         }
       ]
     }

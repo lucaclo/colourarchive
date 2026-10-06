@@ -46,6 +46,7 @@ const shown = tabs.filter((t) => !(STATIC && t.server));
   <div class="tabbar-tabs">
     {shown.map((t) => (
       <a class="tab" href={t.href} aria-current={t.id === current ? 'page' : undefined} data-section={t.id}>
+        {t.id === current && <span class="tab-pill" aria-hidden="true" />}
         <svg viewBox="0 0 24 24" aria-hidden="true" set:html={t.icon} />
         <span class="tab-label">{t.label}</span>
       </a>

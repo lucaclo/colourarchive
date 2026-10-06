@@ -122,6 +122,16 @@ The Lightroom slider values it prints are estimated, not measured — see
 `CALIBRATION.md` for what that means and `scripts/match-calibrate.ts` for the
 harness that replaces the estimates with real ones.
 
+### Checking the edit
+
+After applying a downloaded preset, export from Lightroom and drop the result
+into the report's **Check** tab. It shows how much of each gap the edit closed,
+and hands you a follow-up preset. That preset carries the first one's values
+plus the correction, because a preset *sets* sliders rather than adding to
+them. If you changed things after applying, it gives relative moves to make by
+hand instead. Qualifying round trips also calibrate the slider estimates. See
+`CALIBRATION.md`.
+
 ### Already in the archive
 
 Opening a reference also ranks the whole archive against it **on grade alone** —

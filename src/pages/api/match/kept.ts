@@ -37,6 +37,7 @@ export const GET: APIRoute = async ({ url }) => {
         referenceCount: record.referenceCount,
         referenceIds: record.referenceIds,
         outlierIds: record.outlierIds,
+        calibrated: record.calibrated ?? [],
       });
     }
 

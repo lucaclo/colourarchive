@@ -390,7 +390,7 @@ describe('a photo that could not be measured', () => {
 
     assert.ok(
       sol!.notes.some(
-        (n) => n.severity === 'caution' && n.panel === 'Light' && /could not be measured/.test(n.text),
+        (n) => n.severity === 'caution' && n.panel === 'Light' && /couldn’t be measured/.test(n.text),
       ),
       'expected a caution note explaining the photo could not be measured',
     );

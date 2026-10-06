@@ -1,7 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { readManifest } from '../lib/manifest';
-import { oklchCss, readableInk } from '../lib/color';
+import { readManifest, readOverrides } from '../lib/manifest';
+import { oklchCss, readableInk, baseKeyOf } from '../lib/color';
+import { borderlineOf, chapterChoices } from '../lib/borderline';
 import { GENRES, GENRE_LABEL } from '../lib/types';
 import { findColourGaps, findGenreColourGaps } from '../lib/gaps';
 import { looksFor, photoLookRequest, type LookRequest } from '../lib/match/looks';
@@ -24,6 +25,9 @@ const FILM_CAMERA = 'Leica Mini Zoom';
 const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
 const manifest = await readManifest();
 const hasPhotos = manifest.count > 0;
+// Moving a photo between chapters (issue #105) writes to the Mac's overrides
+// file, so the choices only exist where there is a server to write them.
+const chapterMoveChoices = STATIC ? [] : chapterChoices((await readOverrides()).chapters);
 
 const mediumCounts = { film: 0, digital: 0 };
 for (const ch of manifest.chapters) for (const p of ch.photos) mediumCounts[p.medium]++;
@@ -180,13 +184,6 @@ const roman = (n: number) =>
 // one outsized or tiny chapter can't swing the title past legible bounds.
 const avgChapterSize = hasPhotos ? manifest.count / manifest.chapters.length : 1;
 const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avgChapterSize));
-// The aurora behind the cover title is built from every chapter's own hue —
-// a conic sweep around the archive's real palette, not an invented gradient.
-// It never touches a photograph (grain header rule: "the photograph is the
-// only event"), so it's confined to the cover, which is otherwise empty.
-const auroraCss = hasPhotos
-  ? `conic-gradient(from 0deg, ${manifest.chapters.map((ch, ci) => `${oklchCss(ch.oklch)} ${(ci / manifest.chapters.length) * 360}deg`).join(', ')}, ${oklchCss(manifest.chapters[0].oklch)} 360deg)`
-  : undefined;
 ---
 
 <Layout title={SITE_TITLE} accent={initialAccent} tab="archive">
@@ -260,6 +257,12 @@ const auroraCss = hasPhotos
       </div>
     )}
     <span class="topbar-right">
+      {hasPhotos && (
+        <button type="button" class="tb-button" id="overview-btn" aria-pressed="false" aria-label="Overview" title="Overview — or pinch out">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span class="tb-label">Overview</span>
+        </button>
+      )}
       <button type="button" class="tb-button" id="insights-btn" aria-haspopup="dialog" aria-label="Insights">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
         <span class="tb-label">Insights</span>
@@ -268,12 +271,10 @@ const auroraCss = hasPhotos
   </header>
 
   <section class="cover">
-    {auroraCss && <div class="cover-aurora" aria-hidden="true" style={`--aurora:${auroraCss}`} />}
     <p class="cover-kicker">
       {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapters` : 'In colour'}
     </p>
     <h1>{SITE_TITLE}</h1>
-    <p class="cover-sub">Follow the colour</p>
     {hasPhotos && (
       <nav class="cover-spectrum" id="cover-spectrum" aria-label="Chapters">
         {manifest.chapters.map((ch, ci) => (
@@ -287,7 +288,7 @@ const auroraCss = hasPhotos
         ))}
       </nav>
     )}
-    {hasPhotos && <span class="scroll-hint">Scroll ↓</span>}
+    {hasPhotos && <span class="scroll-hint" aria-hidden="true">↓</span>}
   </section>
 
   {
@@ -355,6 +356,13 @@ const auroraCss = hasPhotos
                     'data-shadow': shadow ? shadow.sentence : '',
                     'data-location': p.exif.location ? `${p.exif.location.lat}, ${p.exif.location.lon}` : '',
                   } : { 'data-camera': FILM_CAMERA }; // film: label the real camera, hide scanner EXIF
+                  // Issue #105: what the lightbox's chapter menu needs — never
+                  // baked into the published snapshot, which cannot move anything.
+                  const moveAttrs = STATIC ? {} : {
+                    'data-auto': baseKeyOf(p.autoChapter),
+                    'data-base': p.chapter,
+                    'data-edge': borderlineOf(p.oklch)?.alternative ?? '',
+                  };
                   return (
                     <figure
                       class="frame"
@@ -373,6 +381,7 @@ const auroraCss = hasPhotos
                       data-accent={oklchCss({ L: 0.78, C: Math.min(ch.oklch.C, 0.11), H: ch.oklch.H })}
                       data-ratio={(p.height / p.width).toFixed(4)}
                       {...exifAttrs}
+                      {...moveAttrs}
                     >
                       <img class="ph" src={p.placeholder} alt="" aria-hidden="true" />
                       {/* Every derivative is AVIF, so <picture>/<source> had no
@@ -404,12 +413,10 @@ const auroraCss = hasPhotos
            and a footer inside it would be dealt a cell in the colour wall. -->
       <footer class="colophon">
         <p>{manifest.count} photographs · {manifest.chapters.length} chapters</p>
-        <p>Snapshot built <time datetime={builtAt.toISOString()}>{builtLabel}</time></p>
       </footer>
 
       <aside class="meta" id="meta" aria-live="polite" hidden>
         <dl id="meta-body" />
-        <p class="hint">Press <kbd>i</kbd> to hide</p>
       </aside>
 
       <!-- Colour-spectrum scrubber: one segment per chapter, click to jump. -->
@@ -427,7 +434,7 @@ const auroraCss = hasPhotos
       </nav>
 
       <!-- Immersive single-photo view: full, uncropped, with metadata. -->
-      <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photograph">
+      <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photograph" tabindex="-1">
         <span class="lb-count" id="lb-count" aria-live="polite"></span>
         <!-- Every keyboard shortcut also needs a control: on the iPad — the
              device this is actually read on — `i` and `p` are unreachable, so
@@ -436,18 +443,36 @@ const auroraCss = hasPhotos
           <button class="lb-tool" id="lb-play" aria-label="Play slideshow" title="Play slideshow" aria-pressed="false">
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
-          <button class="lb-tool" id="lb-info" aria-label="Photo details" title="Photo details" aria-pressed="false">i</button>
-          {!STATIC && <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">≈</button>}
-          {!STATIC && <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">◐</button>}
-          <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close">×</button>
+          <button class="lb-tool" id="lb-info" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
+          {!STATIC && <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5c2.5-2 5-2 7.5 0s5 2 7.5 0"/><path d="M4.5 15c2.5-2 5-2 7.5 0s5 2 7.5 0"/></svg></button>}
+          {!STATIC && <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor"/></svg></button>}
+          {!STATIC && (
+            <button class="lb-tool" id="lb-chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="5.5" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="10.5" cy="8" r="3.6" fill="currentColor" opacity="0.55"/></svg>
+            </button>
+          )}
+          <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
         </div>
-        <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous">‹</button>
+        {!STATIC && (
+          <div class="lb-chapters" id="lb-chapters" hidden role="menu" aria-labelledby="lbc-head">
+            <p class="lbc-head" id="lbc-head">Chapter</p>
+            <button type="button" class="lbc-opt" role="menuitemradio" aria-checked="false" data-chapter="auto">
+              <span class="lbc-sw lbc-auto" aria-hidden="true" /><span class="lbc-name">Automatic</span><span class="lbc-note" />
+            </button>
+            {chapterMoveChoices.map((c) => (
+              <button type="button" class="lbc-opt" role="menuitemradio" aria-checked="false" data-chapter={c.key} data-name={c.name}>
+                <span class="lbc-sw" style={`background:${c.swatch}`} aria-hidden="true" /><span class="lbc-name">{c.name}</span><span class="lbc-note" />
+              </button>
+            ))}
+            <p class="lbc-status" id="lbc-status" aria-live="polite" />
+          </div>
+        )}
+        <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg></button>
         <div class="lb-stage">
           <img id="lb-img" alt="" sizes="100vw" />
         </div>
-        <button class="lb-nav lb-next" id="lb-next" aria-label="Next" title="Next">›</button>
+        <button class="lb-nav lb-next" id="lb-next" aria-label="Next" title="Next"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></button>
         <div class="lb-caption" id="lb-caption"></div>
-        <p class="lb-hint">← →  ·  scroll to zoom  ·  esc</p>
         <span class="lb-progress" aria-hidden="true"></span>
       </div>
 
@@ -457,9 +482,9 @@ const auroraCss = hasPhotos
            uses — pointed at an archive id instead of a reference id. -->
       <div class="arc-similar" id="arc-similar" hidden role="dialog" aria-modal="true" aria-label="More like this">
         <div class="arc-similar-inner">
-          <button class="insights-close" id="arc-similar-close" aria-label="Close">×</button>
+          <button class="insights-close" id="arc-similar-close" aria-label="Close"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
           <h2>More like this</h2>
-          <p class="arc-similar-hint" id="arc-similar-hint">Your closest photographs, ranked.</p>
+          <p class="arc-similar-hint" id="arc-similar-hint"></p>
           <div class="arc-similar-controls">
             <span>Colour</span>
             <input type="range" id="arc-similar-w" min="0" max="100" value="60" aria-label="Colour to composition" />
@@ -472,7 +497,7 @@ const auroraCss = hasPhotos
       <!-- Insights: a quiet stats overlay. -->
       <div class="insights" id="insights" hidden role="dialog" aria-modal="true" aria-label="Archive insights">
         <div class="insights-inner">
-          <button class="insights-close" id="insights-close" aria-label="Close">×</button>
+          <button class="insights-close" id="insights-close" aria-label="Close"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
           <h2>Insights</h2>
           <p class="insights-sub">
             {manifest.count} photographs · {mediumCounts.digital} digital · {mediumCounts.film} film · {manifest.chapters.length} chapters
@@ -622,11 +647,11 @@ const auroraCss = hasPhotos
     position: fixed; inset: 0; z-index: 95; overflow: auto;
     display: flex; align-items: flex-start; justify-content: center;
     background: color-mix(in oklab, var(--bg) 92%, #000);
-    opacity: 0; transition: opacity 320ms var(--ease);
+    opacity: 0; transition: opacity 200ms ease-out;
     overscroll-behavior: contain;
   }
   .arc-similar[hidden] { display: none; }
-  .arc-similar.show { opacity: 1; }
+  .arc-similar.show { opacity: 1; transition-duration: 320ms; transition-timing-function: var(--ease); }
   .arc-similar-inner { max-width: 64rem; width: 100%; padding: 9vh 8vw 12vh; }
   .arc-similar-inner h2 {
     font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
@@ -656,6 +681,59 @@ const auroraCss = hasPhotos
   }
   @media (max-width: 900px) { :global(.arc-similar-grid) { columns: 3; } }
   @media (max-width: 620px) { :global(.arc-similar-grid) { columns: 2; } }
+
+  /* No native scroll bar on the archive: the spectrum scrubber on the right
+     edge already says where you are and jumps anywhere, and the system bar
+     sat translucent on top of it, doubling the same job. Scrolling itself —
+     wheel, touch, keys — is untouched. */
+  :global(html) { scrollbar-width: none; }
+  :global(html::-webkit-scrollbar) { display: none; }
+
+  /* Chapter menu in the lightbox — issue #105. Same clear-glass scrim as the
+     tool buttons it hangs from, since it too sits over the photograph. */
+  .lb-chapters {
+    position: fixed; z-index: 82; right: var(--edge);
+    top: calc(var(--edge) + var(--hit) + 0.6rem);
+    width: min(17rem, calc(100vw - 2 * var(--edge)));
+    max-height: calc(100svh - var(--edge) * 2 - var(--hit) - 1rem); overflow-y: auto;
+    padding: 0.5rem; border-radius: var(--r-lg);
+    background: color-mix(in oklab, #000 62%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+    border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    font-family: var(--font-ui);
+  }
+  .lb-chapters[hidden] { display: none; }
+  /* On a phone the tools sit in a bar at the foot (global.css), so the menu
+     opens up from its button rather than down from the top. */
+  @media (max-width: 640px) {
+    .lb-chapters {
+      top: auto;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem + var(--hit) + 0.6rem);
+      max-height: calc(100svh - 2 * var(--edge) - 2 * var(--hit) - 2rem);
+    }
+  }
+  .lbc-head { margin: 0.2rem 0.55rem 0.4rem; font-size: var(--t-footnote); color: var(--secondary); }
+  .lbc-opt {
+    appearance: none; display: flex; align-items: center; gap: 0.65rem; width: 100%;
+    min-height: var(--hit); padding: 0 0.55rem; border: 0; border-radius: var(--r-md, 10px);
+    background: transparent; color: var(--fg); cursor: pointer; text-align: left;
+    font: inherit; font-size: var(--t-body, 0.95rem);
+  }
+  .lbc-opt:hover, .lbc-opt:focus-visible { background: color-mix(in oklab, #fff 10%, transparent); outline: none; }
+  .lbc-opt[aria-checked='true'] { background: color-mix(in oklab, #fff 14%, transparent); }
+  .lbc-opt[aria-checked='true'] .lbc-name::after { content: ' ✓'; }
+  .lbc-opt:disabled { opacity: 0.5; cursor: progress; }
+  .lbc-sw { width: 1rem; height: 1rem; border-radius: 50%; flex: 0 0 auto; border: 1px solid color-mix(in oklab, #fff 22%, transparent); }
+  .lbc-auto { background: conic-gradient(oklch(0.68 0.13 28), oklch(0.68 0.13 100), oklch(0.68 0.13 195), oklch(0.68 0.13 305), oklch(0.68 0.13 28)); }
+  .lbc-name { flex: 1 1 auto; }
+  .lbc-note { font-size: var(--t-caption); color: var(--secondary); }
+  .lbc-note.edge { color: #f0b54a; }
+  .lbc-status { margin: 0.4rem 0.55rem 0.2rem; font-size: var(--t-footnote); color: var(--secondary); }
+  .lbc-status:empty { display: none; }
+  .lbc-status button {
+    appearance: none; border: 0; background: none; padding: 0; color: var(--fg); cursor: pointer;
+    font: inherit; text-decoration: underline; text-underline-offset: 3px;
+  }
 </style>
 
 <script is:inline>
@@ -1002,21 +1080,62 @@ const auroraCss = hasPhotos
     else if (current) { render(current); panel.hidden = false; requestAnimationFrame(() => panel.classList.add('show')); }
   });
 
-  // --- Pinch to zoom out: photos merge into a colour wall / hue gradient ---
+  // --- Pinch to zoom out: reading → chapter strips → the colour wall -------
+  // Three levels, not one switch. Pinching out first folds each chapter into
+  // a labelled strip of thumbnails — the whole archive's structure on a
+  // screen or two — and only past that do the labels drop away and every
+  // photograph merge into one continuous field ordered round the hue wheel.
+  //
+  // Whatever you pinched on stays under your fingers. Every step reflows the
+  // page (a column count changes, a chapter opener shrinks from 55vh to a
+  // line), and without an anchor the scroll position pointed at wherever
+  // that arithmetic happened to land — you zoomed out of red and arrived in
+  // teal.
   const archive = document.querySelector('.archive');
-  const OVER = 0.55;          // below this, enter the merged overview
-  let z = 1;                  // 1 = reading, 0 = fully merged
-  const applyZoom = () => {
+  const overviewBtn = document.getElementById('overview-btn');
+  const READ = 0.55;          // at or above: the reading view
+  const WALL = 0.28;          // below: labels drop away, one continuous field
+  const STRIPS_Z = 0.42;      // where the Overview button lands
+  let z = 1;                  // 1 = reading, 0 = the densest wall
+  const levelOf = (v) => (v >= READ ? 'read' : v >= WALL ? 'strips' : 'wall');
+  // Columns grow continuously inside each level, so a pinch always visibly
+  // does something rather than only at the two thresholds.
+  const colsFor = (v) => {
+    const lvl = levelOf(v);
+    if (lvl === 'strips') return Math.round(6 + ((READ - v) / (READ - WALL)) * 4);  // 6..10
+    if (lvl === 'wall') return Math.round(11 + ((WALL - v) / WALL) * 5);            // 11..16
+    return 0;
+  };
+  const frameNear = (x, y) => {
+    const hit = document.elementFromPoint(x, y)?.closest?.('.frame, .chapter-gap');
+    if (hit && archive?.contains(hit)) return hit;
+    // Over a gutter, the cover or the tab bar: the nearest frame on screen.
+    let best = null, bd = Infinity;
+    for (const f of archive?.querySelectorAll('.frame') ?? []) {
+      const r = f.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight || !r.height) continue;
+      const d = Math.abs(r.top + r.height / 2 - y);
+      if (d < bd) { bd = d; best = f; }
+    }
+    return best;
+  };
+  let shownLevel = 'read', shownCols = 0;
+  const applyZoom = (focusX = innerWidth / 2, focusY = innerHeight / 2) => {
     if (!archive) return;
-    if (z < OVER) {
-      archive.classList.add('overview');
-      const t = (OVER - z) / OVER;                 // 0..1 through the overview
-      archive.style.setProperty('--ocols', String(Math.round(5 + t * 11))); // 5..16
-    } else {
-      archive.classList.remove('overview');
+    const lvl = levelOf(z), cols = colsFor(z);
+    if (lvl === shownLevel && cols === shownCols) return;
+    const anchor = frameNear(focusX, focusY);
+    const before = anchor?.getBoundingClientRect().top;
+    archive.classList.toggle('overview', lvl !== 'read');
+    archive.classList.toggle('strips', lvl === 'strips');
+    if (cols) archive.style.setProperty('--ocols', String(cols));
+    shownLevel = lvl; shownCols = cols;
+    overviewBtn?.setAttribute('aria-pressed', String(lvl !== 'read'));
+    if (anchor && before !== undefined && anchor.offsetParent) {
+      scrollBy(0, anchor.getBoundingClientRect().top - before);
     }
   };
-  const setZoom = (nz) => { z = Math.min(1, Math.max(0, nz)); applyZoom(); };
+  const setZoom = (nz, x, y) => { z = Math.min(1, Math.max(0, nz)); applyZoom(x, y); };
 
   const lbActive = () => { const el = document.getElementById('lightbox'); return el && !el.hidden; };
 
@@ -1024,7 +1143,7 @@ const auroraCss = hasPhotos
   addEventListener('wheel', (e) => {
     if (!e.ctrlKey || lbActive()) return; // lightbox open → its own image zoom
     e.preventDefault();
-    setZoom(z + (e.deltaY > 0 ? -0.05 : 0.05));
+    setZoom(z + (e.deltaY > 0 ? -0.05 : 0.05), e.clientX, e.clientY);
   }, { passive: false });
 
   // Touch pinch.
@@ -1036,24 +1155,74 @@ const auroraCss = hasPhotos
   addEventListener('touchmove', (e) => {
     if (e.touches.length === 2 && startDist && !lbActive()) {
       e.preventDefault();
-      setZoom(startZ + (dist(e.touches) - startDist) / 480);
+      const [a, b] = e.touches;
+      setZoom(startZ + (dist(e.touches) - startDist) / 480, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
     }
   }, { passive: false });
+  addEventListener('touchend', (e) => { if (e.touches.length < 2) startDist = 0; }, { passive: true });
 
   // Persist zoom so returning from Add/Remove keeps your place (see below).
   const baseSetZoom = setZoom;
-  const setZoomPersist = (nz) => { baseSetZoom(nz); savePos(); };
+  const setZoomPersist = (nz, x, y) => { baseSetZoom(nz, x, y); savePos(); };
 
-  // Click a tile: in the merged view, fall back into reading there; otherwise
-  // open it in the immersive single-photo view.
+  // A pinch nobody can see is a feature nobody finds — and a mouse has no
+  // pinch at all. The button goes to the strips, the level worth navigating
+  // from; pinching further still reaches the wall.
+  // Changing level from a tap (the button, or a tile back into reading) is
+  // one deliberate jump, so the photographs make it visibly: each one glides
+  // from its place in the old layout to its place in the new one, the way
+  // Photos moves between its zoom levels. A pinch stays live and unanimated —
+  // it already tracks the fingers, and it reflows many times a second.
+  // Only photos near the screen get a name; the rest move with the page.
+  const morphReduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const nameNearby = () => {
+    const all = archive?.querySelectorAll('.frame') ?? [];
+    const named = [];
+    all.forEach((f) => {
+      const r = f.getBoundingClientRect();
+      if (!r.height || r.bottom < -120 || r.top > innerHeight + 120) return;
+      // Named by photo, not by position: a filter repack reorders the frames
+      // in the DOM, and a positional name would pair two different photos.
+      f.style.setProperty('view-transition-name', `photo-${f.dataset.id}`);
+      f.style.setProperty('view-transition-class', 'photo');
+      named.push(f);
+    });
+    return named;
+  };
+  const morph = (update) => {
+    if (!archive || !document.startViewTransition || morphReduce.matches) { update(); return; }
+    const named = nameNearby();
+    archive.classList.add('morphing');
+    // Photos new to the screen arrive already developed: the blur-in that
+    // greets them while scrolling would smear them in mid-flight.
+    const vt = document.startViewTransition(() => {
+      update();
+      for (const f of nameNearby()) { f.classList.add('reveal'); named.push(f); }
+    });
+    vt.finished.finally(() => {
+      archive.classList.remove('morphing');
+      for (const f of named) { f.style.removeProperty('view-transition-name'); f.style.removeProperty('view-transition-class'); }
+    });
+  };
+
+  overviewBtn?.addEventListener('click', () => {
+    morph(() => setZoomPersist(levelOf(z) === 'read' ? STRIPS_Z : 1));
+  });
+
+  // Click a tile: in the overview, fall back into reading on it; otherwise
+  // open it in the immersive single-photo view. A chapter's strip label
+  // reads that chapter from its opener.
   archive?.addEventListener('click', (e) => {
-    const frame = e.target.closest('.frame');
-    if (!frame) return;
+    const target = e.target.closest('.frame, .chapter-gap');
+    if (!target) return;
     if (archive.classList.contains('overview')) {
-      setZoomPersist(1);
-      frame.scrollIntoView({ block: 'center' });
-    } else {
-      openLightbox(frame);
+      const r = target.getBoundingClientRect();
+      morph(() => {
+        setZoomPersist(1, r.left + r.width / 2, r.top + r.height / 2);
+        target.scrollIntoView({ block: target.classList.contains('frame') ? 'center' : 'start' });
+      });
+    } else if (target.classList.contains('frame')) {
+      openLightbox(target);
     }
   });
 
@@ -1096,7 +1265,7 @@ const auroraCss = hasPhotos
     const items = Array.from(root.querySelectorAll(FOCUSABLE)).filter((el) => el.offsetParent !== null);
     if (!items.length) return;
     const first = items[0], last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === root)) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
 
@@ -1140,8 +1309,112 @@ const auroraCss = hasPhotos
       }
     }
   };
+  // --- The photo's flight between the grid and the viewer ------------------
+  // Opening lifts the thumbnail you tapped out of the grid and grows it into
+  // the viewer; closing (including a swipe down) carries it back to its own
+  // place. A stand-in <img> makes the trip, drawn from the thumbnail that is
+  // already decoded, so it moves on the first frame instead of waiting for the
+  // full-size file. Nothing flies when the thumbnail is off screen (stepped far
+  // away, a deep link) or motion is reduced — the plain fade covers those.
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const springMove = () =>
+    getComputedStyle(document.documentElement).getPropertyValue('--spring-move').trim() || 'cubic-bezier(0.16, 1, 0.3, 1)';
+  const thumbOf = (f) => f?.querySelector('img.photo');
+  const inView = (r) => r.width > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+  // Where the viewer will draw a photo of this aspect: the same contain-fit
+  // the stage's own max-width / max-height produce, centred in the window.
+  const viewerRect = (aspect) => {
+    const cs = getComputedStyle(lbImg);
+    const mw = parseFloat(cs.maxWidth) || innerWidth, mh = parseFloat(cs.maxHeight) || innerHeight;
+    const w = Math.min(mw, mh * aspect), h = w / aspect;
+    return { left: (innerWidth - w) / 2, top: (innerHeight - h) / 2, width: w, height: h };
+  };
+  // The transform + clip that make a box at `big` look exactly like `small`,
+  // cropping (as object-fit: cover does) when their aspects differ.
+  const shrinkTo = (big, small) => {
+    const k = Math.max(small.width / big.width, small.height / big.height);
+    const ix = Math.max(0, (big.width - small.width / k) / 2);
+    const iy = Math.max(0, (big.height - small.height / k) / 2);
+    return {
+      transform: `translate(${small.left - big.left - ix * k}px, ${small.top - big.top - iy * k}px) scale(${k})`,
+      clipPath: `inset(${iy}px ${ix}px)`,
+    };
+  };
+  let ghost = null, ghostThumb = null;
+  const dropGhost = () => {
+    ghost?.getAnimations().forEach((a) => a.cancel());
+    ghost?.remove(); ghost = null;
+    if (ghostThumb) { ghostThumb.style.visibility = ''; ghostThumb = null; }
+    lbImg.classList.remove('lb-hold');
+  };
+  const makeGhost = (src, box, thumb) => {
+    dropGhost();
+    ghost = document.createElement('img');
+    ghost.className = 'lb-ghost';
+    ghost.alt = '';
+    ghost.src = src;
+    Object.assign(ghost.style, { left: box.left + 'px', top: box.top + 'px', width: box.width + 'px', height: box.height + 'px' });
+    document.body.appendChild(ghost);
+    ghostThumb = thumb;
+    thumb.style.visibility = 'hidden';
+    return ghost;
+  };
+  // Open: thumbnail → viewer. Returns false when there's nothing to fly from.
+  function flyIn(frame) {
+    const thumb = thumbOf(frame);
+    if (reduceMotion.matches || !thumb || !thumb.naturalWidth) return false;
+    const from = thumb.getBoundingClientRect();
+    if (!inView(from)) return false;
+    const to = viewerRect(thumb.naturalWidth / thumb.naturalHeight);
+    const g = makeGhost(thumb.currentSrc || thumb.src, to, thumb);
+    lbImg.classList.add('lb-hold');
+    const start = shrinkTo(to, from);
+    const anim = g.animate(
+      [start, { transform: 'none', clipPath: 'inset(0px 0px)' }],
+      { duration: 380, easing: springMove(), fill: 'both' },
+    );
+    // Hand over to the real image once it has both arrived and decoded; until
+    // then the stand-in holds the spot, which is better than an empty stage.
+    const handOver = () => { if (ghost === g) dropGhost(); };
+    anim.finished.then(() => {
+      if (ghost !== g) return;
+      thumb.style.visibility = ''; ghostThumb = null;
+      if (lbImg.complete && lbImg.naturalWidth) handOver();
+      else lbImg.addEventListener('load', handOver, { once: true });
+    }, () => {});
+    return true;
+  }
+  // Close: viewer → thumbnail, from wherever the photo currently is (a swipe
+  // down leaves it mid-drag; the flight picks it up from there).
+  function flyOut(frame) {
+    const thumb = thumbOf(frame);
+    if (reduceMotion.matches || !thumb || !thumb.naturalWidth || !lbImg.naturalWidth) return false;
+    const to = thumb.getBoundingClientRect();
+    if (!inView(to)) return false;
+    // The photo's untransformed box, plus where the drag/zoom has moved it.
+    const at = lbImg.getBoundingClientRect();
+    const g = makeGhost(lbImg.currentSrc || lbImg.src, at, thumb);
+    lbImg.classList.add('lb-hold');
+    const anim = g.animate(
+      [{ transform: 'none', clipPath: 'inset(0px 0px)' }, shrinkTo(at, to)],
+      { duration: 320, easing: springMove(), fill: 'both' },
+    );
+    anim.finished.then(() => { if (ghost === g) dropGhost(); }, () => {});
+    return true;
+  }
+  // Stepping to the next / previous photo: it arrives from the side it lives
+  // on, a short way, as a page turns. dir 0 (the slideshow) is a slow dissolve.
+  function enterStep(dir) {
+    const kf = reduceMotion.matches || !dir
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [{ opacity: 0, transform: `translateX(${dir * 28}px)` }, { opacity: 1, transform: 'none' }];
+    lbImg.animate(kf, { duration: dir ? 280 : 700, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+  }
+
   function showAt(i) {
     if (i < 0 || i >= frames.length) return;
+    dropGhost();
+    closeChapters();
     lbIndex = i;
     const f = frames[i];
     // srcset here too: a phone opening a photo full-screen should not pull the
@@ -1157,19 +1430,23 @@ const auroraCss = hasPhotos
     if (!lb.hidden) syncUrl();
     requestAnimationFrame(() => preloadNeighbours(i));
   }
-  function openLightbox(frame) {
+  // byKeyboard: focus lands on Close, ready for the next key. From a tap or a
+  // deep link it lands on the viewer itself — Chromium otherwise rings the
+  // Close button on every photo you open, which reads as a selected state.
+  function openLightbox(frame, byKeyboard = false) {
     const i = frames.indexOf(frame);
     if (i < 0) return;
     showAt(i);
     lb.hidden = false;
+    // Measure the thumbnail before the scroll lock can nudge the layout.
+    const flew = flyIn(frame);
     lockScroll();
     requestAnimationFrame(() => lb.classList.add('show'));
-    // A one-shot pop, only on the initial open — not on next/prev stepping
-    // through showAt(), which would turn a quiet arrow-key press into a flash.
+    // With nothing to fly from, a one-shot pop instead — only on the initial
+    // open, never on next/prev stepping, which would turn an arrow key into a flash.
     lbImg.classList.remove('pop-in');
-    void lbImg.offsetWidth;
-    lbImg.classList.add('pop-in');
-    captureFocus(lb, document.getElementById('lb-close'));
+    if (!flew) { void lbImg.offsetWidth; lbImg.classList.add('pop-in'); }
+    captureFocus(lb, byKeyboard ? document.getElementById('lb-close') : lb);
     syncUrl(true);   // a history entry, so Back / edge-swipe closes the photo
   }
   // fromHistory: we're already unwinding the entry pushed on open. Otherwise go
@@ -1178,15 +1455,19 @@ const auroraCss = hasPhotos
   function closeLightbox(fromHistory) {
     if (!fromHistory && lbPushed) { lbPushed = false; history.back(); return; }
     lbPushed = false;
-    lb.classList.remove('show');
     stopSlideshow();
+    closeChapters();
     unlockScroll();
+    // After the unlock, so the thumbnail is measured where it will really be.
+    flyOut(frames[lbIndex]);
+    lb.style.opacity = '';   // a swipe's partial fade carries on down from where it was
+    lb.classList.remove('show');
     releaseFocus();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     // syncUrl once hidden, so the #photo hash clears — including the case where
     // you arrived on a deep link and closed with Back, which would otherwise
     // leave a URL that reopens the photo on reload.
-    setTimeout(() => { lb.hidden = true; resetZoom(); syncUrl(); }, 200);
+    setTimeout(() => { lb.hidden = true; lbImg.classList.remove('lb-hold'); resetZoom(); syncUrl(); }, 200);
   }
   addEventListener('popstate', () => { if (lbOpen()) closeLightbox(true); });
 
@@ -1298,8 +1579,10 @@ const auroraCss = hasPhotos
   const endSwipe = () => {
     if (!swiping) return;
     swiping = false;
+    // Dismissing leaves the photo (and the scrim's fade) where the finger let
+    // go, so the flight home starts from there instead of snapping back first.
+    if (swDY > 90 && swDY > Math.abs(swDX)) { closeLightbox(); return; }
     lb.style.opacity = '';
-    if (swDY > 90 && swDY > Math.abs(swDX)) { closeLightbox(); resetZoom(); return; }
     if (Math.abs(swDX) > 55 && Math.abs(swDX) > Math.abs(swDY)) { swDX < 0 ? lbNext() : lbPrev(); return; }
     resetZoom();   // not far enough — spring back
   };
@@ -1309,7 +1592,7 @@ const auroraCss = hasPhotos
   const lbStep = (dir) => {
     stopSlideshow(); // manual navigation ends any running slideshow
     for (let i = lbIndex + dir; i >= 0 && i < frames.length; i += dir) {
-      if (visibleFrame(frames[i])) { showAt(i); return; }
+      if (visibleFrame(frames[i])) { showAt(i); enterStep(dir); return; }
     }
   };
   const lbNext = () => lbStep(1);
@@ -1326,7 +1609,7 @@ const auroraCss = hasPhotos
   const nextVisibleWrap = () => {
     for (let step = 0; step < frames.length; step++) {
       const i = (lbIndex + 1 + step) % frames.length;
-      if (visibleFrame(frames[i])) { showAt(i); return; }
+      if (visibleFrame(frames[i])) { showAt(i); enterStep(0); return; }
     }
   };
   const playBtn = document.getElementById('lb-play');
@@ -1411,7 +1694,7 @@ const auroraCss = hasPhotos
     arcSimilar.classList.remove('show');
     unlockScroll();
     releaseFocus();
-    setTimeout(() => { arcSimilar.hidden = true; }, 220);
+    setTimeout(() => { arcSimilar.hidden = true; }, 200);
   }
   document.getElementById('lb-similar')?.addEventListener('click', openArcSimilar);
   // Style Match's workbench lives on /inspiration — every reference there
@@ -1434,6 +1717,90 @@ const auroraCss = hasPhotos
     if (i >= 0) { closeArcSimilar(); showAt(i); }
   });
   arcSimilar?.addEventListener('click', (e) => { if (e.target === arcSimilar) closeArcSimilar(); });
+
+  // ======================================================================
+  //  Move to another chapter — issue #105. Mac only: the button and menu
+  //  are never rendered into the static snapshot, so every lookup below is
+  //  optional and the functions are inert there.
+  // ======================================================================
+  const lbChapters = document.getElementById('lb-chapters');
+  const lbChapterBtn = document.getElementById('lb-chapter');
+  const lbcStatus = document.getElementById('lbc-status');
+  const lbcName = (key) => lbChapters?.querySelector(`[data-chapter="${key}"]`)?.dataset.name || key;
+  function chaptersOpen() { return Boolean(lbChapters && !lbChapters.hidden); }
+  function closeChapters() {
+    if (!lbChapters || lbChapters.hidden) return;
+    lbChapters.hidden = true;
+    lbChapterBtn?.setAttribute('aria-expanded', 'false');
+  }
+  function paintChapters() {
+    const f = frames[lbIndex];
+    if (!lbChapters || !f) return;
+    const { auto, base, edge } = f.dataset;
+    const moved = base !== auto;
+    document.getElementById('lbc-head').textContent = `In ${f.dataset.chapter}`;
+    for (const opt of lbChapters.querySelectorAll('.lbc-opt')) {
+      const key = opt.dataset.chapter;
+      opt.setAttribute('aria-checked', String(key === (moved ? base : 'auto')));
+      if (key === 'auto') opt.querySelector('.lbc-name').textContent = `Automatic · ${lbcName(auto)}`;
+      const note = opt.querySelector('.lbc-note');
+      // The two chapters worth pointing at: the one the colour alone picks,
+      // and the one across the edge it is standing on.
+      note.className = 'lbc-note' + (key === edge ? ' edge' : '');
+      note.textContent = key === edge ? '≈ on the edge' : key === auto ? 'by colour' : '';
+    }
+  }
+  lbChapterBtn?.addEventListener('click', () => {
+    if (chaptersOpen()) { closeChapters(); return; }
+    stopSlideshow();
+    paintChapters();
+    if (lbcStatus) lbcStatus.textContent = '';
+    lbChapters.hidden = false;
+    lbChapterBtn.setAttribute('aria-expanded', 'true');
+    lbChapters.querySelector('.lbc-opt[aria-checked="true"]')?.focus({ preventScroll: true });
+  });
+  lbChapters?.addEventListener('click', async (e) => {
+    const opt = e.target.closest('.lbc-opt');
+    if (opt) return moveOpenPhoto(opt);
+    // The page is ordered at render time, so a moved photo only takes its
+    // new place on the next load — reopened on the same photo.
+    if (e.target.closest('[data-reload]')) {
+      history.replaceState(history.state, '', location.pathname + location.search + `#photo=${frames[lbIndex].dataset.id}`);
+      location.reload();
+    }
+  });
+  async function moveOpenPhoto(opt) {
+    const f = frames[lbIndex];
+    if (!f) return;
+    const opts = lbChapters.querySelectorAll('.lbc-opt');
+    opts.forEach((o) => { o.disabled = true; });
+    try {
+      const res = await fetch('/api/chapter', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: f.dataset.id, chapter: opt.dataset.chapter === 'auto' ? null : opt.dataset.chapter }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const where = data.landed[f.dataset.id];
+      f.dataset.base = where.base;
+      f.dataset.chapter = where.name;
+      lbCap.innerHTML = captionHtml(f);
+      paintChapters();
+      lbcStatus.innerHTML = '';
+      lbcStatus.append(`Now in ${where.name}. `);
+      const reload = document.createElement('button');
+      reload.type = 'button'; reload.dataset.reload = '1'; reload.textContent = 'Reload to see it in place';
+      lbcStatus.append(reload);
+    } catch (err) {
+      lbcStatus.textContent = `Couldn’t move it — ${err.message || 'the server did not answer'}.`;
+    } finally {
+      opts.forEach((o) => { o.disabled = false; });
+    }
+  }
+  // Tapping anywhere else in the lightbox dismisses the menu, as a menu should.
+  lb?.addEventListener('click', (e) => {
+    if (chaptersOpen() && !e.target.closest('#lb-chapters, #lb-chapter')) closeChapters();
+  }, true);
 
   // --- Deep-linkable URL: #photo=<id> when the viewer is open --------------
   let lbPushed = false;
@@ -1507,7 +1874,8 @@ const auroraCss = hasPhotos
 
     if (lbOpen()) {
       trapTab(e, lb);
-      if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }
+      if (e.key === 'Escape' && chaptersOpen()) { e.preventDefault(); closeChapters(); lbChapterBtn?.focus(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); lbNext(); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); lbPrev(); }
       else if (e.key === 'f') { e.preventDefault(); toggleFullscreen(); }
@@ -1519,7 +1887,7 @@ const auroraCss = hasPhotos
     // Archive view.
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); jumpChapter(1); }
     else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); jumpChapter(-1); }
-    else if (e.key === 'f') { e.preventDefault(); if (current) openLightbox(current); }
+    else if (e.key === 'f') { e.preventDefault(); if (current) openLightbox(current, true); }
   });
 
   // ======================================================================
@@ -1620,11 +1988,33 @@ const auroraCss = hasPhotos
       ? `Nothing matches ${parts.join(' · ')}.`
       : 'Nothing here yet.';
   }
-  archiveEmptyClear?.addEventListener('click', () => {
+  archiveEmptyClear?.addEventListener('click', () => relayout(() => {
     applyView('all');
     applyGenre('all', 'All genres');
     if (searchInput) { searchInput.value = ''; runSearch(''); }
-  });
+  }));
+
+  // A filter or search used to repack the whole wall in one cut: every photo
+  // jumped at once, and the page kept its scroll offset rather than its
+  // place, so you landed wherever that arithmetic fell. Now it runs through
+  // the same morph as Overview — photos still on screen glide to their new
+  // places, ones leaving fade — and the photo nearest the middle of the
+  // screen that survives the filter stays where it was.
+  function relayout(update) {
+    const mid = innerHeight / 2;
+    const before = [...onScreen]
+      .filter((f) => trackableSet.has(f))
+      .map((f) => { const r = f.getBoundingClientRect(); return { f, top: r.top, d: Math.abs(r.top + r.height / 2 - mid) }; })
+      .sort((a, b) => a.d - b.d);
+    morph(() => {
+      update();
+      const keep = before.find(({ f }) => frameShown(f) && f.offsetParent);
+      if (keep) scrollBy(0, keep.f.getBoundingClientRect().top - keep.top);
+      // That correction is not the reader scrolling down: keep the toolbar
+      // they just used on screen.
+      lastY = window.scrollY;
+    });
+  }
 
   function refreshEmpties() {
     let anyVisible = false;
@@ -1657,7 +2047,7 @@ const auroraCss = hasPhotos
   }
   viewToggle?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-view]');
-    if (b) applyView(b.dataset.view);
+    if (b && b.dataset.view !== view) relayout(() => applyView(b.dataset.view));
   });
 
   // ---- Genre dropdown ---------------------------------------------------
@@ -1710,8 +2100,8 @@ const auroraCss = hasPhotos
   genreMenu?.addEventListener('click', (e) => {
     const li = e.target.closest('[data-genre]');
     if (!li) return;
-    applyGenre(li.dataset.genre, li.dataset.label || li.textContent.trim());
     closeGenre();
+    if (li.dataset.genre !== genre) relayout(() => applyGenre(li.dataset.genre, li.dataset.label || li.textContent.trim()));
   });
   document.addEventListener('click', (e) => {
     if (genreDrop && !genreDrop.contains(e.target)) closeGenre();
@@ -1730,6 +2120,10 @@ const auroraCss = hasPhotos
   const searchInput = document.getElementById('search-input');
   let searchTimer = 0;
   let searchToken = 0;
+  // The field says it is working from the first keystroke to the answer, so
+  // a query the model takes a moment over doesn't read as one that did nothing.
+  const searchBox = document.getElementById('search-box');
+  const searchBusy = (on) => searchBox?.classList.toggle('busy', on);
   function applySearchIds(ids) {
     searchIds = ids;
     layoutAll();      // repack visible frames into tight columns
@@ -1737,22 +2131,29 @@ const auroraCss = hasPhotos
   }
   async function runSearch(q) {
     const token = ++searchToken;
-    if (!q) { applySearchIds(null); return; }
+    if (!q) { searchBusy(false); applySearchIds(null); return; }
+    searchBusy(true);
     let data;
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
       data = await res.json();
-    } catch (err) { return; } // offline / server-only route missing (e.g. static export) — leave unfiltered
+    } catch (err) { if (token === searchToken) searchBusy(false); return; } // offline / server-only route missing (e.g. static export) — leave unfiltered
     if (token !== searchToken) return; // a newer query has since started; this response is stale
+    searchBusy(false);
     // Not ready (nothing embedded yet) or a server-side failure: refuse rather
     // than filter the archive down to a meaningless ranking — leave it as-is.
     if (!data.ok || !data.ready) return;
-    applySearchIds(new Set(data.matches.map((m) => m.id)));
+    const ids = new Set(data.matches.map((m) => m.id));
+    relayout(() => applySearchIds(ids));
   }
   searchInput?.addEventListener('input', (e) => {
     clearTimeout(searchTimer);
     const q = e.target.value.trim();
-    searchTimer = setTimeout(() => runSearch(q), 350);
+    searchBusy(Boolean(q));
+    searchTimer = setTimeout(() => {
+      if (q) runSearch(q);
+      else relayout(() => runSearch(''));
+    }, 350);
   });
 
   // ======================================================================

@@ -15,22 +15,18 @@
  * here, which meant a tile both this protocol and the landform overlay
  * wanted got fetched and despiked twice. There is no hook to post-process a
  * `raster-dem` source's pixels before MapLibre decodes them for rendering,
- * so the tile is intercepted here instead: cleaned, then re-encoded back
- * into a real terrarium PNG, entirely client-side, before being handed back
- * as this protocol's response. `TERRAIN_SOURCE`'s own tile URL template
+ * so the tile is intercepted here instead and cleaned, entirely client-side,
+ * before being handed back as this protocol's response. `TERRAIN_SOURCE`'s own tile URL template
  * points at this scheme rather than at AWS directly — see `page.ts`.
  *
- * Re-encoding only happens when cleaning actually changed something. Bad
- * pixels are rare — most tiles decode, get checked, and are found to need no
- * repair at all — so the overwhelming majority of tiles skip straight back
- * to the bytes they were fetched as, with no canvas write-back or PNG
- * re-compression paid for a tile MapLibre would have decoded to the exact
- * same picture either way.
+ * A tile cleaning left untouched goes back as the bytes it was fetched as.
+ * One it changed goes back as an ImageBitmap, which MapLibre accepts from a
+ * protocol directly, so it is never re-compressed to PNG only to be decoded
+ * again (that encode alone cost over half a second across one zoom).
  */
 
 import type MapLibreGL from 'maplibre-gl';
-import { encodeTerrarium } from '../terrain';
-import { getCleanedTerrariumTile, terrariumCanvasContext } from './terrarium-tile';
+import { getCleanedTerrariumTile, terrariumImageData } from './terrarium-tile';
 
 /** The scheme `TERRAIN_SOURCE`'s tile URL template uses. */
 export const DESPIKED_TERRAIN_PROTOCOL = 'scout-terrarium';
@@ -61,35 +57,12 @@ export function registerDespikedTerrainProtocol(maplibregl: typeof MapLibreGL): 
     // exactly the tile AWS sent — no canvas draw, no re-compression.
     if (!cleaned.changed) return { data: cleaned.raw };
 
-    const { width, height, heights } = cleaned;
-    const context = terrariumCanvasContext(width, height);
-    if (!context) throw new Error('no 2d canvas context available to clean a terrain tile');
-
-    const image = context.createImageData(width, height);
-    for (let i = 0; i < heights.length; i++) {
-      const [r, g, b] = encodeTerrarium(heights[i]);
-      const p = i * 4;
-      image.data[p] = r;
-      image.data[p + 1] = g;
-      image.data[p + 2] = b;
-      // `createImageData` defaults alpha to 0 (fully transparent), unlike
-      // the source PNG it is standing in for. MapLibre never reads alpha for
-      // a raster-dem source, but a transparent PNG is still the wrong thing
-      // to write to a tile that is meant to be opaque.
-      image.data[p + 3] = 255;
-    }
-    context.putImageData(image, 0, 0);
-
-    const canvas = context.canvas;
-    const blob =
-      canvas instanceof OffscreenCanvas
-        ? await canvas.convertToBlob({ type: 'image/png' })
-        : await new Promise<Blob>((resolve, reject) =>
-            (canvas as HTMLCanvasElement).toBlob(
-              (b) => (b ? resolve(b) : reject(new Error('canvas toBlob failed'))),
-              'image/png',
-            ),
-          );
-    return { data: await blob.arrayBuffer() };
+    // Cleaned: hand MapLibre the picture itself, which it takes directly,
+    // rather than re-encoding a PNG for it to decode again. The worker made
+    // one; a tile asked for again (or cleaned without a worker) builds its own.
+    const ready = cleaned.bitmap;
+    cleaned.bitmap = null;
+    const bitmap = ready ?? (await createImageBitmap(terrariumImageData(cleaned.heights, cleaned.width, cleaned.height)));
+    return { data: bitmap };
   });
 }

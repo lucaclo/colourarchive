@@ -104,6 +104,39 @@ export function setGenre(id: string, genre: import('./types').Genre): Promise<Ma
 }
 
 /**
+ * File photos under a chapter by hand, or hand them back to the automatic
+ * classification (`base === null`) — issue #105.
+ *
+ * `base` is a *base* key (an anchor slug or achromatic), never a banded one:
+ * which lightness band a photo sits in, and whether that band is busy enough
+ * to be its own chapter, stays automatic, the same as it is for every photo.
+ * Choosing the band as well would pin a photo to a chapter that may not exist
+ * next week. A move that matches what the pipeline would choose anyway is
+ * stored as no override at all, so an undo leaves no residue.
+ *
+ * Several ids in one write, so a bulk move is one rebuild and one deploy
+ * rather than one per photo.
+ */
+export function setChapter(ids: string[], base: string | null): Promise<Manifest> {
+  return withLock(async () => {
+    const [photos, overrides] = await Promise.all([readStore(), readOverrides()]);
+    const autoById = new Map(photos.map((p) => [p.id, baseKeyOf(p.autoChapter)]));
+    overrides.photos = overrides.photos ?? {};
+    for (const id of ids) {
+      if (!autoById.has(id)) continue;
+      const { chapter: _old, ...rest } = overrides.photos[id] ?? {};
+      const next = base === null || base === autoById.get(id) ? rest : { ...rest, chapter: base };
+      if (Object.keys(next).length) overrides.photos[id] = next;
+      else delete overrides.photos[id];
+    }
+    await writeJson(OVERRIDES_PATH, overrides);
+    const manifest = await rebuild();
+    scheduleDeploy();
+    return manifest;
+  });
+}
+
+/**
  * Replace one photo's derivative list and rebuild.
  *
  * The repair path for the derivative audit (`npm run check:photos -- --fix`):

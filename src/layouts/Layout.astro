@@ -128,7 +128,17 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
         const ring = document.getElementById('cursor-ring');
         if (!ring) return;
         let raf = 0, mx = -100, my = -100;
-        const move = () => { ring.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`; raf = 0; };
+        // A modal <dialog> sits in the browser's top layer, above any
+        // z-index, and the system pointer is hidden, so with the ring left in
+        // <body> the cursor vanishes inside every modal. The ring lives in
+        // the open modal instead (the last one, if they stack), and goes
+        // back to <body> once it closes.
+        const home = () => {
+          const modals = [...document.querySelectorAll('dialog')].filter((d) => d.matches(':modal'));
+          const host = modals[modals.length - 1] || document.body;
+          if (ring.parentElement !== host) host.append(ring);
+        };
+        const move = () => { home(); ring.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`; raf = 0; };
         addEventListener('mousemove', (e) => {
           mx = e.clientX; my = e.clientY;
           ring.classList.add('show');

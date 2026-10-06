@@ -89,6 +89,7 @@ export const POST: APIRoute = async ({ request }) => {
       referenceCount: record.referenceCount,
       referenceIds: record.referenceIds,
       outlierIds: record.outlierIds,
+      calibrated: record.calibrated,
     });
 
     // Two decodes, six model passes and two full-resolution sweeps: twenty

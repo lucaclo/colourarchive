@@ -163,7 +163,7 @@ describe('lightQuality', () => {
 
   it('distinguishes a hard edge from a flat grey', () => {
     assert.match(lightQuality(3, 30), /Hard light/);
-    assert.match(lightQuality(95, 30), /geometry, not what you will see/);
+    assert.match(lightQuality(95, 30), /you won’t see them/);
   });
 
   it('admits when it does not know', () => {
@@ -337,7 +337,7 @@ describe('cloudStructure', () => {
   it('names the dominant deck and what it does', () => {
     const cirrus = cloudStructure(hour({ cloudLow: 5, cloudMid: 10, cloudHigh: 80 }));
     assert.equal(cirrus.dominant, 'high');
-    assert.match(cirrus.note, /shadows keep their edge/);
+    assert.match(cirrus.note, /Shadows keep their edge/);
 
     const stratus = cloudStructure(hour({ cloudLow: 90, cloudMid: 20, cloudHigh: 0 }));
     assert.equal(stratus.dominant, 'low');
@@ -391,19 +391,19 @@ describe('horizonReading', () => {
   it('calls a shut horizon blocked however clear it is overhead', () => {
     const reading = horizonReading(shutGate, canvas, 295, D);
     assert.equal(reading.verdict, 'blocked');
-    assert.match(reading.note, /sun's own horizon/);
+    assert.match(reading.note, /horizon where the sun is/);
   });
 
   it('calls an open horizon with nothing overhead bare, not bad', () => {
     const reading = horizonReading(clearGate, bareCanvas, 295, D);
     assert.equal(reading.verdict, 'bare');
-    assert.match(reading.note, /nothing for it to land on/);
+    assert.match(reading.note, /nothing to land on/);
   });
 
   it('calls the arrangement colour needs lit, and still refuses to promise it', () => {
     const reading = horizonReading(clearGate, canvas, 295, D);
     assert.equal(reading.verdict, 'lit');
-    assert.match(reading.note, /not a promise/);
+    assert.match(reading.note, /no guarantee/);
   });
 
   it('never emits a score', () => {

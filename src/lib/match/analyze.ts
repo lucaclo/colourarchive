@@ -149,6 +149,7 @@ export async function analysePhotoDetailed(
     };
 
     remember(key, analysis);
+    await persist(key, analysis);
     return { analysis, masks, workingPath: work.path, cleanup: work.cleanup };
   } catch (err) {
     // Only clean up on the failure path — on success the caller owns the
@@ -166,8 +167,14 @@ export async function analysePhoto(
 ): Promise<PhotoAnalysis> {
   const requested = opts.baseline ?? 'macos';
   if (!opts.fresh) {
-    const hit = cache.get(analysisCacheKey(buf, requested));
+    const key = analysisCacheKey(buf, requested);
+    const hit = cache.get(key);
     if (hit) return hit;
+    const persisted = await readPersisted(key);
+    if (persisted) {
+      remember(key, persisted);
+      return persisted;
+    }
   }
   const detailed = await analysePhotoDetailed(buf, filename, opts);
   try {

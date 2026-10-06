@@ -1,14 +1,28 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { readManifest } from '../lib/manifest';
-import { oklchCss } from '../lib/color';
+import { readManifest, readOverrides } from '../lib/manifest';
+import { oklchCss, baseKeyOf } from '../lib/color';
 import { GENRE_LABEL } from '../lib/types';
+import { borderlineOf, chapterChoices } from '../lib/borderline';
 
 export const prerender = false;
 const manifest = await readManifest();
+const overrides = await readOverrides();
+// Issue #105/#106: every photo carries the base chapter the pipeline would
+// choose (`auto`), the one it is actually filed under (`base`), and the
+// chapter across the edge it sits on, if it sits on one.
 const allPhotos = manifest.chapters.flatMap((c) =>
-  c.photos.map((p) => ({ ...p, chapterName: c.name })),
+  c.photos.map((p) => {
+    const auto = baseKeyOf(p.autoChapter);
+    const moved = p.chapter !== auto;
+    // The edge is kept even for a moved photo — it is a fact about the
+    // colour, not the filing — and only shown while the photo is automatic,
+    // so moving one back brings its marker back without another request.
+    return { ...p, chapterName: c.name, auto, base: p.chapter, moved, edge: borderlineOf(p.oklch)?.alternative ?? '' };
+  }),
 );
+const choices = chapterChoices(overrides.chapters);
+const onEdge = allPhotos.filter((p) => p.edge && !p.moved).length;
 // Same static echo as the archive's first chapter — see Layout's `accent`
 // prop. Upload feeds this exact chapter system, so it earns the same tint.
 const accent = manifest.chapters[0]
@@ -20,9 +34,7 @@ const accent = manifest.chapters[0]
 
   <main class="ingest">
     <header class="ingest-head">
-      <p class="cover-kicker page-kicker">Library</p>
       <h1>Add &amp; remove</h1>
-      <p class="lead">Drop them in. Colour does the rest.</p>
     </header>
 
     <form id="form" class="drop" aria-label="Upload photographs">
@@ -31,7 +43,6 @@ const accent = manifest.chapters[0]
            aria-label="Choose photos or drop them here">
         <p class="drop-title">Drop photos, or <span class="link">browse</span></p>
         <p class="drop-sub">JPEG · PNG · TIFF · WebP · AVIF · HEIC · GIF</p>
-        <p class="drop-sub drop-note">No camera RAW — export to JPEG first.</p>
       </div>
     </form>
 
@@ -47,15 +58,19 @@ const accent = manifest.chapters[0]
 
     {/* Rendered even when empty, so photos added in this session can drop
         straight into it without a page reload. */}
-    <section class="manage" id="manage" hidden={allPhotos.length === 0}>
+    <section class="manage" id="manage" hidden={allPhotos.length === 0} data-choices={JSON.stringify(choices)}>
       <h2 class="manage-head">
         In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
       </h2>
-      <p class="manage-note">Hover to remove, or flip film / digital. Click to select, shift-click for a range.</p>
       <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
         <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
       </div>
+      {/* Issue #106: the photos standing on a chapter edge are the ones worth
+          checking by eye, so they can be pulled out of the grid on their own. */}
+      <button type="button" class="edge-filter" id="edge-filter" aria-pressed="false" hidden={onEdge === 0}>
+        <span class="edge-mark" aria-hidden="true">≈</span> On a chapter edge <span class="edge-count" id="edge-count">{onEdge}</span>
+      </button>
       <div class="bulk-bar" id="bulk-bar" hidden>
         <span class="bulk-count" id="bulk-count">0 selected</span>
         <div class="bulk-actions">
@@ -68,13 +83,18 @@ const accent = manifest.chapters[0]
             <option value="landscape">Landscape</option>
             <option value="architecture">Architecture</option>
           </select>
+          <select class="bulk-genre" id="bulk-chapter" aria-label="Move selected to a chapter">
+            <option value="" selected disabled>Chapter…</option>
+            <option value="auto">Automatic</option>
+            {choices.map((c) => <option value={c.key}>{c.name}</option>)}
+          </select>
           <button type="button" class="bulk-btn bulk-remove" id="bulk-remove">Remove</button>
           <button type="button" class="bulk-btn bulk-clear" id="bulk-clear">Clear</button>
         </div>
       </div>
       <div class="grid" id="grid">
         {allPhotos.map((p) => (
-          <figure class="cell" data-id={p.id} data-medium={p.medium} data-genre={p.genre ?? ''}>
+          <figure class="cell" data-id={p.id} data-medium={p.medium} data-genre={p.genre ?? ''} data-auto={p.auto} data-base={p.base} data-edge={p.edge} data-file={p.filename}>
             <img src={p.placeholder} data-src={p.derivatives[0].avif} alt="" loading="lazy" />
             <button class="cell-remove" type="button" data-remove={p.id} aria-label={`Remove ${p.filename}`}>×</button>
             <button class="cell-medium" type="button" data-medium-btn={p.id} title="Toggle film / digital">{p.medium}</button>
@@ -96,19 +116,24 @@ const accent = manifest.chapters[0]
   .ingest-head h1 {
     font-family: var(--font-display); font-weight: var(--title-weight); font-style: var(--title-style);
     font-size: clamp(2.2rem, 5.5vw, 3.8rem); letter-spacing: var(--title-tracking);
-    margin: 0.3rem 0 0.6rem; line-height: 1;
+    margin: 0.3rem 0 2.4rem; line-height: 1;
   }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.4rem; max-width: 40rem; }
 
   .drop { margin: 0; }
+  /* Printer's crop marks, the same drop target Inspiration uses — one
+     vocabulary for "put a file here" across the app, not two. */
   .drop-inner {
-    border: 1.5px dashed var(--glass-edge); border-radius: var(--r-lg);
+    border: 1px solid var(--separator); border-radius: 2px;
     padding: 4.5rem 2rem; text-align: center; cursor: pointer;
-    transition: border-color 160ms, background 160ms, transform 120ms ease-out;
-    background: var(--surface-1);
+    transition: border-color 160ms, background-color 160ms, transform 120ms ease-out;
+    background-color: transparent;
+    background-image: var(--cropmarks-image); background-size: var(--cropmarks-size);
+    background-position: var(--cropmarks-pos); background-repeat: no-repeat;
   }
   .drop-inner:hover, .drop-inner:focus-visible, .drop-inner.over {
-    border-color: var(--accent-mix); background: color-mix(in oklab, var(--accent-mix) 5%, transparent);
+    border-color: var(--rule); --mark: var(--fg);
+    background-color: color-mix(in oklab, var(--fg) 3%, transparent);
   }
   .drop-inner:active { transform: scale(0.995); }
   .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.6rem; margin: 0 0 0.5rem; }
@@ -167,6 +192,9 @@ const accent = manifest.chapters[0]
     border: 1px solid var(--separator); border-radius: var(--r-pill);
     background: var(--surface-1);
   }
+  /* `display: flex` above outranks the UA's [hidden], so the bar showed
+     "0 selected" with nothing selected. */
+  .bulk-bar[hidden], .edge-filter[hidden] { display: none; }
   .bulk-count {
     font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.1em;
     text-transform: uppercase; color: var(--muted); flex: 0 0 auto;
@@ -222,7 +250,7 @@ const accent = manifest.chapters[0]
   }
   :global(.cell figcaption) {
     position: absolute; left: 0; bottom: 0; right: 0;
-    font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: var(--t-caption); font-weight: 500; letter-spacing: 0; text-transform: capitalize;
     color: #fff; padding: 0.3rem 0.4rem;
     /* .cell-medium sits at left:6px on the same edge (bottom:6px), so this
        full-width caption needs to clear it or a long chapter name shows its
@@ -253,8 +281,8 @@ const accent = manifest.chapters[0]
   :global(.cell-medium) {
     position: absolute; left: 6px; bottom: 6px; z-index: 2;
     border: 0; cursor: pointer; border-radius: 999px;
-    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em;
-    text-transform: uppercase; padding: 0.2rem 0.5rem;
+    font-family: var(--font-ui); font-size: var(--t-caption); font-weight: 500; letter-spacing: 0;
+    text-transform: capitalize; padding: 0.2rem 0.55rem;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     transition: background 140ms, transform 110ms ease-out;
@@ -266,8 +294,8 @@ const accent = manifest.chapters[0]
   :global(.cell-genre) {
     position: absolute; left: 6px; top: 6px; z-index: 2; max-width: calc(100% - 12px);
     border: 0; cursor: pointer; border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em;
-    text-transform: uppercase; padding: 0.2rem 0.5rem;
+    font-family: var(--font-ui); font-size: var(--t-caption); font-weight: 500; letter-spacing: 0;
+    text-transform: capitalize; padding: 0.2rem 0.55rem;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     transition: background 140ms, filter 140ms, transform 110ms ease-out;
@@ -294,6 +322,51 @@ const accent = manifest.chapters[0]
     :global(.cell-remove) { width: 32px; height: 32px; font-size: 17px; line-height: 32px; }
     :global(.cell-medium), :global(.cell-genre) { min-height: 28px; padding: 0.35rem 0.6rem; font-size: var(--t-caption); }
   }
+
+  /* --- Chapter moves — issues #105/#106 ------------------------------------
+     The caption *is* the control: a native <select> laid invisibly over it,
+     so a tap on the iPad opens the system picker rather than a hand-built
+     menu squeezed onto a 120px thumbnail. It starts where .cell-medium ends,
+     so the medium pill underneath stays tappable. */
+  :global(.cell figcaption .cell-chapter) {
+    position: absolute; top: 0; bottom: 0; left: 5rem; right: 0; z-index: 1;
+    width: calc(100% - 5rem); opacity: 0; cursor: pointer;
+    font-size: 16px; /* under 16px iOS zooms the page on focus */
+    appearance: none; border: 0; background: transparent;
+  }
+  :global(.cell figcaption) { pointer-events: auto; }
+  :global(.cell figcaption:focus-within) { outline: 2px solid var(--accent-mix); outline-offset: -2px; }
+  :global(.cell-edge) { color: #f0b54a; margin-right: 0.3em; font-family: var(--font-ui); letter-spacing: 0; }
+  :global(.cell.moved .cell-ch-name)::after { content: ' ✎'; letter-spacing: 0; opacity: 0.8; }
+  .edge-filter {
+    appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
+    margin: -0.4rem 0 1rem; min-height: 2.25rem; padding: 0 0.95rem;
+    border: 1px solid var(--separator); border-radius: var(--r-pill); background: var(--surface-1); color: var(--fg);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
+    transition: background 140ms, border-color 140ms;
+  }
+  .edge-filter:hover { background: var(--fill-hover); }
+  .edge-filter[aria-pressed='true'] { border-color: #f0b54a; background: color-mix(in oklab, #f0b54a 14%, transparent); }
+  .edge-mark { color: #f0b54a; }
+  .edge-count { font-family: var(--font-label); color: var(--muted); }
+  :global(.grid.edge-only .cell:not(.on-edge):not(.just-moved)) { display: none; }
+
+  /* A new arrival's placement: the photos it now sits among, and the way to
+     move it if they are the wrong company. */
+  :global(.results .place) {
+    flex-basis: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.7rem;
+    font-size: var(--t-footnote); color: var(--muted);
+  }
+  :global(.results .nb) { display: flex; gap: 3px; }
+  :global(.results .nb img) { width: 36px; height: 36px; object-fit: cover; border-radius: 3px; background: var(--border); }
+  :global(.results .row-chapter), :global(.results .edge-move) {
+    appearance: none; cursor: pointer; border: 1px solid var(--separator); border-radius: 999px;
+    background: var(--fill); color: var(--fg); font-family: var(--font-ui);
+    font-size: var(--t-footnote); min-height: 2rem; padding: 0 0.8rem;
+  }
+  :global(.results .edge-move) { border-color: color-mix(in oklab, #f0b54a 60%, transparent); }
+  :global(.results .edge-move:hover), :global(.results .row-chapter:hover) { background: var(--fill-hover); }
+  @media (pointer: coarse) { :global(.results .row-chapter) { font-size: 16px; } }
 
   .foot { margin-top: 3rem; }
 </style>
@@ -502,14 +575,172 @@ const accent = manifest.chapters[0]
         ? `<span class="fit fit-${esc(r.chapterFit.verdict)}">${esc(fitLabel(r.chapterFit.verdict))}</span>`
         : '';
       li.innerHTML = `<span class="sw" style="background:${r.swatch}"></span><span class="fn">${esc(r.filename)}</span><span class="ch">${esc(r.medium)} · ${esc(r.chapterName)}</span>${fit}`;
+      li.dataset.id = r.id;
+      li.dataset.medium = r.medium;
+      li.append(placeRow(r));
     }
     return li;
   }
+
+  // Issue #105: where a new arrival landed, shown as the company it now keeps,
+  // with the one-tap move when it sits on an edge and the full picker always.
+  function placeRow(r) {
+    const place = document.createElement('div');
+    place.className = 'place';
+    const base = baseOf(r.chapterKey);
+    if (r.neighbours?.length) {
+      const nb = document.createElement('span');
+      nb.className = 'nb';
+      nb.title = `Closest in colour, in ${r.chapterName}`;
+      for (const src of r.neighbours) {
+        const img = document.createElement('img');
+        img.src = src; img.alt = ''; img.decoding = 'async';
+        nb.append(img);
+      }
+      place.append(nb);
+    }
+    if (r.borderline) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'edge-move';
+      b.dataset.moveId = r.id; b.dataset.moveTo = r.borderline.alternative;
+      b.textContent = `≈ Belongs in ${choiceName(r.borderline.alternative)}?`;
+      b.title = r.borderline.edge === 'chroma'
+        ? 'Its colour is right on the line between grey and a hue'
+        : 'Its hue is right on the line between two chapters';
+      place.append(b);
+    }
+    place.append(chapterSelect('row-chapter', r.id, base, base, r.filename));
+    return place;
+  }
+
+  results.addEventListener('change', (e) => {
+    const sel = e.target.closest('.row-chapter');
+    if (sel) onChapterChange(sel);
+  });
+  results.addEventListener('click', async (e) => {
+    const b = e.target.closest('.edge-move');
+    if (!b) return;
+    b.disabled = true;
+    if (!(await moveTo([b.dataset.moveId], b.dataset.moveTo))) b.disabled = false;
+  });
 
   function fitLabel(verdict) {
     if (verdict === 'keeps') return 'keeps the chapter’s look';
     if (verdict === 'new-look') return 'starts a new look here';
     return 'between this chapter’s look and a new one';
+  }
+
+  // ======================================================================
+  //  Chapter moves — issues #105/#106. One path for all three places a
+  //  photo can be moved from here (its cell, the bulk bar, a new arrival's
+  //  row), so they can never disagree about where it went.
+  // ======================================================================
+  const CHOICES = JSON.parse(document.getElementById('manage')?.dataset.choices || '[]');
+  const choiceName = (k) => CHOICES.find((c) => c.key === k)?.name || k;
+  const baseOf = (k) => String(k || '').replace(/-(deep|pale)$/, '');
+  const edgeFilter = document.getElementById('edge-filter');
+  const edgeCount = document.getElementById('edge-count');
+
+  function chapterSelect(cls, id, auto, base, label) {
+    const sel = document.createElement('select');
+    sel.className = cls;
+    sel.dataset.chapterFor = id;
+    sel.setAttribute('aria-label', `Chapter for ${label}`);
+    sel.add(new Option(`Automatic · ${choiceName(auto)}`, 'auto'));
+    for (const c of CHOICES) sel.add(new Option(c.name, c.key));
+    sel.value = base && base !== auto ? base : 'auto';
+    return sel;
+  }
+
+  // The name shown is the chapter the photo is actually *in*. That is
+  // usually the one chosen, but a band split or the fold of a chapter too
+  // small to stand alone can put it in a neighbour — the tooltip says so
+  // rather than letting the caption quietly contradict the picker.
+  function paintCaption(cell, name, landedKey) {
+    const nm = cell.querySelector('.cell-ch-name');
+    if (!nm) return;
+    const moved = cell.dataset.base !== cell.dataset.auto;
+    const edge = moved ? '' : cell.dataset.edge;
+    nm.textContent = name;
+    if (edge) {
+      const mark = document.createElement('span');
+      mark.className = 'cell-edge'; mark.textContent = '≈';
+      nm.prepend(mark);
+    }
+    cell.classList.toggle('moved', moved);
+    cell.classList.toggle('on-edge', Boolean(edge));
+    const folded = landedKey && moved && baseOf(landedKey) !== cell.dataset.base;
+    cell.querySelector('figcaption').title =
+      folded ? `Filed under ${choiceName(cell.dataset.base)} — shown in ${name} until ${choiceName(cell.dataset.base)} has enough photos to be its own chapter`
+      : moved ? `Moved here by you — the colour alone says ${choiceName(cell.dataset.auto)}`
+      : edge ? `On the edge with ${choiceName(edge)}`
+      : '';
+  }
+
+  function decorateCell(cell) {
+    const cap = cell.querySelector('figcaption');
+    if (!cap || cap.querySelector('.cell-chapter')) return;
+    const name = cap.textContent.trim();
+    cap.textContent = '';
+    const nm = document.createElement('span');
+    nm.className = 'cell-ch-name';
+    cap.append(nm, chapterSelect('cell-chapter', cell.dataset.id, cell.dataset.auto, cell.dataset.base, cell.dataset.file || 'this photo'));
+    paintCaption(cell, name);
+  }
+
+  function refreshEdgeCount() {
+    const n = grid ? grid.querySelectorAll('.cell.on-edge').length : 0;
+    if (edgeCount) edgeCount.textContent = String(n);
+    if (edgeFilter) edgeFilter.hidden = n === 0 && edgeFilter.getAttribute('aria-pressed') !== 'true';
+  }
+
+  async function moveTo(ids, value) {
+    let data;
+    try {
+      const res = await fetch('/api/chapter', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids, chapter: value === 'auto' ? null : value }),
+      });
+      data = await res.json();
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+    for (const [id, where] of Object.entries(data.landed)) {
+      const cell = cellFor(id);
+      if (cell) {
+        cell.dataset.base = where.base;
+        // Stays put in the "on an edge" view even once it is off the edge —
+        // vanishing mid-decision would take the undo with it.
+        cell.classList.add('just-moved');
+        const sel = cell.querySelector('.cell-chapter');
+        if (sel) sel.value = where.auto ? 'auto' : where.base;
+        paintCaption(cell, where.name, where.key);
+      }
+      const row = results.querySelector(`li[data-id="${id}"]`);
+      if (row) {
+        const ch = row.querySelector('.ch');
+        if (ch) ch.textContent = `${row.dataset.medium} · ${where.name}`;
+        const sel = row.querySelector('.row-chapter');
+        if (sel) sel.value = where.auto ? 'auto' : where.base;
+        row.querySelector('.edge-move')?.remove();
+      }
+    }
+    refreshEdgeCount();
+    return data.landed;
+  }
+
+  // Restore the picker to what the photo is filed under when a move fails,
+  // so it never shows a chapter the server refused.
+  async function onChapterChange(sel) {
+    const id = sel.dataset.chapterFor;
+    const cell = cellFor(id);
+    const was = cell ? (cell.dataset.base !== cell.dataset.auto ? cell.dataset.base : 'auto') : null;
+    sel.disabled = true;
+    const ok = await moveTo([id], sel.value);
+    sel.disabled = false;
+    if (!ok && was) sel.value = was;
   }
 
   const GENRE_ORDER = ['street', 'portrait', 'landscape', 'architecture'];
@@ -524,6 +755,9 @@ const accent = manifest.chapters[0]
     fig.dataset.id = r.id;
     fig.dataset.medium = r.medium || 'digital';
     fig.dataset.genre = r.genre || '';
+    fig.dataset.auto = fig.dataset.base = baseOf(r.chapterKey);
+    fig.dataset.edge = r.borderline?.alternative || '';
+    fig.dataset.file = r.filename;
     const img = document.createElement('img');
     img.alt = ''; img.loading = 'lazy';
     img.src = r.placeholder || '';
@@ -548,6 +782,8 @@ const accent = manifest.chapters[0]
       cap,
     );
     grid.prepend(fig);
+    decorateCell(fig);
+    refreshEdgeCount();
     if (manage) manage.hidden = false;
     if (manageSearchBox) manageSearchBox.hidden = false;
     if (manageCount) manageCount.textContent = String(grid.children.length);
@@ -623,7 +859,7 @@ const accent = manifest.chapters[0]
   }
 
   grid?.addEventListener('click', (e) => {
-    if (e.target.closest('button')) return; // per-cell remove/medium/genre have their own handler
+    if (e.target.closest('button, select')) return; // per-cell controls have their own handlers
     const cell = e.target.closest('.cell');
     if (!cell) return;
     const id = cell.dataset.id;
@@ -660,6 +896,30 @@ const accent = manifest.chapters[0]
   }
   bulkFilm?.addEventListener('click', () => bulkSetMedium('film'));
   bulkDigital?.addEventListener('click', () => bulkSetMedium('digital'));
+
+  const bulkChapter = document.getElementById('bulk-chapter');
+  bulkChapter?.addEventListener('change', async () => {
+    const next = bulkChapter.value;
+    if (!next || !selected.size) return;
+    bulkChapter.disabled = true;
+    await moveTo([...selected], next);
+    bulkChapter.disabled = false;
+    bulkChapter.value = '';
+  });
+
+  grid?.querySelectorAll('.cell').forEach(decorateCell);
+  refreshEdgeCount();
+  grid?.addEventListener('change', (e) => {
+    const sel = e.target.closest('.cell-chapter');
+    if (sel) onChapterChange(sel);
+  });
+  edgeFilter?.addEventListener('click', () => {
+    const on = edgeFilter.getAttribute('aria-pressed') !== 'true';
+    edgeFilter.setAttribute('aria-pressed', String(on));
+    grid?.classList.toggle('edge-only', on);
+    grid?.querySelectorAll('.just-moved').forEach((c) => c.classList.remove('just-moved'));
+    refreshEdgeCount();
+  });
 
   bulkGenre?.addEventListener('change', async () => {
     const next = bulkGenre.value;

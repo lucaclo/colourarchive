@@ -193,14 +193,14 @@ export function lightQuality(
   cloudCover: number | null | undefined,
   sunAltitude: number,
 ): string {
-  if (sunAltitude <= -0.833) return 'No direct light — the sun is down.';
+  if (sunAltitude <= -0.833) return 'The sun is down, so no direct light.';
   if (cloudCover == null || !Number.isFinite(cloudCover)) return 'Cloud cover unknown.';
   const cover = Math.min(100, Math.max(0, cloudCover));
   if (cover < 12) return 'Hard light. Shadows will have a clean edge.';
   if (cover < 35) return 'Mostly sun, with cloud passing. The light will come and go.';
   if (cover < 65) return 'Broken cloud. Shadows soft-edged and intermittent.';
   if (cover < 88) return 'Mostly cloud. Expect weak shadows at best.';
-  return 'Flat overcast. The shadows below are geometry, not what you will see.';
+  return 'Flat overcast. The shadows on the map are where they would fall, but you won’t see them.';
 }
 
 /* ── The three decks ───────────────────────────────────────────────────────── */
@@ -291,7 +291,7 @@ export function cloudStructure(hour: WeatherHour | null | undefined): CloudStruc
   const parts = decks.map(([deck, cover]) => `${DECK_WORD[deck].toLowerCase()} ${Math.round(cover)}%`);
   let consequence = '';
   if (dominant === 'high' && (blocking ?? 0) < 30) {
-    consequence = ' Cirrus over a clear sun — shadows keep their edge, and there is something up there to take colour.';
+    consequence = ' Thin high cloud over a clear sun. Shadows keep their edge, and there’s something up there to catch colour.';
   } else if (dominant === 'low') {
     consequence = ' The sun is behind the lowest deck. Flat light, whatever the total says.';
   } else if ((blocking ?? 0) >= 70) {
@@ -404,7 +404,7 @@ export function horizonReading(
       canvasCover,
       bearing,
       distanceM,
-      note: 'No cloud-layer forecast for one of the two samples, so this stays unanswered.',
+      note: 'No cloud-layer forecast for one of the two spots, so this stays unanswered.',
     };
   }
 
@@ -415,7 +415,7 @@ export function horizonReading(
       canvasCover,
       bearing,
       distanceM,
-      note: `${Math.round(gateCover)}% low and mid cloud on the sun's own horizon (${where}). The light is unlikely to get out from under it, however clear it is overhead.`,
+      note: `${Math.round(gateCover)}% low and mid cloud on the horizon where the sun is (${where}). The light probably won't get out from under it, however clear it is overhead.`,
     };
   }
 
@@ -426,7 +426,7 @@ export function horizonReading(
       canvasCover,
       bearing,
       distanceM,
-      note: `Horizon open — ${Math.round(gateCover)}% low and mid cloud ${where} — but only ${Math.round(canvasCover)}% mid and high cloud overhead. Clean light, nothing for it to land on.`,
+      note: `The horizon is open (${Math.round(gateCover)}% low and mid cloud ${where}), but there's only ${Math.round(canvasCover)}% mid and high cloud overhead. Clean light with nothing to land on.`,
     };
   }
 
@@ -436,7 +436,7 @@ export function horizonReading(
     canvasCover,
     bearing,
     distanceM,
-    note: `Horizon open (${Math.round(gateCover)}% low and mid cloud ${where}) with ${Math.round(canvasCover)}% mid and high cloud overhead. That is the arrangement colour comes from — it is not a promise of one.`,
+    note: `The horizon is open (${Math.round(gateCover)}% low and mid cloud ${where}) and there's ${Math.round(canvasCover)}% mid and high cloud overhead. That's the setup a colourful sky needs, though it's no guarantee.`,
   };
 }
 

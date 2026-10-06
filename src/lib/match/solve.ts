@@ -530,7 +530,7 @@ function solveOne(
       state,
       reachability: 0,
       colourResidual: 0,
-      notes: [{ severity: 'caution', panel: 'Light', text: 'One of the photos could not be measured.' }],
+      notes: [{ severity: 'caution', panel: 'Light', text: 'One of the photos couldn’t be measured.' }],
     };
   }
 
@@ -648,7 +648,7 @@ function solveOne(
     notes.push({
       severity: 'caution',
       panel: 'Colour',
-      text: `The reference is ${satRatio.toFixed(1)}x as saturated as your photo — more than the Saturation slider can reach. It is set to its limit, and the remaining difference is left unmatched rather than forced through other controls.`,
+      text: `The reference is ${satRatio.toFixed(1)}× as saturated as your photo, which is more than the Saturation slider can reach. It’s set to the limit and the rest is left alone, rather than forced through other controls.`,
     });
   }
   applyChromaScale(state, 1 + achievedDelta);
@@ -702,8 +702,8 @@ function solveOne(
       severity: 'info',
       panel: 'Colour',
       text:
-        'The global colour cast is applied through Colour Grading > Global so it stays relative to your photo. ' +
-        'The Temp/Tint values are the equivalent manual move — use one route or the other, not both.',
+        'The overall colour cast goes in through Colour Grading > Global, so it stays relative to your photo. ' +
+        'Temp and Tint are the same move done by hand. Use one or the other, not both.',
     });
     // Only the achievable fraction reaches the state (see stage 3).
     const achieved = (gradeSat / 100) * cal.colorGradeUnit;
@@ -760,7 +760,7 @@ function solveOne(
     notes.push({
       severity: 'caution',
       panel: 'Colour Mixer',
-      text: `${sparseBands} colour band${sparseBands > 1 ? 's are' : ' is'} present in your photo but absent from the reference. Those are desaturated toward the reference rather than matched, because there is no target to match to.`,
+      text: `${sparseBands} colour band${sparseBands > 1 ? 's are' : ' is'} in your photo but not in the reference. There’s nothing to match ${sparseBands > 1 ? 'them' : 'it'} to, so ${sparseBands > 1 ? 'they’re' : 'it’s'} toned down instead.`,
     });
   }
 
@@ -787,7 +787,7 @@ function solveOne(
       notes.push({
         severity: 'info',
         panel: 'Colour Grading',
-        text: `${REGION_LABEL[regionKey]} in the reference have no coherent hue (resultant ${r.hue.strength.toFixed(2)}), so that wheel is left at zero rather than given an invented target.`,
+        text: `${REGION_LABEL[regionKey]} in the reference don’t lean towards any one hue (resultant ${r.hue.strength.toFixed(2)}), so that wheel stays at zero instead of chasing a made-up target.`,
       });
       continue;
     }
@@ -886,7 +886,7 @@ function solveOne(
       notes.push({
         severity: 'caution',
         panel: 'Masks',
-        text: `Matching ${c.label.toLowerCase()} exactly would need ${c.wanted >= 0 ? '+' : ''}${c.wanted.toFixed(2)} stops on that mask, which would rebuild the area rather than grade it. It is held at ${c.capped >= 0 ? '+' : ''}${c.capped.toFixed(2)} — the region will stay visibly different from the reference.`,
+        text: `Matching ${c.label.toLowerCase()} exactly would need ${c.wanted >= 0 ? '+' : ''}${c.wanted.toFixed(2)} stops on that mask. That’s repainting the area, not grading it, so it’s held at ${c.capped >= 0 ? '+' : ''}${c.capped.toFixed(2)} and will still look different from the reference.`,
       });
     }
   }
@@ -895,7 +895,7 @@ function solveOne(
     notes.push({
       severity: 'info',
       panel: 'Masks',
-      text: `${manual.map((m) => m.label).join(', ')} ${manual.length > 1 ? 'need' : 'needs'} a mask you draw yourself — Lightroom can regenerate Subject, Sky and Background automatically, but not these.`,
+      text: `${manual.map((m) => m.label).join(', ')} ${manual.length > 1 ? 'need' : 'needs'} a mask you draw yourself. Lightroom rebuilds Subject, Sky and Background on its own, but not these.`,
     });
   }
 
@@ -920,8 +920,8 @@ function solveOne(
       panel: 'Effects',
       text:
         ref.texture.usable && mine.texture.usable
-          ? 'Grain and sharpening were measured at different pixel scales, so they cannot be compared honestly. Those controls are left at zero.'
-          : `Grain, texture and noise could not be measured: ${(!ref.texture.usable ? ref.texture.reason : mine.texture.reason) ?? 'unavailable'}`,
+          ? 'Grain and sharpening were measured at different sizes, so they can’t be fairly compared. Those sliders stay at zero.'
+          : `Couldn’t measure grain, texture or noise: ${(!ref.texture.usable ? ref.texture.reason : mine.texture.reason) ?? 'unavailable'}`,
     });
   }
 
@@ -932,7 +932,7 @@ function solveOne(
     notes.push({
       severity: 'info',
       panel: 'Effects',
-      text: 'Corner falloff in one or both photos reads as scene content rather than a lens vignette, so the Vignetting slider is left alone.',
+      text: 'The dark corners look like part of the scene rather than lens vignetting, so the Vignetting slider is left alone.',
     });
   }
 
@@ -978,19 +978,19 @@ function solveOne(
       );
     }
     if (Math.abs(refGlobal.C.mean - finalGlobal.C) > 0.02) {
-      parts.push('the reference carries far more colour than your frame contains');
+      parts.push('the reference has far more colour in it than your frame does');
     }
     if (Math.abs(refGlobal.L.mean - finalGlobal.L) > 0.06) {
-      parts.push('their tonal ranges do not overlap enough');
+      parts.push('their tones barely overlap');
     }
     notes.unshift({
       severity: 'caution',
       panel: 'Overall',
       text:
-        `These two photographs can only be brought about ${Math.round(reachability * 100)}% of the way together` +
+        `These two will only get about ${Math.round(reachability * 100)}% of the way together` +
         (parts.length ? `, because ${parts.join(', and ')}` : '') +
-        '. That is a difference in what was photographed, not in how it was edited — no combination of Lightroom controls will close it. ' +
-        'The values below are still the best available move, but expect the result to resemble the reference in mood rather than in colour.',
+        '. The difference is in what was photographed, so no Lightroom setting will close it. ' +
+        'The numbers below are still the best move available. Expect the mood of the reference more than its colours.',
     });
   }
 
@@ -1259,8 +1259,8 @@ export function solveMatch(
       panel: 'Overall',
       text:
         `At full strength this grade pins ${extreme.length} controls at or near their limits (${extreme.slice(0, 4).join(', ')}${extreme.length > 4 ? ', …' : ''}). ` +
-        'It will bring the measurements close, but a grade this hard tends to look forced rather than photographic. ' +
-        'The restrained setting is the better starting point here — pull the strength slider back until it stops looking pushed.',
+        'It gets the measurements close, but a grade this hard usually looks forced. ' +
+        'Start from Restrained instead, and pull the strength back until it stops looking pushed.',
     });
   }
 
@@ -1268,7 +1268,7 @@ export function solveMatch(
     notes.unshift({
       severity: 'caution',
       panel: 'Baseline',
-      text: "One photo was read from a camera-embedded preview, which carries the camera's picture profile rather than Lightroom's baseline. Directions are right; magnitudes are approximate.",
+      text: "One photo was read from the preview embedded in the RAW, which has the camera’s picture profile baked in rather than Lightroom’s. The directions are right, but the amounts are approximate.",
     });
   }
 

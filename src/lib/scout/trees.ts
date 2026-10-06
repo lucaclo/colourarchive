@@ -125,6 +125,10 @@ export const SCATTER_SPACING_M = { wood: 9, park: 22 } as const;
  * A mapped tree nearby suppresses the estimate, and an area already holding
  * enough mapped trees is left to them entirely: where someone has surveyed a
  * park, the survey wins.
+ *
+ * Over the limit, trees are thinned evenly by a rank fixed to each cell, never
+ * by stopping part-way: stopping at the limit while walking the grid west to
+ * east planted a solid block up to a straight edge and left the rest bare.
  */
 export function scatterTrees(
   areas: ScatterArea[],
@@ -135,11 +139,13 @@ export function scatterTrees(
    *  routinely runs straight across the lake in the middle of it. */
   exclude: Ring[] = [],
 ): Tree[] {
-  const out: Tree[] = [];
+  const out: Array<Tree & { rank: number }> = [];
   const mPerDegLat = 111_320;
+  /** A backstop on the work, far above any limit the map asks for. */
+  const ceiling = Math.max(limit * 8, 20_000);
 
   for (const area of areas) {
-    if (out.length >= limit) break;
+    if (out.length >= ceiling) break;
     const ring = area.ring;
     if (!ring || ring.length < 4) continue;
     let w = Infinity;
@@ -173,8 +179,8 @@ export function scatterTrees(
     const cellLat = spacing / mPerDegLat;
     const keep = area.kind === 'wood' ? 0.85 : 0.55;
     const salt = area.kind === 'wood' ? 7 : 3;
-    for (let i = Math.floor(w / cellLon); i * cellLon < e && out.length < limit; i++) {
-      for (let j = Math.floor(s / cellLat); j * cellLat < n && out.length < limit; j++) {
+    for (let i = Math.floor(w / cellLon); i * cellLon < e && out.length < ceiling; i++) {
+      for (let j = Math.floor(s / cellLat); j * cellLat < n && out.length < ceiling; j++) {
         if (hash(i, j, salt) > keep) continue;
         const lon = (i + 0.15 + 0.7 * hash(i, j, salt + 1)) * cellLon;
         const lat = (j + 0.15 + 0.7 * hash(i, j, salt + 2)) * cellLat;
@@ -186,11 +192,18 @@ export function scatterTrees(
         const heightM = area.kind === 'wood' ? 12 + size * 10 : 8 + size * 9;
         const crownM = Math.max(3.5, heightM * (0.5 + 0.2 * hash(i, j, salt + 4)));
         if (inside.some((t) => distance(here, t) < (crownM + t.crownM) / 2)) continue;
-        out.push({ lon, lat, heightM, crownM, estimated: true, heightKnown: false });
+        out.push({ lon, lat, heightM, crownM, estimated: true, heightKnown: false, rank: hash(i, j, salt + 5) });
       }
     }
   }
-  return out;
+  if (out.length > limit) {
+    // Keep the lowest-ranked `limit`, then restore grid order so output stays
+    // deterministic for callers that dedupe or compare.
+    const cut = out.map((t) => t.rank).sort((a, b) => a - b)[limit - 1];
+    let kept = 0;
+    return out.filter((t) => t.rank <= cut && kept++ < limit).map(({ rank: _rank, ...tree }) => tree);
+  }
+  return out.map(({ rank: _rank, ...tree }) => tree);
 }
 
 /**

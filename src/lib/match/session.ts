@@ -5,6 +5,7 @@ import { analysePhoto, analysePhotoDetailed } from './analyze';
 import { analysisOutliers } from './group';
 import { writePreviewAssets, writeReferencePreview, type PreviewAssets } from './preview';
 import { mergeReferences, solveMatch, type MatchSolution } from './solve';
+import { activeCalibration, calibrationFingerprint, readApproved } from './roundtrip-store';
 import { MATCH_CACHE_DIR, MATCH_KEPT_DIR } from '../paths';
 import type { BaselineMode, PhotoAnalysis, RegionKey } from './types';
 
@@ -55,6 +56,10 @@ export interface MatchRecord {
    *  the rest of the group — see `analysisOutliers`. Always empty below
    *  three references, which is a refusal to guess, not a clean bill. */
   outlierIds: string[];
+  /** Calibration constants that were measured (approved from round trips)
+   *  rather than estimated when this match was solved. Empty for every match
+   *  solved before any were approved — the badge reads "estimated" then. */
+  calibrated: string[];
 }
 
 const records = new Map<string, MatchRecord>();
@@ -70,9 +75,13 @@ export const matchId = (
   refs: { hash: string; weight: number }[],
   myHash: string,
   baseline: BaselineMode,
+  /** calibrationFingerprint(): empty until a calibration is approved, so ids
+   *  from before round trips existed are unchanged. */
+  calibration = '',
 ): string => {
   const refPart = refs.map((r) => `${r.hash}@${r.weight}`).sort().join(',');
-  return createHash('sha256').update(`${refPart}:${myHash}:${baseline}`).digest('hex').slice(0, 16);
+  const calPart = calibration ? `:cal=${calibration}` : '';
+  return createHash('sha256').update(`${refPart}:${myHash}:${baseline}${calPart}`).digest('hex').slice(0, 16);
 };
 
 export function getMatch(id: string): MatchRecord | undefined {
@@ -143,6 +152,7 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
     input.references.map((r, i) => ({ hash: refHashes[i], weight: r.weight })),
     myHash,
     input.baseline,
+    await calibrationFingerprint(),
   );
 
   const existing = records.get(id);
@@ -182,7 +192,9 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
   const detailed = await analysePhotoDetailed(input.myBuf, input.myName, { baseline: input.baseline });
   try {
     onStage('solve');
-    const solution = solveMatch(reference, detailed.analysis);
+    // Approved round-trip calibration, when there is any — see roundtrip.ts.
+    const solution = solveMatch(reference, detailed.analysis, { calibration: await activeCalibration() });
+    const calibrated = Object.keys((await readApproved()).values);
 
     // Only regions the solver actually adjusted are worth packing into the
     // preview texture.
@@ -212,6 +224,7 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
       referenceCount: input.references.length,
       referenceIds: refHashes,
       outlierIds,
+      calibrated,
     };
     records.set(id, record);
     await evictOldUnkept();
@@ -244,6 +257,7 @@ export async function keepMatch(id: string): Promise<MatchRecord | undefined> {
         referenceCount: record.referenceCount,
         referenceIds: record.referenceIds,
         outlierIds: record.outlierIds,
+        calibrated: record.calibrated,
       },
       null,
       2,
@@ -290,6 +304,7 @@ export async function loadKeptMatches(): Promise<void> {
         referenceCount: 1,
         referenceIds: [],
         outlierIds: [],
+        calibrated: [],
         ...data,
         kept: true,
       } as MatchRecord);

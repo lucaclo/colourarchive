@@ -18,6 +18,10 @@ export const INSPIRATION_DIR = path.join(ROOT, 'inspiration');
 export const INSPIRATION_STORE = path.join(ROOT, 'src', 'data', 'inspiration.json');
 export const INSPIRATION_MANIFEST = path.join(ROOT, 'src', 'data', 'inspiration.manifest.json');
 export const OVERRIDES_PATH = path.join(ROOT, 'photos.overrides.json');
+// Where each photograph was taken, placed by hand in Scout. Deliberately NOT
+// in OVERRIDES_PATH and git-ignored: the repository is public, and a push
+// must never publish where someone shoots. See `scout/mine.ts`.
+export const LOCATIONS_PATH = path.join(ROOT, 'photos.locations.json');
 export const EXPORT_PATH = path.join(ROOT, 'sequence.json');
 // The book's own curation — issue #82. Deliberately separate from
 // OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
@@ -49,6 +53,10 @@ export const MATCH_KEPT_DIR = path.join(ROOT, 'src', 'data', 'match');
 // isn't a kept match's id, and a subfolder here would look exactly like one
 // of those to it.
 export const MATCH_ANALYSIS_CACHE_DIR = path.join(ROOT, '.match-analysis-cache');
+// Round trips (an applied preset's export, measured back) and the calibration
+// fitted from them. Git-ignored like the rest: it describes one person's
+// Lightroom, and the snapshots inside hold full measurements of their photos.
+export const MATCH_CALIBRATION_DIR = path.join(ROOT, '.match-calibration');
 
 // Scout. Geocoding answers are cached to disk and never expire on their own:
 // places do not move, Nominatim asks to be used sparingly, and a scouted area

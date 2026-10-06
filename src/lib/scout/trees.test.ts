@@ -120,8 +120,18 @@ describe('scatterTrees', () => {
     assert.ok(trees.every((t) => !pointInRing(lake, t.lon, t.lat)));
   });
 
-  it('stops at the limit', () => {
-    assert.equal(scatterTrees([{ ring: PARK, kind: 'wood' }], BOX, [], 25).length, 25);
+  it('thins evenly to the limit rather than filling one side', () => {
+    const all = scatterTrees([{ ring: PARK, kind: 'wood' }], BOX, []);
+    const some = scatterTrees([{ ring: PARK, kind: 'wood' }], BOX, [], 25);
+    assert.equal(some.length, 25);
+    // Stopping part-way through a west-to-east walk kept only the western
+    // edge. Even thinning spreads the kept trees across the whole width.
+    const lons = all.map((t) => t.lon);
+    const mid = (Math.min(...lons) + Math.max(...lons)) / 2;
+    const east = some.filter((t) => t.lon > mid).length;
+    assert.ok(east > 5 && east < 20, `east half kept ${east} of 25`);
+    // And the same 25 every time.
+    assert.deepEqual(scatterTrees([{ ring: PARK, kind: 'wood' }], BOX, [], 25), some);
   });
 });
 

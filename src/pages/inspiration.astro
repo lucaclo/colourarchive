@@ -41,15 +41,15 @@ const genreGroups: GroupBucket[] = (() => {
   }
   const ordered = GENRES.filter((g) => byGenre.has(g)).map((g) => ({ label: GENRE_LABEL[g], ids: byGenre.get(g)! }));
   const rest = byGenre.get('unclassified');
-  return rest ? [...ordered, { label: 'Unclassified', ids: rest }] : ordered;
+  return rest ? [...ordered, { label: 'No genre yet', ids: rest }] : ordered;
 })();
 
 const clusterGroups: GroupBucket[] = await (async () => {
   const clustered = clusterByEmbedding(await readInspStore());
   const inACluster = new Set(clustered.flatMap((g) => g.map((p) => p.id)));
-  const groups = clustered.map((g, i) => ({ label: `Similar — group ${i + 1}`, ids: g.map((p) => p.id) }));
+  const groups = clustered.map((g, i) => ({ label: `Group ${i + 1}`, ids: g.map((p) => p.id) }));
   const leftOver = manifest.chapters.flatMap((ch) => ch.photos.map((p) => p.id)).filter((id) => !inACluster.has(id));
-  return leftOver.length ? [...groups, { label: 'Not clustered', ids: leftOver }] : groups;
+  return leftOver.length ? [...groups, { label: 'On their own', ids: leftOver }] : groups;
 })();
 
 // Arriving from the archive lightbox's "Match this look" (index.astro,
@@ -79,24 +79,22 @@ const accent = manifest.chapters[0]
 
   <main class="insp">
     <header class="insp-head">
-      <p class="cover-kicker page-kicker">Inspiration</p>
       <h1>Reference</h1>
-      <p class="insp-lead">What catches the eye.</p>
     </header>
 
     <section class="insp-add">
       <form id="form">
         <input id="file" type="file" accept="image/*" multiple hidden />
         <div class="drop" id="zone" tabindex="0" role="button" aria-label="Drop images or browse">
-          <p class="drop-title">Drop images, or <span class="link">browse</span></p>
+          <p class="drop-title">Drop pictures here, or <span class="link">choose some</span></p>
           <p class="drop-sub">JPEG · PNG · WebP · AVIF · HEIC · GIF</p>
         </div>
       </form>
       <div class="urlrow">
-        <input id="source" type="text" placeholder="Source / credit — name or @handle (applies to what you add)" />
+        <input id="source" type="text" placeholder="Whose is it? Name or @handle" />
         <span class="or">or</span>
-        <input id="url" type="url" placeholder="Paste an image URL" />
-        <button id="addurl" type="button">Add URL</button>
+        <input id="url" type="url" placeholder="Paste a link to the image" />
+        <button id="addurl" type="button">Add</button>
       </div>
       <div id="status" class="status" hidden><div class="bar"><div class="bar-fill" id="bar"></div></div><p id="status-text"></p></div>
       <ul id="results" class="results"></ul>
@@ -111,8 +109,7 @@ const accent = manifest.chapters[0]
          finds at least one, so an archive with none yet shows nothing. -->
     <section class="kept" id="kept" hidden>
       <header class="kept-head">
-        <p class="kept-kicker">Style Match</p>
-        <h2 class="kept-title">Kept</h2>
+        <h2 class="kept-kicker">Matches I kept</h2>
         <p class="kept-sub" id="kept-sub"></p>
       </header>
       <ul class="kept-strip" id="kept-strip"></ul>
@@ -163,8 +160,8 @@ const accent = manifest.chapters[0]
                             alt={p.source ? `Reference — ${p.source}` : 'Reference image'}
                           />
                           <button class="cell-remove" type="button" data-remove={p.id} aria-label="Remove">×</button>
-                          <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">≈ similar</button>
-                          <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">◐ match</button>
+                          <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">Similar</button>
+                          <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">Match</button>
                           <button class="cell-group" type="button" data-group={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-pressed="false" aria-label="Add to a group of similarly-edited references">+ group</button>
                           {p.source && <figcaption class="src">{p.source}</figcaption>}
                         </figure>
@@ -193,7 +190,7 @@ const accent = manifest.chapters[0]
           </div>
         </>
       ) : (
-        <p class="insp-empty">Nothing yet.</p>
+        <p class="insp-empty">Nothing pinned up yet.</p>
       )
     }
   </main>
@@ -206,8 +203,8 @@ const accent = manifest.chapters[0]
   <div class="group-tray" id="group-tray" hidden role="status">
     <span class="group-tray-count" id="group-tray-count"></span>
     <button class="group-tray-clear" id="group-tray-clear" type="button">Clear</button>
-    <button class="group-tray-find" id="group-tray-find" type="button">Find similar</button>
-    <button class="group-tray-find" id="group-tray-match" type="button">Match this look</button>
+    <button class="group-tray-find" id="group-tray-find" type="button">Find mine like these</button>
+    <button class="group-tray-find" id="group-tray-match" type="button">Match the look</button>
   </div>
 
   <!-- Split view: reference(s) pinned left, ranked archive matches right. A
@@ -227,7 +224,7 @@ const accent = manifest.chapters[0]
           <input type="range" id="sim-w" min="0" max="100" value="60" aria-label="Colour to composition" />
           <span>Composition</span>
         </div>
-        <p class="sim-hint" id="sim-hint">Your closest photographs, ranked.</p>
+        <p class="sim-hint" id="sim-hint"></p>
       </div>
     </div>
     <div class="sim-right" id="sim-right"></div>
@@ -238,8 +235,8 @@ const accent = manifest.chapters[0]
   <div class="mx" id="mx" hidden>
     <header class="mx-head">
       <div>
-        <p class="mx-kicker">Match this look</p>
-        <p class="mx-sub" id="mx-sub">Drop the photo you want to edit.</p>
+        <p class="mx-kicker">Match the look</p>
+        <p class="mx-sub" id="mx-sub"></p>
       </div>
       <button class="lb-close mx-close" id="mx-close" aria-label="Close">×</button>
     </header>
@@ -250,14 +247,14 @@ const accent = manifest.chapters[0]
           <ul class="mx-refs" id="mx-refs"></ul>
           <div class="mx-addref">
             <button type="button" class="mx-addref-toggle" id="mx-addref-toggle" aria-expanded="false">
-              + Match against another reference too
+              Add another reference
             </button>
             <ul class="mx-addref-strip" id="mx-addref-strip" hidden></ul>
           </div>
         </div>
         <div class="mx-startcol">
           <div class="drop mx-zone" id="mx-zone" tabindex="0" role="button" aria-label="Drop your photo or browse">
-            <p class="drop-title">Drop your photo, or <span class="link">browse</span></p>
+            <p class="drop-title">Drop your photo here, or <span class="link">choose it</span></p>
             <p class="drop-sub">RAW · JPEG · PNG · WebP · AVIF · HEIC</p>
           </div>
           <input id="mx-file" type="file" hidden />
@@ -270,11 +267,11 @@ const accent = manifest.chapters[0]
             </p>
           </div>
           <label class="mx-field">
-            <span>Starting point for RAW files</span>
+            <span>If it’s a RAW, start from</span>
             <select id="mx-baseline">
-              <option value="macos">Decode on this Mac — no extra steps, ~95% accurate</option>
-              <option value="export">A JPEG I exported from Lightroom with sliders reset — exact</option>
-              <option value="preview">The camera preview inside the RAW — fastest, least accurate</option>
+              <option value="macos">The Mac’s own decode (easy, about 95% right)</option>
+              <option value="export">A JPEG I exported with every slider at zero (exact)</option>
+              <option value="preview">The camera’s embedded preview (quickest, roughest)</option>
             </select>
           </label>
           <p class="mx-note" id="mx-status" aria-live="polite"></p>
@@ -322,10 +319,10 @@ const accent = manifest.chapters[0]
             </div>
             <p class="mx-strengthlabel" id="mx-strengthlabel"></p>
             <button type="button" class="mx-groupreveal" id="mx-groupreveal" aria-expanded="false">
-              Light / Colour / Effects separately ›
+              Separate sliders ›
             </button>
             <label class="mx-check">
-              <input type="checkbox" id="mx-wipe" /><span>Wipe against your original</span>
+              <input type="checkbox" id="mx-wipe" /><span>Compare with the original</span>
             </label>
           </div>
 
@@ -364,6 +361,7 @@ const accent = manifest.chapters[0]
           <button type="button" role="tab" data-tab="notes">
             Notes<span class="count" id="mx-notecount"></span>
           </button>
+          <button type="button" role="tab" data-tab="check" id="mx-tab-check">Check</button>
         </nav>
 
         <div class="mx-scroll" id="mx-scroll">
@@ -373,6 +371,7 @@ const accent = manifest.chapters[0]
           <div class="mx-panel" data-panel="details" id="mx-details" hidden></div>
           <div class="mx-panel" data-panel="measured" id="mx-evidence" hidden></div>
           <div class="mx-panel" data-panel="notes" id="mx-notes" hidden></div>
+          <div class="mx-panel" data-panel="check" id="mx-rt" hidden></div>
         </div>
 
         <!-- Always reachable, so the primary action never scrolls away. -->
@@ -400,7 +399,7 @@ const accent = manifest.chapters[0]
     <div class="curve-lb-body">
       <div id="curve-lb-svg"></div>
       <div class="curve-lb-points">
-        <p class="curve-lb-hint">Input → output, on Lightroom's own 0–255 curve axes. Place each point at the same position in the Tone Curve panel.</p>
+        <p class="curve-lb-hint">Input → output, 0–255</p>
         <div id="curve-lb-list"></div>
       </div>
     </div>
@@ -409,7 +408,7 @@ const accent = manifest.chapters[0]
 
 <style>
   .insp { max-width: 68rem; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) var(--edge) calc(var(--tabbar-space) + 5rem); }
-  .insp-head h1 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2.2rem, 6vw, 4rem); margin: 0.3rem 0 0.6rem; line-height: 1; }
+  .insp-head h1 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2.2rem, 6vw, 4rem); margin: 0.3rem 0 2.2rem; line-height: 1; }
   .insp-lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 40rem; }
 
   .insp-add { margin-bottom: 3.5rem; }
@@ -800,7 +799,7 @@ const accent = manifest.chapters[0]
      so every togglable block here needs its own [hidden] guard. */
   .mx-start[hidden], .mx-result[hidden] { display: none; }
   /* min-width:0 throughout: the baseline <select> is intrinsically as wide as
-     its longest option ("Decode on this Mac — no extra steps, ~95% accurate"),
+     its longest option ("The Mac’s own decode (easy, about 95% right)"),
      and as a flex/grid child with the default min-width:auto it dragged the
      whole start screen out to 522px inside a 390px phone. */
   .mx-start { display: grid; grid-template-columns: minmax(0, 34%) minmax(0, 1fr); gap: 2rem; align-items: start; padding: var(--edge); width: 100%; min-width: 0; overflow: auto; }
@@ -951,6 +950,69 @@ const accent = manifest.chapters[0]
   .mx-tabs button.on::after { background: var(--fg); }
   .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.6875rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
   .mx-tabs .count:empty { display: none; }
+
+  /* --- Round trip (Check tab) — built at runtime, hence :global --------- */
+  #mx-rt { margin-top: 1.4rem; }
+  :global(.mx-rt-form) { display: grid; gap: 0.9rem; max-width: 40rem; margin-bottom: 1.4rem; }
+  :global(.mx-rt-field) { display: grid; gap: 0.35rem; font-size: var(--t-footnote); color: var(--muted); }
+  :global(.mx-rt-field select) {
+    font: inherit; font-size: 16px; color: var(--fg); background: var(--fill); border: 1px solid var(--separator);
+    border-radius: var(--r-md, 10px); min-height: 2.6rem; padding: 0 0.7rem;
+  }
+  :global(.mx-rt-applied) { border: 0; margin: 0; padding: 0; display: grid; gap: 0.4rem; font-size: var(--t-footnote); }
+  :global(.mx-rt-applied legend) { color: var(--muted); margin-bottom: 0.3rem; padding: 0; }
+  :global(.mx-rt-applied label) { display: flex; gap: 0.55rem; align-items: center; min-height: 2rem; cursor: pointer; }
+  :global(.mx-rt-drop) {
+    border: 1.5px dashed var(--glass-edge); border-radius: var(--r-lg); padding: 1.8rem 1rem; text-align: center;
+    cursor: pointer; font-size: var(--t-body, 0.95rem); color: var(--fg); background: var(--surface-1);
+    transition: border-color 160ms, background 160ms;
+  }
+  :global(.mx-rt-drop:hover), :global(.mx-rt-drop:focus-visible), :global(.mx-rt-drop.over) { border-color: var(--accent-mix); outline: none; }
+  :global(.mx-rt-drop.busy) { cursor: progress; color: var(--muted); }
+  :global(.mx-rt-drop .link) { text-decoration: underline; text-underline-offset: 3px; }
+  :global(.mx-rt-empty), :global(.mx-rt-error) { font-size: var(--t-footnote); color: var(--muted); max-width: 40rem; }
+  :global(.mx-rt-error) { color: #e0603a; }
+  :global(.mx-rt-result) { border-top: 1px solid var(--accent-hair); padding-top: 1.2rem; margin-bottom: 1.8rem; max-width: 46rem; }
+  :global(.mx-rt-overall) { margin: 0 0 0.9rem; font-size: var(--t-footnote); color: var(--muted); display: flex; align-items: baseline; gap: 0.6rem; }
+  :global(.mx-rt-overall .fig) { font-family: var(--font-label); font-variant-numeric: tabular-nums; font-size: 1.9rem; color: var(--fg); line-height: 1; }
+  :global(.mx-rt-overall .unit) { font-size: 1rem; color: var(--muted); }
+  :global(.mx-rt-rows) { list-style: none; margin: 0 0 1.2rem; padding: 0; display: grid; gap: 0.5rem; }
+  :global(.mx-rt-rows li) { display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.8rem; align-items: center; font-size: var(--t-footnote); line-height: 1.45; }
+  :global(.mx-rt-bar) { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+  :global(.mx-rt-bar span) { display: block; height: 100%; background: var(--fg); border-radius: 3px; }
+  :global(.mx-rt-bar.away) { background: color-mix(in oklab, #e0603a 45%, transparent); }
+  :global(.mx-rt-bar.none) { background: repeating-linear-gradient(90deg, var(--fill) 0 4px, transparent 4px 7px); }
+  :global(.mx-rt-follow) { display: grid; gap: 0.5rem; margin: 0 0 1.2rem; }
+  :global(.mx-rt-follow button), :global(.mx-rt-caltable button) {
+    justify-self: start; appearance: none; cursor: pointer; font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
+    border: 1px solid var(--separator); border-radius: 999px; background: var(--fg); color: var(--bg); min-height: 2.4rem; padding: 0 1.1rem;
+  }
+  :global(.mx-rt-caltable button) { min-height: 2rem; padding: 0 0.8rem; }
+  :global(.mx-rt-caltable button.ghost) { background: transparent; color: var(--fg); margin-left: 0.3rem; }
+  :global(.mx-rt-follow p) { margin: 0; font-size: var(--t-footnote); color: var(--muted); max-width: 40rem; }
+  :global(.mx-rt-moves) { border-collapse: collapse; font-size: var(--t-footnote); margin-bottom: 1.2rem; }
+  :global(.mx-rt-moves td) { padding: 0.3rem 1rem 0.3rem 0; border-bottom: 1px solid var(--border); }
+  :global(.mx-rt-moves td:first-child) { color: var(--muted); }
+  :global(.mx-rt-moves td:last-child) { font-family: var(--font-label); font-variant-numeric: tabular-nums; }
+  :global(.mx-rt-ok) { font-size: var(--t-footnote); color: var(--fg); margin: 0; }
+  :global(.mx-rt-no) { font-size: var(--t-footnote); color: var(--muted); }
+  :global(.mx-rt-no p) { margin: 0 0 0.3rem; }
+  :global(.mx-rt-no ul) { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
+  :global(.mx-rt-h) { font-family: var(--font-ui); font-size: var(--t-caption); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 1.6rem 0 0.5rem; }
+  :global(.mx-rt-tablewrap) { overflow-x: auto; }
+  :global(.mx-rt-caltable) { border-collapse: collapse; font-size: var(--t-footnote); min-width: 40rem; }
+  :global(.mx-rt-caltable th), :global(.mx-rt-caltable td) { text-align: left; padding: 0.45rem 0.9rem 0.45rem 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  :global(.mx-rt-caltable thead th) { color: var(--muted); font-weight: 500; }
+  :global(.mx-rt-caltable td:nth-child(2)), :global(.mx-rt-caltable td:nth-child(3)) { font-family: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  :global(.mx-rt-caltable .why) { color: var(--muted); max-width: 22rem; }
+  :global(.mx-rt-caltable .act) { white-space: nowrap; }
+  :global(.mx-rt-caltable .tag) { font-family: var(--font-ui); font-size: 0.6875rem; padding: 0.05rem 0.4rem; border-radius: 999px; background: color-mix(in oklab, var(--fg) 14%, transparent); }
+  :global(.mx-rt-caltable .tag.est) { background: transparent; color: var(--muted); }
+  :global(.mx-rt-caltable tr.st-implausible .why), :global(.mx-rt-caltable tr.st-confounded .why) { color: #e0a63a; }
+  :global(.mx-rt-never) { margin-top: 0.9rem; font-size: var(--t-footnote); color: var(--muted); }
+  :global(.mx-rt-never summary) { cursor: pointer; min-height: 2rem; }
+  :global(.mx-rt-never ul) { padding-left: 1.1rem; display: grid; gap: 0.3rem; }
+  :global(.mx-rt-history) { list-style: none; padding: 0; margin: 0; font-size: var(--t-footnote); color: var(--muted); display: grid; gap: 0.25rem; }
 
   /* --- Report ------------------------------------------------------------- */
   .mx-scroll { flex: 1 1 auto; overflow: auto; padding: 1.4rem var(--edge) 2.5rem; }
@@ -1280,6 +1342,174 @@ const accent = manifest.chapters[0]
     :global(.sim-grid) { columns: 2; column-gap: 5px; }
     :global(.sim-cell) { margin-bottom: 5px; }
   }
+
+  /* ── Notebook pass ──────────────────────────────────────────────────────
+     Later in the cascade on purpose, so it reads as one layer over the rules
+     above. Labels become sentence-case Fraunces italic instead of
+     tracked capitals, boxed cards become hairline rules, glass pills on photos
+     become plain tags, and value rows get a dotted leader. Controls keep the
+     UI face and data keeps the mono. Only the words that name things change. */
+  .insp-head .page-kicker {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-note);
+    letter-spacing: 0; text-transform: none; color: var(--secondary); gap: 0.7rem;
+  }
+  .insp-lead { font-family: var(--font-note); font-style: italic; font-size: 1.1rem; color: var(--secondary); max-width: 34rem; }
+
+  .drop {
+    border: 1px solid var(--separator); border-radius: 2px;
+    background: transparent;
+    background-image: var(--cropmarks-image); background-size: var(--cropmarks-size);
+    background-position: var(--cropmarks-pos); background-repeat: no-repeat;
+  }
+  .drop:hover, .drop:focus-visible, .drop.over {
+    border-color: var(--rule); --mark: var(--fg);
+    background-color: color-mix(in oklab, var(--fg) 3%, transparent);
+  }
+  .drop-sub { font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); }
+
+  .urlrow { gap: 0.4rem 1.2rem; align-items: end; }
+  .urlrow input {
+    background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding: 0 0.1rem;
+  }
+  .urlrow input:focus-visible { border-bottom-color: var(--fg); }
+  .urlrow .or { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); align-self: center; }
+  .urlrow button { border-radius: 2px; }
+  .results :global(.ch) { font-family: var(--font-note); font-style: italic; text-transform: none; letter-spacing: 0; font-size: var(--t-footnote); }
+
+  .insp-groupby {
+    background: none; border: 0; border-radius: 0; padding: 0; gap: 0; align-items: baseline;
+    margin-bottom: 2rem;
+  }
+  .insp-groupby button {
+    border-radius: 0; padding: 0 0.15rem; min-height: var(--hit); color: var(--muted);
+    font-size: var(--t-body);
+    text-decoration: underline transparent; text-underline-offset: 6px; text-decoration-thickness: 1px;
+    transition: color 140ms var(--ease), text-decoration-color 140ms var(--ease);
+  }
+  .insp-groupby button + button::before {
+    content: '/'; color: var(--separator); margin: 0 0.7rem 0 0.55rem; text-decoration: none; display: inline-block;
+  }
+  .insp-groupby button:hover { background: none; color: var(--fg); }
+  .insp-groupby button.on { background: none; color: var(--fg); text-decoration-color: currentColor; }
+
+  .insp-chtitle {
+    font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: 1.2rem;
+    letter-spacing: 0; text-transform: none; color: var(--fg); gap: 0.7rem;
+    align-items: baseline;
+  }
+  .insp-chtitle .sw { align-self: center; width: 0.7rem; height: 0.7rem; }
+  .insp-chtitle .n { font-family: var(--font-label); font-style: normal; font-size: var(--t-caption); color: var(--muted); }
+  .insp-chtitle::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--separator); align-self: center; }
+
+  /* On-photo tags: a small square label, no frosted capsule. */
+  .cell-similar, .cell-match {
+    border-radius: 2px; letter-spacing: 0; text-transform: none;
+    font-family: var(--font-ui); font-size: var(--t-caption); font-weight: 500;
+    padding: 0.3rem 0.55rem; background: color-mix(in oklab, #0b0a09 84%, transparent);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .cell-match { top: 38px; }
+  .cell-similar:hover, .cell-match:hover { background: var(--fg); color: var(--bg); }
+  .insp-frame .src { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
+  @media (hover: none), (pointer: coarse) { .cell-match { top: auto; } }
+
+  .kept-kicker, .already-kicker, .mx-kicker {
+    font-family: var(--font-note); font-style: italic; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--fg); font-size: 1.15rem;
+  }
+  .kept-title { font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); }
+  .mx-kicker { font-size: 1.35rem; }
+  .already-head, .kept-head { align-items: baseline; }
+  .mx-sub { color: var(--secondary); margin-top: 0.15rem; }
+  :global(.already-dist) { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
+  :global(.kept-name) { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
+  :global(.kept-card img), :global(.mx-ref img) { border-radius: 0; }
+
+  .sim-count, .sim-slider {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-note);
+    letter-spacing: 0; text-transform: none;
+  }
+  .sim-hint { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
+  :global(.sim-cell .pct) {
+    border-radius: 2px; -webkit-backdrop-filter: none; backdrop-filter: none;
+    background: color-mix(in oklab, #0b0a09 84%, transparent); letter-spacing: 0;
+  }
+
+  :global(.mx-ref .mx-ref-weight) {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote);
+    letter-spacing: 0; text-transform: none;
+  }
+  .mx-addref-toggle {
+    border: 0; border-bottom: 1px solid var(--separator); border-radius: 0; padding: 0.6rem 0;
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--secondary);
+  }
+  .mx-addref-toggle:hover { border-color: var(--fg); }
+  .mx-field > span { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--secondary); }
+  .mx-field select { border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding-left: 0; }
+  .mx-stop {
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
+    letter-spacing: 0; text-transform: none; border-bottom-color: var(--separator);
+  }
+  .mx-workline #mx-workstage { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); }
+
+  /* Caption written on the print, not stuck on in a capsule. */
+  .mx-fig figcaption {
+    left: 12px; bottom: 10px; padding: 0; border-radius: 0; background: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote);
+    letter-spacing: 0; text-transform: none;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.45);
+  }
+  .mx-end { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
+  .mx-groupreveal, :global(.mx-globaltoggle) {
+    border: 0; border-bottom: 1px solid var(--separator); border-radius: 0; padding: 0.3rem 0;
+    font-size: var(--t-caption);
+  }
+  .mx-grouplabel { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
+  .mx-check { font-size: var(--t-footnote); }
+
+  .mx-h, :global(.mx-rt-h) {
+    font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: 1.15rem;
+    letter-spacing: 0; text-transform: none; color: var(--fg);
+  }
+  :global(.mx-stats) { gap: 2.2rem; }
+  :global(.mx-stat .mx-stat-label) {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote);
+    letter-spacing: 0; text-transform: none;
+  }
+
+  /* Groups: a ruled section heading, not a card. */
+  :global(.mx-group) {
+    border: 0; border-top: 1px solid var(--rule); border-radius: 0; background: none;
+    padding: 0.7rem 0 0.9rem; margin-bottom: 0.4rem;
+  }
+  :global(.mx-grouphead) {
+    font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: 1.1rem;
+    letter-spacing: 0; text-transform: none; margin-bottom: 0.35rem;
+  }
+  :global(.mx-grouphead .tag) { font-family: var(--font-ui); font-style: normal; font-size: var(--t-caption); letter-spacing: 0; }
+  /* A dotted leader carries the eye from the name to its number. */
+  :global(.mx-row) { align-items: baseline; gap: 0.5rem; }
+  :global(.mx-row + .mx-row) { border-top: 0; }
+  :global(.mx-row .k) { order: 0; flex: 0 1 auto; }
+  :global(.mx-row::after) {
+    content: ''; order: 1; flex: 1 1 1.5rem; min-width: 1.5rem;
+    border-bottom: 1px dotted var(--leader); transform: translateY(-0.28em);
+  }
+  :global(.mx-row .v) { order: 2; }
+
+  :global(.mx-mixer .hdr), :global(.mx-cw .nm), :global(.mx-bars .cap) {
+    font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: var(--t-footnote);
+    letter-spacing: 0; text-transform: none;
+  }
+  :global(.mx-curvebox svg), .curve-lb-body svg { border-radius: 0; }
+  :global(.mx-track), :global(.mx-track i) { border-radius: 0; }
+  :global(.mx-track) { height: 3px; }
+
+  /* Notes read as margin notes: a rule, a pencilled label, no tinted box. */
+  :global(.mx-noterow), :global(.mx-noterow.caution) { background: none; border-left-width: 1px; }
+  :global(.mx-noterow .panel) { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); padding-top: 0.1rem; }
+  :global(.mx-rt-caltable .tag) { border-radius: 2px; }
 </style>
 
 <script is:inline>
@@ -1608,9 +1838,9 @@ const accent = manifest.chapters[0]
       ? ` ${flagged} reference${flagged === 1 ? '' : 's'} ${flagged === 1 ? 'looks' : 'look'} like a different edit — see the ⚠ mark.`
       : '';
     const base = simGroupIds.length > 1
-      ? 'Your closest photographs, ranked against the group as a whole.'
-      : 'Your closest photographs. Drag to weigh colour against composition.';
-    return (d.ready ? base : 'Composition needs analysing — run  npm run reanalyze  once.') + warn;
+      ? ''
+      : '';
+    return (d.ready ? base : 'Composition hasn’t been analysed yet. Run  npm run reanalyze  once.') + warn;
   }
 
   async function findSimilarGroup(ids) {
@@ -1707,6 +1937,7 @@ const accent = manifest.chapters[0]
   import { buildPresetFiles } from '../lib/match/xmp';
   import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
   import { DEFAULT_CALIBRATION } from '../lib/match/calibration';
+  import { CAL_TARGETS } from '../lib/match/roundtrip';
   import type { Adjustments } from '../lib/match/adjustments';
   import type { PhotoAnalysis, RegionKey } from '../lib/match/types';
 
@@ -1777,7 +2008,7 @@ const accent = manifest.chapters[0]
     const open = groupBar.hidden;
     groupBar.hidden = !open;
     groupReveal.setAttribute('aria-expanded', String(open));
-    groupReveal.textContent = open ? 'Light / Colour / Effects separately ‹' : 'Light / Colour / Effects separately ›';
+    groupReveal.textContent = open ? 'Separate sliders ‹' : 'Separate sliders ›';
     if (open) syncGroupSliders();
   });
 
@@ -1887,8 +2118,8 @@ const accent = manifest.chapters[0]
     addRefToggle.hidden = candidates.length === 0 && refs.length <= 1;
     addRefToggle.disabled = candidates.length === 0;
     addRefToggle.textContent = candidates.length
-      ? '+ Match against another reference too'
-      : 'Every reference on this board is already in this match';
+      ? 'Add another reference'
+      : 'Every reference on the board is already in';
   }
 
   addRefToggle.addEventListener('click', () => {
@@ -1935,7 +2166,7 @@ const accent = manifest.chapters[0]
     statusEl.textContent = '';
     stopWorking();
     fileEl.value = '';        // so re-dropping the same file still fires `change`
-    subEl.textContent = 'Drop the photo you want to edit.';
+    subEl.textContent = '';
     panel.hidden = false;
     requestAnimationFrame(() => panel.classList.add('show'));
     void loadAlready(refs.map((r) => r.id));
@@ -2021,14 +2252,14 @@ const accent = manifest.chapters[0]
     const matches: any[] = data.matches ?? [];
     alreadyEl.hidden = false;
     if (!matches.length) {
-      $('already-sub').textContent = 'Nothing in the archive measures like this one.';
+      $('already-sub').textContent = 'Nothing in the archive is graded like this.';
       $('already-note').textContent =
-        `Compared against ${data.considered} of ${data.archiveSize} photographs. That is a statement about the numbers, not about the pictures.`;
+        `Checked ${data.considered} of ${data.archiveSize} photographs, by the numbers only.`;
       return;
     }
 
     $('already-sub').textContent =
-      matches.length === 1 ? 'One photograph measures like it' : `${matches.length} photographs measure like it`;
+      matches.length === 1 ? 'One of mine is graded like it' : `${matches.length} of mine are graded like it`;
 
     alreadyStrip.replaceChildren(
       ...matches.map((match) => {
@@ -2039,7 +2270,7 @@ const accent = manifest.chapters[0]
         item.innerHTML = `
           <a class="already-card" href="/#photo=${esc(match.id)}" target="_blank" rel="noopener" title="${esc(match.note)}">
             <img src="${esc(match.thumb ?? match.placeholder)}" alt="" onerror="this.onerror=null;this.src='${esc(match.placeholder)}'" />
-            <span class="already-dist">${match.distance <= 0.75 ? 'Same treatment' : 'Same territory'}</span>
+            <span class="already-dist">${match.distance <= 0.75 ? 'Same grade' : 'Near it'}</span>
             <span class="already-parts">${esc(match.partsText)}</span>
           </a>`;
         return item;
@@ -2048,9 +2279,9 @@ const accent = manifest.chapters[0]
 
     const short = data.considered < data.archiveSize;
     $('already-note').textContent = [
-      'Ranked on the grade only — tone curve, cast, saturation, contrast, split toning. Nothing here can see what the photograph is of.',
+      '',
       short
-        ? `Compared against ${data.considered} of ${data.archiveSize} photographs; the rest have no derivative to measure.`
+        ? `Only ${data.considered} of ${data.archiveSize} photographs have a file to measure, so the rest weren’t checked.`
         : '',
     ]
       .filter(Boolean)
@@ -2079,7 +2310,7 @@ const accent = manifest.chapters[0]
     keptEl.hidden = items.length === 0;
     if (!items.length) return;
 
-    $('kept-sub').textContent = items.length === 1 ? '1 comparison' : `${items.length} comparisons`;
+    $('kept-sub').textContent = items.length === 1 ? 'one so far' : `${items.length} so far`;
     // Every value below goes through `esc()` before it reaches the template —
     // same convention as `loadAlready`'s cards just above, which this mirrors.
     keptStrip.replaceChildren(
@@ -2089,7 +2320,7 @@ const accent = manifest.chapters[0]
         card.type = 'button';
         card.className = 'kept-card';
         card.dataset.open = it.id;
-        card.title = 'Reopen this comparison';
+        card.title = 'Open this match again';
         const img = document.createElement('img');
         img.src = it.previewUrl ?? it.referencePreviewUrl ?? '';
         img.alt = '';
@@ -2316,7 +2547,7 @@ const accent = manifest.chapters[0]
         stopWorking();
         // The Mac does not stop when the browser does — and that is worth
         // saying, because it means the retry is free rather than another wait.
-        statusEl.textContent = 'Stopped waiting. The Mac finishes the measurement anyway, so dropping the same photo again will be immediate.';
+        statusEl.textContent = 'Stopped waiting. The Mac keeps measuring in the background, so dropping the same photo again will be instant.';
         return;
       }
       if (reachedServer) {
@@ -2329,8 +2560,8 @@ const accent = manifest.chapters[0]
     // Offline path. Blending a weighted group of references works exactly as
     // it does server-side — see analyseLocally's own doc comment — so masks
     // are the only thing this path cannot do.
-    setStage('Measuring on this device — the Mac is not reachable');
-    statusEl.innerHTML = 'Masks are unavailable without the Mac — everything else still applies.';
+    setStage('Can’t reach the Mac, so measuring here');
+    statusEl.innerHTML = 'No masks without the Mac. Everything else still works.';
     try {
       current = { ...(await analyseLocally(file)), local: true };
       stopWorking();
@@ -2370,7 +2601,7 @@ const accent = manifest.chapters[0]
       // models. Nothing reports that, so a run that has clearly overshot says
       // why rather than looking hung.
       if (s === 45) {
-        statusEl.textContent = 'Taking longer than usual — if this is the first match since starting the app, the segmentation models are downloading too. That happens once.';
+        statusEl.textContent = 'Slower than usual. If this is the first match since the app started, it’s also downloading the segmentation models, which only happens once.';
       }
     }, 1000);
   }
@@ -2410,7 +2641,7 @@ const accent = manifest.chapters[0]
         }
       }
     }
-    return result ?? { ok: false, error: 'The measurement ended without a result.' };
+    return result ?? { ok: false, error: 'The measurement finished but came back empty.' };
   }
 
   /** Measure every reference and the photo here, with no server and no
@@ -2444,13 +2675,19 @@ const accent = manifest.chapters[0]
     subEl.textContent = `${data.myName} · matched to ${data.referenceName}`;
     refSide.src = data.references[0].previewUrl;
     refSideCaption.textContent =
-      data.references.length > 1 ? `The reference (+${data.references.length - 1} more, blended)` : 'The reference';
+      data.references.length > 1 ? `The reference, blended with ${data.references.length - 1} more` : 'The reference';
     startEl.hidden = true;
     resultEl.hidden = false;
 
     renderBadges(data);
     renderNotes(data.solution.notes);
     renderEvidence(data.reference, data.mine);
+    // The round trip measures on the Mac; a match solved on this device has
+    // nothing there to check against.
+    $('mx-tab-check').hidden = Boolean(data.local);
+    rt.result = null;
+    rt.error = '';
+    void loadRoundTrip();
     showTab('light');
     // Tabs were hidden (inside the just-revealed .mx-result) until now, so
     // this is the first point scrollWidth/clientWidth are measurable.
@@ -2466,7 +2703,7 @@ const accent = manifest.chapters[0]
       canvas.replaceWith(
         Object.assign(document.createElement('p'), {
           className: 'mx-note',
-          textContent: `Live preview unavailable (${(err as Error).message}). The values and preset below are unaffected.`,
+          textContent: `No live preview (${(err as Error).message}). The numbers and the preset are fine.`,
         }),
       );
       preview = null;
@@ -2483,8 +2720,8 @@ const accent = manifest.chapters[0]
     const base =
       t === 0 ? 'No change' :
       t < 0.5 ? `${Math.round(t * 200)}% of the restrained grade` :
-      t === 0.5 ? 'Restrained — adopts the reference’s character, protects skin' :
-      t === 1 ? 'Faithful — closes as much of the measured gap as the controls allow' :
+      t === 0.5 ? 'Restrained: the reference’s feel, skin left alone' :
+      t === 1 ? 'Faithful: as close as the sliders can get' :
       `${Math.round((t - 0.5) * 200)}% of the way from restrained to faithful`;
     const overridden = GROUP_KEYS.filter((g) => groupOverride[g] !== null);
     strengthLabel.textContent = overridden.length
@@ -2578,12 +2815,16 @@ const accent = manifest.chapters[0]
   function renderBadges(data: any) {
     const s = data.solution;
     const stats: Array<[string, number, boolean]> = [
-      ['Measurement confidence', Math.round(s.confidence * 100), s.confidence < 0.7],
-      ['Gap closable', Math.round(s.reachability * 100), s.reachability < 0.55],
+      ['sure of the measurements', Math.round(s.confidence * 100), s.confidence < 0.7],
+      ['of the gap can close', Math.round(s.reachability * 100), s.reachability < 0.55],
     ];
     const caveats: Array<[string, boolean]> = [
-      [`Your photo read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL]}`, data.mine.baseline === 'preview'],
-      ['Slider calibration: estimated', true],
+      [`Your photo was read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL].toLowerCase()}`, data.mine.baseline === 'preview'],
+      // Which constants were measured, as of when THIS match was solved — a
+      // kept report from before any were approved stays "estimated".
+      (data.calibrated || []).length
+        ? [`Slider calibration: ${data.calibrated.length} of ${CAL_TARGETS.length} measured from your round trips, the rest estimated`, false]
+        : ['Slider calibration is estimated for now', true],
     ];
     // Only known once the group's own references have actually been
     // analysed — the start screen (see `openWorkbench`) shows what's about
@@ -2598,7 +2839,7 @@ const accent = manifest.chapters[0]
         ]);
       }
     }
-    if (data.local) caveats.unshift(['Measured on this device — no masks', true]);
+    if (data.local) caveats.unshift(['Measured on this device, so no masks', true]);
     $('mx-badges').innerHTML =
       `<div class="mx-stats">${stats
         .map(
@@ -2610,7 +2851,7 @@ const accent = manifest.chapters[0]
     // Keeping a report writes it to the Mac, which is exactly what is missing.
     const keep = $<HTMLButtonElement>('mx-keep');
     keep.disabled = Boolean(data.local);
-    keep.textContent = data.local ? 'Keeping needs the Mac' : 'Keep this comparison';
+    keep.textContent = data.local ? 'Keeping needs the Mac' : 'Keep this match';
   }
 
   function renderNotes(notes: Array<{ severity: string; panel: string; text: string }>) {
@@ -2619,7 +2860,7 @@ const accent = manifest.chapters[0]
     // train you to ignore it.
     $('mx-notecount').textContent = cautions ? String(cautions) : '';
     $('mx-notes').innerHTML =
-      `<p class="mx-lede">Where the solver declined to act, or held something back, and why.</p>` +
+      ''+
       (notes.length
         ? notes
             .map(
@@ -2629,7 +2870,7 @@ const accent = manifest.chapters[0]
                  </div>`,
             )
             .join('')
-        : '<p class="mx-rowhint">Nothing was held back for this pair.</p>');
+        : '<p class="mx-rowhint">Nothing held back this time.</p>');
   }
 
   // ── Values ─────────────────────────────────────────────────────────────
@@ -2702,7 +2943,7 @@ const accent = manifest.chapters[0]
     // ── Light ────────────────────────────────────────────────────────────
     const flat = a.curve.every((p) => Math.abs(p.x - p.y) <= 1);
     $('mx-light').innerHTML =
-      `<p class="mx-lede">Exposure and the tone curve are the authoritative tone move — the preset carries only these two.</p>` +
+      ''+
       group(
         'Light',
         [
@@ -2712,12 +2953,12 @@ const accent = manifest.chapters[0]
            </div></div>`,
         ],
         undefined,
-        'authoritative',
+        'the real move',
       ) +
       group(
         'Basic sliders',
         [rowIf('Contrast', a.contrast), rowIf('Highlights', a.highlights), rowIf('Shadows', a.shadows), rowIf('Whites', a.whites), rowIf('Blacks', a.blacks)],
-        'A description of the curve above, for anyone who prefers sliders. Apply these OR the curve — never both.',
+        'Use these or the curve, not both.',
         'either / or',
       );
 
@@ -2788,7 +3029,7 @@ const accent = manifest.chapters[0]
          <div>${group(
            'White balance',
            [tempKelvinRowIf(a.temp), rowIf('Tint', a.tint)],
-           'Temp is an approximate Kelvin shift — add it to wherever your RAW’s own Temp slider currently sits; Tint stays relative on a RAW the same as here. The preset routes the actual move through Colour Grading either way, so it stays relative to your photo.',
+           'Temp is relative to your RAW’s current setting.',
            'either / or',
          )}</div>
        </div>` +
@@ -2815,9 +3056,9 @@ const accent = manifest.chapters[0]
       )
       .join('');
     $('mx-details').innerHTML =
-      (effects || '<p class="mx-rowhint">Nothing to change in Effects or Detail for this pair.</p>') +
+      (effects || '<p class="mx-rowhint">Nothing to change in Effects or Detail.</p>') +
       (masks
-        ? `<p class="mx-lede">Masks — Subject, Sky and Background regenerate themselves when the preset is imported. The rest you draw.</p><div class="mx-grid">${masks}</div>`
+        ? `<p class="mx-lede">Masks. Subject, Sky and Background rebuild themselves when you import the preset. You draw the rest.</p><div class="mx-grid">${masks}</div>`
         : '');
   }
 
@@ -2861,7 +3102,7 @@ const accent = manifest.chapters[0]
 
     const comparable = ref.texture.usable && mine.texture.usable;
     $('mx-evidence').innerHTML =
-      `<p class="mx-lede">How far your photo sits from the reference, region by region. Positive means yours has to increase to match.</p>` +
+      ''+
       group('Region by region', [`<div class="mx-ev">${rows.join('')}</div>`]) +
       group(
         'Texture',
@@ -2875,13 +3116,226 @@ const accent = manifest.chapters[0]
         comparable
           ? undefined
           : (!ref.texture.usable ? ref.texture.reason : mine.texture.reason) ??
-            'Measured at different pixel scales, so the two cannot be differenced honestly.',
+            'Measured at different sizes, so the two can’t be fairly compared.',
       ) +
       group('Vignette', [
         row('Reference', `${ref.vignette.falloffStops.toFixed(2)} stops · ${ref.vignette.usable ? 'usable' : 'scene content'}`),
         row('Yours', `${mine.vignette.falloffStops.toFixed(2)} stops · ${mine.vignette.usable ? 'usable' : 'scene content'}`),
-      ], ref.vignette.usable && mine.vignette.usable ? undefined : 'Corner darkness that is not symmetric around the frame is composition, not the lens, so it does not move the Vignetting slider.');
+      ], ref.vignette.usable && mine.vignette.usable ? undefined : 'The dark corners are lopsided, which comes from the scene rather than the lens, so the Vignetting slider stays put.');
   }
+
+  // ── Round trip: check the finished export ───────────────────────────────
+  // lib/match/roundtrip.ts holds what each answer may claim; this only draws
+  // them. Every piece of text that qualifies a number comes from the server.
+  const rtPanel = $('mx-rt');
+  const rt: {
+    downloads: any[]; history: any[]; calibration: any; result: any;
+    busy: boolean; error: string; appliedAs: 'unchanged' | 'changed'; downloadId: string;
+  } = { downloads: [], history: [], calibration: null, result: null, busy: false, error: '', appliedAs: 'unchanged', downloadId: '' };
+
+  const pctText = (v: number) => `${Math.round(v * 100)}`;
+  const whenText = (iso: string) => {
+    const d = new Date(iso);
+    const today = new Date().toDateString() === d.toDateString();
+    return today
+      ? `Today ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : d.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+  const downloadLabel = (d: any) => {
+    const s = d.strength;
+    const same = s.light === s.colour && s.colour === s.effects;
+    const strength = same ? `strength ${pctText(s.light)}` : `Light ${pctText(s.light)} · Colour ${pctText(s.colour)} · Effects ${pctText(s.effects)}`;
+    return `${whenText(d.at)} · ${strength} · ${d.variant === 'safe' || !d.hadMasks ? 'without masks' : 'with masks'}`;
+  };
+
+  async function loadRoundTrip() {
+    if (!current || current.local) return;
+    const id = current.id;
+    try {
+      const [a, b] = await Promise.all([
+        fetch(`/api/match/roundtrip?match=${encodeURIComponent(id)}`).then((r) => r.json()),
+        fetch('/api/match/calibration').then((r) => r.json()),
+      ]);
+      if (!current || current.id !== id) return; // another report opened meanwhile
+      rt.downloads = a.downloads || [];
+      rt.history = a.history || [];
+      rt.calibration = b.ok ? b : null;
+      if (!rt.downloads.some((d) => d.id === rt.downloadId)) rt.downloadId = rt.downloads[0]?.id || '';
+    } catch {
+      rt.error = 'Couldn’t reach the Mac to load earlier downloads.';
+    }
+    renderRoundTrip();
+  }
+
+  function renderRoundTrip() {
+    const intro =
+      `<p class="mx-lede">Drop your Lightroom export to check it.` +
+      `</p>`;
+    if (!rt.downloads.length) {
+      rtPanel.innerHTML = intro +
+        `<p class="mx-rt-empty">Download the preset first.</p>` +
+        renderCalibration();
+      return;
+    }
+    const options = rt.downloads
+      .map((d) => `<option value="${esc(d.id)}"${d.id === rt.downloadId ? ' selected' : ''}>${esc(downloadLabel(d))}</option>`)
+      .join('');
+    rtPanel.innerHTML = intro +
+      `<div class="mx-rt-form">
+        <label class="mx-rt-field"><span>Compare with the preset from</span>
+          <select id="mx-rt-dl">${options}</select></label>
+        <fieldset class="mx-rt-applied"><legend>After applying it, you…</legend>
+          <label><input type="radio" name="mx-rt-applied" value="unchanged"${rt.appliedAs === 'unchanged' ? ' checked' : ''}> left every slider as the preset set it</label>
+          <label><input type="radio" name="mx-rt-applied" value="changed"${rt.appliedAs === 'changed' ? ' checked' : ''}> changed something</label>
+        </fieldset>
+        <div class="mx-rt-drop${rt.busy ? ' busy' : ''}" id="mx-rt-drop" role="button" tabindex="0" aria-busy="${rt.busy}">
+          ${rt.busy ? 'Measuring your export…' : 'Drop the export here, or <span class="link">choose it</span>'}
+        </div>
+        <input type="file" id="mx-rt-file" accept="image/jpeg,image/png,image/tiff,image/webp,image/avif,image/heic" hidden />
+      </div>` +
+      (rt.error ? `<p class="mx-rt-error">${esc(rt.error)}</p>` : '') +
+      (rt.result ? renderRoundTripResult(rt.result) : '') +
+      renderCalibration() +
+      (rt.history.length
+        ? `<h3 class="mx-rt-h">Earlier checks of this match</h3><ul class="mx-rt-history">${rt.history
+            .map((h) => `<li>${esc(whenText(h.at))} · ${h.overall === null ? 'no gap to measure' : h.overall < 0 ? 'moved away from the reference overall' : `${pctText(h.overall)}% of the gap closed`} · ${h.eligible ? 'calibrated' : 'not used for calibration'}</li>`)
+            .join('')}</ul>`
+        : '');
+  }
+
+  function renderRoundTripResult(r: any) {
+    const c = r.comparison;
+    const bar = (closed: number | null) => {
+      if (closed === null) return '<span class="mx-rt-bar none"></span>';
+      const w = Math.max(0, Math.min(1, closed)) * 100;
+      return `<span class="mx-rt-bar${closed < 0 ? ' away' : ''}"><span style="width:${w.toFixed(0)}%"></span></span>`;
+    };
+    const rows = c.rows.map((row: any) => `<li>${bar(row.closed)}<span>${esc(row.text)}</span></li>`).join('');
+    const follow = r.followUp
+      ? `<div class="mx-rt-follow">
+          <button type="button" id="mx-rt-followdl">Download follow-up preset</button>
+          <p>Apply this <em>instead of</em> the first preset, not on top of it: a preset sets values rather than adding to them, so this one carries the first preset’s values plus the correction.</p>
+        </div>`
+      : r.moves && r.moves.length
+        ? `<h3 class="mx-rt-h">Moves to make by hand</h3>
+           <p class="mx-lede">You changed things after applying the preset, and a follow-up preset would undo them. So here are the moves to make from where you are now.</p>
+           <table class="mx-rt-moves">${r.moves.map((m: any) => `<tr><td>${esc(m.panel)}</td><td>${esc(m.control)}</td><td>${esc(m.delta)}</td></tr>`).join('')}</table>`
+        : `<p class="mx-lede">Nothing left worth moving by hand.</p>`;
+    const cal = r.roundTrip.eligible
+      ? `<p class="mx-rt-ok">Saved as a calibration point (${r.roundTrip.rowsAdded} measurements added).</p>`
+      : `<div class="mx-rt-no"><p>Not used for calibration:</p><ul>${r.roundTrip.reasons.map((t: string) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+    return `<section class="mx-rt-result">
+      <p class="mx-rt-overall">${c.overall === null
+        ? 'Nothing to close. Your photo already matched the reference.'
+        : c.overall < 0
+          ? 'Overall the edit ended up further from the reference than where you started. Each measurement is below.'
+          : `<span class="fig">${pctText(c.overall)}<span class="unit">%</span></span> of the measured gap closed`}</p>
+      <ul class="mx-rt-rows">${rows}</ul>
+      ${follow}
+      ${cal}
+    </section>`;
+  }
+
+  function renderCalibration() {
+    const c = rt.calibration;
+    if (!c) return '';
+    const fmtV = (v: number) => (Math.abs(v) >= 10 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toPrecision(2));
+    const rows = c.proposals.map((p: any) => {
+      const applied = p.key in (c.approved?.values || {});
+      const offer = p.status === 'fitted' && Math.abs(p.value - p.current) > 1e-9;
+      return `<tr class="st-${esc(p.status)}">
+        <th scope="row">${esc(p.label)}</th>
+        <td>${fmtV(p.current)}${applied ? ' <span class="tag">measured</span>' : ' <span class="tag est">estimate</span>'}</td>
+        <td>${p.value === undefined ? '—' : fmtV(p.value)}</td>
+        <td class="why">${esc(p.text)}</td>
+        <td class="act">${offer ? `<button type="button" data-cal-apply="${esc(p.key)}">Apply</button>` : ''}${applied ? `<button type="button" class="ghost" data-cal-reset="${esc(p.key)}">Use estimate</button>` : ''}</td>
+      </tr>`;
+    }).join('');
+    return `<section class="mx-rt-cal">
+      <h3 class="mx-rt-h">Slider calibration from your round trips</h3>
+      <p class="mx-lede">${c.eligibleRoundTrips} of ${c.totalRoundTrips} round trips could calibrate. A fit changes nothing until you apply it, and only new matches use it.</p>
+      <div class="mx-rt-tablewrap"><table class="mx-rt-caltable">
+        <thead><tr><th>Control</th><th>In use</th><th>Fitted</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <details class="mx-rt-never"><summary>Constants round trips can’t teach</summary>
+        <ul>${c.notFromRoundTrips.map((n: any) => `<li><code>${esc(n.key)}</code> — ${esc(n.why)}</li>`).join('')}</ul>
+      </details>
+    </section>`;
+  }
+
+  async function checkExport(file: File) {
+    if (!rt.downloadId || rt.busy) return;
+    rt.busy = true;
+    rt.error = '';
+    renderRoundTrip();
+    try {
+      const fd = new FormData();
+      fd.append('download', rt.downloadId);
+      fd.append('appliedAs', rt.appliedAs);
+      fd.append('photo', file);
+      const res = await fetch('/api/match/roundtrip', { method: 'POST', body: fd });
+      const d = await res.json();
+      if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      rt.result = d;
+      if (rt.calibration) rt.calibration = { ...rt.calibration, proposals: d.calibration.proposals, eligibleRoundTrips: d.calibration.eligibleRoundTrips, totalRoundTrips: d.calibration.totalRoundTrips };
+    } catch (err) {
+      rt.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      rt.busy = false;
+    }
+    await loadRoundTrip();
+  }
+
+  rtPanel.addEventListener('change', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (t.id === 'mx-rt-dl') { rt.downloadId = t.value; rt.result = null; renderRoundTrip(); }
+    else if (t.name === 'mx-rt-applied') rt.appliedAs = t.value === 'unchanged' ? 'unchanged' : 'changed';
+    else if (t.id === 'mx-rt-file' && t.files?.[0]) void checkExport(t.files[0]);
+  });
+  rtPanel.addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('#mx-rt-drop')) { ($('mx-rt-file') as HTMLInputElement | null)?.click(); return; }
+    if (t.closest('#mx-rt-followdl') && rt.result?.followUp) {
+      const f = rt.result.followUp;
+      const url = URL.createObjectURL(new Blob([f.contents], { type: 'application/rdf+xml' }));
+      saveAs(url, f.filename);
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      return;
+    }
+    const apply = t.closest<HTMLElement>('[data-cal-apply]')?.dataset.calApply;
+    const reset = t.closest<HTMLElement>('[data-cal-reset]')?.dataset.calReset;
+    if (!apply && !reset) return;
+    (t as HTMLButtonElement).disabled = true;
+    try {
+      const res = await fetch('/api/match/calibration', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(apply ? { apply: [apply] } : { reset: [reset] }),
+      });
+      const d = await res.json();
+      if (d.ok) rt.calibration = d;
+      if (d.refused?.length) rt.error = 'That fit changed since this table was drawn — look again before applying.';
+    } catch {
+      rt.error = 'Could not reach the Mac to change the calibration.';
+    }
+    renderRoundTrip();
+  });
+  rtPanel.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).id === 'mx-rt-drop') {
+      e.preventDefault();
+      ($('mx-rt-file') as HTMLInputElement | null)?.click();
+    }
+  });
+  ['dragenter', 'dragover'].forEach((ev) => rtPanel.addEventListener(ev, (e) => {
+    if ((e.target as HTMLElement).closest('#mx-rt-drop')) { e.preventDefault(); $('mx-rt-drop')?.classList.add('over'); }
+  }));
+  ['dragleave', 'drop'].forEach((ev) => rtPanel.addEventListener(ev, () => $('mx-rt-drop')?.classList.remove('over')));
+  rtPanel.addEventListener('drop', (e) => {
+    if (!(e.target as HTMLElement).closest('#mx-rt-drop')) return;
+    e.preventDefault();
+    const f = (e as DragEvent).dataTransfer?.files?.[0];
+    if (f) void checkExport(f);
+  });
 
   // ── Actions ────────────────────────────────────────────────────────────
   const saveAs = (href: string, filename: string) => {
@@ -2906,6 +3360,9 @@ const accent = manifest.chapters[0]
         variant,
       });
       saveAs(`/api/match/preset?${q.toString()}`, '');
+      // The download is recorded server-side as it is served; pick it up so
+      // the Check tab can offer it.
+      setTimeout(() => void loadRoundTrip(), 900);
       return;
     }
     // Offline: build the preset here. xmp.ts is isomorphic, so this is the same

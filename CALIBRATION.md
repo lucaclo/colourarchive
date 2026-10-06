@@ -14,6 +14,33 @@ UI is this file's admission of that. `scripts/match-calibrate.ts` is the
 harness that replaces estimates with measurements, once someone with a
 Lightroom installation runs it.
 
+## From round trips, in the app
+
+The probe harness below is the controlled way. The other way is the **Check**
+tab in a Style Match report: apply a downloaded preset in Lightroom, export,
+drop the export back in. Every check tells you how much of the gap the edit
+closed and what would close the rest. It also records calibration data, but only
+under three conditions: you left every slider as the preset set it, the preset
+was the *Without masks* one, and "yours" was a zero-slider Lightroom export.
+Anything else and the difference contains something other than the preset,
+and the check says which.
+
+A full preset moves many controls at once, so a round trip is not a probe.
+`src/lib/match/roundtrip.ts` regresses each measured quantity jointly on every
+control that moves it, with *measured* nuisance terms (the tone change read off
+the two photos' percentiles, the cast shift read off their a/b) for moves no
+constant owns. A constant is only fitted once three separate round trips moved
+it — band rows from one photo count once — and it is refused when two controls
+always moved in the same ratio (the restrained solution's fixed 0.7/0.3
+Vibrance/Saturation split does exactly that), when the error is over 35%, or
+when the fit lands more than 5× from the estimate.
+
+Nothing reaches the solver until you press **Apply** on a constant. Applied
+values live in `.match-calibration/approved.json` (git-ignored), only new matches
+use them, and the report's badge says how many constants each match was solved
+with. Temp, Tint and the mask constants can never be learned this way — the
+preset never writes them — and the table says so.
+
 ## The idea
 
 Every calibration constant is the slope of a straight line: apply a **known**

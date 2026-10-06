@@ -321,6 +321,7 @@ import { pace } from './pacing';
 // so only their types are imported here.
 import type { AlignmentPanel, HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
+import { createMineLayer } from './mine';
 import type { ColourGap } from '../../gaps';
 import { createTidePanel, type TideApiResponse } from './tide-panel';
 import type { GoTonightPanel, GoTonightPair } from './go-tonight-panel';
@@ -331,9 +332,14 @@ import type { MonthGridView } from './month-grid';
 import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
 import { createFirstVisitOrientation } from './orientation';
+import { mountSpace, globeFillsView } from './space';
 
 /** Wire the page up. Called once, from the bootstrap in `scout.astro`. */
 export async function startScout(): Promise<void> {
+  // The galaxy round the globe, behind the map's transparent canvas.
+  const haze = document.getElementById('scout-space-haze');
+  const stars = document.getElementById('scout-space');
+  const spaceView = haze instanceof HTMLCanvasElement && stars instanceof HTMLCanvasElement ? mountSpace(haze, stars) : null;
 
   /**
    * True in the published build, which has no API of its own.
@@ -369,6 +375,12 @@ export async function startScout(): Promise<void> {
   const TREE_SOURCE = 'scout-trees';
   /** Metres round the middle of the view that trees are gathered in. */
   const TREE_REACH_M = 700;
+  /** The gathering box snaps out to this world grid (degrees, ~550 m), so a
+   *  small pan keeps the same trees instead of sliding the edge through them. */
+  const TREE_SNAP = 0.005;
+  /** Most trees drawn at once. Each is three extruded shapes plus a shadow,
+   *  so a phone gets fewer. Mapped trees are counted first. */
+  const TREE_BUDGET = matchMedia('(pointer: coarse)').matches ? 500 : 1200;
   const MAX_SHADOW_BUILDINGS = 4000;
   /**
    * How far out a building can still put a point in shade — `buildSkyline`'s
@@ -751,6 +763,18 @@ export async function startScout(): Promise<void> {
       });
     }
     watchForFirstPaint(map);
+
+    // The space round the globe is only worth its memory while it shows.
+    if (spaceView) {
+      const m = map;
+      const check = () => {
+        const box = m.getContainer();
+        spaceView.setVisible(!globeFillsView(m.getZoom(), box.clientWidth, box.clientHeight));
+      };
+      m.on('zoomend', check);
+      m.on('resize', check);
+      check();
+    }
   }
 
   // A handle on the internals, in development only. The diagnostics endpoint
@@ -1107,6 +1131,26 @@ export async function startScout(): Promise<void> {
     if (instance.getLayer(layer.id)) instance.removeLayer(layer.id);
     instance.addLayer(layer as never, before);
   }
+
+  // Your own photographs, as pins. Mac-only — see `view/mine.ts`.
+  const mineLayer =
+    STATIC || !map
+      ? null
+      : createMineLayer({
+          lib: maplibregl,
+          map: () => map,
+          notify: (text) => notify(text),
+          scoutAt: (at) => {
+            if (!centre) placeFirstSpotAt(at);
+            else {
+              undoSpot = { centre, label: { ...label }, timeZone };
+              setCentreCoordinates(at);
+              pin.setLngLat([at.lon, at.lat]);
+              offerUndo('Scouting where you took it');
+            }
+            map?.flyTo({ center: [at.lon, at.lat], zoom: Math.max(map.getZoom(), 15) });
+          },
+        });
 
   map?.on('style.load', () => {
     if (!map) return;
@@ -1688,6 +1732,7 @@ export async function startScout(): Promise<void> {
     // tab about the sun should not welcome you with a black planet.
     applySky(WELCOME_ALTITUDE, null);
     addCustomLayer(map, domeLayer);
+    mineLayer?.attach();
 
     terrainShadows?.destroy();
     terrainShadows = createTerrainShadows(map);
@@ -1732,13 +1777,15 @@ export async function startScout(): Promise<void> {
     // and letting it through relocated the pin mid-orbit, which is exactly
     // the thing free-look exists to prevent.
     if (freeLookCleanup) return;
+    // A photo from "Your photos" is waiting for its place — this tap is that.
+    if (mineLayer?.consumeClick({ lat: event.lngLat.lat, lon: event.lngLat.lng })) return;
     // Nowhere chosen yet. A tap can choose the first spot, but only once the map
     // is close enough in for a fingertip to mean something — see
     // `placeFirstSpotAt`, which is also the only way in when there is no server
     // to search with.
     if (!centre) {
       if (map!.getZoom() < TAP_TO_PLACE_ZOOM) {
-        notify('Zoom in to pick a spot by tapping — from here a tap is tens of kilometres.');
+        notify('Zoom in to pick a spot. From this far out, one tap covers tens of kilometres.');
         return;
       }
       placeFirstSpotAt({ lat: event.lngLat.lat, lon: event.lngLat.lng });
@@ -2712,7 +2759,7 @@ export async function startScout(): Promise<void> {
     // of not at all.
     visibleStars = [];
     if (shown.stars && starsUnavailable) {
-      sayStars('Star catalogue unavailable — the rest of the page works either way.');
+      sayStars('Couldn’t load the star catalogue. Everything else still works.');
     }
     if (shown.stars && starCatalog && instant) {
       // 0 the instant stars turn on, 1 once `STAR_FADE_MS` has passed — folded
@@ -2733,7 +2780,7 @@ export async function startScout(): Promise<void> {
         // The layer is on and doing nothing, and a control that appears to
         // have stopped working is worse than one that says plainly why: the
         // sky is still too bright, not broken.
-        sayStars('Too bright for stars — past civil twilight they start to show.');
+        sayStars('Too bright for stars yet. They start to show after civil twilight.');
       } else {
         const moonNow = currentMoon();
         const limit = limitingMagnitude(
@@ -3214,11 +3261,22 @@ export async function startScout(): Promise<void> {
   let treeBlockers: Array<{ ring: Ring; height: number; estimated: boolean }> = [];
   let treeSignature = '';
   let treeTally = { mapped: 0, estimated: 0, pending: 0, failed: 0 };
+  let treeWaitingForTiles = false;
 
   function collectTrees() {
     if (!map || !styleReady) return;
     const source = map.getSource(TREE_SOURCE) as GeoJSONSource | undefined;
     if (!source) return;
+    if (shown.trees && map.getZoom() >= TREE_MIN_ZOOM && !map.isSourceLoaded('openmaptiles')) {
+      // Half-loaded tiles hold half the parks: planting from them now, then
+      // again once the rest land, is what made trees vanish and come back.
+      // Keep what is drawn and plant once, when the tiles have settled.
+      if (!treeWaitingForTiles) {
+        treeWaitingForTiles = true;
+        map.once('idle', () => { treeWaitingForTiles = false; collectTrees(); });
+      }
+      return;
+    }
     if (!shown.trees || map.getZoom() < TREE_MIN_ZOOM) {
       if (treeSignature) {
         treeSignature = '';
@@ -3230,14 +3288,17 @@ export async function startScout(): Promise<void> {
       return;
     }
 
-    const bounds = map.getBounds();
+    // Anchored to the world, not the screen: the reach round the centre,
+    // snapped outward to a fixed grid. Clipping to the viewport moved the
+    // edge on every pan (and a pitched view's bounds run out to the horizon),
+    // so trees along it blinked in and out.
     const middle = map.getCenter();
     const [rw, rs, re, rn] = boundingBox({ lat: middle.lat, lon: middle.lng }, TREE_REACH_M);
     const box = {
-      west: Math.max(bounds.getWest(), rw),
-      south: Math.max(bounds.getSouth(), rs),
-      east: Math.min(bounds.getEast(), re),
-      north: Math.min(bounds.getNorth(), rn),
+      west: Math.floor(rw / TREE_SNAP) * TREE_SNAP,
+      south: Math.floor(rs / TREE_SNAP) * TREE_SNAP,
+      east: Math.ceil(re / TREE_SNAP) * TREE_SNAP,
+      north: Math.ceil(rn / TREE_SNAP) * TREE_SNAP,
     };
 
     const areas: ScatterArea[] = [];
@@ -3256,8 +3317,12 @@ export async function startScout(): Promise<void> {
       addAreas(map.querySourceFeatures('openmaptiles', { sourceLayer: 'park' }), (p) =>
         p.class === 'park' || p.class === 'garden' ? 'park' : null,
       );
+      // Woods and forests are not planted. The basemap already shades them,
+      // and filling a hillside with guessed trees every 9 m drew a solid
+      // green slab — thousands of shapes, each with a shadow — that said
+      // nothing true about the place and was the heaviest thing on a phone.
       addAreas(map.querySourceFeatures('openmaptiles', { sourceLayer: 'landcover' }), (p) =>
-        p.class === 'wood' || p.subclass === 'forest' || p.subclass === 'wood' ? 'wood' : p.subclass === 'park' ? 'park' : null,
+        p.subclass === 'park' ? 'park' : null,
       );
     } catch {
       return;
@@ -3275,12 +3340,26 @@ export async function startScout(): Promise<void> {
     }
 
     const known = mappedTreesIn(box, () => collectTrees());
+    // A street-tree city maps thousands per square kilometre. Over budget,
+    // thin by a rank fixed to each tree's position, so the same trees stay
+    // whichever way the view arrived.
+    let mapped = known.trees;
+    if (mapped.length > TREE_BUDGET) {
+      const rank = (t: Tree) => {
+        const h = Math.imul(Math.round(t.lon * 1e6), 0x27d4eb2d) ^ Math.imul(Math.round(t.lat * 1e6), 0x165667b1);
+        return (Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0) / 4294967296;
+      };
+      const cut = mapped.map(rank).sort((a, b) => a - b)[TREE_BUDGET - 1];
+      mapped = mapped.filter((t) => rank(t) <= cut).slice(0, TREE_BUDGET);
+    }
+    const estimatedRoom = Math.max(0, TREE_BUDGET - mapped.length);
     // Tiles clip polygons with a buffer, so a park on a seam arrives as two
     // overlapping pieces. The scatter is anchored to the world, so both pieces
     // grow the same tree in the overlap — dedupe by position.
     const seen = new Set<string>();
     const trees: Tree[] = [];
-    for (const tree of [...known.trees, ...scatterTrees(areas, box, known.trees, 2500, water)]) {
+    const scattered = estimatedRoom ? scatterTrees(areas, box, known.trees, estimatedRoom, water) : [];
+    for (const tree of [...mapped, ...scattered]) {
       const key = `${tree.lon.toFixed(6)},${tree.lat.toFixed(6)}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -3307,8 +3386,8 @@ export async function startScout(): Promise<void> {
     source.setData({ type: 'FeatureCollection', features });
     treeBlockers = blockers;
     treeTally = {
-      mapped: known.trees.length,
-      estimated: trees.length - known.trees.length,
+      mapped: mapped.length,
+      estimated: trees.length - mapped.length,
       pending: known.pending,
       failed: known.failed,
     };
@@ -4027,7 +4106,7 @@ export async function startScout(): Promise<void> {
       air.provenance.aerosol.note,
       air.provenance.water,
       cover != null && cover > 25
-        ? `clear-sky model — ${Math.round(cover)}% cloud will change this`
+        ? `assumes clear sky; ${Math.round(cover)}% cloud will change it`
         : 'clear-sky model',
     ].join(' · ');
 
@@ -5040,7 +5119,6 @@ export async function startScout(): Promise<void> {
       slab.lon = spot.lon;
     }
 
-    $<HTMLElement>('scout-hint').hidden = true;
     firstVisit.dismiss();
     $<HTMLElement>('tools').hidden = false;
     $<HTMLElement>('sheet').hidden = false;
@@ -5262,9 +5340,9 @@ export async function startScout(): Promise<void> {
    * nobody can mistake it for the first three.
    */
   const ACCOLADE_BADGE: Record<string, { text: string; hint: string }> = {
-    featured: { text: 'Featured', hint: 'Featured picture on Commons — promoted by community vote.' },
-    quality: { text: 'Quality', hint: 'Quality image on Commons — reviewed for technical quality.' },
-    valued: { text: 'Valued', hint: 'Valued image on Commons — the most useful illustration of its subject.' },
+    featured: { text: 'Featured', hint: 'A Featured picture on Commons, voted in by the community.' },
+    quality: { text: 'Quality', hint: 'A Quality image on Commons, reviewed for technical quality.' },
+    valued: { text: 'Valued', hint: 'A Valued image on Commons: the most useful picture of its subject.' },
     contest: {
       text: 'Entered',
       hint: 'Entered in Wiki Loves Earth. Somebody went there to photograph it; nobody has reviewed it.',
@@ -5644,7 +5722,7 @@ export async function startScout(): Promise<void> {
     const order =
       'Ordered by light now, then how well the surroundings are known, then light left today, then photographs, then distance.';
     $('best-note').textContent = partial
-      ? `${order} ${partial} of ${rows.length} sit outside the buildings loaded here — those are terrain and horizon only, and rank below the rest because nothing was there to shade them.`
+      ? `${order} ${partial} of ${rows.length} are outside the buildings loaded here. They only account for terrain and horizon, so they rank below the rest.`
       : order;
   }
 
@@ -5661,7 +5739,7 @@ export async function startScout(): Promise<void> {
     const phrase = spotLightPhrase(openSpotIndex);
     cell.textContent = light?.buildingsKnown
       ? `Here now: ${phrase.text}.`
-      : `Here now: ${phrase.text} — from terrain and horizon only, no buildings loaded this far out.`;
+      : `Here now: ${phrase.text}. Terrain and horizon only; no buildings are loaded this far out.`;
   }
 
   function openHotspot(index: number) {
@@ -7484,7 +7562,7 @@ export async function startScout(): Promise<void> {
   /** Store, and complain in the open if the browser would not have it. */
   function storeSpotsOrSay(): boolean {
     if (storeSpots()) return true;
-    notify('No room to keep that — this browser’s storage is full.');
+    notify('Couldn’t keep that. This browser’s storage is full.');
     return false;
   }
 
@@ -7495,7 +7573,7 @@ export async function startScout(): Promise<void> {
     if (!centre) return;
     const kept = indexOfSpot(keptSpots, centre) !== -1;
     star.setAttribute('aria-pressed', String(kept));
-    star.title = kept ? 'Kept — press to forget' : 'Keep this spot';
+    star.title = kept ? 'Kept. Press to forget' : 'Keep this spot';
   }
 
   function renderKept() {
@@ -7634,7 +7712,7 @@ export async function startScout(): Promise<void> {
         );
       } else if (targetDeg - deg > 0.2) {
         parts.push(
-          `The ring's own target reads ${targetDeg.toFixed(1)}° up — it stands beyond the profile's reach, so this understates what the sun has to clear.`,
+          `The ring's own target reads ${targetDeg.toFixed(1)}° up — but it's past the end of the profile, so the sun may have to clear more than this.`,
         );
       }
     }
@@ -7910,7 +7988,7 @@ export async function startScout(): Promise<void> {
 
     $('note-kept').textContent = spot.frame
       ? `Kept with ${describeFrame(spot.frame)}${spot.slabHeightM ? ` · ${spot.slabHeightM} m monolith` : ''}`
-      : 'No lens kept here yet — press the star again to keep the current frame.';
+      : 'No lens kept here yet. Press the star again to keep this frame.';
 
     const photos = spot.photos ?? [];
     $('note-photos').replaceChildren(
@@ -7950,7 +8028,7 @@ export async function startScout(): Promise<void> {
 
     $<HTMLInputElement>('note-url').disabled = photos.length >= MAX_PHOTOS;
     $('note-say').textContent =
-      photos.length >= MAX_PHOTOS ? `That is ${MAX_PHOTOS} references — remove one to add another.` : '';
+      photos.length >= MAX_PHOTOS ? `That’s ${MAX_PHOTOS} references. Remove one to add another.` : '';
 
     renderProofs(spot);
     renderVisits(spot);
@@ -8001,7 +8079,7 @@ export async function startScout(): Promise<void> {
 
     $<HTMLButtonElement>('proof-add').disabled = proofs.length >= MAX_PROOFS;
     $('proof-say').textContent =
-      proofs.length >= MAX_PROOFS ? `That is ${MAX_PROOFS} proofs — remove one to add another.` : '';
+      proofs.length >= MAX_PROOFS ? `That’s ${MAX_PROOFS} proofs. Remove one to add another.` : '';
     $<HTMLButtonElement>('proof-copy-link').disabled = proofs.length === 0;
   }
 
@@ -8051,7 +8129,7 @@ export async function startScout(): Promise<void> {
           ghost.setAttribute('aria-pressed', String(isGhosted));
           ghost.title = isGhosted
             ? 'Stop overlaying this frame'
-            : `Overlay this frame on the map — ${describeFrame(visit.frame)}`;
+            : `Show this frame on the map (${describeFrame(visit.frame)})`;
           li.append(ghost);
         }
 
@@ -8091,8 +8169,8 @@ export async function startScout(): Promise<void> {
    */
   function renderDemUploads() {
     $('dem-kept').textContent = demUploads.length
-      ? `${demUploads.length} survey${demUploads.length === 1 ? '' : 's'} on record here — sharper ground than the free terrain wherever they cover.`
-      : 'No survey uploaded here — shadows and the dome measure against the free global terrain.';
+      ? `${demUploads.length} survey${demUploads.length === 1 ? '' : 's'} on record here, sharper than the free terrain wherever they reach.`
+      : 'No survey uploaded here, so shadows and the dome use the free global terrain.';
 
     $('dem-list').replaceChildren(
       ...demUploads.map((upload) => {
@@ -9201,7 +9279,6 @@ export async function startScout(): Promise<void> {
     radiusInput.value = String(radiusKm);
     $('radius-out').textContent = formatDistance(radiusKm * 1000);
     searchBox.setQuery(label.name);
-    $<HTMLElement>('scout-hint').hidden = true;
     firstVisit.dismiss();
     $<HTMLElement>('tools').hidden = false;
 

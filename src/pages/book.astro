@@ -58,16 +58,11 @@ const accent = manifest.chapters[0]
 
   <main class="book-page">
     <header class="book-head">
-      <p class="cover-kicker page-kicker">Print sequence</p>
       <h1>The book</h1>
       <p class="lead">
-        The sequence <code>export:sequence</code> and <code>export:print</code> build — drag the handle to reorder
-        within a chapter (or focus a photo and use the arrow keys), click a photo to leave it out, or use a photo's
-        chapter menu to move it into a different one.{' '}
-        <span id="book-count">{includedCount} of {manifest.count} in the book — ~{pageCount} pages</span>.{' '}
-        <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-share-link">
-          View the read-only share link →
-        </a>
+        <span id="book-count">{includedCount} of {manifest.count} · {pageCount} pages</span>
+        <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-share-link">Share</a>
+        <a href="/book/zine" class="book-share-link">Magazine</a>
       </p>
     </header>
 
@@ -76,6 +71,9 @@ const accent = manifest.chapters[0]
         <p class="book-empty">Nothing in the archive yet.</p>
       ) : (
         <div id="book-chapters">
+          <template id="book-chapter-options">
+            {chapterList.map((c) => <option value={c.key}>{c.name}</option>)}
+          </template>
           {chapters.map((ch) => (
             <section class="book-chapter" data-chapter={ch.key}>
               <h2 class="book-chapter-head">
@@ -136,10 +134,10 @@ const accent = manifest.chapters[0]
                             </button>
                           )
                         }
+                        {/* Only the current chapter until it's touched; the rest come
+                            from #book-chapter-options then (see the script). */}
                         <select class="book-move" data-move={p.id} title="Move to a different chapter">
-                          {chapterList.map((c) => (
-                            <option value={c.key} selected={c.key === ch.key}>{c.name}</option>
-                          ))}
+                          <option value={ch.key} selected>{ch.name}</option>
                         </select>
                       </div>
                     </li>
@@ -172,7 +170,7 @@ const accent = manifest.chapters[0]
       <img id="book-noteedit-img" alt="" />
       <div class="book-noteedit-form">
         <p class="book-noteedit-name" id="book-noteedit-name"></p>
-        <textarea id="book-noteedit-text" placeholder="Why this one matters…" rows="5"></textarea>
+        <textarea id="book-noteedit-text" placeholder="Note" rows="5"></textarea>
         <p class="book-noteedit-error" id="book-noteedit-error" role="alert" hidden></p>
         <div class="book-noteedit-actions">
           <button type="button" class="ghost" id="book-noteedit-cancel">Cancel</button>
@@ -193,7 +191,8 @@ const accent = manifest.chapters[0]
   }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 44rem; }
   .lead code { font-size: 0.92em; }
-  .book-share-link { color: var(--accent-mix, var(--fg)); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+  .book-head .lead { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; align-items: baseline; }
+  .book-share-link { color: var(--fg); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; white-space: nowrap; }
   #book-count { color: var(--fg); }
   .book-empty { color: var(--muted); }
 
@@ -495,8 +494,25 @@ const accent = manifest.chapters[0]
     const cells = document.querySelectorAll('.book-cell');
     const included = [...cells].filter((c) => c.dataset.excluded !== '1').length;
     const el = document.getElementById('book-count');
-    if (el) el.textContent = `${included} of ${cells.length} in the book — ~${estimatedPageCount()} pages`;
+    if (el) el.textContent = `${included} of ${cells.length} · ${estimatedPageCount()} pages`;
   }
+
+  // --- Chapter menus, filled on first touch ---------------------------------
+  // Every cell's menu used to carry all the chapters: 888 <option>s on the
+  // page, nearly none of them ever opened. Each now ships with its own chapter
+  // and takes the full list from one template the first time it's pressed or
+  // focused, which comes before the menu opens, on a tap or from the keyboard.
+  const chapterOptions = document.getElementById('book-chapter-options');
+  function fillMenu(e) {
+    const select = e.target.closest?.('.book-move');
+    if (!select || select.dataset.full || !chapterOptions) return;
+    const current = select.value;
+    select.replaceChildren(chapterOptions.content.cloneNode(true));
+    select.value = current;
+    select.dataset.full = '1';
+  }
+  document.getElementById('book-chapters')?.addEventListener('pointerdown', fillMenu, true);
+  document.getElementById('book-chapters')?.addEventListener('focusin', fillMenu);
 
   // --- Move a photo to a different chapter --------------------------------
   // Book-only — see book.ts's `moved` field. Physically relocating the <li>

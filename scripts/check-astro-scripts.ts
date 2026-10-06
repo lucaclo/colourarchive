@@ -38,13 +38,15 @@ function scriptBlocks(source: string): string[] {
 const written: string[] = [];
 
 try {
-  for (const entry of await fs.readdir(PAGES_DIR)) {
+  // Pages in folders too (book/zine.astro), each checked beside its page so
+  // relative imports resolve.
+  for (const entry of await fs.readdir(PAGES_DIR, { recursive: true })) {
     if (!entry.endsWith('.astro')) continue;
     const source = await fs.readFile(path.join(PAGES_DIR, entry), 'utf8');
     const blocks = scriptBlocks(source);
     for (const [index, block] of blocks.entries()) {
-      const name = `${PREFIX}${entry.replace('.astro', '')}${index ? `.${index}` : ''}.ts`;
-      const target = path.join(PAGES_DIR, name);
+      const name = `${PREFIX}${path.basename(entry, '.astro')}${index ? `.${index}` : ''}.ts`;
+      const target = path.join(PAGES_DIR, path.dirname(entry), name);
       await fs.writeFile(target, block);
       written.push(target);
     }

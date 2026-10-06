@@ -1,0 +1,1832 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { readManifest } from '../../lib/manifest';
+import { readBookCuration, curatedChapters } from '../../lib/book';
+import { FOLD_STEPS } from '../../lib/zine/imposition';
+
+// The magazine maker: an eight-page, one-sheet zine built from the archive,
+// laid out the way Dirty Little Zine (dirtylittlezine.com) does it. Server-
+// rendered like the book editor, for the book's own order. Everything after
+// that happens in the browser: nothing is uploaded, and the zine is kept in
+// this browser's storage between visits.
+export const prerender = false;
+
+const manifest = await readManifest();
+const curation = await readBookCuration();
+const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
+  name: ch.name,
+  photos: ch.photos.map((p) => {
+    const d = p.derivatives;
+    return {
+      id: p.id,
+      w: p.width,
+      h: p.height,
+      small: d[0].avif,
+      thumb: (d[1] ?? d[0]).avif,
+      full: d[d.length - 1].avif,
+    };
+  }),
+}));
+---
+
+<Layout title="Magazine — Colour Archive" tab="book">
+  <script type="application/json" id="zn-data" is:inline set:html={JSON.stringify({ chapters })} />
+
+  <main class="zn" id="zn">
+    <header class="zn-top">
+      <a class="zn-back" href="/book" aria-label="Back to the book">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        <span>The book</span>
+      </a>
+      <h1 class="zn-title">Magazine</h1>
+      <div class="zn-tools">
+        <div class="zn-seg" role="radiogroup" aria-label="Paper size" id="zn-paper">
+          <button type="button" role="radio" data-paper="letter" aria-checked="false">Letter</button>
+          <button type="button" role="radio" data-paper="a4" aria-checked="true">A4</button>
+          <button type="button" role="radio" data-paper="a3" aria-checked="false">A3</button>
+        </div>
+        <button type="button" class="zn-btn" id="zn-colours">Colours</button>
+        <button type="button" class="zn-btn" id="zn-preview">Preview</button>
+        <button type="button" class="zn-btn zn-primary" id="zn-download">Download PDF</button>
+      </div>
+    </header>
+
+    <nav class="zn-rail" aria-label="Pages">
+      <ol id="zn-rail"></ol>
+    </nav>
+
+    <section class="zn-stage" id="zn-stage" aria-label="Page">
+      <canvas id="zn-canvas" aria-hidden="true"></canvas>
+      <p class="zn-stagehint" id="zn-stagehint" aria-live="polite"></p>
+    </section>
+
+    <section class="zn-edit" id="zn-edit" aria-label="Edit this page"></section>
+
+    <footer class="zn-foot">
+      <button type="button" class="zn-textbtn" id="zn-fold">How to fold</button>
+      <button type="button" class="zn-textbtn" id="zn-frombook">Fill from book</button>
+      <button type="button" class="zn-textbtn" id="zn-jpg">JPG</button>
+      <button type="button" class="zn-textbtn zn-quiet" id="zn-reset">Start over</button>
+    </footer>
+  </main>
+
+  <!-- Choosing a photo: the archive in book order, or a file from this device. -->
+  <dialog class="zn-dialog zn-picker" id="zn-picker" aria-labelledby="zn-picker-title">
+    <header class="zn-dhead">
+      <h2 id="zn-picker-title">Choose a photo</h2>
+      <label class="zn-btn zn-upload">
+        From this device
+        <input type="file" accept="image/*" id="zn-file" hidden />
+      </label>
+      <button type="button" class="zn-close" data-close aria-label="Close">×</button>
+    </header>
+    <div class="zn-pickgrid" id="zn-pickgrid"></div>
+  </dialog>
+
+  <!-- Flip through it as a reader would, or see the sheet as it prints. -->
+  <dialog class="zn-dialog zn-viewer" id="zn-viewer" aria-label="Preview">
+    <header class="zn-dhead">
+      <div class="zn-seg" role="radiogroup" aria-label="Show" id="zn-viewmode">
+        <button type="button" role="radio" data-mode="pages" aria-checked="true">Pages</button>
+        <button type="button" role="radio" data-mode="sheet" aria-checked="false">The sheet</button>
+      </div>
+      <p class="zn-viewlabel" id="zn-viewlabel"></p>
+      <button type="button" class="zn-close" data-close aria-label="Close">×</button>
+    </header>
+    <div class="zn-viewbody">
+      <button type="button" class="zn-nav" id="zn-prev" aria-label="Previous page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+      <canvas id="zn-viewcanvas"></canvas>
+      <button type="button" class="zn-nav" id="zn-next" aria-label="Next page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+      </button>
+    </div>
+    <p class="zn-viewnote" id="zn-viewnote"></p>
+  </dialog>
+
+  <dialog class="zn-dialog zn-fold" id="zn-folddlg" aria-labelledby="zn-fold-title">
+    <header class="zn-dhead">
+      <h2 id="zn-fold-title">How to fold it</h2>
+      <button type="button" class="zn-close" data-close aria-label="Close">×</button>
+    </header>
+    <div class="zn-foldbody">
+      <svg class="zn-folddiagram" viewBox="0 0 220 120" role="img" aria-label="The sheet: eight panels, top row upside down, cut across the middle two">
+        <g class="sheet">
+          <rect x="10" y="10" width="200" height="100" />
+          <path d="M60 10v100M110 10v100M160 10v100M10 60h200" class="fold" />
+          <path d="M60 60h100" class="cut" />
+        </g>
+        <g class="nums">
+          <text x="35" y="35" transform="rotate(180 35 35)">7</text>
+          <text x="85" y="35" transform="rotate(180 85 35)">6</text>
+          <text x="135" y="35" transform="rotate(180 135 35)">5</text>
+          <text x="185" y="35" transform="rotate(180 185 35)">4</text>
+          <text x="35" y="85">back</text>
+          <text x="85" y="85">cover</text>
+          <text x="135" y="85">2</text>
+          <text x="185" y="85">3</text>
+        </g>
+      </svg>
+      <ol class="zn-steps">
+        {FOLD_STEPS.map((s) => (
+          <li><strong>{s.title}</strong> {s.body}</li>
+        ))}
+      </ol>
+      <p class="zn-foldtip">Print at 100%, one side.</p>
+    </div>
+  </dialog>
+
+  <dialog class="zn-dialog zn-confirm" id="zn-confirm" aria-labelledby="zn-confirm-title">
+    <h2 id="zn-confirm-title"></h2>
+    <p id="zn-confirm-body"></p>
+    <div class="zn-confirm-row">
+      <button type="button" class="zn-btn" data-close>Cancel</button>
+      <button type="button" class="zn-btn zn-primary" id="zn-confirm-ok">Go ahead</button>
+    </div>
+  </dialog>
+
+  <!-- A colour wheel for any text or paper colour, with the nearest colour in
+       Wada's dictionary and the combinations it belongs to. -->
+  <dialog class="zn-dialog zn-wheel" id="zn-wheel" aria-labelledby="zn-wheel-title">
+    <header class="zn-dhead">
+      <h2 id="zn-wheel-title">Text colour</h2>
+      <button type="button" class="zn-close" data-close aria-label="Close">×</button>
+    </header>
+    <div class="zn-wheelbody">
+      <div class="zn-wheelpick">
+        <canvas id="zn-wheelcanvas" width="240" height="240" role="slider" tabindex="0" aria-label="Hue and strength"></canvas>
+        <label class="zn-wheelrow"><span>Brightness</span><input type="range" id="zn-wheelv" min="0" max="100" aria-label="Brightness" /></label>
+        <div class="zn-wheelrow">
+          <span class="zn-wheelchip" id="zn-wheelchip"></span>
+          <input id="zn-wheelhex" spellcheck="false" maxlength="7" aria-label="Hex colour" />
+        </div>
+      </div>
+      <div class="zn-wheelside">
+        <div class="zn-wheeltheory" id="zn-theorywrap" hidden>
+          <p class="zn-wheelsub">Six from the book, by colour theory</p>
+          <div id="zn-wheelkey"></div>
+          <div class="zn-theorygrid" id="zn-wheeltheory"></div>
+        </div>
+        <p class="zn-wheelsub">Nearest in Wada’s dictionary</p>
+        <button type="button" class="zn-wada" id="zn-wada"><span class="zn-wheelchip"></span><span class="zn-wadaname"></span><small></small></button>
+        <p class="zn-wheelsub">It goes with</p>
+        <div class="zn-goes" id="zn-goes"></div>
+        <p class="zn-wheelnote">Tap a combination to keep its colours by every swatch.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Wada's 348 combinations, ranked against the photographs in the zine. -->
+  <dialog class="zn-dialog zn-pal" id="zn-pal" aria-labelledby="zn-pal-title">
+    <header class="zn-dhead">
+      <h2 id="zn-pal-title">Colour combinations</h2>
+      <div class="zn-seg" role="radiogroup" aria-label="Show" id="zn-palmode">
+        <button type="button" role="radio" data-mode="photos" aria-checked="true">For your photos</button>
+        <button type="button" role="radio" data-mode="all" aria-checked="false">The whole book</button>
+      </div>
+      <button type="button" class="zn-close" data-close aria-label="Close">×</button>
+    </header>
+    <div class="zn-palbody">
+      <div class="zn-palphotos" id="zn-palphotos"></div>
+      <div class="zn-palcount" id="zn-palcount" hidden>
+        <div class="zn-seg" role="radiogroup" aria-label="Colours in a combination">
+          <button type="button" role="radio" data-count="0" aria-checked="true">All</button>
+          <button type="button" role="radio" data-count="2" aria-checked="false">Two</button>
+          <button type="button" role="radio" data-count="3" aria-checked="false">Three</button>
+          <button type="button" role="radio" data-count="4" aria-checked="false">Four</button>
+        </div>
+      </div>
+      <div class="zn-palgrid" id="zn-palgrid"></div>
+    </div>
+    <footer class="zn-palfoot">
+      <p id="zn-palpicked">Pick a combination.</p>
+      <button type="button" class="zn-textbtn zn-quiet" id="zn-palnone">None</button>
+      <button type="button" class="zn-btn zn-primary" id="zn-palapply" disabled>Colour the whole zine</button>
+    </footer>
+    <p class="zn-palcredit">From Sanzo Wada, <cite>A Dictionary of Color Combinations</cite> (1933–34). Screen colours are approximate conversions of the book’s inks.</p>
+  </dialog>
+
+  <p class="zn-toast" id="zn-toast" role="status" hidden></p>
+</Layout>
+
+<style>
+  /* ── Frame ───────────────────────────────────────────────────────────────
+     Dirty Little Zine's layout: a bar across the top, the pages down the
+     left, the page you're on large in the middle, and its controls beneath.
+     On a phone the rail turns into a row under the page. */
+  .zn {
+    --rail: 9.5rem;
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    grid-template-rows: auto minmax(18rem, 1fr) auto auto;
+    grid-template-areas: 'top top' 'rail stage' 'rail edit' 'foot foot';
+    min-height: 100dvh;
+    padding-bottom: var(--tabbar-space);
+  }
+  .zn-top {
+    grid-area: top; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    padding: calc(env(safe-area-inset-top, 0px) + 0.7rem) var(--edge) 0.7rem;
+    border-bottom: 1px solid var(--separator);
+  }
+  .zn-back {
+    display: inline-flex; align-items: center; gap: 0.2rem; min-height: var(--hit);
+    color: var(--secondary); text-decoration: none; font-size: var(--t-footnote);
+  }
+  .zn-back svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  .zn-back:hover { color: var(--fg); }
+  .zn-title { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.6rem; line-height: 1; }
+  .zn-tools { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+  /* :global — the edit panel's segmented controls are built at runtime and
+     never carry Astro's scoping attribute. */
+  :global(.zn .zn-seg), .zn-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 2px; }
+  :global(.zn .zn-seg button), .zn-seg button {
+    appearance: none; border: 0; background: none; color: var(--secondary); cursor: pointer;
+    font: inherit; font-size: var(--t-footnote); min-height: 2.5rem; padding: 0 0.85rem;
+  }
+  :global(.zn .zn-seg button + button), .zn-seg button + button { border-left: 1px solid var(--rule); }
+  :global(.zn .zn-seg button[aria-checked='true']), .zn-seg button[aria-checked='true'] { background: var(--fg); color: var(--bg); }
+  .zn-btn {
+    appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    min-height: 2.5rem; padding: 0 1rem; border-radius: 2px; cursor: pointer;
+    font: inherit; font-size: var(--t-footnote); font-weight: 500;
+    background: none; color: var(--fg); border: 1px solid var(--rule);
+    transition: background 140ms var(--ease), border-color 140ms var(--ease), transform 110ms ease-out;
+  }
+  .zn-btn:hover { border-color: var(--fg); }
+  .zn-btn:active { transform: scale(0.97); }
+  .zn-btn:disabled { opacity: 0.45; cursor: default; }
+  .zn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .zn-primary:hover { background: color-mix(in oklab, var(--fg) 86%, var(--bg)); }
+  .zn-textbtn {
+    appearance: none; background: none; border: 0; padding: 0; cursor: pointer; min-height: var(--hit);
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-note); color: var(--secondary);
+    text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 5px;
+  }
+  .zn-textbtn:hover { color: var(--fg); text-decoration-color: currentColor; }
+  .zn-quiet { color: var(--muted); }
+
+  /* ── Rail ──────────────────────────────────────────────────────────── */
+  .zn-rail { grid-area: rail; border-right: 1px solid var(--separator); overflow-y: auto; }
+  .zn-rail ol { list-style: none; margin: 0; padding: 0.9rem 0.8rem; display: flex; flex-direction: column; gap: 0.9rem; }
+  .zn-rail :global(li) { position: relative; }
+  .zn-rail :global(.zn-thumb) {
+    display: flex; flex-direction: column; align-items: center; gap: 0.4rem; width: 100%;
+    appearance: none; background: none; border: 0; padding: 0.35rem; cursor: pointer; color: var(--secondary);
+    border-radius: 2px; transition: background 140ms var(--ease);
+  }
+  .zn-rail :global(.zn-thumb canvas) { display: block; max-width: 100%; box-shadow: 0 1px 4px rgb(0 0 0 / 0.35); }
+  .zn-rail :global(.zn-thumb span) { font-family: var(--font-display); font-style: italic; font-size: var(--t-footnote); }
+  .zn-rail :global(.zn-thumb:hover) { background: var(--fill); }
+  .zn-rail :global(.zn-thumb[aria-current='true']) { background: var(--fill-active); color: var(--fg); }
+  .zn-rail :global(.zn-thumb[aria-current='true'] canvas) { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .zn-rail :global(li[draggable='true'] .zn-thumb) { cursor: grab; }
+  .zn-rail :global(li.dragging) { opacity: 0.4; }
+  .zn-rail :global(li.drop-before)::before {
+    content: ''; position: absolute; left: 0.4rem; right: 0.4rem; top: -0.5rem; height: 2px; background: var(--fg);
+  }
+
+  /* ── Stage ─────────────────────────────────────────────────────────── */
+  .zn-stage {
+    grid-area: stage; position: relative; display: flex; align-items: center; justify-content: center;
+    min-height: 0; padding: 1.4rem; background: color-mix(in oklab, var(--fg) 9%, var(--bg));
+  }
+  .zn-stage canvas { display: block; touch-action: none; box-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px -16px rgb(0 0 0 / 0.6); }
+  .zn-stage.over { outline: 2px dashed var(--fg); outline-offset: -10px; }
+  .zn-stagehint {
+    position: absolute; left: 50%; bottom: 0.3rem; transform: translateX(-50%); margin: 0; white-space: nowrap;
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-footnote); color: var(--muted);
+  }
+
+  /* ── Edit panel ────────────────────────────────────────────────────── */
+  .zn-edit { grid-area: edit; border-top: 1px solid var(--separator); padding: 1rem var(--edge) 1.2rem; }
+  .zn-edit :global(.zn-cols) { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 1.4rem; align-items: start; }
+  .zn-edit :global(.zn-cols.one) { grid-template-columns: minmax(0, 1fr) auto; }
+  .zn-edit :global(.zn-cover) { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 1.2rem; }
+  .zn-edit :global(.zn-page) { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.6rem 1rem; align-content: start; }
+  .zn-edit :global(.zn-page.wide) { grid-template-columns: 11rem minmax(0, 1fr); }
+  .zn-edit :global(.zn-pagehead) {
+    grid-column: 1 / -1; margin: 0; font-family: var(--font-display); font-style: italic; font-size: 1.05rem;
+    display: flex; align-items: baseline; gap: 0.6rem;
+  }
+  .zn-edit :global(.zn-pagehead small) { font-family: var(--font-label); font-style: normal; font-size: var(--t-caption); color: var(--muted); }
+  .zn-edit :global(.zn-mid) { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; padding-top: 2rem; }
+  .zn-edit :global(.zn-wellcol) { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+
+  /* The photo well: a crop-marked frame, like the drop zones on Inspiration. */
+  .zn-edit :global(.zn-well) {
+    position: relative; display: flex; align-items: center; justify-content: center; text-align: center;
+    width: 100%; aspect-ratio: var(--page-aspect, 0.7); padding: 0.4rem; cursor: pointer; overflow: hidden;
+    appearance: none; border: 1px solid var(--separator); border-radius: 0; color: var(--secondary);
+    background: transparent;
+    background-image: var(--cropmarks-image); background-size: var(--cropmarks-size);
+    background-position: var(--cropmarks-pos); background-repeat: no-repeat;
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-footnote); line-height: 1.3;
+  }
+  .zn-edit :global(.zn-well.wide) { aspect-ratio: calc(var(--page-aspect, 0.7) * 2); }
+  .zn-edit :global(.zn-well:hover), .zn-edit :global(.zn-well.over) { --mark: var(--fg); border-color: var(--rule); color: var(--fg); }
+  .zn-edit :global(.zn-well img) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .zn-edit :global(.zn-well .zn-change) {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 0.3rem; font-size: var(--t-caption);
+    background: rgb(0 0 0 / 0.6); color: #fff; opacity: 0; transition: opacity 140ms;
+  }
+  .zn-edit :global(.zn-well:hover .zn-change), .zn-edit :global(.zn-well:focus-visible .zn-change) { opacity: 1; }
+  @media (hover: none) { .zn-edit :global(.zn-well .zn-change) { opacity: 1; } }
+
+  .zn-edit :global(.zn-fields) { display: grid; gap: 0.75rem; min-width: 0; }
+  .zn-edit :global(.zn-row) { display: flex; flex-wrap: wrap; gap: 0.75rem 1.6rem; align-items: end; }
+  .zn-edit :global(.zn-field) { display: grid; gap: 0.3rem; flex: 1 1 11rem; min-width: 0; }
+  .zn-edit :global(.zn-field > span), .zn-edit :global(.zn-ctl > span) {
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-footnote); color: var(--secondary);
+  }
+  .zn-edit :global(.zn-field input), .zn-edit :global(.zn-field textarea) {
+    width: 100%; background: transparent; color: var(--fg); border: 0; border-bottom: 1px solid var(--rule);
+    border-radius: 0; padding: 0.4rem 0.05rem; font: inherit; font-size: 16px; resize: vertical;
+  }
+  .zn-edit :global(.zn-field textarea) { min-height: 2.6rem; }
+  .zn-edit :global(.zn-field input:focus-visible), .zn-edit :global(.zn-field textarea:focus-visible) { outline: none; border-bottom-color: var(--fg); }
+  .zn-edit :global(.zn-field input::placeholder), .zn-edit :global(.zn-field textarea::placeholder) { color: var(--muted); }
+  .zn-edit :global(.zn-ctl) { display: grid; gap: 0.3rem; }
+  .zn-edit :global(.zn-ctl .zn-seg button) { min-height: 2.25rem; padding: 0 0.7rem; }
+  .zn-edit :global(.zn-ctl .zn-seg svg) { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; display: block; }
+  .zn-edit :global(.zn-group) { display: grid; gap: 0.45rem; padding-top: 0.6rem; border-top: 1px solid var(--separator); }
+  .zn-edit :global(.zn-grouphead) {
+    margin: 0; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  .zn-edit :global(.zn-chips) { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .zn-edit :global(.zn-chips button) {
+    appearance: none; min-height: 2.25rem; padding: 0 0.75rem; cursor: pointer; font-size: 0.95rem;
+    background: none; color: var(--secondary); border: 1px solid var(--rule); border-radius: 2px;
+  }
+  .zn-edit :global(.zn-chips button:hover) { border-color: var(--fg); color: var(--fg); }
+  .zn-edit :global(.zn-chips button[aria-checked='true']) { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .zn-edit :global(.zn-ink) { display: flex; gap: 0.5rem; }
+  .zn-edit :global(.zn-ink button) {
+    width: 2.25rem; height: 2.25rem; border-radius: 50%; cursor: pointer; border: 1px solid var(--rule);
+  }
+  .zn-edit :global(.zn-ink button[aria-checked='true']) { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .zn-edit :global(.zn-icon) {
+    appearance: none; display: grid; place-items: center; width: var(--hit); height: var(--hit); cursor: pointer;
+    background: none; color: var(--fg); border: 1px solid var(--rule); border-radius: 2px;
+  }
+  .zn-edit :global(.zn-icon:hover) { border-color: var(--fg); }
+  .zn-edit :global(.zn-icon svg) { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.7; }
+  .zn-edit :global(.zn-midlabel) { font-family: var(--font-display); font-style: italic; font-size: var(--t-caption); color: var(--muted); margin-top: -0.35rem; }
+
+  .zn-foot {
+    grid-area: foot; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 1.4rem;
+    padding: 0.5rem var(--edge) 0.8rem; border-top: 1px solid var(--separator);
+  }
+  .zn-note { margin-left: auto; font-size: var(--t-caption); color: var(--muted); }
+
+  /* ── Dialogs ───────────────────────────────────────────────────────── */
+  .zn-dialog {
+    border: 1px solid var(--rule); border-radius: 2px; padding: 0; color: var(--fg); background: var(--bg);
+    max-width: min(60rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); width: 100%;
+  }
+  .zn-dialog::backdrop { background: rgb(0 0 0 / 0.72); }
+  .zn-dhead {
+    position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 0.8rem;
+    padding: 0.8rem 1rem; background: var(--bg); border-bottom: 1px solid var(--separator);
+  }
+  .zn-dhead h2 { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.3rem; }
+  .zn-close {
+    margin-left: auto; appearance: none; background: none; border: 0; color: var(--secondary); cursor: pointer;
+    width: var(--hit); height: var(--hit); font-size: 1.6rem; line-height: 1;
+  }
+  .zn-close:hover { color: var(--fg); }
+  .zn-upload { cursor: pointer; }
+  .zn-pickgrid { padding: 0.4rem 1rem 1.2rem; }
+  .zn-pickgrid :global(h3) {
+    margin: 1rem 0 0.5rem; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.05rem;
+    display: flex; align-items: center; gap: 0.7rem;
+  }
+  .zn-pickgrid :global(h3)::after { content: ''; flex: 1; height: 1px; background: var(--separator); }
+  .zn-pickgrid :global(.zn-pickrow) { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 4px; }
+  .zn-pickgrid :global(button) {
+    appearance: none; border: 0; padding: 0; cursor: pointer; aspect-ratio: 1; background: var(--surface-2);
+    transition: transform 110ms ease-out, opacity 140ms;
+  }
+  .zn-pickgrid :global(button:hover) { opacity: 0.85; }
+  .zn-pickgrid :global(button:active) { transform: scale(0.97); }
+  .zn-pickgrid :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .zn-viewer { max-width: none; max-height: none; width: 100vw; height: 100dvh; border: 0; background: #0b0a09; }
+  .zn-viewer .zn-dhead { background: transparent; border-bottom: 0; }
+  .zn-viewlabel { margin: 0 auto; font-family: var(--font-display); font-style: italic; font-size: 1.05rem; color: var(--secondary); }
+  .zn-viewer .zn-close { margin-left: 0; }
+  .zn-viewbody { display: flex; align-items: center; justify-content: center; gap: 1rem; height: calc(100dvh - 8rem); padding: 0 1rem; }
+  .zn-viewbody canvas { box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.9); }
+  .zn-nav {
+    flex: 0 0 auto; appearance: none; width: 3rem; height: 3rem; border-radius: 50%; cursor: pointer;
+    background: none; border: 1px solid var(--rule); color: var(--fg); display: grid; place-items: center;
+  }
+  .zn-nav:disabled { opacity: 0.25; cursor: default; }
+  .zn-nav svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  .zn-viewnote { text-align: center; margin: 0.6rem 0 0; font-size: var(--t-footnote); color: var(--muted); }
+
+  .zn-fold { max-width: 34rem; }
+  .zn-foldbody { padding: 1rem 1.2rem 1.4rem; }
+  .zn-folddiagram { width: 100%; max-width: 22rem; display: block; margin: 0 auto; }
+  .zn-folddiagram rect { fill: var(--surface-2); stroke: var(--fg); stroke-width: 1; }
+  .zn-folddiagram .fold { stroke: var(--muted); stroke-dasharray: 3 3; fill: none; }
+  .zn-folddiagram .cut { stroke: #e0603a; stroke-width: 2.4; }
+  .zn-folddiagram text { fill: var(--secondary); font-family: var(--font-display); font-style: italic; font-size: 11px; text-anchor: middle; dominant-baseline: middle; }
+  .zn-foldcap { text-align: center; font-size: var(--t-caption); color: var(--muted); margin: 0.4rem 0 1rem; }
+  .zn-steps { margin: 0; padding-left: 1.4rem; display: grid; gap: 0.7rem; font-size: var(--t-body); line-height: 1.5; color: var(--secondary); }
+  .zn-steps strong { display: block; color: var(--fg); font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.05rem; }
+  .zn-foldtip { margin: 1.1rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--separator); font-size: var(--t-footnote); color: var(--secondary); }
+
+  :global(.zn .zn-theorygrid), :global(.zn-wheel .zn-theorygrid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.4rem; width: 100%; }
+  :global(.zn .zn-theorygrid) { grid-template-columns: repeat(auto-fill, minmax(9.4rem, 1fr)); }
+  :global(.zn-theory) {
+    appearance: none; display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 0.55rem;
+    align-items: center; padding: 0.35rem 0.5rem 0.35rem 0.35rem; cursor: pointer; text-align: left; font: inherit;
+    background: none; color: var(--fg); border: 1px solid var(--rule); border-radius: 2px;
+  }
+  :global(.zn-theory:hover) { border-color: var(--fg); }
+  :global(.zn-theory[aria-pressed='true']) { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+  :global(.zn-theory i) { grid-row: 1 / 3; width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 1px solid var(--rule); }
+  :global(.zn-theory span) { font-family: var(--font-display); font-style: italic; font-size: 0.92rem; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.zn-theory small) { font-size: var(--t-caption); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :global(.zn-key) { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-footnote); color: var(--secondary); }
+  :global(.zn-key i) { width: 1.1rem; height: 1.1rem; border-radius: 2px; border: 1px solid var(--rule); }
+  :global(.zn-key b) { font-family: var(--font-display); font-style: italic; font-weight: 500; color: var(--fg); }
+  .zn-edit :global(.zn-suggest) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.9rem; }
+  .zn-edit :global(.zn-suggest:empty) { display: none; }
+  .zn-edit :global(.zn-suglabel) { font-family: var(--font-display); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); flex-basis: 100%; }
+  .zn-edit :global(.zn-sugnote) { font-size: var(--t-caption); color: var(--muted); }
+  .zn-edit :global(.zn-ink .zn-pal-sep) { width: 1px; align-self: stretch; background: var(--rule); margin: 0 0.15rem; }
+  .zn-edit :global(.zn-wheelbtn) {
+    width: 2.25rem; height: 2.25rem; border-radius: 50%; cursor: pointer; border: 1px solid var(--rule); padding: 0;
+    background: radial-gradient(circle, #fff 0 18%, transparent 62%), conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+  }
+
+  .zn-wheel { max-width: 46rem; }
+  .zn-wheeltheory { display: grid; gap: 0.5rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--separator); }
+  .zn-wheelbody { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.4rem; padding: 1.1rem 1.2rem 1.3rem; }
+  .zn-wheelpick { display: grid; gap: 0.7rem; justify-items: start; }
+  #zn-wheelcanvas { width: 240px; height: 240px; touch-action: none; cursor: crosshair; border-radius: 50%; }
+  #zn-wheelcanvas:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+  .zn-wheelrow { display: flex; align-items: center; gap: 0.6rem; width: 240px; }
+  .zn-wheelrow > span:first-child:not(.zn-wheelchip) { font-family: var(--font-display); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .zn-wheelrow input[type='range'] { flex: 1; accent-color: var(--fg); }
+  #zn-wheelhex {
+    flex: 1; background: transparent; color: var(--fg); border: 0; border-bottom: 1px solid var(--rule);
+    font-family: var(--font-label); font-size: 16px; padding: 0.3rem 0.05rem; text-transform: lowercase;
+  }
+  #zn-wheelhex:focus-visible { outline: none; border-bottom-color: var(--fg); }
+  .zn-wheelchip { display: inline-block; width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 1px solid var(--rule); flex: 0 0 auto; }
+  .zn-wheelside { min-width: 0; display: grid; align-content: start; gap: 0.5rem; }
+  .zn-wheelsub { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .zn-wada {
+    appearance: none; display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; cursor: pointer; text-align: left;
+    background: none; color: var(--fg); border: 1px solid var(--rule); border-radius: 2px; font: inherit;
+  }
+  .zn-wada:hover { border-color: var(--fg); }
+  .zn-wadaname { font-family: var(--font-display); font-style: italic; font-size: 1.02rem; }
+  .zn-wada small { margin-left: auto; font-size: var(--t-caption); color: var(--muted); }
+  .zn-goes { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: 0.4rem; max-height: 15rem; overflow-y: auto; }
+  .zn-wheelnote { margin: 0; font-size: var(--t-caption); color: var(--muted); }
+
+  /* A combination: its colours as a strip of chips, with its number in the book. */
+  .zn-dialog :global(.zn-combo) {
+    appearance: none; display: grid; gap: 0.3rem; padding: 0.3rem; cursor: pointer; text-align: left;
+    background: none; border: 1px solid transparent; border-radius: 2px; color: var(--secondary); font: inherit;
+  }
+  .zn-dialog :global(.zn-combo:hover) { border-color: var(--rule); }
+  .zn-dialog :global(.zn-combo[aria-pressed='true']) { border-color: var(--fg); color: var(--fg); }
+  .zn-dialog :global(.zn-strip) { display: flex; height: 2.4rem; }
+  .zn-dialog :global(.zn-strip i) { flex: 1; }
+  .zn-dialog :global(.zn-combo small) { font-family: var(--font-label); font-size: var(--t-caption); }
+
+  .zn-pal { max-width: min(56rem, calc(100vw - 2rem)); }
+  .zn-pal .zn-dhead { flex-wrap: wrap; }
+  .zn-palbody { padding: 0.8rem 1rem 1rem; display: grid; gap: 0.8rem; }
+  .zn-palphotos :global(p) { margin: 0 0 0.4rem; font-size: var(--t-footnote); color: var(--secondary); }
+  .zn-palphotos :global(.zn-strip) { height: 1.4rem; max-width: 22rem; }
+  .zn-palgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.5rem; }
+  .zn-palfoot {
+    position: sticky; bottom: 0; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    padding: 0.7rem 1rem; background: var(--bg); border-top: 1px solid var(--separator);
+  }
+  .zn-palfoot p { margin: 0 auto 0 0; font-family: var(--font-display); font-style: italic; color: var(--secondary); }
+  .zn-palcredit { margin: 0; padding: 0 1rem 0.9rem; font-size: var(--t-caption); color: var(--muted); }
+  @media (max-width: 640px) {
+    .zn-wheelbody { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+    .zn-wheelside { width: 100%; }
+  }
+
+  .zn-confirm { max-width: 24rem; padding: 1.2rem; }
+  .zn-confirm h2 { margin: 0 0 0.4rem; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.3rem; }
+  .zn-confirm p { margin: 0 0 1.1rem; color: var(--secondary); font-size: var(--t-body); line-height: 1.5; }
+  .zn-confirm-row { display: flex; justify-content: flex-end; gap: 0.6rem; }
+
+  .zn-toast {
+    position: fixed; left: 50%; bottom: calc(var(--tabbar-space) + 0.6rem); transform: translateX(-50%); z-index: 50;
+    margin: 0; padding: 0.7rem 1rem; max-width: calc(100vw - 2rem); background: var(--fg); color: var(--bg);
+    font-size: var(--t-footnote); border-radius: 2px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.6);
+  }
+
+  @media (max-width: 1100px) {
+    .zn-edit :global(.zn-cols), .zn-edit :global(.zn-cols.one) { grid-template-columns: minmax(0, 1fr); }
+    .zn-edit :global(.zn-mid) { flex-direction: row; justify-content: center; padding-top: 0; }
+    .zn-edit :global(.zn-midlabel) { margin: 0 0.6rem 0 -0.3rem; }
+  }
+  @media (max-width: 760px) {
+    .zn {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto auto auto auto;
+      grid-template-areas: 'top' 'stage' 'rail' 'edit' 'foot';
+    }
+    .zn-top { gap: 0.4rem 0.8rem; padding-inline: 1rem; }
+    .zn-tools { margin-left: 0; width: 100%; }
+    .zn-tools .zn-primary { margin-left: auto; }
+    .zn-stage { height: 54svh; padding: 1rem 1rem 1.6rem; }
+    .zn-rail { border-right: 0; border-bottom: 1px solid var(--separator); overflow-x: auto; }
+    .zn-rail ol { flex-direction: row; padding: 0.6rem 1rem; gap: 0.5rem; }
+    .zn-rail :global(li) { flex: 0 0 auto; }
+    .zn-edit { padding-inline: 1rem; }
+    .zn-edit :global(.zn-cover) { grid-template-columns: 6.5rem minmax(0, 1fr); }
+    .zn-edit :global(.zn-page.wide) { grid-template-columns: minmax(0, 1fr); }
+    .zn-note { margin-left: 0; width: 100%; }
+    .zn-nav { position: absolute; bottom: 1.2rem; }
+    #zn-prev { left: 1.2rem; } #zn-next { right: 1.2rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .zn-btn, .zn-pickgrid :global(button) { transition: none; }
+  }
+</style>
+
+<script>
+  import { SLIDES, SPREADS, PANELS, PAPER, COVER_PANEL, BACK_PANEL, pageAspect, sheetPixels, sheetPoints, type PaperId, type Slide } from '../../lib/zine/imposition';
+  import {
+    freshDoc, reviveDoc, swapPages, moveSpread, mergeSpread, splitSpread, setFit, applyCombination, photosInDoc, isEmpty, READING_ORDER, FONTS, INKS, TONES,
+    type ZineDoc, type PhotoRef, type PageDoc, type CoverDoc, type MergeDoc, type TextStyle, type FrameStyle, type Fit,
+  } from '../../lib/zine/doc';
+  import { drawPage, drawSpread, drawSheet, drawGutter, coverGeometry, photoBox, type RenderOpts } from '../../lib/zine/render';
+  import { jpegToPdf } from '../../lib/zine/pdf';
+  import {
+    isHex, hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, nearestWada, readCover, RULE_LABEL, type CoverReading, combination, combinationsWith, dominantColours, rankCombinations, type Swatch,
+  } from '../../lib/zine/colour';
+  import { WADA_COLOURS, WADA_COMBINATIONS } from '../../lib/zine/wada';
+
+  interface ArchivePhoto { id: string; w: number; h: number; small: string; thumb: string; full: string }
+  const data = JSON.parse(document.getElementById('zn-data')!.textContent || '{}') as {
+    chapters: { name: string; photos: ArchivePhoto[] }[];
+  };
+  const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  // ── Storage ─────────────────────────────────────────────────────────────
+  // The zine itself goes in localStorage. Photos from this device are too big
+  // for that, so they go in IndexedDB and are referred to by key. Any of it
+  // can be unavailable (private windows, blocked storage); the editor still
+  // works, it just won't remember.
+  const DOC_KEY = 'zine:doc:v1';
+  const DB = 'colour-archive-zine';
+
+  function idb(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('files');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function putFile(key: string, blob: Blob) {
+    try {
+      const db = await idb();
+      await new Promise<void>((res, rej) => {
+        const tx = db.transaction('files', 'readwrite');
+        tx.objectStore('files').put(blob, key);
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+      });
+    } catch { /* not remembered, still usable this session */ }
+  }
+  async function getFile(key: string): Promise<Blob | null> {
+    try {
+      const db = await idb();
+      return await new Promise((res) => {
+        const req = db.transaction('files').objectStore('files').get(key);
+        req.onsuccess = () => res((req.result as Blob) ?? null);
+        req.onerror = () => res(null);
+      });
+    } catch { return null; }
+  }
+  async function clearFiles() {
+    try {
+      const db = await idb();
+      db.transaction('files', 'readwrite').objectStore('files').clear();
+    } catch { /* nothing to clear */ }
+  }
+
+  function loadDoc(): ZineDoc {
+    try { return reviveDoc(JSON.parse(localStorage.getItem(DOC_KEY) || 'null')); } catch { return freshDoc(); }
+  }
+  let saveTimer = 0;
+  function save() {
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      // Blob URLs die with the page, so local photos are stored by key only.
+      const strip = (p: PhotoRef | null) => (p && p.kind === 'local' ? { ...p, thumb: '', full: '' } : p);
+      const out: ZineDoc = {
+        ...doc,
+        pages: doc.pages.map((p) => ({ ...p, photo: strip(p.photo) })),
+        merged: Object.fromEntries(Object.entries(doc.merged).map(([k, m]) => [k, { ...m, photo: strip(m.photo) }])) as ZineDoc['merged'],
+      };
+      try { localStorage.setItem(DOC_KEY, JSON.stringify(out)); } catch { /* storage full or blocked */ }
+    }, 300);
+  }
+
+  let doc = loadDoc();
+  let current = 0;
+
+  // ── Images ──────────────────────────────────────────────────────────────
+  const images = new Map<string, HTMLImageElement>();
+  let renderQueued = false;
+  function queueRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => { renderQueued = false; renderAll(); });
+  }
+  function imageFor(url: string): HTMLImageElement | null {
+    if (!url) return null;
+    let img = images.get(url);
+    if (!img) {
+      img = new Image();
+      img.decoding = 'async';
+      img.onload = () => queueRender();
+      img.src = url;
+      images.set(url, img);
+    }
+    return img.complete && img.naturalWidth ? img : null;
+  }
+  const screenOpts = (hints: boolean): RenderOpts => ({ image: (r) => imageFor(r.thumb), hints });
+
+  /** Local photos come back from IndexedDB with fresh blob URLs. */
+  async function rehydrate() {
+    const refs = [...doc.pages.map((p) => p.photo), ...Object.values(doc.merged).map((m) => m.photo)];
+    for (const ref of refs) {
+      if (!ref || ref.kind !== 'local' || ref.thumb) continue;
+      const blob = await getFile(ref.id);
+      if (blob) ref.thumb = ref.full = URL.createObjectURL(blob);
+    }
+    // A local photo whose file is gone can't be shown; drop it rather than
+    // print a blank.
+    for (const p of doc.pages) if (p.photo?.kind === 'local' && !p.photo.thumb) p.photo = null;
+    for (const m of Object.values(doc.merged)) if (m.photo?.kind === 'local' && !m.photo.thumb) m.photo = null;
+    buildEdit();
+    renderAll();
+  }
+
+  // ── Drawing ─────────────────────────────────────────────────────────────
+  function slideAspect(s: Slide) {
+    const a = pageAspect(doc.paper);
+    return s.kind === 'spread' ? a * 2 : a;
+  }
+
+  function drawSlide(ctx: CanvasRenderingContext2D, s: Slide, w: number, h: number, opts: RenderOpts, gutter: boolean) {
+    if (s.kind === 'single') drawPage(ctx, doc, s.panel, 0, 0, w, h, opts);
+    else {
+      drawSpread(ctx, doc, s.spread, 0, 0, w / 2, h, opts);
+      if (gutter) drawGutter(ctx, w / 2, 0, h);
+    }
+  }
+
+  /**
+   * Size a canvas for drawing, touching it only when the size changed:
+   * setting width or height, even to the same value, throws away and
+   * reallocates the whole backing store, and every draw here repaints the
+   * full canvas anyway.
+   */
+  function sizeCanvas(c: HTMLCanvasElement, cssW: number, cssH: number) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round(cssW * dpr);
+    const h = Math.round(cssH * dpr);
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+      c.style.width = `${cssW}px`;
+      c.style.height = `${cssH}px`;
+    }
+    const ctx = c.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return ctx;
+  }
+
+  const stage = $('zn-stage');
+  const canvas = $<HTMLCanvasElement>('zn-canvas');
+  let stageBox = { w: 0, h: 0 };
+
+  /**
+   * The stage's content box, as its ResizeObserver last reported it. Reading
+   * clientWidth and the computed padding on every draw forced a layout each
+   * frame of a drag; the observer already knows, and says when it changes.
+   */
+  let stageAvail: { w: number; h: number } | null = null;
+  function measureStage() {
+    const cs = getComputedStyle(stage);
+    return {
+      w: stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      h: stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom),
+    };
+  }
+
+  function renderStage() {
+    const s = SLIDES[current];
+    stageAvail ??= measureStage();
+    const { w: availW, h: availH } = stageAvail;
+    const a = slideAspect(s);
+    let w = availW;
+    let h = w / a;
+    if (h > availH) { h = availH; w = h * a; }
+    w = Math.max(40, Math.floor(w));
+    h = Math.max(40, Math.floor(h));
+    stageBox = { w, h };
+    const ctx = sizeCanvas(canvas, w, h);
+    drawSlide(ctx, s, w, h, screenOpts(true), true);
+    updateStageHint();
+  }
+
+  function renderRail() {
+    const h = window.matchMedia('(max-width: 760px)').matches ? 68 : 90;
+    document.querySelectorAll<HTMLCanvasElement>('#zn-rail canvas').forEach((c) => {
+      const s = SLIDES[Number(c.dataset.slide)];
+      const w = Math.round(h * slideAspect(s));
+      const ctx = sizeCanvas(c, w, h);
+      drawSlide(ctx, s, w, h, screenOpts(false), true);
+    });
+  }
+
+  // The page being edited redraws at once; the rail's thumbnails catch up
+  // when typing or dragging pauses, rather than all seven redrawing on every
+  // keystroke and every frame of a drag.
+  let railTimer = 0;
+  function renderAll() {
+    renderStage();
+    clearTimeout(railTimer);
+    railTimer = window.setTimeout(renderRail, 160);
+    if (viewer.open) renderViewer();
+  }
+
+  // ── Rail ────────────────────────────────────────────────────────────────
+  const rail = $('zn-rail');
+  function buildRail() {
+    rail.replaceChildren(
+      ...SLIDES.map((s, i) => {
+        const li = document.createElement('li');
+        if (s.kind === 'spread') {
+          li.draggable = true;
+          li.dataset.spread = String(SPREADS.indexOf(s.spread));
+        }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'zn-thumb';
+        b.dataset.go = String(i);
+        b.setAttribute('aria-current', String(i === current));
+        b.title = s.kind === 'spread' ? `${s.label}. Drag to reorder` : s.label;
+        const c = document.createElement('canvas');
+        c.dataset.slide = String(i);
+        const label = document.createElement('span');
+        label.textContent = s.label;
+        b.append(c, label);
+        li.append(b);
+        return li;
+      }),
+    );
+    renderRail();
+  }
+
+  rail.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-go]');
+    if (b) go(Number(b.dataset.go));
+  });
+
+  // Spreads reorder by dragging, as on Dirty Little Zine. The covers stay put.
+  let dragFrom = -1;
+  rail.addEventListener('dragstart', (e) => {
+    const li = (e.target as HTMLElement).closest<HTMLLIElement>('li[data-spread]');
+    if (!li) return;
+    dragFrom = Number(li.dataset.spread);
+    li.classList.add('dragging');
+    e.dataTransfer!.effectAllowed = 'move';
+    e.dataTransfer!.setData('text/plain', li.dataset.spread!);
+  });
+  rail.addEventListener('dragover', (e) => {
+    const li = (e.target as HTMLElement).closest<HTMLLIElement>('li[data-spread]');
+    if (!li || dragFrom < 0) return;
+    e.preventDefault();
+    rail.querySelectorAll('.drop-before').forEach((x) => x.classList.remove('drop-before'));
+    li.classList.add('drop-before');
+  });
+  rail.addEventListener('drop', (e) => {
+    const li = (e.target as HTMLElement).closest<HTMLLIElement>('li[data-spread]');
+    if (!li || dragFrom < 0) return;
+    e.preventDefault();
+    const to = Number(li.dataset.spread);
+    moveSpread(doc, dragFrom, to);
+    current = 1 + to;
+    changed(true);
+  });
+  rail.addEventListener('dragend', () => {
+    dragFrom = -1;
+    rail.querySelectorAll('.dragging, .drop-before').forEach((x) => x.classList.remove('dragging', 'drop-before'));
+  });
+
+  function go(i: number) {
+    current = Math.max(0, Math.min(SLIDES.length - 1, i));
+    rail.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => b.setAttribute('aria-current', String(Number(b.dataset.go) === current)));
+    buildEdit();
+    renderStage();
+  }
+
+  /** After any edit: save, redraw, and rebuild the panel if its shape changed. */
+  function changed(rebuild = false) {
+    save();
+    if (rebuild) { buildRail(); buildEdit(); }
+    renderAll();
+  }
+
+  // ── Edit panel ──────────────────────────────────────────────────────────
+  // Built from templates. Every value that came from the person (titles,
+  // captions) or from storage (photo URLs) goes through esc(); the rest are
+  // constants or numbers.
+  const edit = $('zn-edit');
+  const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  const ICON = {
+    left: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>',
+    center: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>',
+    right: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
+    top: '<path d="M5 4h14M12 8v12M8 12l4-4 4 4"/>',
+    middle: '<path d="M5 12h14M12 3v5M12 16v5M9 6l3 2 3-2M9 18l3-2 3 2"/>',
+    bottom: '<path d="M5 20h14M12 4v12M8 12l4 4 4-4"/>',
+    swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
+    merge: '<path d="M4 12h6M14 12h6M8 9l3 3-3 3M16 9l-3 3 3 3"/>',
+    split: '<path d="M12 4v16M4 12h5M20 12h-5M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
+  };
+  const seg = (name: string, label: string, value: string, options: [string, string, string?][]) => `
+    <div class="zn-ctl"><span>${label}</span>
+      <div class="zn-seg" role="radiogroup" aria-label="${label}">
+        ${options.map(([v, text, icon]) => `<button type="button" role="radio" data-set="${name}" data-value="${v}" aria-checked="${v === value}" ${icon ? `aria-label="${text}" title="${text}"` : ''}>${icon ? `<svg viewBox="0 0 24 24">${icon}</svg>` : text}</button>`).join('')}
+      </div>
+    </div>`;
+  const wadaName = new Map(WADA_COLOURS.map(([name, hex]) => [hex.toLowerCase(), name] as const));
+  /**
+   * A colour row: the zine's Wada combination first (when one is chosen), then
+   * the named colours, any colour picked on the wheel, and the wheel itself.
+   */
+  const colourCtl = (name: string, label: string, value: string, named: readonly { id: string; label: string; hex: string }[]) => {
+    const fromPal = doc.palette ? combination(doc.palette).map((hex) => ({ id: hex, label: wadaName.get(hex.toLowerCase()) ?? hex, hex })) : [];
+    const v = value.toLowerCase();
+    const known = [...fromPal, ...named].some((c) => c.id.toLowerCase() === v);
+    const own = isHex(value) && !known ? [{ id: value, label: 'Your colour', hex: value }] : [];
+    const chip = (c: { id: string; label: string; hex: string }) =>
+      `<button type="button" role="radio" data-set="${name}" data-value="${esc(c.id)}" aria-checked="${c.id.toLowerCase() === v}" aria-label="${esc(c.label)}" title="${esc(c.label)}" style="background:${esc(c.hex)}"></button>`;
+    return `<div class="zn-ctl"><span>${label}</span>
+      <div class="zn-ink" role="radiogroup" aria-label="${label}">
+        ${fromPal.map(chip).join('')}${fromPal.length ? '<span class="zn-pal-sep" aria-hidden="true"></span>' : ''}
+        ${[...named, ...own].map(chip).join('')}
+        <button type="button" class="zn-wheelbtn" data-wheel="${name}" aria-label="${label}: colour wheel" title="Colour wheel"></button>
+      </div>
+    </div>`;
+  };
+  const group = (title: string, body: string) => `<div class="zn-group"><p class="zn-grouphead">${title}</p><div class="zn-row">${body}</div></div>`;
+  const styleCtls = (prefix: string, s: TextStyle) => group('Text',
+    seg(`${prefix}.size`, 'Size', s.size, [['xs', 'XS'], ['s', 'S'], ['m', 'M'], ['l', 'L'], ['xl', 'XL']]) +
+    colourCtl(`${prefix}.ink`, 'Colour', s.ink, INKS) +
+    seg(`${prefix}.align`, 'Align', s.align, [['left', 'Left', ICON.left], ['center', 'Centre', ICON.center], ['right', 'Right', ICON.right]]) +
+    seg(`${prefix}.valign`, 'Vertical', s.valign, [['top', 'Top', ICON.top], ['middle', 'Middle', ICON.middle], ['bottom', 'Bottom', ICON.bottom]]) +
+    seg(`${prefix}.case`, 'Case', s.case, [['normal', 'Aa'], ['upper', 'AA']]) +
+    seg(`${prefix}.plate`, 'Behind', s.plate, [['none', 'None'], ['box', 'Box'], ['band', 'Band']]));
+  /** The paper round the photo. Shape and line only matter once there's a border. */
+  const frameCtls = (prefix: string, f: FrameStyle) => group('Border',
+    seg(`${prefix}.border`, 'Width', f.border, [['none', 'None'], ['thin', 'Thin'], ['m', 'Mid'], ['wide', 'Wide']]) +
+    (f.border === 'none' ? '' :
+      seg(`${prefix}.frame`, 'Sides', f.frame, [['even', 'Even'], ['polaroid', 'Deep foot'], ['letterbox', 'Top & foot'], ['pillar', 'Sides']]) +
+      colourCtl(`${prefix}.tone`, 'Paper', f.tone, TONES) +
+      seg(`${prefix}.rule`, 'Line', f.rule, [['none', 'Off'], ['line', 'On']])));
+
+  function well(where: string, photo: PhotoRef | null, empty: string, wide = false) {
+    return `<div class="zn-wellcol"><button type="button" class="zn-well${wide ? ' wide' : ''}" data-pick="${where}" data-drop="${where}" aria-label="${photo ? 'Change the photo' : esc(empty)}">
+      ${photo ? `<img src="${esc(photo.thumb)}" alt="" /><span class="zn-change">Change</span>` : esc(empty)}
+    </button>${photo ? `<button type="button" class="zn-textbtn zn-quiet" data-clear="${where}">Remove</button>` : ''}</div>`;
+  }
+
+  function coverPanel(panel: number, text: CoverDoc, prefix: 'cover' | 'back') {
+    const front = prefix === 'cover';
+    return `<div class="zn-cover">
+      ${well(`page.${panel}`, doc.pages[panel].photo, front ? 'Add photo' : 'Add photo')}
+      <div class="zn-fields">
+        <div class="zn-row">
+          <label class="zn-field"><span>Title</span><input data-text="${prefix}.title" value="${esc(text.title)}" placeholder="" /></label>
+          <label class="zn-field"><span>Subtitle</span><input data-text="${prefix}.subtitle" value="${esc(text.subtitle)}" placeholder="" /></label>
+          <label class="zn-field"><span>Author</span><input data-text="${prefix}.author" value="${esc(text.author)}" placeholder="" /></label>
+        </div>
+        ${front ? `<div class="zn-row"><div class="zn-ctl"><span>Typeface</span>
+          <div class="zn-chips" role="radiogroup" aria-label="Typeface">
+            ${FONTS.map((f) => `<button type="button" role="radio" data-set="font" data-value="${f.id}" aria-checked="${f.id === doc.font}" style="font-family:${esc(f.family)};font-style:${f.style};font-weight:${f.weight}">${f.label}</button>`).join('')}
+          </div></div></div>` : ''}
+        ${styleCtls(prefix, text)}
+        <div class="zn-suggest" id="zn-suggest" data-text-for="${prefix}" data-panel="${panel}" aria-live="polite"></div>
+        ${frameCtls(`page.${panel}`, doc.pages[panel])}
+      </div>
+    </div>`;
+  }
+
+  function pagePanel(panel: number, side: string) {
+    const p: PageDoc = doc.pages[panel];
+    const info = PANELS[panel];
+    return `<div class="zn-page">
+      <p class="zn-pagehead">${side} <small>page ${info.page}</small></p>
+      ${well(`page.${panel}`, p.photo, 'Add photo')}
+      <div class="zn-fields">
+        <label class="zn-field"><span>Caption</span><textarea rows="2" data-text="page.${panel}.caption" placeholder="">${esc(p.caption)}</textarea></label>
+        <div class="zn-row">
+          ${seg(`page.${panel}.fit`, 'Photo', p.fit, [['fit', 'Fit'], ['fill', 'Fill']])}
+        </div>
+        ${styleCtls(`page.${panel}`, p)}
+        ${frameCtls(`page.${panel}`, p)}
+      </div>
+    </div>`;
+  }
+
+  function mergedPanel(id: keyof ZineDoc['merged']) {
+    const m: MergeDoc = doc.merged[id];
+    return `<div class="zn-page wide">
+      <p class="zn-pagehead">Spread</p>
+      ${well(`merged.${id}`, m.photo, 'Add photo', true)}
+      <div class="zn-fields">
+        <label class="zn-field"><span>Caption</span><textarea rows="2" data-text="merged.${id}.caption" placeholder="">${esc(m.caption)}</textarea></label>
+        ${styleCtls(`merged.${id}`, m)}
+        ${frameCtls(`merged.${id}`, m)}
+      </div>
+    </div>`;
+  }
+
+  function buildEdit() {
+    const s = SLIDES[current];
+    edit.style.setProperty('--page-aspect', String(pageAspect(doc.paper)));
+    if (s.kind === 'single') {
+      edit.innerHTML = s.panel === COVER_PANEL ? coverPanel(COVER_PANEL, doc.cover, 'cover') : coverPanel(BACK_PANEL, doc.back, 'back');
+      void refreshSuggest();
+      return;
+    }
+    const sp = s.spread;
+    if (doc.merged[sp.id].on) {
+      edit.innerHTML = `<div class="zn-cols one">
+        ${mergedPanel(sp.id)}
+        <div class="zn-mid">
+          <button type="button" class="zn-icon" data-act="split" aria-label="Split into two pages" title="Split into two pages"><svg viewBox="0 0 24 24">${ICON.split}</svg></button>
+          <span class="zn-midlabel">Split</span>
+        </div>
+      </div>`;
+      return;
+    }
+    edit.innerHTML = `<div class="zn-cols">
+      ${pagePanel(sp.left, 'Left page')}
+      <div class="zn-mid">
+        <button type="button" class="zn-icon" data-act="swap" aria-label="Swap the two pages" title="Swap the two pages"><svg viewBox="0 0 24 24">${ICON.swap}</svg></button>
+        <span class="zn-midlabel">Swap</span>
+        <button type="button" class="zn-icon" data-act="merge" aria-label="Make one picture across both pages" title="Make one picture across both pages"><svg viewBox="0 0 24 24">${ICON.merge}</svg></button>
+        <span class="zn-midlabel">Join</span>
+      </div>
+      ${pagePanel(sp.right, 'Right page')}
+    </div>`;
+  }
+
+  /** Resolve a dotted path like "page.6.caption" to its object and key. */
+  function target(path: string): [Record<string, unknown>, string] {
+    const parts = path.split('.');
+    const key = parts.pop()!;
+    let obj: unknown = doc;
+    for (const p of parts) obj = p === 'page' ? doc.pages : (obj as Record<string, unknown>)[p];
+    return [obj as Record<string, unknown>, key];
+  }
+
+  edit.addEventListener('input', (e) => {
+    const el = e.target as HTMLInputElement;
+    if (el.dataset.text) {
+      const [o, k] = target(el.dataset.text);
+      o[k] = el.value;
+      changed();
+    }
+  });
+
+  edit.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-set], [data-act], [data-pick], [data-clear], [data-wheel], [data-theory]');
+    if (!el) return;
+    if (el.dataset.theory) {
+      const [o, k] = target(el.dataset.path!);
+      o[k] = el.dataset.theory;
+      changed(true);
+      return;
+    }
+    if (el.dataset.wheel) { openWheel(el.dataset.wheel); return; }
+    const s = SLIDES[current];
+    if (el.dataset.set) {
+      if (el.dataset.set === 'font') doc.font = el.dataset.value as ZineDoc['font'];
+      else {
+        const [o, k] = target(el.dataset.set);
+        if (k === 'fit') setFit(o as unknown as PageDoc, el.dataset.value as Fit);
+        else o[k] = el.dataset.value;
+      }
+      // Some controls only show in some states, so those rebuild the panel.
+      const reshapes = /\.(fit|border)$/.test(el.dataset.set) || Boolean(el.closest('.zn-suggest'));
+      if (/^(cover|back)\.valign$/.test(el.dataset.set)) void refreshSuggest();
+      if (!reshapes) el.parentElement!.querySelectorAll('[role="radio"]').forEach((b) => b.setAttribute('aria-checked', String(b === el)));
+      changed(reshapes);
+    } else if (el.dataset.act && s.kind === 'spread') {
+      if (el.dataset.act === 'swap') swapPages(doc, s.spread);
+      if (el.dataset.act === 'merge') mergeSpread(doc, s.spread);
+      if (el.dataset.act === 'split') splitSpread(doc, s.spread);
+      changed(true);
+    } else if (el.dataset.pick) {
+      openPicker(el.dataset.pick);
+    } else if (el.dataset.clear) {
+      setPhoto(el.dataset.clear, null);
+    }
+  });
+
+  // ── Photos ──────────────────────────────────────────────────────────────
+  function setPhoto(where: string, ref: PhotoRef | null) {
+    const [kind, key] = where.split('.');
+    if (kind === 'page') doc.pages[Number(key)].photo = ref;
+    else doc.merged[key as keyof ZineDoc['merged']].photo = ref;
+    changed(true);
+    if (ref && where === `page.${COVER_PANEL}`) {
+      void readFor('cover.ink').then((r) => {
+        if (r) toast(`Cover read: its key colour is ${r.key.name}. Six title colours from Wada’s book are below and in the colour wheel.`, 6000);
+      });
+    }
+  }
+
+  const fromArchive = (p: ArchivePhoto): PhotoRef => ({ kind: 'archive', id: p.id, thumb: p.thumb, full: p.full, w: p.w, h: p.h, panX: 0, panY: 0 });
+
+  /** A file from this device, shrunk to print size and kept in IndexedDB. */
+  async function fromFile(file: File): Promise<PhotoRef | null> {
+    if (!file.type.startsWith('image/')) { toast('That isn’t an image this browser can open.'); return null; }
+    let bmp: ImageBitmap;
+    try { bmp = await createImageBitmap(file); } catch { toast('Couldn’t read that image. RAW files need exporting as JPEG first.'); return null; }
+    const max = 3000;
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k);
+    c.height = Math.round(bmp.height * k);
+    c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.9));
+    if (!blob) return null;
+    const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await putFile(id, blob);
+    const url = URL.createObjectURL(blob);
+    return { kind: 'local', id, thumb: url, full: url, w: c.width, h: c.height, panX: 0, panY: 0 };
+  }
+
+  const picker = $<HTMLDialogElement>('zn-picker');
+  let pickFor = '';
+  function openPicker(where: string) {
+    pickFor = where;
+    const grid = $('zn-pickgrid');
+    if (!grid.childElementCount) {
+      grid.innerHTML = data.chapters.length
+        ? data.chapters.map((ch) => `<h3>${esc(ch.name)}</h3><div class="zn-pickrow">${ch.photos.map((p) => `<button type="button" data-photo="${esc(p.id)}" aria-label="Use this photo"><img src="${esc(p.small)}" alt="" loading="lazy" /></button>`).join('')}</div>`).join('')
+        : '<p>Nothing in the book yet. Use a photo from this device instead.</p>';
+    }
+    picker.showModal();
+  }
+  const archiveById = new Map(data.chapters.flatMap((c) => c.photos).map((p) => [p.id, p] as const));
+  $('zn-pickgrid').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-photo]');
+    const p = b && archiveById.get(b.dataset.photo!);
+    if (!p) return;
+    picker.close();
+    setPhoto(pickFor, fromArchive(p));
+  });
+  $<HTMLInputElement>('zn-file').addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    picker.close();
+    const ref = await fromFile(file);
+    if (ref) setPhoto(pickFor, ref);
+  });
+
+  // Dropping a file: onto a photo well, or onto the page itself on the stage.
+  function dropTargetOnStage(clientX: number): string {
+    const s = SLIDES[current];
+    if (s.kind === 'single') return `page.${s.panel}`;
+    if (doc.merged[s.spread.id].on) return `merged.${s.spread.id}`;
+    const r = canvas.getBoundingClientRect();
+    return `page.${clientX < r.left + r.width / 2 ? s.spread.left : s.spread.right}`;
+  }
+  for (const el of [edit, stage]) {
+    el.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types.includes('Files')) return;
+      e.preventDefault();
+      const w = (e.target as HTMLElement).closest('.zn-well');
+      edit.querySelectorAll('.zn-well.over').forEach((x) => x !== w && x.classList.remove('over'));
+      (w ?? (el === stage ? stage : null))?.classList.add('over');
+    });
+    el.addEventListener('dragleave', (e) => {
+      if (!(e.relatedTarget instanceof Node && el.contains(e.relatedTarget))) {
+        el.querySelectorAll('.over').forEach((x) => x.classList.remove('over'));
+        stage.classList.remove('over');
+      }
+    });
+    el.addEventListener('drop', async (e) => {
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      e.preventDefault();
+      stage.classList.remove('over');
+      const w = (e.target as HTMLElement).closest<HTMLElement>('[data-drop]');
+      const where = w?.dataset.drop ?? (el === stage ? dropTargetOnStage(e.clientX) : null);
+      if (!where) return;
+      const ref = await fromFile(file);
+      if (ref) setPhoto(where, ref);
+    });
+  }
+
+  // ── Moving a photo within its page ─────────────────────────────────────
+  // A photo that fills its page can be dragged to choose what the crop keeps.
+  interface PanTarget { ref: PhotoRef; boxW: number; boxH: number }
+  function panTargetAt(clientX: number): PanTarget | null {
+    const s = SLIDES[current];
+    const { w, h } = stageBox;
+    const boxed = (ref: PhotoRef, f: FrameStyle, bw: number, u: number) => {
+      const b = photoBox(f, 0, 0, bw, h, u);
+      return { ref, boxW: b.w, boxH: b.h };
+    };
+    if (s.kind === 'single') {
+      const p = doc.pages[s.panel];
+      return p.photo ? boxed(p.photo, p, w, w / 100) : null;
+    }
+    const m = doc.merged[s.spread.id];
+    if (m.on) return m.photo ? boxed(m.photo, m, w, w / 200) : null;
+    const r = canvas.getBoundingClientRect();
+    const page = doc.pages[clientX < r.left + r.width / 2 ? s.spread.left : s.spread.right];
+    return page.photo && page.fit === 'fill' ? boxed(page.photo, page, w / 2, w / 200) : null;
+  }
+  let pan: (PanTarget & { x: number; y: number; px: number; py: number }) | null = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    const t = panTargetAt(e.clientX);
+    if (!t) return;
+    const g = coverGeometry(t.ref.w, t.ref.h, t.boxW, t.boxH);
+    if (g.overflowX < 1 && g.overflowY < 1) return;
+    pan = { ...t, x: e.clientX, y: e.clientY, px: t.ref.panX, py: t.ref.panY };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pan) {
+      canvas.style.cursor = panTargetAt(e.clientX) ? 'grab' : '';
+      return;
+    }
+    const g = coverGeometry(pan.ref.w, pan.ref.h, pan.boxW, pan.boxH);
+    const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+    if (g.overflowX >= 1) pan.ref.panX = clamp(pan.px - ((e.clientX - pan.x) * 2) / g.overflowX);
+    if (g.overflowY >= 1) pan.ref.panY = clamp(pan.py - ((e.clientY - pan.y) * 2) / g.overflowY);
+    queueRender();
+  });
+  const endPan = () => {
+    if (!pan) return;
+    pan = null;
+    canvas.style.cursor = '';
+    changed();
+    void refreshSuggest();
+  };
+  canvas.addEventListener('pointerup', endPan);
+  canvas.addEventListener('pointercancel', endPan);
+
+  function updateStageHint() {
+    const s = SLIDES[current];
+    const has = s.kind === 'single'
+      ? Boolean(doc.pages[s.panel].photo)
+      : doc.merged[s.spread.id].on
+        ? Boolean(doc.merged[s.spread.id].photo)
+        : [s.spread.left, s.spread.right].some((i) => doc.pages[i].photo && doc.pages[i].fit === 'fill');
+    $('zn-stagehint').textContent = has ? 'Drag to reposition' : '';
+  }
+
+  // ── Paper ───────────────────────────────────────────────────────────────
+  const paperSeg = $('zn-paper');
+  function syncPaper() {
+    paperSeg.querySelectorAll<HTMLElement>('[data-paper]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.paper === doc.paper)));
+  }
+  paperSeg.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-paper]');
+    if (!b) return;
+    doc.paper = b.dataset.paper as PaperId;
+    syncPaper();
+    changed(true);
+  });
+
+  // ── Preview ─────────────────────────────────────────────────────────────
+  const viewer = $<HTMLDialogElement>('zn-viewer');
+  const viewCanvas = $<HTMLCanvasElement>('zn-viewcanvas');
+  let viewAt = 0;
+  let viewMode: 'pages' | 'sheet' = 'pages';
+  function renderViewer() {
+    const body = viewCanvas.parentElement!;
+    const narrow = window.matchMedia('(max-width: 760px)').matches;
+    const availW = body.clientWidth - (narrow ? 32 : 160);
+    const availH = body.clientHeight - (narrow ? 80 : 0);
+    const sheet = viewMode === 'sheet';
+    const a = sheet ? PAPER[doc.paper].widthMM / PAPER[doc.paper].heightMM : slideAspect(SLIDES[viewAt]);
+    let w = availW;
+    let h = w / a;
+    if (h > availH) { h = availH; w = h * a; }
+    w = Math.floor(w);
+    h = Math.floor(h);
+    const ctx = sizeCanvas(viewCanvas, w, h);
+    if (sheet) drawSheet(ctx, doc, w, h, screenOpts(false), true);
+    else drawSlide(ctx, SLIDES[viewAt], w, h, screenOpts(false), false);
+    $('zn-viewlabel').textContent = sheet ? `${PAPER[doc.paper].label}, as it prints` : SLIDES[viewAt].label;
+    $('zn-viewnote').textContent = sheet
+      ? ''
+      : `${viewAt + 1} / ${SLIDES.length}`;
+    $<HTMLButtonElement>('zn-prev').disabled = sheet || viewAt === 0;
+    $<HTMLButtonElement>('zn-next').disabled = sheet || viewAt === SLIDES.length - 1;
+  }
+  $('zn-preview').addEventListener('click', () => {
+    viewAt = current;
+    viewer.showModal();
+    renderViewer();
+  });
+  $('zn-prev').addEventListener('click', () => { viewAt = Math.max(0, viewAt - 1); renderViewer(); });
+  $('zn-next').addEventListener('click', () => { viewAt = Math.min(SLIDES.length - 1, viewAt + 1); renderViewer(); });
+  viewer.addEventListener('keydown', (e) => {
+    if (viewMode !== 'pages') return;
+    if (e.key === 'ArrowLeft') $('zn-prev').click();
+    if (e.key === 'ArrowRight') $('zn-next').click();
+  });
+  $('zn-viewmode').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]');
+    if (!b) return;
+    viewMode = b.dataset.mode as typeof viewMode;
+    $('zn-viewmode').querySelectorAll('[data-mode]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    renderViewer();
+  });
+
+  // ── Title colour from the cover photo ──────────────────────────────────
+  // Only the cover's own photo counts here. It is drawn small, cropped and
+  // panned the way it prints, to find its colours and the average colour of
+  // the band the title sits in (top, middle or bottom), and colours from the
+  // Wada combinations that suit it are offered if they read on that band.
+  let suggestRun = 0;
+  const loadImage = (url: string) => new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+
+  /** What a text colour's path sits on: the photo under it, and where. */
+  function textContext(path: string): { ref: PhotoRef; style: TextStyle; aspect: number; paper: string | null } | null {
+    const parts = path.split('.');
+    if (parts.at(-1) !== 'ink') return null;
+    const a = pageAspect(doc.paper);
+    if (parts[0] === 'cover' || parts[0] === 'back') {
+      const ref = doc.pages[parts[0] === 'cover' ? COVER_PANEL : BACK_PANEL].photo;
+      return ref ? { ref, style: doc[parts[0]], aspect: a, paper: null } : null;
+    }
+    if (parts[0] === 'page') {
+      const p = doc.pages[Number(parts[1])];
+      if (!p.photo) return null;
+      // A fitted caption above or below the picture sits on paper, not photo.
+      const onPaper = p.fit === 'fit' && p.valign !== 'middle';
+      return { ref: p.photo, style: p, aspect: a, paper: onPaper ? toneHex(p.tone) : null };
+    }
+    const m = doc.merged[parts[1] as keyof ZineDoc['merged']];
+    return m.photo ? { ref: m.photo, style: m, aspect: a * 2, paper: null } : null;
+  }
+  const toneHex = (t: string) => (isHex(t) ? t : (TONES.find((x) => x.id === t)?.hex ?? '#fbfaf6'));
+
+  /**
+   * Read a photo with colour theory, cropped and panned the way it prints:
+   * its main colours, and the average colour of the band the text sits in
+   * (top, middle or bottom), unless the text sits on paper.
+   */
+  const readings = new Map<string, CoverReading | null>();
+  async function readFor(path: string): Promise<CoverReading | null> {
+    const t = textContext(path);
+    if (!t) return null;
+    const { ref, style, aspect, paper } = t;
+    const key = [ref.thumb, ref.panX.toFixed(2), ref.panY.toFixed(2), style.valign, aspect.toFixed(3), paper].join('|');
+    if (readings.has(key)) return readings.get(key)!;
+    const img = await loadImage(ref.thumb);
+    if (!img) return null;
+    const W = Math.round(60 * Math.max(1, aspect));
+    const H = Math.round(W / aspect);
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    const g = coverGeometry(ref.w, ref.h, W, H);
+    ctx.drawImage(img, -g.overflowX / 2 - (ref.panX * g.overflowX) / 2, -g.overflowY / 2 - (ref.panY * g.overflowY) / 2, g.w, g.h);
+    let reading: CoverReading | null = null;
+    try {
+      const all = ctx.getImageData(0, 0, W, H).data;
+      let region = paper;
+      if (!region) {
+        const [from, to] = style.valign === 'top' ? [0.08, 0.45] : style.valign === 'bottom' ? [0.55, 0.92] : [0.3, 0.7];
+        const band = ctx.getImageData(0, Math.round(H * from), W, Math.max(1, Math.round(H * (to - from)))).data;
+        const sum = [0, 0, 0];
+        for (let i = 0; i < band.length; i += 4) { sum[0] += band[i]; sum[1] += band[i + 1]; sum[2] += band[i + 2]; }
+        const n = band.length / 4;
+        region = rgbToHex([sum[0] / n, sum[1] / n, sum[2] / n]);
+      }
+      reading = readCover(dominantColours(all, 6), region);
+    } catch { /* unreadable image */ }
+    readings.set(key, reading);
+    return reading;
+  }
+
+  /** The six suggestions as cards: swatch, Wada's name, and the rule behind it. */
+  function theoryCards(r: CoverReading, path: string, current: string) {
+    return r.picks.map((p) => `<button type="button" class="zn-theory" data-theory="${p.hex}" data-path="${path}" aria-pressed="${p.hex === current.toLowerCase()}"
+      title="${esc(p.name)}${p.pairedIn ? `. Wada pairs it with ${esc(r.key.name)} in No. ${p.pairedIn}` : ''}">
+      <i style="background:${p.hex}"></i><span>${esc(p.name)}</span><small>${RULE_LABEL[p.rule]}${p.pairedIn ? ` · No. ${p.pairedIn}` : ''}</small></button>`).join('');
+  }
+  const keyLine = (r: CoverReading) =>
+    `<span class="zn-key"><i style="background:${r.key.hex}"></i>Key colour <b>${esc(r.key.name)}</b>${r.key.neutral ? ' (mostly neutral)' : ''}</span>`;
+
+  async function refreshSuggest() {
+    const box = document.getElementById('zn-suggest');
+    if (!box) return;
+    const run = ++suggestRun;
+    const prefix = box.dataset.textFor as 'cover' | 'back';
+    const path = `${prefix}.ink`;
+    const label = prefix === 'cover' ? 'Title colours from the cover photo' : 'Title colours from this photo';
+    if (!textContext(path)) { box.innerHTML = `<span class="zn-suglabel">${label}</span><span class="zn-sugnote">Add a photo and it’s read with colour theory for six title colours from Wada’s book.</span>`; return; }
+    const r = await readFor(path);
+    if (run !== suggestRun) return;
+    if (!r) { box.innerHTML = ''; return; }
+    box.innerHTML = `<span class="zn-suglabel">${label}</span>${keyLine(r)}<div class="zn-theorygrid">${theoryCards(r, path, doc[prefix].ink)}</div>`;
+  }
+
+  // ── Colour wheel ────────────────────────────────────────────────────────
+  // Hue round the wheel, strength out from the centre, brightness on a slider.
+  // Every move recolours the zine at once; the swatches catch up on close.
+  const wheel = $<HTMLDialogElement>('zn-wheel');
+  const wheelCanvas = $<HTMLCanvasElement>('zn-wheelcanvas');
+  const wheelV = $<HTMLInputElement>('zn-wheelv');
+  const wheelHex = $<HTMLInputElement>('zn-wheelhex');
+  let wheelFor = '';
+  let hsv: [number, number, number] = [0, 0, 0];
+  const WHEEL = 240;
+
+  function currentColour(path: string): string {
+    const [o, k] = target(path);
+    const v = o[k] as string;
+    return k === 'tone' ? (isHex(v) ? v : (TONES.find((t) => t.id === v)?.hex ?? '#fbfaf6')) : (isHex(v) ? v : (INKS.find((i) => i.id === v)?.hex ?? '#141312'));
+  }
+
+  let wheelReading: CoverReading | null = null;
+  function openWheel(path: string) {
+    wheelFor = path;
+    wheelReading = null;
+    shownNear = -1;
+    $('zn-theorywrap').hidden = true;
+    void readFor(path).then((r) => {
+      if (wheelFor !== path || !wheel.open || !r) return;
+      wheelReading = r;
+      $('zn-wheelkey').innerHTML = keyLine(r);
+      $('zn-wheeltheory').innerHTML = theoryCards(r, path, rgbToHex(hsvToRgb(...hsv)));
+      $('zn-theorywrap').hidden = false;
+      syncWheel(false);
+    });
+    $('zn-wheel-title').textContent = path.endsWith('.tone') ? 'Paper colour' : 'Text colour';
+    hsv = rgbToHsv(hexToRgb(currentColour(path)));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    wheelCanvas.width = wheelCanvas.height = Math.round(WHEEL * dpr);
+    wheel.showModal();
+    syncWheel(false);
+  }
+
+  /**
+   * The wheel at full brightness, worked out once per size. Every pixel's
+   * colour in HSV scales straight with brightness, so a dimmer wheel is this
+   * one under a black wash of (1 − brightness): exactly the same colours, for
+   * one fill instead of a quarter of a million per move.
+   */
+  let wheelBase: HTMLCanvasElement | null = null;
+  function wheelDisc(n: number): HTMLCanvasElement {
+    if (wheelBase?.width === n) return wheelBase;
+    const c = document.createElement('canvas');
+    c.width = c.height = n;
+    const g = c.getContext('2d')!;
+    const r = n / 2;
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const dx = x + 0.5 - r;
+        const dy = y + 0.5 - r;
+        const d = Math.hypot(dx, dy) / r;
+        if (d > 1) continue;
+        const h = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+        const [cr, cg, cb] = hsvToRgb(h, d, 1);
+        const i = (y * n + x) * 4;
+        img.data[i] = cr; img.data[i + 1] = cg; img.data[i + 2] = cb;
+        img.data[i + 3] = d > 0.985 ? Math.round(255 * (1 - d) / 0.015) : 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return (wheelBase = c);
+  }
+
+  function drawWheel() {
+    const ctx = wheelCanvas.getContext('2d')!;
+    const n = wheelCanvas.width;
+    const r = n / 2;
+    ctx.clearRect(0, 0, n, n);
+    ctx.drawImage(wheelDisc(n), 0, 0);
+    if (hsv[2] < 1) {
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = `rgba(0,0,0,${1 - hsv[2]})`;
+      ctx.fillRect(0, 0, n, n);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    const k = n / WHEEL;
+    const dot = (hex: string, size: number, ring: string) => {
+      const [h, sat] = rgbToHsv(hexToRgb(hex));
+      const a = (h * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.arc(r + Math.cos(a) * sat * r, r + Math.sin(a) * sat * r, size * k, 0, Math.PI * 2);
+      ctx.fillStyle = hex;
+      ctx.fill();
+      ctx.lineWidth = 2 * k;
+      ctx.strokeStyle = ring;
+      ctx.stroke();
+    };
+    // Colour theory, drawn: the photo's key colour as a square, and a line
+    // from it to each of the six suggestions.
+    if (wheelReading) {
+      const at = (hex: string): [number, number] => {
+        const [h, sat] = rgbToHsv(hexToRgb(hex));
+        const a = (h * Math.PI) / 180;
+        return [r + Math.cos(a) * sat * r, r + Math.sin(a) * sat * r];
+      };
+      const [kx, ky] = at(wheelReading.key.hex);
+      ctx.save();
+      ctx.setLineDash([4 * k, 4 * k]);
+      ctx.lineWidth = 1.2 * k;
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      for (const p of wheelReading.picks) {
+        const [px, py] = at(p.hex);
+        ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(px, py); ctx.stroke();
+      }
+      ctx.restore();
+      for (const p of wheelReading.picks) dot(p.hex, 6, '#fff');
+      ctx.fillStyle = wheelReading.key.hex;
+      ctx.fillRect(kx - 7 * k, ky - 7 * k, 14 * k, 14 * k);
+      ctx.lineWidth = 2 * k;
+      ctx.strokeStyle = '#fff';
+      ctx.strokeRect(kx - 7 * k, ky - 7 * k, 14 * k, 14 * k);
+    }
+    // The chosen combination's colours sit on the wheel as small markers.
+    if (doc.palette) for (const hex of combination(doc.palette)) dot(hex, 5, 'rgba(255,255,255,0.85)');
+    const now = rgbToHex(hsvToRgb(...hsv));
+    dot(now, 9, '#fff');
+    ctx.lineWidth = 1 * k;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.stroke();
+  }
+
+  function comboButton(n: number, pressed: boolean) {
+    const cols = combination(n);
+    return `<button type="button" class="zn-combo" data-combo="${n}" aria-pressed="${pressed}" title="${esc(cols.map((h) => wadaName.get(h) ?? h).join(', '))}">
+      <span class="zn-strip">${cols.map((h) => `<i style="background:${h}"></i>`).join('')}</span><small>No. ${n}</small></button>`;
+  }
+
+  // What the panel beside the wheel last showed, so a drag only rebuilds it
+  // when the nearest book colour actually changes.
+  let shownNear = -1;
+  let shownPalette: number | null = null;
+  function syncWheel(apply = true) {
+    const hex = rgbToHex(hsvToRgb(...hsv));
+    wheelV.value = String(Math.round(hsv[2] * 100));
+    if (document.activeElement !== wheelHex) wheelHex.value = hex;
+    $('zn-wheelchip').style.background = hex;
+    drawWheel();
+    const near = nearestWada(hex);
+    const w = $('zn-wada');
+    (w.querySelector('.zn-wheelchip') as HTMLElement).style.background = near.hex;
+    w.querySelector('.zn-wadaname')!.textContent = near.name;
+    w.querySelector('small')!.textContent = near.distance < 3 ? 'this one' : 'use it';
+    w.dataset.hex = near.hex;
+    if (near.index !== shownNear || doc.palette !== shownPalette) {
+      shownNear = near.index;
+      shownPalette = doc.palette;
+      $('zn-goes').innerHTML = combinationsWith(near.index).map((n) => comboButton(n, n === doc.palette)).join('');
+    }
+    $('zn-wheeltheory').querySelectorAll<HTMLElement>('[data-theory]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.theory === hex)));
+    if (apply) {
+      const [o, k] = target(wheelFor);
+      o[k] = hex;
+      changed();
+    }
+  }
+
+  function pickAt(e: PointerEvent) {
+    const rect = wheelCanvas.getBoundingClientRect();
+    const dx = e.clientX - rect.left - rect.width / 2;
+    const dy = e.clientY - rect.top - rect.height / 2;
+    hsv[0] = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+    hsv[1] = Math.min(1, Math.hypot(dx, dy) / (rect.width / 2));
+    // Picking a hue on a black wheel would do nothing visible; lift it.
+    if (hsv[2] < 0.15) hsv[2] = 0.6;
+    // Pointers can report faster than the screen draws; one sync per frame.
+    if (!wheelFrame) wheelFrame = requestAnimationFrame(() => { wheelFrame = 0; syncWheel(); });
+  }
+  let wheelFrame = 0;
+  let wheelDrag = false;
+  wheelCanvas.addEventListener('pointerdown', (e) => { wheelDrag = true; wheelCanvas.setPointerCapture(e.pointerId); pickAt(e); });
+  wheelCanvas.addEventListener('pointermove', (e) => { if (wheelDrag) pickAt(e); });
+  const endWheel = () => { wheelDrag = false; };
+  wheelCanvas.addEventListener('pointerup', endWheel);
+  wheelCanvas.addEventListener('pointercancel', endWheel);
+  wheelCanvas.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 15 : 3;
+    if (e.key === 'ArrowLeft') hsv[0] = (hsv[0] - step + 360) % 360;
+    else if (e.key === 'ArrowRight') hsv[0] = (hsv[0] + step) % 360;
+    else if (e.key === 'ArrowUp') hsv[1] = Math.min(1, hsv[1] + step / 100);
+    else if (e.key === 'ArrowDown') hsv[1] = Math.max(0, hsv[1] - step / 100);
+    else return;
+    e.preventDefault();
+    syncWheel();
+  });
+  wheelV.addEventListener('input', () => { hsv[2] = Number(wheelV.value) / 100; syncWheel(); });
+  wheelHex.addEventListener('input', () => {
+    const v = wheelHex.value.trim().toLowerCase();
+    const hex = v.startsWith('#') ? v : `#${v}`;
+    if (isHex(hex)) { hsv = rgbToHsv(hexToRgb(hex)); syncWheel(); }
+  });
+  wheelHex.addEventListener('blur', () => { wheelHex.value = rgbToHex(hsvToRgb(...hsv)); });
+  $('zn-wheeltheory').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-theory]');
+    if (!b) return;
+    hsv = rgbToHsv(hexToRgb(b.dataset.theory!));
+    syncWheel();
+  });
+  $('zn-wada').addEventListener('click', (e) => {
+    const hex = (e.currentTarget as HTMLElement).dataset.hex;
+    if (hex) { hsv = rgbToHsv(hexToRgb(hex)); syncWheel(); }
+  });
+  $('zn-goes').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-combo]');
+    if (!b) return;
+    const n = Number(b.dataset.combo);
+    doc.palette = doc.palette === n ? null : n;
+    save();
+    syncWheel(false);
+  });
+  wheel.addEventListener('close', () => buildEdit());
+
+  // ── Colour combinations ─────────────────────────────────────────────────
+  // The photos' main colours are read from their screen-sized copies (same
+  // origin, or blob URLs, so the canvas stays readable), then the book's
+  // combinations are ranked by how well they echo them.
+  const pal = $<HTMLDialogElement>('zn-pal');
+  let palMode: 'photos' | 'all' = 'photos';
+  let palCount = 0;
+  let picked: number | null = null;
+  let photoSwatches: { key: string; swatches: Swatch[] } = { key: '', swatches: [] };
+
+  async function readPhotoColours(): Promise<Swatch[]> {
+    const refs = photosInDoc(doc);
+    const key = refs.map((r) => r.thumb).join('|');
+    if (key === photoSwatches.key) return photoSwatches.swatches;
+    const S = 40;
+    const c = document.createElement('canvas');
+    c.width = S;
+    c.height = S * refs.length;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    await Promise.all(refs.map((r, i) => new Promise<void>((resolve) => {
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, i * S, S, S); resolve(); };
+      img.onerror = () => resolve();
+      img.src = r.thumb;
+    })));
+    let swatches: Swatch[] = [];
+    try { swatches = refs.length ? dominantColours(ctx.getImageData(0, 0, c.width, c.height).data, 6) : []; } catch { /* unreadable canvas */ }
+    photoSwatches = { key, swatches };
+    return swatches;
+  }
+
+  async function renderPal() {
+    const grid = $('zn-palgrid');
+    const head = $('zn-palphotos');
+    $('zn-palcount').hidden = palMode !== 'all';
+    let list: number[];
+    if (palMode === 'photos') {
+      const sw = await readPhotoColours();
+      if (!sw.length) {
+        head.innerHTML = '<p>Add some photos and this suggests combinations that suit them.</p>';
+        list = [];
+      } else {
+        head.innerHTML = `<p>Colours in your photos</p><span class="zn-strip">${sw.map((s) => `<i style="background:${s.hex};flex:${s.weight.toFixed(3)}"></i>`).join('')}</span>`;
+        list = rankCombinations(sw, 30).map((r) => r.n);
+      }
+    } else {
+      head.innerHTML = '';
+      list = WADA_COMBINATIONS.map((_, i) => i + 1).filter((n) => !palCount || WADA_COMBINATIONS[n - 1].length === palCount);
+    }
+    grid.innerHTML = list.map((n) => comboButton(n, n === picked)).join('');
+    syncPalFoot();
+  }
+  function syncPalFoot() {
+    $('zn-palpicked').textContent = picked
+      ? `No. ${picked}: ${combination(picked).map((h) => wadaName.get(h) ?? h).join(', ')}`
+      : 'Pick a combination.';
+    $<HTMLButtonElement>('zn-palapply').disabled = !picked;
+  }
+  $('zn-colours').addEventListener('click', () => {
+    picked = doc.palette;
+    pal.showModal();
+    void renderPal();
+  });
+  $('zn-palmode').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]');
+    if (!b) return;
+    palMode = b.dataset.mode as typeof palMode;
+    $('zn-palmode').querySelectorAll('[data-mode]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    void renderPal();
+  });
+  $('zn-palcount').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-count]');
+    if (!b) return;
+    palCount = Number(b.dataset.count);
+    $('zn-palcount').querySelectorAll('[data-count]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    void renderPal();
+  });
+  // Picking one puts its colours by every swatch; applying recolours it all.
+  $('zn-palgrid').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-combo]');
+    if (!b) return;
+    picked = Number(b.dataset.combo);
+    doc.palette = picked;
+    $('zn-palgrid').querySelectorAll('[data-combo]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    syncPalFoot();
+    changed(true);
+  });
+  $('zn-palnone').addEventListener('click', () => {
+    picked = null;
+    doc.palette = null;
+    $('zn-palgrid').querySelectorAll('[data-combo]').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    syncPalFoot();
+    changed(true);
+  });
+  $('zn-palapply').addEventListener('click', () => {
+    if (!picked) return;
+    applyCombination(doc, picked);
+    pal.close();
+    changed(true);
+    toast(`Coloured with No. ${picked}. Each swatch row now starts with its colours.`);
+  });
+
+  // ── Dialog plumbing ─────────────────────────────────────────────────────
+  document.querySelectorAll<HTMLDialogElement>('dialog').forEach((d) => {
+    d.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('[data-close]') || e.target === d) d.close();
+    });
+  });
+  $('zn-fold').addEventListener('click', () => $<HTMLDialogElement>('zn-folddlg').showModal());
+
+  const confirmDlg = $<HTMLDialogElement>('zn-confirm');
+  let onConfirm: (() => void) | null = null;
+  function ask(title: string, body: string, ok: string, then: () => void) {
+    $('zn-confirm-title').textContent = title;
+    $('zn-confirm-body').textContent = body;
+    $('zn-confirm-ok').textContent = ok;
+    onConfirm = then;
+    confirmDlg.showModal();
+  }
+  $('zn-confirm-ok').addEventListener('click', () => {
+    confirmDlg.close();
+    onConfirm?.();
+    onConfirm = null;
+  });
+
+  let toastTimer = 0;
+  function toast(msg: string, ms = 4200) {
+    const t = $('zn-toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => { t.hidden = true; }, ms);
+  }
+
+  // ── Starting points ─────────────────────────────────────────────────────
+  function fillFromBook() {
+    const photos = data.chapters.flatMap((c) => c.photos);
+    if (!photos.length) { toast('The book is empty, so there’s nothing to fill it with yet.'); return; }
+    const { paper, font, palette, cover, back } = doc;
+    doc = freshDoc(paper);
+    Object.assign(doc, { font, palette, cover, back });
+    // Spread the book across all eight pages, so a long book gives a sample
+    // of every chapter rather than eight frames from the first.
+    READING_ORDER.forEach((panel, i) => {
+      const p = photos[Math.floor((i * photos.length) / READING_ORDER.length)];
+      if (p) doc.pages[panel].photo = fromArchive(p);
+    });
+    current = 0;
+    changed(true);
+    
+  }
+  $('zn-frombook').addEventListener('click', () => {
+    if (isEmpty(doc)) fillFromBook();
+    else ask('Replace these pages?', 'Every page gets a photo from your book.', 'Fill it', fillFromBook);
+  });
+  $('zn-reset').addEventListener('click', () =>
+    ask('Start over?', 'This clears every page.', 'Start over', () => {
+      doc = freshDoc(doc.paper);
+      current = 0;
+      void clearFiles();
+      syncPaper();
+      changed(true);
+    }),
+  );
+
+  // ── Download ────────────────────────────────────────────────────────────
+  function loadFull(ref: PhotoRef): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('a photo didn’t load'));
+      img.src = ref.full;
+    });
+  }
+
+  async function renderPrint(): Promise<{ jpeg: Blob; w: number; h: number }> {
+    const refs = photosInDoc(doc);
+    const loaded = new Map<string, HTMLImageElement>();
+    await Promise.all(refs.map(async (r) => loaded.set(r.full, await loadFull(r))));
+    await document.fonts.ready;
+    const { w, h } = sheetPixels(doc.paper);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    drawSheet(c.getContext('2d')!, doc, w, h, { image: (r) => loaded.get(r.full) ?? null, hints: false });
+    const jpeg = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.92));
+    if (!jpeg) throw new Error('this browser couldn’t make the image');
+    return { jpeg, w, h };
+  }
+
+  function fileName(ext: string) {
+    const slug = doc.cover.title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return `${slug || 'zine'}-${PAPER[doc.paper].label.toLowerCase()}.${ext}`;
+  }
+  function saveBlob(blob: Blob, name: string) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  async function download(kind: 'pdf' | 'jpg', btn: HTMLButtonElement) {
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Making it…';
+    try {
+      const { jpeg, w, h } = await renderPrint();
+      if (kind === 'jpg') saveBlob(jpeg, fileName('jpg'));
+      else {
+        const pt = sheetPoints(doc.paper);
+        const pdf = jpegToPdf(new Uint8Array(await jpeg.arrayBuffer()), w, h, pt.w, pt.h);
+        saveBlob(new Blob([pdf], { type: 'application/pdf' }), fileName('pdf'));
+      }
+      toast(`Print on ${PAPER[doc.paper].label} at 100%.`);
+    } catch (err) {
+      toast(`Couldn’t make the file: ${(err as Error).message}.`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+  $('zn-download').addEventListener('click', (e) => download('pdf', e.currentTarget as HTMLButtonElement));
+  $('zn-jpg').addEventListener('click', (e) => download('jpg', e.currentTarget as HTMLButtonElement));
+
+  // ── Start ───────────────────────────────────────────────────────────────
+  syncPaper();
+  buildRail();
+  buildEdit();
+  renderAll();
+  new ResizeObserver(([entry]) => {
+    stageAvail = { w: entry.contentRect.width, h: entry.contentRect.height };
+    queueRender();
+  }).observe(stage);
+  // The masthead is set in the archive's own faces; redraw once they arrive.
+  Promise.all([
+    document.fonts.load('italic 600 40px Fraunces'),
+    document.fonts.load('600 40px Fraunces'),
+    document.fonts.load('italic 500 40px Fraunces'),
+    document.fonts.load('500 40px "JetBrains Mono"'),
+  ]).finally(queueRender);
+  void rehydrate();
+</script>

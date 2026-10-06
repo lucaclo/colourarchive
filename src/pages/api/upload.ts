@@ -8,6 +8,7 @@ import type { Photo } from '../../lib/types';
 import { looksFor, photoLookRequest, type LookRequest } from '../../lib/match/looks';
 import { MIN_CHAPTER_PHOTOS, chapterDna, scoreAgainstChapter } from '../../lib/match/chapter-dna';
 import type { LookSignature } from '../../lib/match/resemble';
+import { borderlineOf, type Borderline } from '../../lib/borderline';
 
 export const prerender = false;
 
@@ -43,6 +44,8 @@ export const POST: APIRoute = async ({ request }) => {
       // *other* photos yet to have a settled look worth comparing to —
       // refused rather than guessed at, not an error.
       chapterFit?: { verdict: 'keeps' | 'borderline' | 'new-look'; distance: number; note: string } | null;
+      borderline?: Borderline | null;
+      neighbours?: string[];
     };
 
     const processed = await mapPool(files, CONCURRENCY, async (file): Promise<{ result: Result; photo?: Photo }> => {
@@ -79,6 +82,7 @@ export const POST: APIRoute = async ({ request }) => {
     const photos = processed.map((p) => p.photo).filter((p): p is Photo => Boolean(p));
     if (photos.length > 0) {
       const manifest = await addPhotos(photos);
+      attachPlacement(processed, manifest.chapters);
       await attachChapterFits(processed, photos, manifest.chapters);
     }
 
@@ -94,6 +98,46 @@ export const POST: APIRoute = async ({ request }) => {
   }
 };
 
+/** How many of a chapter's photos to show beside a new arrival. */
+const NEIGHBOURS = 4;
+
+/**
+ * Where each just-added photo actually landed — issue #105.
+ *
+ * `processPhoto` only knows the base chapter; the band split and the fold of
+ * tiny chapters run in the rebuild, so the chapter a reader will find the
+ * photo in is read back from the manifest rather than assumed. Alongside it:
+ * the photos it now sits among (closest in colour first, so the strip answers
+ * "does it belong with these?"), and whether it sits on a chapter edge.
+ */
+function attachPlacement(
+  processed: Array<{ result: { status: string; id: string; chapterKey: string; chapterName: string; borderline?: Borderline | null; neighbours?: string[] }; photo?: Photo }>,
+  chapters: { key: string; name: string; photos: Photo[] }[],
+): void {
+  const where = new Map<string, { key: string; name: string; photos: Photo[] }>();
+  for (const ch of chapters) for (const p of ch.photos) where.set(p.id, ch);
+  const lab = (p: Photo) => {
+    const r = (p.oklch.H * Math.PI) / 180;
+    return [p.oklch.L, p.oklch.C * Math.cos(r), p.oklch.C * Math.sin(r)];
+  };
+  for (const entry of processed) {
+    if (entry.result.status !== 'added' || !entry.photo) continue;
+    const ch = where.get(entry.photo.id);
+    if (!ch) continue;
+    const me = lab(entry.photo);
+    entry.result.chapterKey = ch.key;
+    entry.result.chapterName = ch.name;
+    entry.result.borderline = borderlineOf(entry.photo.oklch);
+    entry.result.neighbours = ch.photos
+      .filter((p) => p.id !== entry.photo!.id)
+      .map((p) => ({ p, d: Math.hypot(...lab(p).map((v, i) => v - me[i])) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, NEIGHBOURS)
+      .map(({ p }) => p.derivatives[0]?.avif)
+      .filter((src): src is string => Boolean(src));
+  }
+}
+
 /**
  * Score every just-added photo against the chapter it landed in — issue #61.
  *
@@ -105,7 +149,7 @@ export const POST: APIRoute = async ({ request }) => {
  * handful of new arrivals happen to agree with each other about.
  */
 async function attachChapterFits(
-  processed: Array<{ result: { status: string; chapterFit?: unknown }; photo?: Photo }>,
+  processed: Array<{ result: { status: string; chapterKey: string; chapterFit?: unknown }; photo?: Photo }>,
   newPhotos: Photo[],
   chapters: { key: string; photos: Photo[] }[],
 ): Promise<void> {
@@ -130,7 +174,10 @@ async function attachChapterFits(
   for (const entry of processed) {
     if (entry.result.status !== 'added' || !entry.photo) continue;
     const signature = signatureById.get(entry.photo.id);
-    const dna = await dnaFor(entry.photo.chapter);
+    // The chapter it landed in, which attachPlacement read back from the
+    // manifest — not `photo.chapter`, the base key, which misses the band
+    // split and scored a Deep Orange arrival against plain Orange's look.
+    const dna = await dnaFor(entry.result.chapterKey || entry.photo.chapter);
     entry.result.chapterFit =
       dna && signature
         ? (() => {

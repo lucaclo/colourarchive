@@ -4,10 +4,14 @@ dist
 public/img/*
 !public/img/.gitkeep
 sequence.json
+# Where photos were taken (Scout) — private, never published
+photos.locations.json
 
 # Local Netlify folder
 .netlify
 .match-cache/
+.match-analysis-cache/
+.match-calibration/
 src/data/match/
 .scout-cache/
 

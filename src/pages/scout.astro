@@ -11,12 +11,6 @@ import { findColourGaps } from '../lib/gaps';
 // `browser/sources.ts`.
 export const prerender = true;
 
-// `/inspiration` is `prerender = false` on purpose — it writes to disk and holds
-// other people's photographs pending credit — so it does not exist in a static
-// publish. The archive's own topbar already drops the link there; this page has
-// to do the same, or its Inspiration link is a 404 on the published site.
-const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
-
 // The one server-side read on this page (see the note over `#gap-data`
 // below): which hue anchors the archive is missing, baked at build/request
 // time from the manifest the same way `index.astro` bakes its chapters.
@@ -51,18 +45,17 @@ const accent = '#f0b866';
 >
   <main class="scout">
     <div class="scout-stage" data-glass="light">
+      <!-- Deep space round the globe; the map's canvas is clear outside it. -->
+      <canvas class="scout-space scout-space-haze" id="scout-space-haze" aria-hidden="true"></canvas>
+      <canvas class="scout-space" id="scout-space" aria-hidden="true"></canvas>
       <div class="scout-map" id="map"></div>
-
-      <!-- Both ways in, because on a published build without functions the
-           first one is not available and the second is the only one there is. -->
-      <p class="scout-hint" id="scout-hint">Type a place to begin — or zoom in and tap the map.</p>
 
       <!-- First-visit orientation — issue #74. Shown once, ever, before a
            place is picked, and gone the moment one is; see orientation.ts. -->
       <div class="first-visit" id="first-visit" role="status" hidden>
         <p>
-          Once you pick a place: sun and moon paths, twilight and tide windows, aurora odds, alignments,
-          missing colours, tonight's go/no-go, sweep and timelapse timing, ND math, and a place to log what you saw.
+          Pick somewhere and you'll get where the sun and moon go, twilight and tides, the odds of aurora,
+          what lines up behind what, and whether tonight is worth going out. There's also a notebook for what you saw.
         </p>
         <button type="button" id="first-visit-close" aria-label="Dismiss">×</button>
       </div>
@@ -251,10 +244,10 @@ const accent = '#f0b866';
               <p class="wx-horizon" id="wx-horizon"></p>
 
               <div class="cards" id="cards">
-                <div class="card"><span class="card-k">Azimuth<button class="infotip" type="button" aria-label="What azimuth means" data-tip="The compass bearing to the sun from here — 0°/360° north, 90° east, 180° south, 270° west.">i</button></span><span class="card-v" id="c-azimuth">—</span></div>
-                <div class="card"><span class="card-k">Altitude<button class="infotip" type="button" aria-label="What altitude means" data-tip="How high the sun sits above the horizon — 0° is right on it, 90° is straight overhead.">i</button></span><span class="card-v" id="c-altitude">—</span></div>
-                <div class="card"><span class="card-k">Shadow<button class="infotip" type="button" aria-label="What the shadow ratio means" data-tip="A multiple of an object's own height — 1 : 2.4 means a metre of height throws 2.4 metres of shadow. Grows as the sun sinks, and stops meaning anything once it's below the horizon.">i</button></span><span class="card-v" id="c-shadow">—</span></div>
-                <div class="card"><span class="card-k">Elevation<button class="infotip" type="button" aria-label="What elevation means" data-tip="The ground's own height above sea level here, read from the elevation model — not the sun's altitude above it.">i</button></span><span class="card-v" id="c-elevation">—</span></div>
+                <div class="card"><span class="card-k">Azimuth<button class="infotip" type="button" aria-label="What azimuth means" data-tip="Compass bearing to the sun from here. 0° is north, 90° east, 180° south, 270° west.">i</button></span><span class="card-v" id="c-azimuth">—</span></div>
+                <div class="card"><span class="card-k">Altitude<button class="infotip" type="button" aria-label="What altitude means" data-tip="How high the sun is. 0° is on the horizon, 90° is straight overhead.">i</button></span><span class="card-v" id="c-altitude">—</span></div>
+                <div class="card"><span class="card-k">Shadow<button class="infotip" type="button" aria-label="What the shadow ratio means" data-tip="Shadow length as a multiple of height. At 1 : 2.4, a metre-tall thing throws a 2.4 m shadow. It grows as the sun drops and means nothing once the sun is down.">i</button></span><span class="card-v" id="c-shadow">—</span></div>
+                <div class="card"><span class="card-k">Elevation<button class="infotip" type="button" aria-label="What elevation means" data-tip="How high the ground is above sea level here, from the elevation model. Nothing to do with the sun.">i</button></span><span class="card-v" id="c-elevation">—</span></div>
               </div>
 
               <ul class="events" id="events"></ul>
@@ -326,8 +319,6 @@ const accent = '#f0b866';
                      hidden the rest of the time rather than printing "—", which
                      would read as a measurement that came back empty. -->
                 <p class="core-note" id="core-stars-note" hidden></p>
-                <p class="core-caveat">Light pollution is not modelled.</p>
-                <p class="core-caveat">Stars to magnitude 4, dimmed for altitude and moonlight but not for cloud. Constellation lines are computed from the catalogue, not the IAU's own figures.</p>
               </details>
 
               <!-- Issue #69. Kp, Bz and the solar wind, joined with the same
@@ -343,8 +334,7 @@ const accent = '#f0b866';
                 <p class="core-note" id="aurora-space"></p>
                 <p class="core-note" id="aurora-stale"></p>
                 <button class="ghost" id="aurora-refresh" type="button">Check now</button>
-                <p class="core-caveat">A real-time reading, not a forecast — refresh before heading out.</p>
-                <p class="core-caveat">Oval reach from NOAA SWPC's own published Kp-to-latitude guidance, an average rather than a prediction for any one night.</p>
+                <p class="core-caveat">Live, not a forecast.</p>
               </details>
 
               <!-- The per-spot answer: not where the shade is, but when the light
@@ -439,6 +429,24 @@ const accent = '#f0b866';
                 </div>
               </details>
 
+              <!-- ── Your photos ───────────────────────────────────────────────
+                   Where the archive's own photographs were taken — GPS when a
+                   file has it, otherwise placed by hand here. Mac-only: the
+                   locations are private (see `scout/mine.ts`), so the static
+                   publish never shows this fold. Owned by `view/mine.ts`. -->
+              <details class="fold" id="fold-mine" hidden>
+                <summary>Your photos</summary>
+                <div class="mine">
+                  <p class="mine-count" id="mine-count">Loading…</p>
+                  <div class="mine-controls">
+                    <button class="ghost" id="mine-show" type="button" aria-pressed="true">Shown on map</button>
+                    <button class="ghost" id="mine-fit" type="button">Zoom to all</button>
+                  </div>
+                  <p class="mine-hint" id="mine-hint">Pick a photo, then tap where you took it.</p>
+                  <ul class="mine-grid" id="mine-grid" aria-label="Photos without a location"></ul>
+                </div>
+              </details>
+
               <!-- ── Missing colours ──────────────────────────────────────────
                    The archive's own gap analysis (issue #59), inverted: instead
                    of checking a place and reading off the light, this starts
@@ -464,13 +472,13 @@ const accent = '#f0b866';
               <dl class="facts">
                 <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
                 <div><dt>Radius</dt><dd id="f-radius">—</dd></div>
-                <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="A worked example of the Shadow ratio above, in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
-                <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow this minute. Near the horizon a whole city can be in range, so this is capped at the 4,000 tallest and says so rather than passing triage off as complete.">i</button></dt><dd id="f-buildings">—</dd></div>
-                <div><dt>Trees<button class="infotip" type="button" aria-label="What this means" data-tip="Trees mapped in OpenStreetMap where someone has surveyed them, and estimated ones scattered through parks and woods where nobody has. Estimated trees cast lighter shadows and are never used for the light windows or the hotspot ranking — they are a picture, not a measurement.">i</button></dt><dd id="f-trees">—</dd></div>
-            <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin itself is in the shadow of a hill or ridge, from the same elevation data as the map's terrain shading — with the grid size it was read at.">i</button></dt><dd id="f-landform">—</dd></div>
-                <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Peer-reviewed photographs from Wikimedia Commons, plus Flickr when a key is configured, clustered into hotspots near this spot — not every photo ever taken here. A photograph by someone on the curated notable-photographer list is marked and ranked above the rest.">i</button></dt><dd id="f-photos">—</dd></div>
+                <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="The shadow ratio in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
+                <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow right now. With the sun low, a whole city can be in range, so it stops at the 4,000 tallest and tells you when it has.">i</button></dt><dd id="f-buildings">—</dd></div>
+                <div><dt>Trees<button class="infotip" type="button" aria-label="What this means" data-tip="Trees from OpenStreetMap where someone has surveyed them, plus guessed ones in parks and woods where nobody has. Guessed trees cast lighter shadows and never count towards the light windows or the hotspot ranking.">i</button></dt><dd id="f-trees">—</dd></div>
+            <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin is in the shadow of a hill or ridge, using the same elevation data as the map's terrain shading. The grid size it was read at is shown too.">i</button></dt><dd id="f-landform">—</dd></div>
+                <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Reviewed photographs from Wikimedia Commons (and Flickr, if there's a key), grouped into hotspots near here. It's a sample, not every photo ever taken here. Anything by a photographer on the notable list is marked and goes to the top.">i</button></dt><dd id="f-photos">—</dd></div>
                 <div>
-                  <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The sunlight's own colour and contrast this minute — kelvin, and stops of shadow fill. Modelled for a clear sky; cloud is not an input to this figure, see the weather note above for that.">i</button></dt>
+                  <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The colour and contrast of the sunlight right now, in kelvin and stops of shadow fill. It assumes a clear sky. For cloud, see the weather note above.">i</button></dt>
                   <dd id="f-light">
                     <!-- The colour, as a colour. A number in kelvin is a fact about
                          the light that a photographer has to translate; the swatch
@@ -502,7 +510,7 @@ const accent = '#f0b866';
                     id="note-text"
                     rows="3"
                     maxlength="600"
-                    placeholder="What is worth remembering about this spot?"
+                    placeholder="Anything worth remembering about this spot?"
                     aria-label="Note about this spot"
                   ></textarea>
                   <p class="note-kept" id="note-kept"></p>
@@ -800,7 +808,7 @@ const accent = '#f0b866';
             <output id="sight-out">0 m</output>
           </label>
           <input id="sight-height" type="range" min="0" max="300" step="1" value="0" />
-          <p class="slab-note">Drag the ring on the map to what you want to see. Terrain only — trees and buildings are not in this.</p>
+          <p class="slab-note">Drag the ring on the map.</p>
         </div>
 
         <div class="slab" id="slab" hidden>
@@ -809,7 +817,7 @@ const accent = '#f0b866';
             <output id="slab-out">10 m</output>
           </label>
           <input id="slab-height" type="range" min="1" max="200" step="1" value="10" />
-          <p class="slab-note">Drag the slab on the map. Its shadow is the one on this page with no guessing in it.</p>
+          <p class="slab-note">Drag the slab on the map.</p>
         </div>
 
         <!-- These two calculators do not touch the map at all — no coordinate,
@@ -1036,6 +1044,10 @@ const accent = '#f0b866';
   @media (min-width: 821px) {
     .scout-stage { --stage-top: calc(env(safe-area-inset-top, 0px) + 0.9rem); }
   }
+  .scout-space { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+  /* Painted at a sixth of the size; the stretch and blur smooth it. Scaled a
+     little past the edges so the blur doesn't fade them in. */
+  .scout-space-haze { background: #05070f; filter: blur(5px); transform: scale(1.04); }
   .scout-map { position: absolute; inset: 0; }
 
   .sr {
@@ -1132,29 +1144,6 @@ const accent = '#f0b866';
     .scout-mapmsg:not([hidden]) { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
   }
 
-  .scout-hint {
-    position: absolute;
-    left: 50%;
-    top: 42%;
-    transform: translate(-50%, -50%);
-    margin: 0;
-    font-family: var(--font-display);
-    font-style: var(--title-style);
-    font-size: 1.5rem;
-    color: var(--muted);
-    pointer-events: none;
-    text-align: center;
-    /* Sits directly on the basemap, whose colour is whatever's under the pin —
-       open ocean, snow, desert, all rendered pale by this style — so a plain
-       --muted grey can lose almost all its contrast. Every other floating
-       label on this page sits on a solid panel behind it (.panel, .first-visit,
-       .scout-mapmsg); this is the one that never got that scrim because there
-       is no place to anchor a box before a location is picked. A soft dark
-       halo does the same job without needing one. */
-    text-shadow: 0 1px 3px color-mix(in oklab, #000 75%, transparent),
-      0 2px 18px color-mix(in oklab, #000 55%, transparent);
-  }
-  .scout-hint[hidden] { display: none; }
 
   /* Same box language as .infotip-pop below — a quiet callout rather than a
      modal, sitting just under the hint it follows. */
@@ -1758,6 +1747,112 @@ const accent = '#f0b866';
     color: var(--muted);
   }
   #tonight-note:empty { display: none; }
+
+  /* ── Your photos ─────────────────────────────────────────────────────── */
+
+  .mine { display: flex; flex-direction: column; gap: 0.45rem; }
+  .mine-count, .mine-hint {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+  .mine-count { color: var(--fg); font-size: var(--t-caption); }
+  .mine-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .mine-grid {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap: 4px;
+    max-height: 13rem;
+    overflow-y: auto;
+  }
+  /* Built by view/mine.ts, so outside this component's scope. */
+  .mine-grid :global(button) {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--border) center / cover no-repeat;
+    cursor: pointer;
+    outline-offset: 2px;
+  }
+  .mine-grid :global(button img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mine-grid :global(button[aria-pressed='true']) {
+    outline: 2px solid #f0b866;
+  }
+
+  /* The pins. A photograph is its own best marker: you know the picture
+     before you know the place. The ring is the chapter's colour. */
+  .scout-map :global(.mine-pin) {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 2.5px solid var(--ring, #f7f3ea);
+    border-radius: 10px;
+    background: #222 center / cover no-repeat;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    position: relative;
+  }
+  .scout-map :global(.mine-pin img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 7px;
+    display: block;
+  }
+  .scout-map :global(.mine-pin.mine-cluster) { width: 52px; height: 52px; }
+  .scout-map :global(.mine-pin.mine-cluster)::before {
+    /* A second card peeking out behind: this pin is a stack. */
+    content: '';
+    position: absolute;
+    inset: -2.5px;
+    border-radius: 10px;
+    background: #f7f3ea;
+    transform: rotate(7deg);
+    z-index: -1;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  .scout-map :global(.mine-pin b) {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: #f0b866;
+    color: #1a1206;
+    font: 600 11px/20px var(--font-ui);
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+  .scout-map :global(.mine-card) { width: 220px; font-family: var(--font-ui); }
+  .scout-map :global(.mine-card img) {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
+  }
+  .scout-map :global(.mine-card p) { margin: 0.4rem 0 0.3rem; font-size: 0.75rem; line-height: 1.35; }
+  .scout-map :global(.mine-card .mine-card-actions) { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .scout-map :global(.mine-card .mine-card-actions button) {
+    font: 500 0.75rem var(--font-ui);
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
 
   /* ── Missing colours ──────────────────────────────────────────────────── */
 
@@ -3658,6 +3753,9 @@ const accent = '#f0b866';
     --fill-hover: color-mix(in oklab, var(--fg) 11%, transparent);
     --fill-active: color-mix(in oklab, var(--fg) 16%, transparent);
     --separator: color-mix(in oklab, var(--fg) 10%, transparent);
+    --rule: color-mix(in oklab, var(--fg) 16%, transparent);
+    --leader: color-mix(in oklab, var(--fg) 30%, transparent);
+    --mark: color-mix(in oklab, var(--fg) 55%, transparent);
     --glass-bg: color-mix(in oklab, var(--bg) 62%, transparent);
     --glass-bg-strong: color-mix(in oklab, var(--bg) 84%, transparent);
     --glass-edge: rgb(255 255 255 / 0.7);
@@ -3692,6 +3790,38 @@ const accent = '#f0b866';
     contain: layout paint;
   }
   .scout-stage.dock-dragging #dock { transition: none; }
+
+  /* The sidebar, in black. Its own dark tokens, re-declared here so every
+     control inside turns with it while the rest of the page keeps the light
+     glass; each derived token is restated, since it resolves where it's
+     declared. Solid rather than see-through: a black sheet over a pale map
+     reads as a deliberate panel, a smoky one as a stain. */
+  #dock {
+    --bg: #000;
+    --fg: #ece9e3;
+    --muted: #8f8b85;
+    --secondary: #a8a49d;
+    --border: #1c1b1a;
+    --accent: var(--fg);
+    --accent-mix: color-mix(in oklab, var(--accent) 45%, var(--fg));
+    --accent-hair: color-mix(in oklab, var(--accent) 30%, var(--hair));
+    --hair: color-mix(in oklab, var(--fg) 12%, transparent);
+    --surface-1: color-mix(in oklab, var(--fg) 5%, var(--bg));
+    --surface-2: color-mix(in oklab, var(--fg) 8%, var(--bg));
+    --surface-3: color-mix(in oklab, var(--fg) 12%, var(--bg));
+    --fill: color-mix(in oklab, var(--fg) 8%, transparent);
+    --fill-hover: color-mix(in oklab, var(--fg) 13%, transparent);
+    --fill-active: color-mix(in oklab, var(--fg) 18%, transparent);
+    --separator: color-mix(in oklab, var(--fg) 10%, transparent);
+    --rule: color-mix(in oklab, var(--fg) 16%, transparent);
+    --leader: color-mix(in oklab, var(--fg) 24%, transparent);
+    --mark: color-mix(in oklab, var(--fg) 55%, transparent);
+    --glass-bg: color-mix(in oklab, var(--bg) 90%, transparent);
+    --glass-bg-strong: color-mix(in oklab, var(--bg) 94%, transparent);
+    --glass-edge: rgb(255 255 255 / 0.08);
+    --glass-shadow: 0 12px 34px -12px rgb(0 0 0 / 0.55), 0 1px 3px rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
 
   .dock-grabber {
     flex: 0 0 auto;
@@ -3936,27 +4066,8 @@ const accent = '#f0b866';
   }
 
   /* ── The empty state, on glass ────────────────────────────────────────────
-     The hint used to be display italic with a dark glow, drawn straight on the
-     map — fine on the old dark chrome, a smudge on pale paper. Both it and the
-     first-visit note are now the same glass as everything else floating here,
-     so they turn with the map instead of fighting it. */
-  .scout-hint {
-    padding: 0.6rem 1rem;
-    border-radius: var(--r-pill);
-    background: var(--glass-bg-strong);
-    border: 1px solid var(--glass-edge);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    box-shadow: var(--glass-shadow);
-    font-family: var(--font-ui);
-    font-style: normal;
-    font-size: var(--t-body);
-    font-weight: 600;
-    color: var(--fg);
-    text-shadow: none;
-    width: max-content;
-    max-width: calc(100vw - 2.4rem);
-  }
+     The first-visit note is the same glass as everything else floating here,
+     so it turns with the map instead of fighting it. */
   .first-visit {
     top: calc(42% + 2.2rem);
     padding: 0.85rem 0.9rem;
@@ -4046,6 +4157,86 @@ const accent = '#f0b866';
     background: rgb(255 255 255 / 0.18);
   }
   :global(body:has(.scout) .cursor-ring.down) { width: 22px; height: 22px; }
+
+  /* ── Notebook pass ──────────────────────────────────────────────────────
+     The same layer Inspiration has, last in the cascade so it reads as one
+     change. Headings become sentence-case Fraunces italic, the four boxed
+     tiles become a two-column ledger with dotted leaders, the weather pill
+     becomes a ruled line, and the cautionary notes read as margin notes.
+     Map controls and the numbers themselves are unchanged. */
+  .framing-head, .best-head, .layers-head, .kept-head, .mg-title, .facts dt {
+    font-family: var(--font-note); font-style: italic; font-weight: 500;
+    font-size: var(--t-note); letter-spacing: 0; text-transform: none;
+    color: var(--fg);
+  }
+  .mg-title { font-size: 1.05rem; }
+
+  .cards { gap: 0 1.4rem; margin: 0.2rem 0 0.8rem; }
+  .card {
+    flex-direction: row; align-items: baseline; gap: 0.45rem;
+    padding: 0.4rem 0; background: none; border-radius: 0;
+    border-bottom: 1px solid var(--separator);
+  }
+  .card-k {
+    order: 0; flex: 0 1 auto; justify-content: flex-start; gap: 0.25rem;
+    font-family: var(--font-note); font-style: italic; font-weight: 500;
+    font-size: var(--t-footnote); letter-spacing: 0; text-transform: none; color: var(--secondary);
+  }
+  .card::after {
+    content: ''; order: 1; flex: 1 1 0.8rem; min-width: 0.8rem;
+    border-bottom: 1px dotted var(--leader); transform: translateY(-0.25em);
+  }
+  .card-v { order: 2; flex: 0 0 auto; white-space: nowrap; }
+  .card-k :global(.infotip) { opacity: 0.55; }
+  .card-k :global(.infotip:hover), .card-k :global(.infotip:focus-visible) { opacity: 1; }
+
+  .wx {
+    background: none; border: 0; border-radius: 0;
+    border-top: 1px solid var(--separator); border-bottom: 1px solid var(--separator);
+    padding: 0.55rem 0;
+  }
+  .wx-label { font-family: var(--font-note); font-style: italic; font-size: 1.02rem; }
+  .wx-note { font-size: var(--t-footnote); color: var(--secondary); }
+  .wx-decks, .wx-horizon {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote);
+    line-height: 1.45; padding-left: 0.7rem;
+  }
+
+  .events :global(.ev-label) {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary);
+  }
+  .events :global(li) { border-bottom-style: dotted; }
+
+  .fold summary {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-note);
+    color: var(--fg); border-top: 1px solid var(--separator); padding-top: 0.5rem;
+  }
+  .core-caveat { font-family: var(--font-note); font-style: italic; }
+  .fold summary { list-style: none; display: flex; align-items: baseline; gap: 0.4rem; }
+  .fold summary::-webkit-details-marker { display: none; }
+  .fold summary::after {
+    content: '+'; margin-left: auto; font-family: var(--font-ui); font-style: normal;
+    color: var(--muted); transition: transform 160ms var(--ease);
+  }
+  .fold[open] > summary::after { content: '−'; }
+  .fold.unread summary::before { align-self: center; margin-right: 0.1rem; }
+
+  /* The light window: a margin note in the sun's own colour, not a tinted slab. */
+  .spot { background: none; border-radius: 0; border-left-width: 1px; padding: 0.15rem 0 0.15rem 0.75rem; }
+  .spot-line { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); }
+  .spot-next { color: color-mix(in oklab, #c1863c 78%, var(--fg)); }
+
+  /* Time jumps: words to tap, not a row of capsules. */
+  .jumps button, #dock .jumps button {
+    background: none; border: 0; border-radius: 0;
+    color: var(--secondary); font-family: var(--font-note); font-style: italic;
+    font-size: var(--t-note); padding: 0.35rem 0.45rem;
+    text-decoration: underline transparent; text-underline-offset: 5px; text-decoration-thickness: 1px;
+    transition: color 140ms, text-decoration-color 140ms;
+  }
+  .jumps button:hover:not(:disabled), #dock .jumps button:hover:not(:disabled) {
+    color: var(--fg); text-decoration-color: currentColor;
+  }
 </style>
 
 <script>
