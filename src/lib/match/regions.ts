@@ -203,12 +203,7 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
     for (let i = 0; i < output.data.length; i++) {
       alpha[i] = Math.max(0, Math.min(255, Math.round(output.data[i] * 255)));
     }
-    const fitted = await sharp(alpha, { raw: { width: side, height: side, channels: 1 } })
-      .resize(width, height, { fit: 'fill' })
-      .raw()
-      .toBuffer();
-
-    const subject = new Uint8Array(fitted);
+    const subject = await fitMatte(alpha, side, width, height);
     const background = new Uint8Array(n);
     for (let i = 0; i < n; i++) background[i] = 255 - subject[i];
     raw.subject = subject;
@@ -246,4 +241,26 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
   timings.erode = (Date.now() - t0) / 1000;
 
   return { width, height, masks, full, coverage, warnings, timings };
+}
+
+/**
+ * Resize RMBG's square alpha back onto the mask grid, one byte per pixel.
+ *
+ * sharp writes a single-channel raw input back out as three channels (it
+ * converts to sRGB on the way), so without `toColourspace('b-w')` the buffer
+ * came back 3n long and was read as if it were n: the subject and background
+ * masks became every third row of a scrambled image, which striped the
+ * preview's masked exposure and fed the wrong pixels to the subject and
+ * background measurements.
+ */
+export async function fitMatte(alpha: Uint8Array, side: number, width: number, height: number): Promise<Uint8Array> {
+  const fitted = await sharp(alpha, { raw: { width: side, height: side, channels: 1 } })
+    .resize(width, height, { fit: 'fill' })
+    .toColourspace('b-w')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (fitted.info.channels !== 1 || fitted.data.length !== width * height) {
+    throw new Error(`matte came back ${fitted.info.channels}-channel, ${fitted.data.length} bytes for ${width}×${height}`);
+  }
+  return new Uint8Array(fitted.data);
 }
