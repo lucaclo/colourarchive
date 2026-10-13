@@ -61,7 +61,7 @@ const digitalPhotos = allPhotos.filter((p) => p.medium === 'digital'); // film E
 // read here: film's capturedAt is the scanner's date, not the subject's.
 // Rendered from `Date.now()`, so it's exact on the Mac (astro dev renders
 // per request) and only as fresh as the last build on the published static
-// site — the same tradeoff `builtAt`'s footer stamp already accepts below.
+// site — the same tradeoff a build-time stamp would accept.
 const capturedDates = digitalPhotos
   .map((p) => (p.exif.capturedAt ? new Date(p.exif.capturedAt) : undefined))
   .filter((d): d is Date => Boolean(d) && !Number.isNaN(d!.getTime()));
@@ -148,16 +148,6 @@ function lensSwatch(preset: GearPreset): string {
   return oklchCss({ L: 0.65, C, H });
 }
 
-// The stamp at the foot of the scroll. This page is prerendered, so on the
-// published site this is the moment the build ran — which is the moment it was
-// published, the deploy following its build by seconds. On the Mac the page
-// renders per request and it reads as today, which is also true.
-//
-// It is here because the failure it answers is silence: a site ten days behind
-// looks exactly like a current one. `npm run drift` asks the same question from
-// the terminal; this is the version a reader can see.
-const builtAt = new Date();
-const builtLabel = builtAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
 // Ink for the chapter opener: whichever of paper white / near-black actually
 // reads best on the chapter's colour (WCAG contrast, see readableInk) — the

@@ -1046,9 +1046,11 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 }
 /* Kicker with flanking hairlines — a plate/frontispiece feel. */
 .cover-kicker {
-  font-family: var(--font-label);
-  font-size: var(--label-size); letter-spacing: var(--label-track); text-transform: uppercase;
-  color: var(--muted); margin: 0;
+  /* The notebook's sentence-case italic, not tracked capitals: the first
+     words on the first page set the voice for the rest (round 3). */
+  font-family: var(--font-note); font-style: italic;
+  font-size: var(--t-note); letter-spacing: 0; text-transform: none;
+  color: var(--secondary); margin: 0;
   display: inline-flex; align-items: center; gap: 1.1rem;
 }
 .cover-kicker::before, .cover-kicker::after {
