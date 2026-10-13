@@ -350,10 +350,17 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-edit :global(.zn-ctl) { display: grid; gap: 0.3rem; }
   .zn-edit :global(.zn-ctl .zn-seg button) { min-height: 2.25rem; padding: 0 0.7rem; }
   .zn-edit :global(.zn-ctl .zn-seg svg) { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; display: block; }
-  .zn-edit :global(.zn-group) { display: grid; gap: 0.45rem; padding-top: 0.6rem; border-top: 1px solid var(--separator); }
+  .zn-edit :global(.zn-group) { border-top: 1px solid var(--separator); }
+  .zn-edit :global(.zn-group > .zn-row) { padding: 0.2rem 0 0.8rem; }
   .zn-edit :global(.zn-grouphead) {
-    margin: 0; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+    list-style: none; display: flex; align-items: baseline; gap: 0.6rem; cursor: pointer; min-height: 2.75rem; padding-top: 0.75rem;
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-body); color: var(--fg);
   }
+  .zn-edit :global(.zn-grouphead::-webkit-details-marker) { display: none; }
+  .zn-edit :global(.zn-grouphead::after) { content: '+'; margin-left: auto; font-family: var(--font-ui); font-style: normal; color: var(--muted); }
+  .zn-edit :global(.zn-group[open] > .zn-grouphead::after) { content: '−'; }
+  .zn-edit :global(.zn-grouphead:focus-visible) { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .zn-edit :global(.zn-groupnow) { font-family: var(--font-ui); font-style: normal; font-size: var(--t-footnote); color: var(--muted); }
   .zn-edit :global(.zn-chips) { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .zn-edit :global(.zn-chips button) {
     appearance: none; min-height: 2.25rem; padding: 0 0.75rem; cursor: pointer; font-size: 0.95rem;
@@ -846,6 +853,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   function changed(rebuild = false) {
     save();
     if (rebuild) { buildRail(); buildEdit(); }
+    else refreshGroupNow();
     renderAll();
   }
 
@@ -893,8 +901,31 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       </div>
     </div>`;
   };
-  const group = (title: string, body: string) => `<div class="zn-group"><p class="zn-grouphead">${title}</p><div class="zn-row">${body}</div></div>`;
-  const styleCtls = (prefix: string, s: TextStyle) => group('Text',
+  /* The finer controls fold away under a heading that says what they're set
+     to, so a page shows its photo, its words and its typeface first (Canva
+     shows only what the selection needs). Which groups are open survives
+     the panel being rebuilt after every change. */
+  const openGroups = new Set<string>();
+  const group = (title: string, prefix: string, body: string) =>
+    `<details class="zn-group" data-group="${title}" data-prefix="${prefix}"${openGroups.has(title) ? ' open' : ''}><summary class="zn-grouphead">${title}<span class="zn-groupnow">${esc(groupNow(title, prefix))}</span></summary><div class="zn-row">${body}</div></details>`;
+  const SIZE_WORD: Record<string, string> = { xs: 'Extra small', s: 'Small', m: 'Medium', l: 'Large', xl: 'Extra large' };
+  const BORDER_WORD: Record<string, string> = { none: 'None', thin: 'Thin', m: 'Mid', wide: 'Wide' };
+  /** What a folded group is set to, read from the document so it never goes stale. */
+  function groupNow(title: string, prefix: string): string {
+    const [o] = target(`${prefix}.x`);
+    if (title === 'Text') {
+      const s = o as unknown as TextStyle;
+      return `${SIZE_WORD[s.size] ?? s.size}, ${s.align === 'center' ? 'centred' : s.align}`;
+    }
+    return BORDER_WORD[(o as unknown as FrameStyle).border] ?? '';
+  }
+  function refreshGroupNow() {
+    edit.querySelectorAll<HTMLElement>('details.zn-group').forEach((d) => {
+      const now = d.querySelector('.zn-groupnow');
+      if (now && d.dataset.group && d.dataset.prefix) now.textContent = groupNow(d.dataset.group, d.dataset.prefix);
+    });
+  }
+  const styleCtls = (prefix: string, s: TextStyle) => group('Text', prefix,
     seg(`${prefix}.size`, 'Size', s.size, [['xs', 'XS'], ['s', 'S'], ['m', 'M'], ['l', 'L'], ['xl', 'XL']]) +
     colourCtl(`${prefix}.ink`, 'Colour', s.ink, INKS) +
     seg(`${prefix}.align`, 'Align', s.align, [['left', 'Left', ICON.left], ['center', 'Centre', ICON.center], ['right', 'Right', ICON.right]]) +
@@ -902,7 +933,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     seg(`${prefix}.case`, 'Case', s.case, [['normal', 'Aa'], ['upper', 'AA']]) +
     seg(`${prefix}.plate`, 'Behind', s.plate, [['none', 'None'], ['box', 'Box'], ['band', 'Band']]));
   /** The paper round the photo. Shape and line only matter once there's a border. */
-  const frameCtls = (prefix: string, f: FrameStyle) => group('Border',
+  const frameCtls = (prefix: string, f: FrameStyle) => group('Border', prefix,
     seg(`${prefix}.border`, 'Width', f.border, [['none', 'None'], ['thin', 'Thin'], ['m', 'Mid'], ['wide', 'Wide']]) +
     (f.border === 'none' ? '' :
       seg(`${prefix}.frame`, 'Sides', f.frame, [['even', 'Even'], ['polaroid', 'Deep foot'], ['letterbox', 'Top & foot'], ['pillar', 'Sides']]) +
@@ -965,6 +996,13 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       </div>
     </div>`;
   }
+
+  edit.addEventListener('toggle', (e) => {
+    const d = e.target as HTMLElement;
+    if (!(d instanceof HTMLDetailsElement) || !d.dataset.group) return;
+    if (d.open) openGroups.add(d.dataset.group);
+    else openGroups.delete(d.dataset.group);
+  }, true);
 
   function buildEdit() {
     const s = SLIDES[current];
@@ -1360,7 +1398,8 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     const prefix = box.dataset.textFor as 'cover' | 'back';
     const path = `${prefix}.ink`;
     const label = prefix === 'cover' ? 'Title colours from the cover photo' : 'Title colours from this photo';
-    if (!textContext(path)) { box.innerHTML = `<span class="zn-suglabel">${label}</span><span class="zn-sugnote">Add a photo and it’s read with colour theory for six title colours from Wada’s book.</span>`; return; }
+    // Nothing to suggest from until there's a photo, so nothing is shown.
+    if (!textContext(path)) { box.innerHTML = ''; return; }
     const r = await readFor(path);
     if (run !== suggestRun) return;
     if (!r) { box.innerHTML = ''; return; }
