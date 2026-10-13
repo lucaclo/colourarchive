@@ -807,7 +807,12 @@ const accent = manifest.chapters[0]
   /* `pointer: coarse` as well as `hover: none`: an iPad with a Magic Keyboard
      reports hover, but it is still a screen you reach out and touch. */
   @media (hover: none), (pointer: coarse) {
-    .cell-match, .cell-similar, .cell-remove, .cell-group { opacity: 0.9; }
+    /* Round 4: quiet cards, the same model as Book. At rest a card is its
+       picture; the first tap shows Similar, Match, + group and ×, and a tap
+       on the picture then enlarges it. A card in the group keeps its mark. */
+    .cell-match, .cell-similar, .cell-remove, .cell-group { opacity: 0; pointer-events: none; transition: opacity 160ms var(--ease); }
+    .insp-frame:is(.is-active, :focus-within) :is(.cell-match, .cell-similar, .cell-remove, .cell-group),
+    .insp-frame.in-group .cell-group { opacity: 0.9; pointer-events: auto; }
     .cell-match::after, .cell-similar::after, .cell-remove::after, .cell-group::after {
       content: ''; position: absolute; inset: -12px;
     }
@@ -2127,7 +2132,18 @@ const accent = manifest.chapters[0]
     // here so it does not also open the lightbox.
     if (e.target.closest('.cell-remove') || e.target.closest('.cell-match')) return;
     const f = e.target.closest('.insp-frame'); if (!f) return;
+    // Touch: the first tap only shows the card's actions (they're hidden at
+    // rest, see the Touch styles); the next tap on the picture enlarges it.
+    if (coarse.matches && !f.classList.contains('is-active')) {
+      for (const other of document.querySelectorAll('.insp-frame.is-active')) other.classList.remove('is-active');
+      f.classList.add('is-active');
+      return;
+    }
     openLb(f.dataset.full, f.dataset.source);
+  });
+  const coarse = matchMedia('(hover: none), (pointer: coarse)');
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.insp-frame')) for (const f of document.querySelectorAll('.insp-frame.is-active')) f.classList.remove('is-active');
   });
 
   addEventListener('keydown', (e) => {
