@@ -264,7 +264,6 @@ const accent = manifest.chapters[0]
           <div class="drop mx-zone" id="mx-zone" tabindex="0" role="button" aria-label="Drop your photo or browse">
             <p class="drop-title">Drop your photo here, or <span class="link">choose it</span></p>
             <p class="drop-sub mx-batch-hint">Several at once for a preset each</p>
-            <p class="drop-sub">RAW · JPEG · PNG · WebP · AVIF · HEIC</p>
           </div>
           <input id="mx-file" type="file" multiple hidden />
           <div class="mx-working" id="mx-working" hidden>
@@ -295,9 +294,9 @@ const accent = manifest.chapters[0]
           <label class="mx-field">
             <span>If it’s a RAW, start from</span>
             <select id="mx-baseline">
-              <option value="macos">The Mac’s own decode (easy, about 95% right)</option>
-              <option value="export">A JPEG I exported with every slider at zero (exact)</option>
-              <option value="preview">The camera’s embedded preview (quickest, roughest)</option>
+              <option value="macos">The Mac’s decode</option>
+              <option value="export">A zero-slider JPEG (exact)</option>
+              <option value="preview">The camera preview (quickest)</option>
             </select>
           </label>
           <p class="mx-note" id="mx-status" aria-live="polite"></p>
@@ -890,7 +889,7 @@ const accent = manifest.chapters[0]
   :global(.mx-ref) { display: flex; align-items: center; gap: 0.6rem; }
   :global(.mx-ref img) { width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: 2px; flex: 0 0 auto; }
   :global(.mx-ref .mx-ref-meta) { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1 1 auto; }
-  :global(.mx-ref .mx-ref-name) { font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.mx-ref .mx-ref-name) { font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.mx-ref .mx-ref-weight) { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   :global(.mx-ref .mx-ref-weight input) { width: 4.5rem; accent-color: var(--fg); }
   :global(.mx-ref-remove) { appearance: none; background: transparent; border: 0; cursor: pointer; color: var(--muted); font-size: 1rem; line-height: 1; padding: 0.2rem; flex: 0 0 auto; }
@@ -1366,13 +1365,22 @@ const accent = manifest.chapters[0]
     font-size: var(--t-caption);
     color: var(--fg);
   }
+  /* The measurements are the working, not the answer: at rest the strip is
+     pictures, and "Same grade" is the only word. The distances come up over
+     the picture on hover, and are the card's label for VoiceOver. */
+  :global(.already-pic) { position: relative; display: block; }
   :global(.already-parts) {
-    display: block;
-    font-family: var(--font-label);
-    font-size: 0.6875rem;
-    line-height: 1.45;
-    color: var(--muted);
+    position: absolute; inset: auto 0 0 0;
+    padding: 1.4rem 0.45rem 0.35rem;
+    font-family: var(--font-data);
+    font-size: 0.625rem;
+    line-height: 1.4;
+    color: #fff;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0));
+    opacity: 0; transition: opacity 160ms;
+    pointer-events: none;
   }
+  :global(.already-card:hover .already-parts), :global(.already-card:focus-visible .already-parts) { opacity: 1; }
   .already-note {
     margin: 0.3rem 0 0;
     font-family: var(--font-ui);
@@ -1519,7 +1527,7 @@ const accent = manifest.chapters[0]
     border-color: var(--rule); --mark: var(--fg);
     background-color: color-mix(in oklab, var(--fg) 3%, transparent);
   }
-  .drop-sub { font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); }
+  .drop-sub { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
 
   .urlrow { gap: 0.4rem 1.2rem; align-items: end; }
   .urlrow input {
@@ -2472,10 +2480,12 @@ const accent = manifest.chapters[0]
         // own, and opens in a new tab: the panel behind it is mid-task, and
         // navigating away from a reference you were about to match would lose it.
         item.innerHTML = `
-          <a class="already-card" href="/#photo=${esc(match.id)}" target="_blank" rel="noopener" title="${esc(match.note)}">
-            <img src="${esc(match.thumb ?? match.placeholder)}" alt="" onerror="this.onerror=null;this.src='${esc(match.placeholder)}'" />
-            <span class="already-dist">${match.distance <= 0.75 ? 'Same grade' : 'Near it'}</span>
-            <span class="already-parts">${esc(match.partsText)}</span>
+          <a class="already-card" href="/#photo=${esc(match.id)}" target="_blank" rel="noopener" title="${esc(match.note)}" aria-label="${match.distance <= 0.75 ? 'Same grade' : 'Near it'}: ${esc(match.partsText)}">
+            <span class="already-pic">
+              <img src="${esc(match.thumb ?? match.placeholder)}" alt="" onerror="this.onerror=null;this.src='${esc(match.placeholder)}'" />
+              <span class="already-parts" aria-hidden="true">${esc(match.partsText)}</span>
+            </span>
+            ${match.distance <= 0.75 ? '<span class="already-dist">Same grade</span>' : ''}
           </a>`;
         return item;
       }),
