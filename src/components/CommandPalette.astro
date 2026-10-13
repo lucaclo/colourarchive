@@ -1,0 +1,263 @@
+---
+/**
+ * ⌘K / Ctrl+K anywhere: one field, a short list, Enter to go. Pages,
+ * chapters, Scout places you kept or visited, a hex code as a colour search,
+ * and any words as a search of the archive. `/` focuses the archive's own
+ * search field where there is one, and opens this where there isn't.
+ *
+ * Keyboard only on purpose: on a touch screen the tab bar already does this
+ * job, and a floating button for it would be one more thing over the photos.
+ * The reference is Immich 2.4's palette and mymind's keyboard search
+ * (round 4 in replica/competitors.md).
+ */
+import { readManifest } from '../lib/manifest';
+import { oklchToHex } from '../lib/colour-search';
+import type { Command } from '../lib/command-palette';
+
+const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
+const manifest = await readManifest();
+
+const pages: (Command & { server?: boolean })[] = [
+  { id: 'go:archive', title: 'Archive', group: 'Go to', href: '/', keywords: ['photos', 'home'] },
+  { id: 'go:inspiration', title: 'Inspiration', group: 'Go to', href: '/inspiration', keywords: ['reference', 'board', 'match'], server: true },
+  { id: 'go:scout', title: 'Scout', group: 'Go to', href: '/scout', keywords: ['map', 'sun', 'light', 'plan'] },
+  { id: 'go:book', title: 'Book', group: 'Go to', href: '/book', keywords: ['sequence', 'print', 'spreads'], server: true },
+  { id: 'go:zine', title: 'Magazine', group: 'Go to', href: '/book/zine', keywords: ['zine'], server: true },
+  { id: 'go:upload', title: 'Add & remove', group: 'Go to', href: '/upload', keywords: ['upload', 'import', 'add photos'], server: true },
+];
+const chapters: Command[] = manifest.chapters.map((c) => ({
+  id: `chapter:${c.name}`,
+  title: c.name,
+  group: 'Chapters',
+  href: `/#chapter=${encodeURIComponent(c.name)}`,
+  keywords: ['chapter'],
+  swatch: oklchToHex(c.oklch),
+}));
+const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _s, ...c }) => c), ...chapters];
+---
+
+<div class="cmdk" id="cmdk" hidden>
+  <div class="cmdk-sheet" role="dialog" aria-modal="true" aria-label="Go to">
+    <input
+      class="cmdk-input"
+      id="cmdk-input"
+      type="text"
+      placeholder="Go to a page, chapter, place or colour"
+      autocomplete="off"
+      spellcheck="false"
+      role="combobox"
+      aria-expanded="true"
+      aria-controls="cmdk-list"
+      aria-autocomplete="list"
+    />
+    <ul class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Results"></ul>
+  </div>
+</div>
+<script type="application/json" id="cmdk-data" set:html={JSON.stringify(commands).replace(/</g, '\\u003c')} />
+
+<style>
+  .cmdk {
+    position: fixed; inset: 0; z-index: 200;
+    display: flex; justify-content: center; align-items: flex-start;
+    padding: 14vh 1rem 1rem;
+    background: color-mix(in oklab, #000 38%, transparent);
+  }
+  .cmdk[hidden] { display: none; }
+  .cmdk-sheet {
+    width: min(34rem, 100%);
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge); border-radius: var(--r-md, 14px);
+    box-shadow: var(--glass-shadow), 0 24px 60px rgb(0 0 0 / 0.45);
+    overflow: hidden;
+  }
+  .cmdk-input {
+    width: 100%; box-sizing: border-box;
+    padding: 1rem 1.15rem; border: 0; border-bottom: 1px solid var(--rule);
+    background: transparent; color: var(--fg); outline: none;
+    font-family: var(--font-ui); font-size: 1.05rem;
+  }
+  .cmdk-input::placeholder { color: var(--secondary); }
+  .cmdk-list { list-style: none; margin: 0; padding: 0.35rem; max-height: min(26rem, 60vh); overflow: auto; }
+  .cmdk-list:empty { display: none; }
+  .cmdk-list :global(.cmdk-group) {
+    padding: 0.55rem 0.75rem 0.25rem;
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary);
+  }
+  .cmdk-list :global(.cmdk-item) {
+    display: flex; align-items: center; gap: 0.65rem;
+    padding: 0.55rem 0.75rem; border-radius: 8px; cursor: pointer;
+    font-family: var(--font-ui); font-size: var(--t-body, 0.95rem); color: var(--fg);
+  }
+  .cmdk-list :global(.cmdk-item[aria-selected='true']) { background: var(--surface-3); }
+  .cmdk-list :global(.cmdk-sw) {
+    width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: 0 0 auto;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 18%, transparent);
+  }
+  .cmdk-list :global(.cmdk-sw.none) { background: none; box-shadow: none; }
+</style>
+
+<script>
+  import { queryCommands, rankCommands, type Command } from '../lib/command-palette';
+  import { encodeScoutLink } from '../lib/scout/share';
+  import { readSpots } from '../lib/scout/spots';
+  import { SPOTS_KEY } from '../lib/scout/view/session';
+
+  const root = document.getElementById('cmdk') as HTMLElement;
+  const input = document.getElementById('cmdk-input') as HTMLInputElement;
+  const list = document.getElementById('cmdk-list') as HTMLUListElement;
+  const base: Command[] = JSON.parse(document.getElementById('cmdk-data')?.textContent || '[]');
+
+  /** Kept spots first, then recent places, without repeats. Read on every
+   *  open, since Scout writes them while you use it. */
+  function places(): Command[] {
+    const out: Command[] = [];
+    const seen = new Set<string>();
+    const add = (name: string, lat: number, lon: number, timeZone?: string) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({
+        id: `place:${key}`,
+        title: name,
+        group: 'Places',
+        href: `/scout?${encodeScoutLink({ centre: { lat, lon }, name, timeZone })}`,
+        keywords: ['scout'],
+      });
+    };
+    try {
+      for (const s of readSpots(localStorage.getItem(SPOTS_KEY))) add(s.name, s.lat, s.lon, s.timeZone);
+      const recent = JSON.parse(localStorage.getItem('scout.recent') || '[]');
+      if (Array.isArray(recent)) {
+        for (const r of recent) {
+          if (r && typeof r.name === 'string' && Number.isFinite(r.lat) && Number.isFinite(r.lon)) add(r.name, r.lat, r.lon, r.timeZone);
+        }
+      }
+    } catch {
+      /* storage blocked: no places */
+    }
+    return out;
+  }
+
+  let all: Command[] = base;
+  let shown: Command[] = [];
+  let active = 0;
+  let returnFocus: HTMLElement | null = null;
+
+  /** Built with DOM calls, not markup: place names come from storage. */
+  function render() {
+    const q = input.value;
+    shown = [...rankCommands(all, q, 8), ...queryCommands(q)];
+    active = Math.min(active, Math.max(0, shown.length - 1));
+    const rows: HTMLLIElement[] = [];
+    let group = '';
+    shown.forEach((c, i) => {
+      if (c.group !== group) {
+        group = c.group;
+        const head = document.createElement('li');
+        head.className = 'cmdk-group';
+        head.setAttribute('role', 'presentation');
+        head.textContent = group;
+        rows.push(head);
+      }
+      const li = document.createElement('li');
+      li.className = 'cmdk-item';
+      li.id = `cmdk-${i}`;
+      li.dataset.i = String(i);
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', String(i === active));
+      const sw = document.createElement('span');
+      sw.className = c.swatch ? 'cmdk-sw' : 'cmdk-sw none';
+      if (c.swatch) sw.style.background = c.swatch;
+      const title = document.createElement('span');
+      title.textContent = c.title;
+      li.append(sw, title);
+      rows.push(li);
+    });
+    list.replaceChildren(...rows);
+    if (shown.length) input.setAttribute('aria-activedescendant', `cmdk-${active}`);
+    else input.removeAttribute('aria-activedescendant');
+    list.querySelector(`#cmdk-${active}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function open() {
+    if (!root.hidden) return;
+    returnFocus = document.activeElement as HTMLElement | null;
+    all = [...base, ...places()];
+    input.value = '';
+    active = 0;
+    root.hidden = false;
+    render();
+    input.focus();
+  }
+  function close() {
+    if (root.hidden) return;
+    root.hidden = true;
+    returnFocus?.focus?.();
+  }
+  function go(i: number) {
+    const c = shown[i];
+    if (!c) return;
+    close();
+    const url = new URL(c.href, location.href);
+    // Same page, only the hash differs (a chapter on the archive): no reload.
+    if (url.pathname === location.pathname && url.search === location.search && url.hash) {
+      location.hash = url.hash;
+    } else {
+      location.href = url.href;
+    }
+  }
+
+  input.addEventListener('input', () => {
+    active = 0;
+    render();
+  });
+  input.addEventListener('keydown', (e) => {
+    const n = Math.max(1, shown.length);
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % n; render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + n) % n; render(); }
+    else if (e.key === 'Enter') { e.preventDefault(); go(active); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  list.addEventListener('pointermove', (e) => {
+    const li = (e.target as HTMLElement).closest<HTMLElement>('.cmdk-item');
+    if (li && Number(li.dataset.i) !== active) {
+      active = Number(li.dataset.i);
+      for (const row of list.querySelectorAll('.cmdk-item')) row.setAttribute('aria-selected', String(row === li));
+      input.setAttribute('aria-activedescendant', li.id);
+    }
+  });
+  list.addEventListener('click', (e) => {
+    const li = (e.target as HTMLElement).closest<HTMLElement>('.cmdk-item');
+    if (li) go(Number(li.dataset.i));
+  });
+  root.addEventListener('pointerdown', (e) => {
+    if (e.target === root) close();
+  });
+
+  const typing = (el: EventTarget | null) =>
+    el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
+  addEventListener(
+    'keydown',
+    (e) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (root.hidden) open();
+        else close();
+        return;
+      }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target) && root.hidden) {
+        // The archive has its own search field: `/` goes there, as mymind's
+        // Enter does. Anywhere else it opens the palette.
+        const search = document.getElementById('search-input') as HTMLInputElement | null;
+        e.preventDefault();
+        if (search && search.offsetParent !== null) {
+          search.focus();
+          search.select();
+        } else open();
+      }
+    },
+    { capture: true },
+  );
+</script>

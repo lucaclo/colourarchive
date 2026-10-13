@@ -2333,7 +2333,22 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       const target = frames.find((f) => f.dataset.id === m[1]);
       if (target) requestAnimationFrame(() => openLightbox(target));
     }
+    // ?q= is a search by description, so the ⌘K palette (and a link) can
+    // hand one over.
+    const q = params.get('q');
+    if (q && searchInput) { searchInput.value = q; runSearch(q); }
+    goToChapterFromHash();
   })();
+
+  // #chapter=Name scrolls to that chapter's opener (from the ⌘K palette).
+  function goToChapterFromHash() {
+    const c = location.hash.match(/chapter=([^&]+)/);
+    if (!c) return;
+    const name = decodeURIComponent(c[1]);
+    const opener = [...document.querySelectorAll('.chapter-gap')].find((s) => s.getAttribute('aria-label') === `Chapter ${name}`);
+    if (opener) requestAnimationFrame(() => opener.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+  }
+  addEventListener('hashchange', goToChapterFromHash);
 </script>
 
 <script>

@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import TabBar, { type Tab } from '../components/TabBar.astro';
+import CommandPalette from '../components/CommandPalette.astro';
 
 interface Props {
   title?: string;
@@ -117,6 +118,7 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
   <body class={[tab && 'has-tabbar', ringPointer && 'ring-pointer'].filter(Boolean).join(' ') || undefined}>
     <slot />
     {tab && <TabBar current={tab} />}
+    {tab && <CommandPalette />}
     {cursor && <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>}
     <script is:inline>
       // Custom cursor: a ring tinted to whatever --accent currently is (set
