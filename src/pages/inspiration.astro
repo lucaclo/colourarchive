@@ -80,27 +80,30 @@ const accent = manifest.chapters[0]
 <Layout title="Inspiration — Colour Archive" accent={accent} tab="inspiration">
 
   <main class="insp">
+    <!-- The board comes first; adding sits behind one button (Cosmos,
+         Are.na). It starts open only when there is nothing on the board yet.
+         Dragging files over the page or pasting anywhere also adds. -->
     <header class="insp-head">
       <h1>Reference</h1>
+      <button class="insp-addbtn" id="add-toggle" type="button" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add">Add</button>
     </header>
 
-    <section class="insp-add">
+    <section class="insp-add" id="insp-add" hidden={hasItems}>
       <form id="form">
         <input id="file" type="file" accept="image/*" multiple hidden />
         <div class="drop" id="zone" tabindex="0" role="button" aria-label="Drop images or browse">
           <p class="drop-title">Drop pictures here, or <span class="link">choose some</span></p>
-          <p class="drop-sub">JPEG · PNG · WebP · AVIF · HEIC · GIF</p>
         </div>
       </form>
       <div class="urlrow">
-        <input id="source" type="text" placeholder="Whose is it? Name or @handle" />
-        <span class="or">or</span>
-        <input id="url" type="url" placeholder="Paste a link to the image" />
+        <input id="url" type="url" placeholder="Or paste a link to the image" />
+        <input id="source" type="text" placeholder="Whose is it? (optional)" />
         <button id="addurl" type="button">Add</button>
       </div>
-      <div id="status" class="status" hidden><div class="bar"><div class="bar-fill" id="bar"></div></div><p id="status-text"></p></div>
-      <ul id="results" class="results"></ul>
     </section>
+    <div id="status" class="status" hidden><div class="bar"><div class="bar-fill" id="bar"></div></div><p id="status-text"></p></div>
+    <ul id="results" class="results"></ul>
+    <div class="drop-veil" id="drop-veil" hidden aria-hidden="true"><p>Drop to pin up</p></div>
 
     <!-- Style Match reports you've explicitly kept (POST /api/match/keep) —
          the library that mx-keep's "Kept" button used to write to with no way
@@ -1420,6 +1423,35 @@ const accent = manifest.chapters[0]
      tracked capitals, boxed cards become hairline rules, glass pills on photos
      become plain tags, and value rows get a dotted leader. Controls keep the
      UI face and data keeps the mono. Only the words that name things change. */
+  /* Round 3: title and Add on one line, the capture form behind Add. */
+  .insp-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .insp-head h1 { margin-bottom: 1.4rem; }
+  .insp-addbtn {
+    appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
+    min-height: 2.5rem; padding: 0 1.2rem; background: var(--fg); color: var(--bg);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
+    transition: transform 110ms ease-out, opacity 140ms;
+  }
+  .insp-addbtn:active { transform: scale(0.96); }
+  .insp-addbtn[aria-expanded='true'] { background: var(--fill); color: var(--fg); }
+  .insp-addbtn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .insp-add[hidden] { display: none; }
+  .insp-add { margin-bottom: 2.4rem; }
+  .insp-add .drop { padding: 1.8rem 1rem; }
+  .insp-add .drop-title { margin: 0; font-size: 1.2rem; }
+  .status, .results { margin-top: 0; }
+  .results:empty { display: none; }
+  /* Files dragged over the page: the whole page is the drop zone. */
+  .drop-veil {
+    position: fixed; inset: 0.8rem; z-index: 80; display: grid; place-items: center; pointer-events: none;
+    border: 1px solid var(--rule); border-radius: 4px;
+    background: color-mix(in oklab, var(--bg) 82%, transparent);
+    background-image: var(--cropmarks-image); background-size: var(--cropmarks-size);
+    background-position: var(--cropmarks-pos); background-repeat: no-repeat;
+  }
+  .drop-veil[hidden] { display: none; }
+  .drop-veil p { margin: 0; font-family: var(--font-note); font-style: italic; font-size: 1.6rem; color: var(--fg); }
+
   .insp-head .page-kicker {
     font-family: var(--font-note); font-style: italic; font-size: var(--t-note);
     letter-spacing: 0; text-transform: none; color: var(--secondary); gap: 0.7rem;
@@ -1708,6 +1740,55 @@ const accent = manifest.chapters[0]
   ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
   zone.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files); });
   document.getElementById('addurl').addEventListener('click', addUrl);
+
+  // Add: one button opens the capture form; it's open from the start only
+  // when the board is empty.
+  const addToggle = document.getElementById('add-toggle');
+  const addPanel = document.getElementById('insp-add');
+  function setAddOpen(open) {
+    addPanel.hidden = !open;
+    addToggle.setAttribute('aria-expanded', String(open));
+    addToggle.textContent = open ? 'Done' : 'Add';
+    if (open) urlEl.focus({ preventScroll: true });
+  }
+  if (!addPanel.hidden) addToggle.textContent = 'Done';
+  addToggle.addEventListener('click', () => setAddOpen(addPanel.hidden));
+
+  // Files dragged anywhere over the page: the page is the drop zone. The
+  // Style Match workbench has its own zones and handles its own drops.
+  const veil = document.getElementById('drop-veil');
+  const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+  const inWorkbench = (e) => e.target instanceof Element && e.target.closest('.mx, #mx, dialog');
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e) || inWorkbench(e)) return;
+    dragDepth++;
+    veil.hidden = false;
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (!hasFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) veil.hidden = true;
+  });
+  document.addEventListener('dragover', (e) => { if (hasFiles(e) && !inWorkbench(e)) e.preventDefault(); });
+  document.addEventListener('drop', (e) => {
+    dragDepth = 0;
+    veil.hidden = true;
+    if (!hasFiles(e) || inWorkbench(e) || e.target === zone || zone.contains(e.target)) return;
+    e.preventDefault();
+    if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+  });
+
+  // Paste anywhere that isn't a text field: an image is added as it is, a
+  // link is fetched as if typed into the link field.
+  document.addEventListener('paste', (e) => {
+    const t = e.target;
+    if (t instanceof HTMLElement && (t.closest('input, textarea, [contenteditable="true"]'))) return;
+    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+    if (files.length) { e.preventDefault(); uploadFiles(files); return; }
+    const text = e.clipboardData?.getData('text/plain')?.trim() ?? '';
+    if (/^https?:\/\/\S+$/.test(text)) { e.preventDefault(); urlEl.value = text; addUrl(); }
+  });
 
   function begin(msg) { statusEl.hidden = false; bar.style.width = '10%'; statusText.textContent = msg; }
   function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
