@@ -129,3 +129,14 @@ export function mineFeatures(photos: MinePhoto[]): GeoJSON.FeatureCollection<Geo
   });
   return { type: 'FeatureCollection', features };
 }
+
+/**
+ * The photo pin's edge in CSS pixels at a map zoom. Full size (44) from
+ * street level in, shrinking to 22 at a whole-globe view, so a pin on the
+ * globe marks a place instead of covering a country.
+ */
+export function minePinSize(zoom: number): number {
+  const FAR = 3, NEAR = 12, SMALL = 22, FULL = 44;
+  const t = Math.min(1, Math.max(0, (zoom - FAR) / (NEAR - FAR)));
+  return Math.round(SMALL + (FULL - SMALL) * t);
+}

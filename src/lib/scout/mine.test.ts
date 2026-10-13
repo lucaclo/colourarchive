@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isLatLon, mineFeatures, parsePlacedLocations, resolveMinePhotos, type MineChapterInput } from './mine.ts';
+import { isLatLon, mineFeatures, minePinSize, parsePlacedLocations, resolveMinePhotos, type MineChapterInput } from './mine.ts';
 
 const photo = (id: string, exif: MineChapterInput['photos'][number]['exif'] = {}) => ({
   id,
@@ -76,5 +76,17 @@ describe('mineFeatures', () => {
     assert.equal(features.length, 1);
     assert.deepEqual(features[0].geometry.coordinates, [4, 3]);
     assert.deepEqual(features[0].properties, { id: 'b', order: 1 });
+  });
+});
+
+describe('minePinSize', () => {
+  it('is full size from street level in and half size on the globe', () => {
+    assert.equal(minePinSize(15), 44);
+    assert.equal(minePinSize(12), 44);
+    assert.equal(minePinSize(3), 22);
+    assert.equal(minePinSize(1), 22);
+  });
+  it('grows steadily in between', () => {
+    assert.ok(minePinSize(6) > 22 && minePinSize(6) < minePinSize(9) && minePinSize(9) < 44);
   });
 });

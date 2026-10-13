@@ -20,7 +20,7 @@
 
 import type { GeoJSONSource, Map as MapLibreMap, Marker, Popup } from 'maplibre-gl';
 import type { LatLon } from '../geo';
-import { mineFeatures, type MinePhoto } from '../mine';
+import { mineFeatures, minePinSize, type MinePhoto } from '../mine';
 import { $, on } from './dom';
 
 type MapLibreModule = typeof import('maplibre-gl');
@@ -355,6 +355,11 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     if (event.sourceId === MINE_SOURCE) markDirty();
   });
   map?.on('moveend', markDirty);
+  // The pins shrink as you zoom out (see minePinSize). A variable on the
+  // container rather than a transform: MapLibre owns each marker's transform.
+  const sizePins = () => map?.getContainer().style.setProperty('--mine-size', `${minePinSize(map.getZoom())}px`);
+  map?.on('zoom', sizePins);
+  sizePins();
   map?.on('render', () => {
     if (!dirty || !map.getSource(MINE_SOURCE) || !map.isSourceLoaded(MINE_SOURCE)) return;
     dirty = false;
