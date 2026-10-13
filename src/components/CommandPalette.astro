@@ -36,7 +36,7 @@ const chapters: Command[] = manifest.chapters.map((c) => ({
 const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _s, ...c }) => c), ...chapters];
 ---
 
-<div class="cmdk" id="cmdk" hidden>
+<div class="cmdk" id="cmdk" hidden data-text-search={STATIC ? 'false' : 'true'}>
   <div class="cmdk-sheet" role="dialog" aria-modal="true" aria-label="Go to">
     <input
       class="cmdk-input"
@@ -147,7 +147,7 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
   /** Built with DOM calls, not markup: place names come from storage. */
   function render() {
     const q = input.value;
-    shown = [...rankCommands(all, q, 8), ...queryCommands(q)];
+    shown = [...rankCommands(all, q, 8), ...queryCommands(q, { textSearch: root.dataset.textSearch !== 'false' })];
     active = Math.min(active, Math.max(0, shown.length - 1));
     const rows: HTMLLIElement[] = [];
     let group = '';

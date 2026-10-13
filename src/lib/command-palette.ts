@@ -86,9 +86,9 @@ export function parseHex(query: string): string | null {
 /**
  * The rows that depend on what was typed and can't be listed ahead: a hex
  * code becomes a colour search, and any text can be searched for in the
- * archive by description.
+ * archive by description, where the archive has that search.
  */
-export function queryCommands(query: string): Command[] {
+export function queryCommands(query: string, opts: { textSearch?: boolean } = {}): Command[] {
   const q = query.trim();
   if (!q) return [];
   const out: Command[] = [];
@@ -97,7 +97,8 @@ export function queryCommands(query: string): Command[] {
     out.push({ id: `colour:${hex}`, title: `Photos in ${hex}`, group: 'Search', href: `/?colour=${hex.slice(1)}`, swatch: hex });
     return out;
   }
-  if (q.length >= 2) {
+  // The static publish has no description search to hand the words to.
+  if (q.length >= 2 && opts.textSearch !== false) {
     out.push({ id: `search:${q}`, title: `Search the archive for “${q}”`, group: 'Search', href: `/?q=${encodeURIComponent(q)}` });
   }
   return out;

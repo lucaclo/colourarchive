@@ -58,3 +58,8 @@ test('results come grouped, groups in the order of their best match', () => {
     assert.equal(at[at.length - 1] - at[0], at.length - 1, `${g} is contiguous`);
   }
 });
+
+test('without a text search only a hex gives a row', () => {
+  assert.deepEqual(queryCommands('sea', { textSearch: false }), []);
+  assert.equal(queryCommands('#fff', { textSearch: false }).length, 1);
+});
