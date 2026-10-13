@@ -122,7 +122,7 @@ import {
 } from '../shadows';
 import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-layer';
 import { nightCameraConstraintsFor } from './night-camera';
-import { lightWord, nextLight, phaseRows, readableTitle } from '../glance';
+import { isAfterDark, lightWord, morningRows, nextLight, phaseRows, readableTitle } from '../glance';
 import { monthGrid, monthTitle, shiftMonth } from '../calendar';
 import {
   MINUTES_PER_DAY,
@@ -638,6 +638,8 @@ export async function startScout(): Promise<void> {
   let gateBearing = 0;
   let skyline: Skyline | null = null;
   let spotWindows: ReturnType<typeof lightWindows> = [];
+  /** Tomorrow morning's rows, shown in place of today's once it's dark. */
+  let tomorrowRows: SunEventRow[] = [];
   /** The day's main rows, kept for the glance and the half-day filter. */
   let eventRows: SunEventRow[] = [];
   /** "All times" pressed: show the whole day, not just the half still ahead. */
@@ -4123,8 +4125,14 @@ export async function startScout(): Promise<void> {
       const minutes = Math.max(1, Math.round((next.at.getTime() - instant.getTime()) / 60_000));
       set('glance-next', `${next.label} in ${formatDuration(minutes)} · ${clock(next.at)}`);
     } else {
+      // The day is over: what's next is tomorrow's first light, the same
+      // roll-forward the times list makes.
+      const first = tomorrowRows.find((row) => row.key === 'civilDawn')?.start;
       const last = eventRows.find((row) => row.key === 'civilDusk')?.start;
-      set('glance-next', last ? `Last light was ${clock(last)}` : '');
+      if (first) {
+        const minutes = Math.max(1, Math.round((first.getTime() - instant.getTime()) / 60_000));
+        set('glance-next', `First light in ${formatDuration(minutes)} · ${clock(first)}`);
+      } else set('glance-next', last ? `Last light was ${clock(last)}` : '');
     }
 
     if (!weather) {
@@ -4508,7 +4516,9 @@ export async function startScout(): Promise<void> {
    */
   function renderEvents() {
     if (!day) return;
-    const build = (rows: SunEventRow[], into: HTMLElement) => {
+    // `pick` replaces the default "move the slider to this time": tomorrow's
+    // rows have no minute on today's slider, so they change the date first.
+    const build = (rows: SunEventRow[], into: HTMLElement, pick?: (row: SunEventRow) => void) => {
       into.replaceChildren(
         ...rows.map((row) => {
           const li = document.createElement('li');
@@ -4533,8 +4543,9 @@ export async function startScout(): Promise<void> {
             when.textContent = formatClock(row.start, timeZone);
           }
 
-          const target = row.start ? minuteFor(row.start) : null;
-          if (target == null) button.disabled = true;
+          const target = row.start && !pick ? minuteFor(row.start) : null;
+          if (pick) button.disabled = !row.start;
+          else if (target == null) button.disabled = true;
           // Kept on the element so the highlight pass can read the window back
           // without recomputing every event time.
           if (target != null) {
@@ -4544,7 +4555,8 @@ export async function startScout(): Promise<void> {
 
           button.append(name, when);
           button.addEventListener('click', () => {
-            if (target != null) setMinute(target);
+            if (pick) pick(row);
+            else if (target != null) setMinute(target);
           });
           li.append(button);
           return li;
@@ -4554,6 +4566,16 @@ export async function startScout(): Promise<void> {
 
     eventRows = sunEventRows(day.times);
     build(eventRows, $('events'));
+    if (centre) {
+      const nextIso = shiftIsoDate(isoDate || todayHere(), 1);
+      const next = scoutDay(centre.lat, centre.lon, zonedNoon(nextIso, timeZone));
+      tomorrowRows = morningRows(sunEventRows(next.times));
+      build(tomorrowRows, $('events-tomorrow'), (row) => {
+        setDate(nextIso);
+        const target = row.start ? minuteFor(row.start) : null;
+        if (target != null) setMinute(target);
+      });
+    }
     build(twilightRows(day.times), $('twilight'));
     markCurrentEvent();
   }
@@ -4564,6 +4586,10 @@ export async function startScout(): Promise<void> {
    */
   function filterEvents() {
     const now = currentInstant();
+    // Once the day's last light has gone, what's ahead is tomorrow morning.
+    const dark = !allTimes && !!now && tomorrowRows.length > 0 && isAfterDark(eventRows, now);
+    $<HTMLElement>('events-next').hidden = !dark;
+    $<HTMLElement>('events').hidden = dark;
     const keep = allTimes || !now ? null : new Set(phaseRows(eventRows, now).map((row) => row.key));
     for (const li of $('events').children as HTMLCollectionOf<HTMLElement>) {
       li.hidden = keep ? !keep.has(li.dataset.key ?? '') : false;

@@ -312,6 +312,10 @@ const accent = '#f0b866';
               </div>
 
               <ul class="events" id="events"></ul>
+              <div class="events-next" id="events-next" hidden>
+                <p class="events-next-head">Tomorrow</p>
+                <ul class="events" id="events-tomorrow"></ul>
+              </div>
 
               <button class="events-all" id="events-all" type="button" aria-pressed="false">All times</button>
 
@@ -2204,6 +2208,8 @@ const accent = '#f0b866';
   /* ── Events ───────────────────────────────────────────────────────────── */
 
   .events { list-style: none; margin: 0 0 0.5rem; padding: 0; }
+  .events[hidden], .events-next[hidden] { display: none; }
+  .events-next-head { margin: 0.2rem 0 0.1rem; font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
   .events :global(li) { border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent); }
   .events :global(li:last-child) { border-bottom: 0; }
   .events :global(button) {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { lightWord, nextLight, phaseRows, readableTitle } from './glance';
+import { isAfterDark, lightWord, morningRows, nextLight, phaseRows, readableTitle } from './glance';
 import type { SunEventRow } from './daylight';
 
 const at = (hhmm: string) => new Date(`2026-10-13T${hhmm}:00Z`);
@@ -78,5 +78,23 @@ describe('readableTitle', () => {
     assert.equal(readableTitle("Star Ferry's Harbour Tour 12.jpg"), "Star Ferry's Harbour Tour 12");
     assert.equal(readableTitle('Hkstarferry'), 'Hkstarferry');
     assert.equal(readableTitle('AoS McDull statue'), 'AoS McDull statue');
+  });
+});
+
+describe('isAfterDark', () => {
+  it('is false through the evening and true once last light has passed', () => {
+    assert.equal(isAfterDark(rows, at('18:00')), false);
+    assert.equal(isAfterDark(rows, at('18:22')), false);
+    assert.equal(isAfterDark(rows, at('18:30')), true);
+  });
+  it('is false before dawn and for a day with no times at all', () => {
+    assert.equal(isAfterDark(rows, at('03:00')), false);
+    assert.equal(isAfterDark(rows.map((r) => ({ ...r, start: null, end: null })), at('23:00')), false);
+  });
+});
+
+describe('morningRows', () => {
+  it('is everything up to and including solar noon', () => {
+    assert.deepEqual(morningRows(rows).map((r) => r.key), ['civilDawn', 'blueMorning', 'sunrise', 'goldenMorning', 'solarNoon']);
   });
 });

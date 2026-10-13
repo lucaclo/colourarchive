@@ -66,6 +66,26 @@ export function phaseRows(rows: SunEventRow[], now: Date): SunEventRow[] {
 }
 
 /**
+ * Has the last of the day's light gone? True once `now` is past the end of
+ * the final row with a time (last light, or the evening blue hour), so the
+ * list can roll on to tomorrow morning the way Flighty moves to the next leg
+ * once a flight has landed.
+ */
+export function isAfterDark(rows: SunEventRow[], now: Date): boolean {
+  const ends = rows
+    .map((row) => (row.end ?? row.start)?.getTime())
+    .filter((t): t is number => Number.isFinite(t));
+  if (!ends.length) return false;
+  return now.getTime() > Math.max(...ends);
+}
+
+/** The morning half of a day's rows, up to and including solar noon. */
+export function morningRows(rows: SunEventRow[]): SunEventRow[] {
+  const index = rows.findIndex((row) => row.key === 'solarNoon');
+  return index < 0 ? rows : rows.slice(0, index + 1);
+}
+
+/**
  * A photo title fit to head a list row, or null when it is a file name.
  *
  * Commons and Flickr titles are often camera or upload names such as
