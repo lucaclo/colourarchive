@@ -33,11 +33,15 @@ const accent = manifest.chapters[0]
 <Layout title="Add & remove — Colour Archive" accent={accent} tab="upload">
 
   <main class="ingest">
+    {/* The archive comes first (round 4, as Inspiration in round 3): adding
+        sits behind one button, and dropping anywhere on the page or pasting
+        adds too. The big drop zone is only the empty archive's first screen. */}
     <header class="ingest-head">
       <h1>Add &amp; remove</h1>
+      <button class="ingest-addbtn" id="add-photos" type="button">Add photos</button>
     </header>
 
-    <form id="form" class="drop" aria-label="Upload photographs">
+    <form id="form" class="drop" aria-label="Upload photographs" hidden={allPhotos.length > 0}>
       <input id="file" name="photos" type="file" accept="image/*" multiple hidden />
       <div class="drop-inner" id="zone" tabindex="0" role="button"
            aria-label="Choose photos or drop them here">
@@ -55,6 +59,7 @@ const accent = manifest.chapters[0]
     </div>
 
     <ul id="results" class="results" aria-live="polite"></ul>
+    <div class="drop-veil" id="drop-veil" hidden aria-hidden="true"><p>Drop to add</p></div>
 
     {/* Rendered even when empty, so photos added in this session can drop
         straight into it without a page reload. */}
@@ -120,6 +125,26 @@ const accent = manifest.chapters[0]
   }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.4rem; max-width: 40rem; }
 
+  .ingest-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .ingest-addbtn {
+    appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
+    min-height: 2.5rem; padding: 0 1.2rem; background: var(--fg); color: var(--bg);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
+    transition: transform 110ms ease-out, opacity 140ms; flex: 0 0 auto;
+  }
+  .ingest-addbtn:active { transform: scale(0.96); }
+  .ingest-addbtn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  @media (max-width: 640px) { .ingest-addbtn { min-height: var(--hit); } }
+  .drop[hidden] { display: none; }
+  .drop-veil {
+    position: fixed; inset: 0.8rem; z-index: 80; display: grid; place-items: center; pointer-events: none;
+    border: 1px solid var(--rule); border-radius: 4px;
+    background: color-mix(in oklab, var(--bg) 82%, transparent);
+    background-image: var(--cropmarks-image); background-size: var(--cropmarks-size);
+    background-position: var(--cropmarks-pos); background-repeat: no-repeat;
+  }
+  .drop-veil[hidden] { display: none; }
+  .drop-veil p { margin: 0; font-family: var(--font-note); font-style: italic; font-size: 1.6rem; color: var(--fg); }
   .drop { margin: 0; }
   /* Printer's crop marks, the same drop target Inspiration uses — one
      vocabulary for "put a file here" across the app, not two. */
@@ -178,7 +203,8 @@ const accent = manifest.chapters[0]
   :global(.results .fit-keeps) { color: color-mix(in oklab, var(--fg) 70%, transparent); }
   :global(.results .fit-new-look) { color: #e0a63a; }
 
-  .manage { margin-top: 4rem; }
+  .manage { margin-top: 0.8rem; }
+  .drop:not([hidden]) ~ .manage { margin-top: 4rem; }
   .manage-head { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.7rem; margin: 0 0 0.3rem; display: flex; align-items: baseline; gap: 0.6rem; }
   .manage-count { font-family: var(--font-label); font-size: 0.9rem; color: var(--muted); }
   .manage-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.4rem; }
@@ -423,11 +449,29 @@ const accent = manifest.chapters[0]
   ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
   zone.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) upload(e.dataTransfer.files); });
-  // Dropping onto the page but missing the zone used to make the browser
-  // navigate away and *open the photo*, losing the page you were working on.
-  ['dragover', 'drop'].forEach((ev) => addEventListener(ev, (e) => {
-    if (!zone.contains(e.target)) e.preventDefault();
-  }));
+  document.getElementById('add-photos')?.addEventListener('click', pick);
+  // Drop anywhere on the page: a veil says where it'll go. (Before, a drop
+  // that missed the zone made the browser open the photo and lose the page.)
+  const veil = document.getElementById('drop-veil');
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  let dragDepth = 0;
+  addEventListener('dragenter', (e) => {
+    if (!hasFiles(e) || zone.contains(e.target)) return;
+    dragDepth++;
+    veil.hidden = false;
+  });
+  addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) veil.hidden = true;
+  });
+  addEventListener('dragover', (e) => { if (!zone.contains(e.target)) e.preventDefault(); });
+  addEventListener('drop', (e) => {
+    dragDepth = 0;
+    veil.hidden = true;
+    if (zone.contains(e.target)) return;
+    e.preventDefault();
+    if (e.dataTransfer?.files?.length) upload(e.dataTransfer.files);
+  });
   // Paste an image straight from the clipboard (⌘V) — screenshots, or a frame
   // copied out of another app.
   addEventListener('paste', (e) => {
