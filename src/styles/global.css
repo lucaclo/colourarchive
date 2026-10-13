@@ -1272,6 +1272,15 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   .lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: none; }
 }
 .lb-tool[aria-pressed='true'] { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
+/* The archive's own actions say what they do in a word: ≈, ◐ and two
+   overlapping circles were guesses on touch, where there's no tooltip. Kept
+   apart from the symbol buttons so a word never reads as a symbol's label. */
+.lb-tool.lb-text {
+  width: auto; padding: 0 0.95rem; border-radius: 999px;
+  font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500; letter-spacing: 0;
+}
+#lb-similar { margin-left: 0.35rem; }
+.lb-tool.lb-close { margin-left: 0.35rem; }
 /* One icon set for the viewer, drawn on the same 24-unit grid and stroke as
    the tab bar, in place of the ‹ › × ≈ ◐ i characters it used to borrow from
    whichever font was nearest. */

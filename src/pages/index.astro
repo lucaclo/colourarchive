@@ -453,12 +453,10 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
           <button class="lb-tool" id="lb-info" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
-          {!STATIC && <button class="lb-tool" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5c2.5-2 5-2 7.5 0s5 2 7.5 0"/><path d="M4.5 15c2.5-2 5-2 7.5 0s5 2 7.5 0"/></svg></button>}
-          {!STATIC && <button class="lb-tool" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor"/></svg></button>}
+          {!STATIC && <button class="lb-tool lb-text" id="lb-similar" aria-label="More like this in your archive" title="More like this in your archive">Similar</button>}
+          {!STATIC && <button class="lb-tool lb-text" id="lb-match" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
           {!STATIC && (
-            <button class="lb-tool" id="lb-chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">
-              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="5.5" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="10.5" cy="8" r="3.6" fill="currentColor" opacity="0.55"/></svg>
-            </button>
+            <button class="lb-tool lb-text" id="lb-chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">Chapter</button>
           )}
           <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
         </div>
@@ -1623,7 +1621,19 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     swiping = false;
     // Dismissing leaves the photo (and the scrim's fade) where the finger let
     // go, so the flight home starts from there instead of snapping back first.
-    if (swDY > 90 && swDY > Math.abs(swDX)) { closeLightbox(); return; }
+    // Up opens the details, Photos-style; down closes them first, and only
+    // then the photo.
+    if (swDY < -70 && -swDY > Math.abs(swDX)) {
+      lb.style.opacity = '';
+      resetZoom();
+      if (!lb.classList.contains('details')) toggleDetails();
+      return;
+    }
+    if (swDY > 90 && swDY > Math.abs(swDX)) {
+      if (lb.classList.contains('details')) { lb.style.opacity = ''; resetZoom(); toggleDetails(); return; }
+      closeLightbox();
+      return;
+    }
     lb.style.opacity = '';
     if (Math.abs(swDX) > 55 && Math.abs(swDX) > Math.abs(swDY)) { swDX < 0 ? lbNext() : lbPrev(); return; }
     resetZoom();   // not far enough — spring back
