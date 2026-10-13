@@ -1926,25 +1926,66 @@ const accent = '#f0b866';
     text-align: center;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
-  .scout-map :global(.mine-card) { width: 220px; font-family: var(--font-ui); }
+  /* The photo card is always dark, whatever the map's light: it reads as
+     your own photo lifted off a pale day map or 3D buildings, and its border
+     and shadow keep it apart from the night map. MapLibre's default white
+     popup under the panel's light ink left the caption at about 1.1:1. */
+  .scout-map :global(.mine-popup) { --bg: #100f0e; --fg: #ece9e3; }
+  .scout-map :global(.mine-popup .maplibregl-popup-content) {
+    padding: 0.5rem 0.5rem 0.55rem;
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--bg) 94%, transparent);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border: 1px solid color-mix(in oklab, var(--fg) 22%, transparent);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
+    color: var(--fg);
+  }
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip),
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip),
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip) { border-top-color: color-mix(in oklab, var(--bg) 94%, transparent); }
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip),
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip),
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip) { border-bottom-color: color-mix(in oklab, var(--bg) 94%, transparent); }
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip) { border-right-color: color-mix(in oklab, var(--bg) 94%, transparent); }
+  .scout-map :global(.mine-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip) { border-left-color: color-mix(in oklab, var(--bg) 94%, transparent); }
+  .scout-map :global(.mine-popup .maplibregl-popup-close-button) {
+    top: 0.85rem; right: 0.85rem;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55); color: #fff;
+    font-size: 16px; line-height: 22px;
+  }
+  .scout-map :global(.mine-card) { width: 232px; font-family: var(--font-ui); }
   .scout-map :global(.mine-card img) {
     width: 100%;
     max-height: 180px;
     object-fit: cover;
-    border-radius: 6px;
+    border-radius: 7px;
     display: block;
   }
-  .scout-map :global(.mine-card p) { margin: 0.4rem 0 0.3rem; font-size: 0.75rem; line-height: 1.35; }
+  .scout-map :global(.mine-card p) {
+    margin: 0.5rem 0.15rem 0.45rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: color-mix(in oklab, var(--fg) 82%, transparent);
+  }
   .scout-map :global(.mine-card .mine-card-actions) { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .scout-map :global(.mine-card .mine-card-actions button) {
-    font: 500 0.75rem var(--font-ui);
-    padding: 0.3rem 0.55rem;
+    font: 500 0.78rem var(--font-ui);
+    min-height: 30px;
+    padding: 0.3rem 0.6rem;
     border-radius: 999px;
-    border: 1px solid rgba(0, 0, 0, 0.18);
-    background: transparent;
-    color: inherit;
+    border: 1px solid color-mix(in oklab, var(--fg) 30%, transparent);
+    background: color-mix(in oklab, var(--fg) 8%, transparent);
+    color: var(--fg);
     cursor: pointer;
   }
+  .scout-map :global(.mine-card .mine-card-actions button:first-child) {
+    background: var(--fg);
+    border-color: var(--fg);
+    color: var(--bg);
+  }
+  .scout-map :global(.mine-card .mine-card-actions button:hover) { border-color: color-mix(in oklab, var(--fg) 55%, transparent); }
+  .scout-map :global(.mine-card .mine-card-actions button:focus-visible) { outline: 2px solid var(--fg); outline-offset: 2px; }
 
   /* ── Missing colours ──────────────────────────────────────────────────── */
 

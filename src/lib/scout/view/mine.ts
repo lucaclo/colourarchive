@@ -335,7 +335,7 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     // placement to take back.
     if (photo.source === 'placed') actions.append(action('Remove', () => (popup?.remove(), void save(photo.id, null))));
     card.append(caption, actions);
-    popup = new ports.lib.Popup({ offset: 28, maxWidth: '240px', closeButton: true })
+    popup = new ports.lib.Popup({ offset: 28, maxWidth: '260px', closeButton: true, className: 'mine-popup' })
       .setLngLat([photo.lon, photo.lat])
       .setDOMContent(card)
       .addTo(map);
