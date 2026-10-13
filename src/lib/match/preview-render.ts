@@ -314,7 +314,12 @@ void main() {
     return;
   }
 
-  vec3 outC = grade(src, v_uv);
+  // Deband: the photo arrives in 8 bits, and wherever the grade steepens the
+  // curve (a flat sky lifted or crushed) each step of the source becomes a
+  // visible stripe. One level of noise before grading turns those steps into
+  // grain finer than the eye resolves, as Lightroom's 16-bit pipeline would.
+  vec3 dithered = clamp(src + (hash(gl_FragCoord.xy + vec2(19.0, 47.0)) - 0.5) / 255.0, 0.0, 1.0);
+  vec3 outC = grade(dithered, v_uv);
 
   // Texture — four-tap unsharp. An approximation of Lightroom's mid-frequency
   // detail control, good for direction, rough on magnitude.

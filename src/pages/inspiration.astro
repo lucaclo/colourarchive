@@ -330,6 +330,7 @@ const accent = manifest.chapters[0]
             <figure class="mx-fig">
               <canvas id="mx-canvas"></canvas>
               <figcaption><span id="mx-wipehint">Yours, graded</span></figcaption>
+              <span class="mx-holdhint" aria-hidden="true">Hold for the original</span>
             </figure>
             <figure class="mx-fig">
               <img id="mx-refside" alt="" />
@@ -348,7 +349,7 @@ const accent = manifest.chapters[0]
               Separate sliders ›
             </button>
             <label class="mx-check">
-              <input type="checkbox" id="mx-wipe" /><span>Compare with the original</span>
+              <input type="checkbox" id="mx-wipe" /><span>Before / after</span>
             </label>
           </div>
 
@@ -362,17 +363,17 @@ const accent = manifest.chapters[0]
             <label class="mx-groupslider">
               <span class="mx-grouplabel">Light</span>
               <input type="range" id="mx-strength-light" min="0" max="100" value="50" aria-label="Light strength" />
-              <button type="button" class="mx-unlink" id="mx-unlink-light" aria-pressed="false" title="Follow the match strength slider">⚭</button>
+              <button type="button" class="mx-unlink" id="mx-unlink-light" aria-pressed="false" aria-label="Light follows the main slider" title="Follows the main slider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
             </label>
             <label class="mx-groupslider">
               <span class="mx-grouplabel">Colour</span>
               <input type="range" id="mx-strength-colour" min="0" max="100" value="50" aria-label="Colour strength" />
-              <button type="button" class="mx-unlink" id="mx-unlink-colour" aria-pressed="false" title="Follow the match strength slider">⚭</button>
+              <button type="button" class="mx-unlink" id="mx-unlink-colour" aria-pressed="false" aria-label="Colour follows the main slider" title="Follows the main slider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
             </label>
             <label class="mx-groupslider">
               <span class="mx-grouplabel">Effects</span>
               <input type="range" id="mx-strength-effects" min="0" max="100" value="50" aria-label="Effects strength" />
-              <button type="button" class="mx-unlink" id="mx-unlink-effects" aria-pressed="false" title="Follow the match strength slider">⚭</button>
+              <button type="button" class="mx-unlink" id="mx-unlink-effects" aria-pressed="false" aria-label="Effects follows the main slider" title="Follows the main slider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
             </label>
           </div>
         </div>
@@ -403,8 +404,15 @@ const accent = manifest.chapters[0]
         <!-- Always reachable, so the primary action never scrolls away. -->
         <footer class="mx-actions">
           <button id="mx-dl" type="button">Download preset</button>
-          <button id="mx-dl-safe" type="button" class="ghost">Without masks</button>
           <button id="mx-keep" type="button" class="ghost">Keep</button>
+          <div class="mx-more">
+            <button id="mx-more" type="button" class="ghost mx-more-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="mx-more-menu" aria-label="More downloads" title="More downloads">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+            </button>
+            <div class="mx-more-menu" id="mx-more-menu" role="menu" hidden>
+              <button id="mx-dl-safe" type="button" role="menuitem">Download without masks</button>
+            </div>
+          </div>
         </footer>
       </section>
     </div>
@@ -944,7 +952,7 @@ const accent = manifest.chapters[0]
   .mx-fig { margin: 0; position: relative; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 0; }
   .mx-fig canvas, .mx-fig img {
     max-width: 100%;
-    max-height: calc(11vh + 32vh * var(--s));
+    max-height: calc(9vh + 24vh * var(--s));
     object-fit: contain; display: block;
     transition: max-height 120ms linear;
   }
@@ -955,6 +963,22 @@ const accent = manifest.chapters[0]
     padding: 2px 8px; border-radius: 999px;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     opacity: var(--s); transition: opacity 120ms linear; pointer-events: none;
+  }
+
+  /* Hold for the original. The canvas is the control, so it must not start a
+     text selection or the iPad's long-press callout. */
+  #mx-canvas { cursor: zoom-in; touch-action: pan-y; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+  .mx-holding #mx-canvas { cursor: zoom-out; }
+  .mx-holdhint {
+    position: absolute; right: 10px; top: 8px; pointer-events: none;
+    font-family: var(--font-ui); font-size: 0.6875rem; color: #fff;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.45);
+    opacity: calc(var(--s) * 0.75); transition: opacity 160ms;
+  }
+  .mx-holding .mx-holdhint { opacity: 0; }
+  @media (hover: hover) and (pointer: fine) {
+    .mx-holdhint { opacity: 0; }
+    .mx-fig:hover .mx-holdhint { opacity: calc(var(--s) * 0.75); }
   }
 
   .mx-bar {
@@ -985,6 +1009,9 @@ const accent = manifest.chapters[0]
   .mx-groupreveal:hover { color: var(--accent-mix); border-color: var(--accent-mix); }
   .mx-groupreveal[aria-expanded="true"] { color: var(--fg); border-color: var(--fg); }
 
+  /* `display: flex` below would otherwise beat the attribute, and the three
+     sliders never folded away. */
+  .mx-groupbar[hidden] { display: none; }
   .mx-groupbar {
     display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.6rem;
     padding: 0 var(--edge) 0.6rem;
@@ -1000,7 +1027,10 @@ const accent = manifest.chapters[0]
     color: var(--muted); font-size: var(--t-caption); line-height: 1; width: 1.4rem; height: 1.4rem; flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center; transition: color 140ms, border-color 140ms;
   }
+  .mx-unlink svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  /* Pressed = this group has its own value; the link draws broken. */
   .mx-unlink[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
+  .mx-unlink[aria-pressed="true"] svg { stroke-dasharray: 3 2.4; }
   .mx-unlink:hover { color: var(--fg); }
 
   /* --- Tabs --------------------------------------------------------------- */
@@ -1253,6 +1283,27 @@ const accent = manifest.chapters[0]
   .mx-actions button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
   .mx-actions button:disabled { opacity: 0.4; cursor: default; }
   .mx-actions button:not(:disabled):hover { opacity: 0.85; }
+  /* More: the variant downloads in a small menu above the footer, so the
+     one filled button is the only loud thing at the bottom. */
+  .mx-more { position: relative; flex: 0 0 auto; display: flex; }
+  .mx-actions .mx-more-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.6rem; padding: 0; flex: 0 0 auto;
+  }
+  .mx-more-btn svg { width: 18px; height: 18px; fill: currentColor; }
+  .mx-more-menu {
+    position: absolute; right: 0; bottom: calc(100% + 0.5rem); z-index: 5;
+    min-width: 13rem; padding: 0.3rem;
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge); border-radius: var(--r-md, 12px); box-shadow: var(--glass-shadow);
+  }
+  .mx-more-menu[hidden] { display: none; }
+  .mx-actions .mx-more-menu button {
+    display: block; width: 100%; text-align: left;
+    background: transparent; color: var(--fg); border-radius: 8px; padding: 0.6rem 0.75rem;
+  }
+  .mx-actions .mx-more-menu button:hover, .mx-actions .mx-more-menu button:focus-visible { background: var(--surface-2); opacity: 1; }
 
   /* ── Already in the archive ─────────────────────────────────────────────
      Spans both columns of the start grid and scrolls sideways rather than
@@ -1334,7 +1385,7 @@ const accent = manifest.chapters[0]
   @media (max-width: 900px) {
     .mx-start { grid-template-columns: 1fr; }
     .mx-frames { grid-template-columns: 1fr 1fr; }
-    .mx-fig canvas, .mx-fig img { max-height: calc(7vh + 18vh * var(--s)); }
+    .mx-fig canvas, .mx-fig img { max-height: calc(6vh + 15vh * var(--s)); }
     .mx-cols { grid-template-columns: 1fr; gap: 1.8rem; }
     .mx-bar { gap: 0.5rem 1rem; }
     .mx-strengthlabel { flex-basis: 100%; }
@@ -1401,12 +1452,12 @@ const accent = manifest.chapters[0]
     /* The tab strip scrolls; without an edge fade the last tab (Notes, and its
        count of the solver's refusals) simply looks like it isn't there. */
     .mx-tabs { padding: 0 1.1rem; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
-    .mx-tabs button { flex: 0 0 auto; min-height: 44px; scroll-snap-align: start; }
+    .mx-tabs button { flex: 0 0 auto; min-height: var(--hit); scroll-snap-align: start; }
     .mx-tabs::after { content: ''; position: sticky; right: 0; flex: 0 0 1.6rem; align-self: stretch; background: linear-gradient(to right, transparent, var(--bg)); pointer-events: none; }
 
     .mx-scroll { padding-left: 1.1rem; padding-right: 1.1rem; }
     .mx-actions { padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px)); gap: 0.45rem; }
-    .mx-actions button { flex: 1 1 8rem; min-height: 44px; padding: 0.7rem 0.8rem; }
+    .mx-actions button { flex: 1 1 8rem; min-height: var(--hit); padding: 0.7rem 0.8rem; }
 
     /* Split view: four columns of thumbnails on a phone is a contact sheet you
        cannot see. Two, and the reference keeps a third of the screen. */
@@ -2087,6 +2138,7 @@ const accent = manifest.chapters[0]
   import { HSL_BANDS, REGION_LABEL, REGION_ORDER, BASELINE_LABEL } from '../lib/match/types';
   import { mergeReferences, solveMatch } from '../lib/match/solve';
   import { buildPresetFiles } from '../lib/match/xmp';
+  import { photoName, matchTitle } from '../lib/match/names';
   import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
   import { DEFAULT_CALIBRATION } from '../lib/match/calibration';
   import { CAL_TARGETS } from '../lib/match/roundtrip';
@@ -2222,7 +2274,7 @@ const accent = manifest.chapters[0]
         li.innerHTML = `
           <img src="${esc(r.url)}" alt="" />
           <span class="mx-ref-meta">
-            <span class="mx-ref-name">${esc(r.name)}</span>
+            <span class="mx-ref-name" title="${esc(r.name)}">${esc(photoName(r.name) || (multi ? `Reference ${i + 1}` : 'Reference'))}</span>
             ${multi ? `<span class="mx-ref-weight">Weight <input type="number" min="0.1" max="10" step="0.1" value="${r.weight}" data-refweight="${i}" /></span>` : ''}
           </span>
           ${multi ? `<button type="button" class="mx-ref-remove" data-refremove="${i}" aria-label="Remove ${esc(r.name)} from this match">×</button>` : ''}
@@ -2900,7 +2952,9 @@ const accent = manifest.chapters[0]
 
   // ── Result ─────────────────────────────────────────────────────────────
   async function showResult(data: any) {
-    subEl.textContent = `${data.myName} · matched to ${data.referenceName}`;
+    const refNames = ((data.references ?? []) as { name?: string }[]).map((r) => r.name ?? '').filter(Boolean);
+    subEl.textContent = matchTitle(String(data.myName ?? ''), refNames.length ? refNames : String(data.referenceName ?? '').split(' + '));
+    subEl.title = `${data.myName} · ${data.referenceName}`;
     refSide.src = data.references[0].previewUrl;
     refSideCaption.textContent =
       data.references.length > 1 ? `The reference, blended with ${data.references.length - 1} more` : 'The reference';
@@ -2941,6 +2995,7 @@ const accent = manifest.chapters[0]
 
   const GROUP_LABEL: Record<GroupKey, string> = { light: 'Light', colour: 'Colour', effects: 'Effects' };
 
+  let holding = false;   // the picture is being held for the original
   function draw() {
     const t = Number(strengthEl.value) / 100;
     syncGroupSliders();
@@ -2957,16 +3012,57 @@ const accent = manifest.chapters[0]
       : base;
     if (preview) {
       const spec = deriveRenderSpec(adj, current.maskChannels ?? []);
-      preview.render(spec, wipeEl.checked ? 0.5 : -1);
+      preview.render(spec, holding ? 1.01 : wipeEl.checked ? 0.5 : -1);
     }
     renderValues(adj);
   }
 
   strengthEl.addEventListener('input', draw);
+  const wipeCaption = () => (holding ? 'The original' : wipeEl.checked ? 'Left: original · Right: graded' : 'Yours, graded');
   wipeEl.addEventListener('change', () => {
-    wipeHint.textContent = wipeEl.checked ? 'Left: original · Right: graded' : 'Yours, graded';
+    wipeHint.textContent = wipeCaption();
     draw();
   });
+
+  // Press and hold the picture for the original, let go for the grade: the
+  // gesture Lightroom and Photos both use, so it needs no button. `\` does
+  // the same from a keyboard (Lightroom's before key); the Before / after
+  // switch stays for a split you can look at without holding anything.
+  const setHolding = (on: boolean) => {
+    if (holding === on) return;
+    holding = on;
+    resultEl.classList.toggle('mx-holding', on);
+    wipeHint.textContent = wipeCaption();
+    draw();
+  };
+  const canvasEl = $<HTMLCanvasElement>('mx-canvas');
+  canvasEl.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    canvasEl.setPointerCapture(e.pointerId);
+    setHolding(true);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvasEl.addEventListener(ev, () => setHolding(false));
+  canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
+  addEventListener('keydown', (e) => {
+    if (e.key !== '\\' || resultEl.hidden || (e.target as HTMLElement).closest('input, textarea, select')) return;
+    e.preventDefault();
+    setHolding(true);
+  });
+  addEventListener('keyup', (e) => { if (e.key === '\\') setHolding(false); });
+
+  // More: the variant downloads, out of the way of the one filled button.
+  const moreBtn = $<HTMLButtonElement>('mx-more');
+  const moreMenu = $('mx-more-menu');
+  const closeMore = () => { moreMenu.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); };
+  moreBtn.addEventListener('click', () => {
+    const open = moreMenu.hidden;
+    moreMenu.hidden = !open;
+    moreBtn.setAttribute('aria-expanded', String(open));
+    if (open) moreMenu.querySelector<HTMLButtonElement>('button')?.focus();
+  });
+  moreMenu.addEventListener('click', closeMore);
+  addEventListener('pointerdown', (e) => { if (!moreMenu.hidden && !e.composedPath().includes(moreBtn.parentElement!)) closeMore(); });
+  moreMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeMore(); moreBtn.focus(); } });
 
   // ── Stage collapse ─────────────────────────────────────────────────────
   // The pictures hand their space back to the report as you scroll. `--s`
