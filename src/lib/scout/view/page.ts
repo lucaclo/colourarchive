@@ -5391,6 +5391,10 @@ export async function startScout(): Promise<void> {
   function setCentreCoordinates(next: LatLon) {
     reverseToken++;
     centre = next;
+    // A first spot placed by a tap or by Locate has no date yet, the same as
+    // one chosen from search (see setCentre). Without this the date chip
+    // stayed blank.
+    if (!isoDate) isoDate = isoDateIn(new Date(), timeZone);
     ghostFrame = null;
     label = { name: 'Naming that spot…', detail: formatCoords(next) };
     nearby = [];
@@ -7980,7 +7984,9 @@ export async function startScout(): Promise<void> {
     // Places opened lately, less any already kept: kept wins, being the one
     // you chose to keep.
     const recents = recentPlaces.filter((r) => indexOfSpot(keptSpots, r) === -1).slice(0, RECENT_SHOWN);
-    const wanted = (keptSpots.length > 0 || recents.length > 0) && !searchBox.query() && searchBox.isOpen();
+    const empty = !searchBox.query() && searchBox.isOpen();
+    $<HTMLElement>('locate-row').hidden = !empty || !('geolocation' in navigator);
+    const wanted = (keptSpots.length > 0 || recents.length > 0) && empty;
     box.hidden = !wanted;
     if (!wanted) return;
     $<HTMLElement>('kept-head').hidden = keptSpots.length === 0;
@@ -9069,6 +9075,32 @@ export async function startScout(): Promise<void> {
     renderNotebook();
     planPanel.forgetUnkept();
     goTonightPanel.restate();
+  });
+
+  // Use my location: one fix, then the same path as a tapped first spot.
+  on('locate-row', 'click', () => {
+    const button = $<HTMLButtonElement>('locate-row');
+    const say = $('locate-say');
+    button.disabled = true;
+    say.textContent = 'Finding you…';
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        button.disabled = false;
+        say.textContent = 'Use my location';
+        const at = { lat: position.coords.latitude, lon: position.coords.longitude };
+        searchBox.closeResults();
+        searchBox.hide();
+        setCentreCoordinates(at);
+        map?.flyTo({ center: [at.lon, at.lat], zoom: Math.max(map.getZoom(), 14) });
+      },
+      () => {
+        // Quiet, in place: the row says why, then goes back to normal.
+        button.disabled = false;
+        say.textContent = 'Location isn’t available';
+        setTimeout(() => (say.textContent = 'Use my location'), 4000);
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
+    );
   });
 
   on('recent-list', 'click', (event) => {

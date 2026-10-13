@@ -140,6 +140,11 @@ const accent = '#f0b866';
               role="combobox"
             />
             <ul class="results" id="place-results" role="listbox" aria-label="Places" hidden></ul>
+            <!-- With the field empty: the one place you never have to type. -->
+            <button class="locate-row" id="locate-row" type="button" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+              <span id="locate-say">Use my location</span>
+            </button>
             <!-- Shown when the field is empty, which is exactly when you are
                  looking for somewhere you have already been. -->
             <div class="kept" id="kept" hidden>
@@ -3294,6 +3299,17 @@ const accent = '#f0b866';
     .photo-grid { grid-template-columns: repeat(3, 1fr); }
   }
 
+  .locate-row {
+    display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: var(--hit);
+    margin-top: 0.35rem; padding: 0 0.15rem; border: 0; border-radius: 8px; background: none; cursor: pointer;
+    color: var(--fg); font-family: var(--font-ui); font-size: var(--t-footnote); text-align: left;
+  }
+  .locate-row[hidden] { display: none; }
+  .locate-row:hover { background: var(--fill); }
+  .locate-row:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .locate-row svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; flex: none; }
+  .locate-row:disabled { color: var(--muted); cursor: default; }
+
   /* ── The date calendar ─────────────────────────────────────────────────
      A dropdown from the date chip, dark like the dock it hangs off, and
      placed in fixed coordinates by page.ts so it is never clipped by the
@@ -4153,6 +4169,10 @@ const accent = '#f0b866';
     #dock[data-detent] #edge-date,
     #dock[data-detent] #dock-body { visibility: visible; }
     .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 25.8rem; }
+    /* Before a place is chosen there is nothing to dock: the card hugs the
+       search and its suggestions instead of standing as an empty column. */
+    #dock:has(#panel[hidden]) { bottom: auto; max-height: calc(100% - var(--dock-floor) - var(--safe-top) - 0.9rem); }
+    #dock:has(#panel[hidden]) #dock-body { display: none; }
   }
 
   /* ── The empty state, on glass ────────────────────────────────────────────
