@@ -439,6 +439,26 @@ const accent = manifest.chapters[0]
   /* Phone: the corner marks take less of each thumbnail. The chapter picker
      is a <select>, so it keeps 16px type (iOS zooms on focus below that) and
      is drawn smaller with a transform instead, which iOS doesn't look at. */
+  /* Round 3: quiet tiles. At rest a tile is only its photograph; the
+     handle, ×, name and chapter appear on hover or keyboard focus, or after
+     a first tap on touch (Lightroom's "clickable items on mouse over only",
+     Photos' tap to select). The duplicate badge stays, because it is the one
+     overlay that is a warning, and so does the + on a left-out photo. */
+  .book-handle, .book-exclude, .book-caption, .book-move { opacity: 0; transition: opacity 160ms var(--ease); }
+  .book-foot { background: none; transition: background 160ms var(--ease); }
+  .book-cell:is(:hover, :focus-within, .is-active) :is(.book-handle, .book-exclude, .book-caption, .book-move),
+  .book-cell[data-excluded='1'] .book-exclude { opacity: 1; }
+  .book-cell:is(:hover, :focus-within, .is-active) .book-foot {
+    background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
+  }
+  /* A finger can't hover, so hidden controls must not catch the first tap:
+     it only reveals them (see the script). */
+  @media (hover: none) {
+    .book-cell:not(.is-active):not(:focus-within) :is(.book-handle, .book-caption, .book-move),
+    .book-cell:not(.is-active):not(:focus-within):not([data-excluded='1']) .book-exclude { pointer-events: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .book-handle, .book-exclude, .book-caption, .book-move, .book-foot { transition: none; } }
+
   @media (max-width: 640px) {
     .book-exclude { width: 22px; height: 22px; line-height: 22px; font-size: 13px; }
     .book-handle { width: 22px; height: 22px; }
@@ -840,6 +860,23 @@ const accent = manifest.chapters[0]
   // same pagination /api/book/pdf prints from, read off the list view's DOM
   // so an unsaved reorder or exclusion shows up here straight away.
   import { TRIMS, checkPages, isTrimId, padToEven, paginate, placements, spreads, type Page, type PageChapter, type Treatment, type TrimId } from '../lib/book-pages';
+
+  // Quiet tiles on touch: a first tap on a tile shows its controls, a tap
+  // elsewhere hides them again. Pointers get the same through :hover.
+  document.getElementById('book-chapters')?.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, select')) return;
+    const cell = target.closest<HTMLElement>('.book-cell');
+    for (const other of document.querySelectorAll('.book-cell.is-active')) {
+      if (other !== cell) other.classList.remove('is-active');
+    }
+    cell?.classList.toggle('is-active');
+  });
+  document.addEventListener('click', (event) => {
+    if (!(event.target as HTMLElement).closest('.book-cell')) {
+      for (const cell of document.querySelectorAll('.book-cell.is-active')) cell.classList.remove('is-active');
+    }
+  });
 
   const init = JSON.parse(document.getElementById('book-layout-init')?.textContent || '{}');
   const state: { layout: Record<string, Treatment>; blankBefore: Set<string>; trim: TrimId } = {

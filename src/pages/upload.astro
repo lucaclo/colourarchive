@@ -307,10 +307,22 @@ const accent = manifest.chapters[0]
     :global(.cell-remove:active), :global(.cell-medium:active), :global(.cell-genre:active) { transform: none; }
   }
 
-  /* Touch: the per-cell controls are hover-revealed, which a finger never
-     triggers. */
-  @media (hover: none), (pointer: coarse) {
-    :global(.cell-remove) { opacity: 0.85; }
+  /* Round 3: quiet tiles, as on the Book page. At rest only the photograph;
+     the ×, medium, genre and chapter appear on hover or focus, and on touch
+     once a tile is selected (a tap already selects it here). */
+  :global(.cell-medium), :global(.cell-genre), :global(.cell figcaption) {
+    opacity: 0; transition: opacity 160ms var(--ease);
+  }
+  :global(.cell:is(:hover, :focus-within, .selected) :is(.cell-medium, .cell-genre, figcaption)),
+  :global(.cell:is(.selected) .cell-remove) { opacity: 1; }
+  /* An edge photo keeps its small amber mark at rest: it's a prompt to act. */
+  :global(.cell.on-edge figcaption) { opacity: 1; background: none; }
+  :global(.cell.on-edge:not(:hover):not(:focus-within):not(.selected) figcaption .cell-ch-name) { visibility: hidden; }
+  @media (hover: none) {
+    :global(.cell:not(.selected):not(:focus-within) :is(.cell-remove, .cell-medium, .cell-genre, figcaption)) { pointer-events: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.cell-medium), :global(.cell-genre), :global(.cell figcaption) { transition: none; }
   }
   /* .cell-remove got the opacity fix above but stayed 26px; .cell-medium and
      .cell-genre had no touch accommodation at all — 18px tall, on a page
