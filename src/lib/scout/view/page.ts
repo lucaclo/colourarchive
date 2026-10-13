@@ -122,6 +122,7 @@ import {
 } from '../shadows';
 import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-layer';
 import { nightCameraConstraintsFor } from './night-camera';
+import { lightWord, nextLight, phaseRows, readableTitle } from '../glance';
 import {
   MINUTES_PER_DAY,
   PHASE_LABEL,
@@ -636,6 +637,14 @@ export async function startScout(): Promise<void> {
   let gateBearing = 0;
   let skyline: Skyline | null = null;
   let spotWindows: ReturnType<typeof lightWindows> = [];
+  /** The day's main rows, kept for the glance and the half-day filter. */
+  let eventRows: SunEventRow[] = [];
+  /** "All times" pressed: show the whole day, not just the half still ahead. */
+  let allTimes = false;
+  /** "All" pressed under Best right now: eight rows instead of three. */
+  let bestAll = false;
+  /** The missing Flickr key has been logged once this visit. */
+  let flickrKeyNoted = false;
   let terrainShadows: TerrainShadows | null = null;
   /** The last solved sightline, kept so the chart and the panel agree. */
   let sight: LineOfSight | null = null;
@@ -4076,6 +4085,73 @@ export async function startScout(): Promise<void> {
     if (skyline?.estimated) parts.push(`${skyline.estimated} height${skyline.estimated === 1 ? '' : 's'} estimated`);
     if (skyline?.enclosed) parts.push('the pin is inside a building');
     $('spot-basis').textContent = `From ${parts.join(' · ')}.`;
+    renderGlance();
+  }
+
+  /**
+   * The top of the panel and the three tiles under it: the answer first,
+   * each tile one takeaway, the detail behind a tap. It only reads what
+   * the slider minute already has, so scrubbing stays a lookup.
+   */
+  function renderGlance() {
+    const now = current();
+    const instant = currentInstant();
+    const set = (id: string, text: string) => {
+      $(id).textContent = text;
+    };
+    if (!day || !now || !instant) {
+      for (const id of ['glance-head', 'tile-sky-v', 'tile-here-v']) set(id, '—');
+      for (const id of ['glance-next', 'tile-sky-s', 'tile-here-s']) set(id, '');
+      return;
+    }
+    const lookup = Math.min(minute, 1439);
+    const clock = (date: Date) => formatClock(date, timeZone);
+
+    const hour = weather ? hourAt(weather, instant) : null;
+    const structure = hour ? cloudStructure(hour) : null;
+    const cover = hour ? (structure?.blocking ?? hour.cloudCover) : null;
+    const segment = day.segments.find((s) => lookup >= s.startMinute && lookup < s.endMinute);
+    // A low deck in front of the sun is flat light whatever the cover figure,
+    // the same call the deck note under the Sky tile makes.
+    const word =
+      structure?.dominant === 'low' && now.altitude > -0.833 ? 'Flat light' : lightWord(cover, now.altitude);
+    set('glance-head', word ?? (segment ? PHASE_LABEL[segment.phase] : '—'));
+
+    const next = nextLight(eventRows, instant);
+    if (next.kind === 'now') set('glance-next', `${next.label} until ${clock(next.until)}`);
+    else if (next.kind === 'next') {
+      const minutes = Math.max(1, Math.round((next.at.getTime() - instant.getTime()) / 60_000));
+      set('glance-next', `${next.label} in ${formatDuration(minutes)} · ${clock(next.at)}`);
+    } else {
+      const last = eventRows.find((row) => row.key === 'civilDusk')?.start;
+      set('glance-next', last ? `Last light was ${clock(last)}` : '');
+    }
+
+    if (!weather) {
+      set('tile-sky-v', '…');
+      set('tile-sky-s', '');
+    } else if (!hour) {
+      set('tile-sky-v', 'No forecast');
+      set('tile-sky-s', 'this far out');
+    } else {
+      set('tile-sky-v', weatherCondition(hour.weatherCode).label);
+      set('tile-sky-s', hour.cloudCover == null ? '' : `${Math.round(hour.cloudCover)}% cloud`);
+    }
+
+    const here = spotWindows.find((w) => lookup >= w.startMinute && lookup < w.endMinute);
+    if (!here) {
+      set('tile-here-v', '—');
+      set('tile-here-s', '');
+      return;
+    }
+    set('tile-here-v', now.altitude <= 0 || here.belowHorizon ? 'No sun' : here.lit ? 'In sun' : 'In shade');
+    const change = nextChange(spotWindows, lookup);
+    set(
+      'tile-here-s',
+      change && change.inMinutes > 0
+        ? `${change.lit ? 'sun' : 'shade'} at ${formatMinute(day.dayStart, change.atMinute, timeZone)}`
+        : '',
+    );
   }
 
   /* ── Panel ───────────────────────────────────────────────────────────── */
@@ -4121,11 +4197,14 @@ export async function startScout(): Promise<void> {
     $('panel-glance').textContent = now
       ? `${up ? bearingLabel(now.azimuth) : 'sun down'} · ${now.altitude.toFixed(1)}° · ${formatShadowRatio(now.altitude)}`
       : '';
+    $('tile-sun-v').textContent = now ? (up ? bearingLabel(now.azimuth) : 'Down') : '—';
+    $('tile-sun-s').textContent = now && up ? `${Math.round(now.altitude)}° high` : '';
 
     markCurrentEvent();
     renderMoonNow();
     renderWeather();
     renderSpotNext();
+    renderGlance();
     // The join, on the slider's clock. All three read precomputed windows —
     // no skyline is built here — so scrubbing stays a lookup and a sort.
     drawHotspots();
@@ -4372,10 +4451,13 @@ export async function startScout(): Promise<void> {
         reportable.length && okTiers < reportable.length
           ? ` (${okTiers} of ${reportable.length} sources answered)`
           : '';
-      const needsKey = photoTiers.some((t) => t.accolade === 'flickr' && t.needsKey)
-        ? " · Flickr needs an API key (FLICKR_API_KEY), which isn't configured for this deployment"
-        : '';
-      const partial = answered + needsKey;
+      // A source with no key is a setup detail, not something to read on the
+      // map: it goes to the console once, not into the panel.
+      if (photoTiers.some((t) => t.accolade === 'flickr' && t.needsKey) && !flickrKeyNoted) {
+        flickrKeyNoted = true;
+        console.info('Scout: Flickr is skipped because FLICKR_API_KEY is not set.');
+      }
+      const partial = answered;
       if (!hotspots.length) photos.textContent = `nothing found${partial}`;
       else {
         const total = hotspots.reduce((n, spot) => n + spot.count, 0);
@@ -4430,6 +4512,7 @@ export async function startScout(): Promise<void> {
       into.replaceChildren(
         ...rows.map((row) => {
           const li = document.createElement('li');
+          li.dataset.key = row.key;
           const button = document.createElement('button');
           button.type = 'button';
 
@@ -4469,9 +4552,22 @@ export async function startScout(): Promise<void> {
       );
     };
 
-    build(sunEventRows(day.times), $('events'));
+    eventRows = sunEventRows(day.times);
+    build(eventRows, $('events'));
     build(twilightRows(day.times), $('twilight'));
     markCurrentEvent();
+  }
+
+  /**
+   * Only the half of the day still ahead, as Flighty only shows what the
+   * current phase of a trip needs. A class toggle per minute, no rebuild.
+   */
+  function filterEvents() {
+    const now = currentInstant();
+    const keep = allTimes || !now ? null : new Set(phaseRows(eventRows, now).map((row) => row.key));
+    for (const li of $('events').children as HTMLCollectionOf<HTMLElement>) {
+      li.hidden = keep ? !keep.has(li.dataset.key ?? '') : false;
+    }
   }
 
   /** Light up whichever event the slider is sitting in. */
@@ -4485,6 +4581,7 @@ export async function startScout(): Promise<void> {
       const inside = to > from ? minute >= from && minute < to : Math.abs(minute - from) <= 2;
       element.classList.toggle('ev-now', inside);
     }
+    filterEvents();
   }
 
   /** Moonrise and moonset: a property of the day, so computed once per day. */
@@ -4727,12 +4824,15 @@ export async function startScout(): Promise<void> {
     // does not. Where the split is missing this falls back to the total, which
     // is what `blockingCover` returning null means.
     const structure = cloudStructure(hour);
-    $('wx-note').textContent = lightQuality(
-      structure.blocking ?? hour.cloudCover,
-      current()?.altitude ?? -90,
-    );
+    // With a low deck in front of the sun, the deck note's "flat light" is
+    // the specific reading and the cover-based sentence would contradict it.
+    $('wx-note').textContent =
+      structure.dominant === 'low'
+        ? ''
+        : lightQuality(structure.blocking ?? hour.cloudCover, current()?.altitude ?? -90);
     decks.textContent = structure.note;
     renderHorizon();
+    renderGlance();
   }
 
   /**
@@ -4765,7 +4865,8 @@ export async function startScout(): Promise<void> {
       horizonSampleDistanceM(),
     );
     box.dataset.verdict = reading.verdict;
-    box.textContent = `${event === 'sunrise' ? 'Sunrise' : 'Sunset'}: ${reading.note}`;
+    // "Can't say" is not worth a line of its own.
+    box.textContent = reading.verdict === 'unknown' ? '' : `${event === 'sunrise' ? 'Sunrise' : 'Sunset'}: ${reading.note}`;
   }
 
   /** Sunrise or sunset — whichever the slider is closer to. */
@@ -5757,9 +5858,13 @@ export async function startScout(): Promise<void> {
 
   /** A Commons filename, made readable enough to identify a place by. */
   function spotLabel(spot: Hotspot): string {
-    const title = spot.photos[0]?.title ?? '';
-    const trimmed = title.replace(/\.[a-z0-9]{3,4}$/i, '').trim();
-    return trimmed || `${spot.count} photograph${spot.count === 1 ? '' : 's'}`;
+    // The first photo with a real title names the spot; camera and upload
+    // file names ("IMG_4021", "13-08-hongkong-Ralf-10") are not names.
+    for (const photo of spot.photos) {
+      const title = readableTitle(photo.title);
+      if (title) return title;
+    }
+    return 'Photo spot';
   }
 
   /**
@@ -5803,7 +5908,7 @@ export async function startScout(): Promise<void> {
         };
       })
       .sort((a, b) => compareSpots(a.rank, b.rank))
-      .slice(0, 8);
+      .slice(0, bestAll ? 8 : 3);
 
     list.replaceChildren(
       ...rows.map((row, position) => {
@@ -5844,13 +5949,13 @@ export async function startScout(): Promise<void> {
       }),
     );
 
-    // Say what the order is, once, rather than implying a score by hiding it.
-    const partial = rows.filter((row) => !row.buildingsKnown).length;
-    const order =
-      'Ordered by light now, then how well the surroundings are known, then light left today, then photographs, then distance.';
-    $('best-note').textContent = partial
-      ? `${order} ${partial} of ${rows.length} are outside the buildings loaded here. They only account for terrain and horizon, so they rank below the rest.`
-      : order;
+    // Say what the order is, once and briefly, rather than implying a score
+    // by hiding it. Rows outside the loaded buildings already say "terrain
+    // only" on themselves.
+    $('best-note').textContent = 'By light now, light left, photos, then distance.';
+    const more = $<HTMLButtonElement>('best-more');
+    more.hidden = hotspots.length <= 3;
+    more.textContent = bestAll ? 'Fewer' : `All ${Math.min(hotspots.length, 8)}`;
   }
 
   /** Which hotspot's sheet is open, so the slider can keep its light current. */
@@ -7626,6 +7731,43 @@ export async function startScout(): Promise<void> {
    * wrapped this way: it would have to be built already to know whether to
    * open the fold in the first place, which defeats the deferral.
    */
+  /* ── Tiles, times and groups ─────────────────────────────────────────── */
+
+  // One tile open at a time; a second tap on the open one shuts it.
+  const tiles = [...document.querySelectorAll<HTMLButtonElement>('#tiles .tile')];
+  for (const tile of tiles) {
+    tile.addEventListener('click', () => {
+      const opening = tile.getAttribute('aria-expanded') !== 'true';
+      for (const other of tiles) {
+        const on = opening && other === tile;
+        other.setAttribute('aria-expanded', String(on));
+        $<HTMLElement>(other.getAttribute('aria-controls') ?? '').hidden = !on;
+      }
+    });
+  }
+
+  const allTimesButton = $<HTMLButtonElement>('events-all');
+  allTimesButton.addEventListener('click', () => {
+    allTimes = !allTimes;
+    allTimesButton.setAttribute('aria-pressed', String(allTimes));
+    allTimesButton.textContent = allTimes ? 'Fewer times' : 'All times';
+    filterEvents();
+  });
+
+  $('best-more').addEventListener('click', () => {
+    bestAll = !bestAll;
+    renderBest();
+  });
+
+  // A fold opened from elsewhere (the Milky Way button, a gap link) has to
+  // bring its group open with it, or it opens out of sight.
+  for (const fold of document.querySelectorAll<HTMLDetailsElement>('.group .fold')) {
+    fold.addEventListener('toggle', () => {
+      const group = fold.parentElement?.closest<HTMLDetailsElement>('details.group');
+      if (fold.open && group && !group.open) group.open = true;
+    });
+  }
+
   function lazyFoldPanel(foldId: string, build: () => Promise<{ restate(): void }>): { restate(): void } {
     let panel: { restate(): void } | null = null;
     let started = false;

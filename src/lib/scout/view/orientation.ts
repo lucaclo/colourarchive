@@ -10,15 +10,14 @@
  * Given the project's preference for precision over hand-holding, not a
  * tour: a single dismissible line, reusing the infotip popover's own visual
  * language, shown once — ever, via `localStorage` — before a place is
- * picked, and gone the moment one is. Session-scoped (`sessionStorage`, so a
- * closed tab starts fresh) alongside it: an "unread" dot on any of the 13
- * folds this session hasn't opened yet.
+ * picked, and gone the moment one is. (The "unread" dots it used to put on
+ * every fold were retired in the round-3 declutter: thirteen orange dots read
+ * as thirteen alerts.)
  */
 
 import { $ } from './dom';
 
 const SEEN_KEY = 'scout-orientation-seen';
-const OPENED_KEY = 'scout-opened-folds';
 
 export interface FirstVisitOrientation {
   /** Dismiss the orientation line — called once a place is picked, from
@@ -53,28 +52,6 @@ export function createFirstVisitOrientation(): FirstVisitOrientation {
     }
   }
   closeBtn.addEventListener('click', dismiss);
-
-  let opened = new Set<string>();
-  try {
-    const raw = sessionStorage.getItem(OPENED_KEY);
-    if (raw) opened = new Set(JSON.parse(raw) as string[]);
-  } catch {
-    // Start with nothing marked read rather than fail the whole page over it.
-  }
-  document.querySelectorAll<HTMLDetailsElement>('.fold').forEach((fold) => {
-    if (!opened.has(fold.id)) fold.classList.add('unread');
-    fold.addEventListener('toggle', () => {
-      if (!fold.open || opened.has(fold.id)) return;
-      opened.add(fold.id);
-      fold.classList.remove('unread');
-      try {
-        sessionStorage.setItem(OPENED_KEY, JSON.stringify([...opened]));
-      } catch {
-        // Session-only convenience — dropping the write just means the dot
-        // reappears next reload, not a broken feature.
-      }
-    });
-  });
 
   return { dismiss };
 }
