@@ -89,17 +89,23 @@ const accent = manifest.chapters[0]
             <button type="button" data-bookview="list" aria-pressed="true">List</button>
             <button type="button" data-bookview="spreads" aria-pressed="false">Spreads</button>
           </div>
-          <span class="book-size">
-            <select id="book-trim" aria-label="Book size">
-              {Object.entries(TRIMS).map(([id, t]) => <option value={id} selected={id === trimId}>{t.label}</option>)}
-            </select>
-            <span class="book-check" id="book-check" data-ok={pageCheck.ok ? '1' : ''}>{pageCheck.message}</span>
+          {/* Size, page count and bleed are only needed when printing, so they
+              live behind Print rather than in the header all the time. */}
+          <span class="book-printwrap">
+            <span class="book-pdf-status" id="book-pdf-status" role="status" aria-live="polite"></span>
+            <button type="button" class="book-printbtn" id="book-print-open" aria-expanded="false" aria-controls="book-printpop" data-warn={pageCheck.ok ? '' : '1'}>Print</button>
+            <div class="book-printpop" id="book-printpop" hidden role="dialog" aria-label="Print">
+              <label class="book-poprow">
+                <span>Size</span>
+                <select id="book-trim" aria-label="Book size">
+                  {Object.entries(TRIMS).map(([id, t]) => <option value={id} selected={id === trimId}>{t.label}</option>)}
+                </select>
+              </label>
+              <span class="book-check" id="book-check" data-ok={pageCheck.ok ? '1' : ''}>{pageCheck.message}</span>
+              <label class="book-bleed"><input type="checkbox" id="book-bleed" checked /> Bleed</label>
+              <button type="button" class="book-pdf" id="book-pdf">Make PDF</button>
+            </div>
           </span>
-          <span class="book-print">
-            <label class="book-bleed"><input type="checkbox" id="book-bleed" checked /> Bleed</label>
-            <button type="button" class="book-pdf" id="book-pdf">Print PDF</button>
-          </span>
-          <span class="book-pdf-status" id="book-pdf-status" role="status" aria-live="polite"></span>
         </div>
       )}
     </header>
@@ -1061,6 +1067,28 @@ const accent = manifest.chapters[0]
   window.addEventListener('book:changed', () => { if (!spreadsEl.hidden) render(); else updateCheck(); });
   updateCheck();
 
+  // --- Print panel --------------------------------------------------------
+  const printOpen = document.getElementById('book-print-open') as HTMLButtonElement | null;
+  const printPop = document.getElementById('book-printpop');
+  const setPrintOpen = (open: boolean) => {
+    if (!printPop || !printOpen) return;
+    printPop.hidden = !open;
+    printOpen.setAttribute('aria-expanded', String(open));
+  };
+  printOpen?.addEventListener('click', () => setPrintOpen(!!printPop?.hidden));
+  document.addEventListener('click', (e) => {
+    const path = e.composedPath();
+    if (printPop && printOpen && !path.includes(printPop) && !path.includes(printOpen)) setPrintOpen(false);
+  });
+  printPop?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { setPrintOpen(false); printOpen?.focus(); }
+  });
+  // The warning dot follows the page check as the size or the book changes.
+  if (check && printOpen) {
+    new MutationObserver(() => { printOpen.dataset.warn = check.dataset.ok === '1' ? '' : '1'; })
+      .observe(check, { attributes: true, attributeFilter: ['data-ok'] });
+  }
+
   // --- Print PDF --------------------------------------------------------
   const pdfBtn = document.getElementById('book-pdf') as HTMLButtonElement | null;
   const pdfStatus = document.getElementById('book-pdf-status');
@@ -1133,7 +1161,6 @@ const accent = manifest.chapters[0]
   }
   .book-viewtoggle button[aria-pressed='true'], .book-seg label:has(input:checked) { background: var(--fill-active); color: var(--fg); font-weight: 600; }
   .book-viewtoggle button:focus-visible, .book-seg label:has(input:focus-visible), .book-blank:focus-visible, .book-pdf:focus-visible, #book-trim:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
-  .book-size { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); min-width: 0; max-width: 100%; }
   /* A pop-up button, shaped like every other control in the row. 16px so
      iPad Safari doesn't zoom into it. */
   #book-trim {
@@ -1146,7 +1173,6 @@ const accent = manifest.chapters[0]
   #book-trim:hover { background-color: var(--fill-hover); }
   .book-check { font-size: var(--t-footnote); color: var(--secondary); white-space: nowrap; }
   .book-check:not([data-ok='1']) { color: var(--fg); text-decoration: underline dotted; text-underline-offset: 4px; }
-  .book-print { display: inline-flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
   .book-bleed {
     display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer;
     min-height: var(--hit); padding: 0 var(--sp-3); border-radius: var(--r-pill); color: var(--secondary);
@@ -1168,8 +1194,34 @@ const accent = manifest.chapters[0]
   .book-blank { font-weight: 500; }
   .book-blank[aria-pressed='true'] { background: var(--fill-active); font-weight: 600; }
   .book-pdf-status { color: var(--secondary); }
+  /* Round 3: Print opens a small panel with the size, the page check and
+     bleed; Make PDF inside it is the one filled button. */
+  .book-printwrap { position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+  .book-printbtn {
+    appearance: none; cursor: pointer; font: inherit; font-weight: 600; border: 0; border-radius: var(--r-pill);
+    min-height: var(--hit); padding: 0 var(--sp-5); background: var(--fg); color: var(--bg); position: relative;
+  }
+  .book-printbtn:hover { background: color-mix(in oklab, var(--fg) 86%, var(--bg)); }
+  .book-printbtn[aria-expanded='true'] { background: var(--fill-active); color: var(--fg); }
+  .book-printbtn:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  /* The book doesn't fit the chosen size: a small dot, the reason inside. */
+  .book-printbtn[data-warn='1']::after {
+    content: ''; position: absolute; top: 6px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: #e0603a;
+  }
+  .book-printpop {
+    position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 30; width: min(20rem, calc(100vw - 2rem));
+    display: grid; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-lg);
+    background: var(--glass-bg-strong); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  }
+  .book-printpop[hidden] { display: none; }
+  .book-poprow { display: grid; gap: var(--sp-1); color: var(--secondary); font-size: var(--t-caption); }
+  .book-printpop #book-trim { width: 100%; }
+  .book-printpop .book-check { white-space: normal; }
+  .book-printpop .book-bleed { padding: 0; min-height: 2.25rem; }
+  .book-printpop .book-pdf { width: 100%; }
   @media (max-width: 640px) {
-    .book-print { margin-left: 0; }
+    .book-printpop { right: 0; }
     #book-trim { max-width: 100%; }
     .book-check { white-space: normal; }
   }
