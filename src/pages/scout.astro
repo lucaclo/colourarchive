@@ -205,7 +205,7 @@ const accent = '#f0b866';
           <button class="chip chip-strong" id="chip-today" type="button">Today</button>
           <div class="stepper">
             <button class="chip chip-step" id="day-back" type="button" aria-label="A day earlier">−</button>
-            <button class="chip chip-date" id="chip-date" type="button">—</button>
+            <button class="chip chip-date" id="chip-date" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="datesheet">—</button>
             <button class="chip chip-step" id="day-forward" type="button" aria-label="A day later">+</button>
           </div>
         </div>
@@ -1006,16 +1006,19 @@ const accent = '#f0b866';
       </div>
 
       <!-- ── Bottom: place sheet, then the day ───────────────────────────── -->
-      <!-- The date sheet, opened from the date chip. -->
-      <div class="datesheet" id="datesheet" hidden>
-        <div class="datesheet-row">
-          <input type="date" id="date-input" aria-label="Date" />
-          <button class="chip" id="date-close" type="button">Done</button>
+      <!-- The calendar, dropped down from the date chip and placed against it
+           by page.ts (below it when there is room, above it on a phone). -->
+      <div class="datepop" id="datesheet" hidden role="dialog" aria-label="Choose a date">
+        <div class="cal-head">
+          <button class="cal-step" id="cal-back" type="button" aria-label="The month before">‹</button>
+          <p class="cal-title" id="cal-title" aria-live="polite">—</p>
+          <button class="cal-step" id="cal-forward" type="button" aria-label="The month after">›</button>
         </div>
-        <!-- Pick a date by the light rather than by the number. -->
-        <p class="layers-head">The week ahead</p>
-        <div class="week" id="week"></div>
-        <p class="layers-head">Jump to</p>
+        <div class="cal-days" aria-hidden="true">
+          <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <p class="cal-sub">Jump to</p>
         <div class="seasons" id="seasons"></div>
       </div>
 
@@ -1166,7 +1169,6 @@ const accent = '#f0b866';
   .panel,
   .layers,
   .sheet,
-  .datesheet,
   .chip,
   .round,
   .seg {
@@ -1197,18 +1199,15 @@ const accent = '#f0b866';
     transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete;
   }
   .panel { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete, width 220ms ease; }
-  .datesheet { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete; }
   .toast { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete; }
 
   .layers[hidden], .monthgrid[hidden], .photos[hidden], .star-info[hidden],
   .searchbox[hidden], .kept[hidden], .panel[hidden], .slab[hidden] { opacity: 0; transform: scale(0.95); }
-  .datesheet[hidden] { opacity: 0; transform: translateY(-50%) scale(0.95); }
   .toast[hidden] { opacity: 0; transform: translateX(-50%) translateY(10px); }
   .scout-mapmsg[hidden] { opacity: 0; transform: translateY(6px); }
   @starting-style {
     .layers:not([hidden]), .monthgrid:not([hidden]), .photos:not([hidden]), .star-info:not([hidden]),
     .searchbox:not([hidden]), .kept:not([hidden]), .panel:not([hidden]), .slab:not([hidden]) { opacity: 0; transform: scale(0.95); }
-    .datesheet:not([hidden]) { opacity: 0; transform: translateY(-50%) scale(0.95); }
     .toast:not([hidden]) { opacity: 0; transform: translateX(-50%) translateY(10px); }
     .scout-mapmsg:not([hidden]) { opacity: 0; transform: translateY(6px); }
   }
@@ -3295,40 +3294,58 @@ const accent = '#f0b866';
     .photo-grid { grid-template-columns: repeat(3, 1fr); }
   }
 
-  /* ── The date sheet ───────────────────────────────────────────────────── */
+  /* ── The date calendar ─────────────────────────────────────────────────
+     A dropdown from the date chip, dark like the dock it hangs off, and
+     placed in fixed coordinates by page.ts so it is never clipped by the
+     dock's own scroll area. */
+  .datepop {
+    position: fixed; z-index: 60; width: 18.5rem; max-width: calc(100vw - 1rem);
+    padding: 0.75rem 0.75rem 0.6rem; border-radius: 16px;
+    background: #0b0b0b; color: #ece9e3; border: 1px solid color-mix(in oklab, #ece9e3 12%, transparent);
+    box-shadow: 0 18px 48px rgb(0 0 0 / 0.45);
+    --cal-muted: #8f8b85; --cal-sep: color-mix(in oklab, #ece9e3 10%, transparent);
+    transition: opacity 160ms var(--ease), transform 160ms var(--ease), display 160ms allow-discrete;
+  }
+  .datepop[hidden] { display: none; opacity: 0; transform: translateY(-4px); }
+  @starting-style { .datepop:not([hidden]) { opacity: 0; transform: translateY(-4px); } }
+  @media (prefers-reduced-motion: reduce) { .datepop { transition: none; } }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+  .cal-title { margin: 0; font-family: var(--font-note); font-style: italic; font-size: 1.05rem; }
+  .cal-step {
+    width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer;
+    background: none; color: inherit; font-size: 1.35rem; line-height: 1;
+  }
+  .cal-step:hover { background: color-mix(in oklab, #ece9e3 10%, transparent); }
+  .cal-days, .cal-grid :global(.cal-week) { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-days span {
+    text-align: center; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--cal-muted);
+    padding: 0.15rem 0 0.3rem;
+  }
+  .cal-grid :global(.cal-day) {
+    height: 36px; margin: 1px; border: 0; border-radius: 50%; cursor: pointer; background: none; color: inherit;
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-variant-numeric: tabular-nums;
+    transition: background-color 120ms var(--ease);
+  }
+  .cal-grid :global(.cal-day:hover) { background: color-mix(in oklab, #ece9e3 10%, transparent); }
+  .cal-grid :global(.cal-day:focus-visible) { outline: 2px solid #ece9e3; outline-offset: 1px; }
+  .cal-grid :global(.cal-day[aria-current='date']) { box-shadow: inset 0 0 0 1px color-mix(in oklab, #c1863c 80%, #ece9e3); color: #f0b866; }
+  .cal-grid :global(.cal-day[aria-pressed='true']) { background: #ece9e3; color: #0b0b0b; box-shadow: none; }
+  .cal-sub {
+    margin: 0.6rem 0 0.2rem; padding-top: 0.55rem; border-top: 1px solid var(--cal-sep);
+    font-family: var(--font-ui); font-size: var(--t-caption); color: var(--cal-muted);
+  }
+  .datepop .seasons { display: grid; gap: 0; }
+  .datepop .seasons :global(button) {
+    display: flex; justify-content: space-between; gap: 0.6rem; width: 100%; min-height: 34px;
+    padding: 0 0.1rem; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer;
+    font-family: var(--font-ui); font-size: var(--t-footnote); align-items: center;
+  }
+  .datepop .seasons :global(button:hover) { background: color-mix(in oklab, #ece9e3 7%, transparent); }
+  .datepop .seasons :global(.se-when) { color: var(--cal-muted); font-variant-numeric: tabular-nums; }
+  .chip-date[aria-expanded='true'] { box-shadow: inset 0 0 0 1px currentColor; }
 
-  .datesheet {
-    position: absolute;
-    left: 0.9rem;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 22;
-    width: 15rem;
-    max-width: calc(100vw - 1.8rem);
-    padding: 0.75rem;
-    border-radius: 14px;
-  }
-  .datesheet[hidden] { display: none; }
-  .datesheet-row { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
-  .datesheet input[type='date'] {
-    flex: 1;
-    min-width: 0;
-    background: color-mix(in oklab, var(--bg) 70%, transparent);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--fg);
-    font-family: var(--font-ui);
-    font-size: var(--t-footnote);
-    padding: 0.45rem 0.5rem;
-    min-height: 36px;
-  }
-  .seasons,
-  .week { display: grid; gap: 0.3rem; }
-  .week { margin-bottom: 0.7rem; }
-  /* The day you are on, so the strip reads as a position and not just a list. */
-  .week :global(button.on) { border-color: var(--fg); background: color-mix(in oklab, var(--fg) 8%, transparent); }
-  .seasons :global(button),
-  .week :global(button) {
+
+  .seasons :global(button) {
     display: flex;
     justify-content: space-between;
     gap: 0.6rem;
@@ -3345,12 +3362,9 @@ const accent = '#f0b866';
     text-align: left;
     transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 110ms ease-out;
   }
-  .seasons :global(button:hover),
-  .week :global(button:hover) { border-color: var(--accent-mix); }
-  .seasons :global(button:active),
-  .week :global(button:active) { transform: scale(0.98); }
-  .seasons :global(.se-when),
-  .week :global(.se-when) { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .seasons :global(button:hover) { border-color: var(--accent-mix); }
+  .seasons :global(button:active) { transform: scale(0.98); }
+  .seasons :global(.se-when) { color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* ── Time ─────────────────────────────────────────────────────────────── */
 
@@ -3533,7 +3547,6 @@ const accent = '#f0b866';
     @starting-style {
       .layers:not([hidden]) { transform: translateX(-50%) scale(0.95); }
     }
-    .datesheet { top: auto; bottom: calc(var(--above-sheet) + var(--safe-bottom)); transform: none; }
     .cards { grid-template-columns: repeat(2, 1fr); }
 
     /* The seven jumps want more width than a phone has, and trimming the padding
@@ -3710,8 +3723,7 @@ const accent = '#f0b866';
        The event rows keep their text where it was and gain the height as
        padding, so the list reads at the same rhythm it always did. */
     .events :global(button),
-    .seasons :global(button),
-    .week :global(button) { min-height: var(--hit); }
+    .seasons :global(button) { min-height: var(--hit); }
     .chip { min-height: var(--hit); }
     .round { min-width: var(--hit); min-height: var(--hit); }
     /* The layers panel's own checkbox rows were the one list on this page
@@ -3719,7 +3731,6 @@ const accent = '#f0b866';
        problem as everything above, on a list that now also carries the
        Milky Way mode's own "Stars & constellations" row. */
     .toggle { min-height: var(--hit); }
-    .datesheet input[type='date'] { min-height: var(--hit); font-size: 16px; }
     #framebox input[type='range'],
     #sightbox input[type='range'] { min-height: var(--hit); }
     .frame-field select { min-height: var(--hit); }
@@ -4120,7 +4131,6 @@ const accent = '#f0b866';
       bottom: calc(var(--dock-h) + 0.6rem + var(--hit) + 0.6rem);
       max-height: calc(100svh - var(--dock-h) - var(--hit) - 1.8rem - var(--safe-top) - var(--stage-top));
     }
-    .scout-stage .datesheet { bottom: calc(var(--dock-h) + 0.6rem); }
 
     .scout-map :global(.maplibregl-ctrl-bottom-right) { top: var(--stage-top); }
   }

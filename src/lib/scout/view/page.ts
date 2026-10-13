@@ -123,6 +123,7 @@ import {
 import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-layer';
 import { nightCameraConstraintsFor } from './night-camera';
 import { lightWord, nextLight, phaseRows, readableTitle } from '../glance';
+import { monthGrid, monthTitle, shiftMonth } from '../calendar';
 import {
   MINUTES_PER_DAY,
   PHASE_LABEL,
@@ -5194,7 +5195,7 @@ export async function startScout(): Promise<void> {
     $<HTMLElement>('edge-date').hidden = false;
     $('chip-date').textContent = formatDayLabel(isoDate, timeZone);
     $<HTMLButtonElement>('chip-today').disabled = isToday();
-    $<HTMLInputElement>('date-input').value = isoDate;
+    renderCalendar();
 
     // The four corners of the year, seeded from the date on screen so the list
     // reads forwards from where you are rather than from January.
@@ -5232,54 +5233,74 @@ export async function startScout(): Promise<void> {
       }),
     );
 
-    renderWeek();
   }
 
-  /**
-   * The next seven days, by their light.
-   *
-   * A date input asks you to already know which day you want. What a
-   * photographer actually holds is a question about the light — when does the
-   * sun get here, how long is the golden hour, is it worth going Thursday —
-   * and answering that meant typing seven dates in turn and reading the panel
-   * each time.
-   *
-   * `scoutDay` is pure and costs about a millisecond, so seven of them is
-   * nothing; this runs only when the sheet is rebuilt, not on the slider.
-   */
-  function renderWeek() {
-    if (!centre) return;
-    const today = todayHere();
-    const rows: HTMLElement[] = [];
+  /* ── The calendar under the date chip ──────────────────────────────────
+     Replaces a native date field and a seven-day list: one month you can
+     page through, today ringed, the chosen day filled. */
+  let calMonth = '';
 
-    for (let offset = 0; offset < 7; offset++) {
-      const iso = shiftIsoDate(today, offset);
-      const times = scoutDay(centre.lat, centre.lon, zonedNoon(iso, timeZone)).times;
+  function renderCalendar() {
+    if (!calMonth) calMonth = isoDate.slice(0, 7);
+    $('cal-title').textContent = monthTitle(calMonth);
+    const today = centre ? todayHere() : '';
+    $('cal-grid').replaceChildren(
+      ...monthGrid(calMonth).map((week) => {
+        const row = document.createElement('div');
+        row.className = 'cal-week';
+        for (const iso of week) {
+          if (!iso) {
+            row.append(document.createElement('span'));
+            continue;
+          }
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'cal-day';
+          button.textContent = String(Number(iso.slice(8)));
+          button.setAttribute('aria-label', formatDayLabel(iso, timeZone));
+          button.setAttribute('aria-pressed', String(iso === isoDate));
+          if (iso === today) button.setAttribute('aria-current', 'date');
+          button.addEventListener('click', () => {
+            setDate(iso);
+            closeCalendar();
+          });
+          row.append(button);
+        }
+        return row;
+      }),
+    );
+  }
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.classList.toggle('on', iso === isoDate);
+  /** Hang the calendar off the chip: below it if it fits, else above. */
+  function placeCalendar() {
+    const pop = $<HTMLElement>('datesheet');
+    const chip = $('chip-date').getBoundingClientRect();
+    const margin = 8;
+    const width = pop.offsetWidth;
+    const height = pop.offsetHeight;
+    const left = Math.min(Math.max(margin, chip.right - width), innerWidth - width - margin);
+    const below = chip.bottom + 6;
+    const top =
+      below + height <= innerHeight - margin ? below : Math.max(margin, chip.top - height - 6);
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(top)}px`;
+  }
 
-      const name = document.createElement('span');
-      name.textContent = offset === 0 ? 'Today' : formatDayLabel(iso, timeZone).replace(/,.*$/, '');
+  function openCalendar() {
+    calMonth = isoDate.slice(0, 7);
+    renderCalendar();
+    const pop = $<HTMLElement>('datesheet');
+    pop.hidden = false;
+    placeCalendar();
+    $('chip-date').setAttribute('aria-expanded', 'true');
+    pop.querySelector<HTMLButtonElement>('.cal-day[aria-pressed="true"]')?.focus({ preventScroll: true });
+  }
 
-      const when = document.createElement('span');
-      when.className = 'se-when';
-      // The two numbers that decide whether a day is worth the drive. A day
-      // with neither — midnight sun, or polar night — says so instead of
-      // showing two dashes that look like a failure to load.
-      if (times.sunrise && times.sunset) {
-        when.textContent = `${formatClock(times.sunrise, timeZone)} – ${formatClock(times.sunset, timeZone)}`;
-      } else {
-        when.textContent = times.solarNoon && !times.sunrise ? 'no sunrise' : 'no sunset';
-      }
-
-      button.append(name, when);
-      button.addEventListener('click', () => setDate(iso));
-      rows.push(button);
-    }
-
-    $('week').replaceChildren(...rows);
+  function closeCalendar() {
+    const pop = $<HTMLElement>('datesheet');
+    if (pop.hidden) return;
+    pop.hidden = true;
+    $('chip-date').setAttribute('aria-expanded', 'false');
   }
 
   function setDate(next: string) {
@@ -9532,11 +9553,25 @@ export async function startScout(): Promise<void> {
   on('day-back', 'click', () => setDate(shiftIsoDate(isoDate, -1)));
   on('day-forward', 'click', () => setDate(shiftIsoDate(isoDate, 1)));
   on('chip-date', 'click', () => {
-    const sheet = $<HTMLElement>('datesheet');
-    sheet.hidden = !sheet.hidden;
+    if ($<HTMLElement>('datesheet').hidden) openCalendar();
+    else closeCalendar();
   });
-  on('date-close', 'click', () => ($<HTMLElement>('datesheet').hidden = true));
-  on('date-input', 'change', (event) => setDate((event.target as HTMLInputElement).value));
+  on('cal-back', 'click', () => {
+    calMonth = shiftMonth(calMonth, -1);
+    renderCalendar();
+  });
+  on('cal-forward', 'click', () => {
+    calMonth = shiftMonth(calMonth, 1);
+    renderCalendar();
+  });
+  $('datesheet').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeCalendar();
+      $('chip-date').focus();
+    }
+  });
+  addEventListener('resize', closeCalendar);
+  $('dock-body').addEventListener('scroll', closeCalendar, { passive: true });
 
   // A slider step is a minute, which is the right grain for golden hour but a
   // tedious way to cross a day. Shift jumps an hour.
@@ -9565,9 +9600,10 @@ export async function startScout(): Promise<void> {
     if (!target.closest('#night-panel') && !target.closest('#night-button')) {
       $<HTMLElement>('night-panel').hidden = true;
     }
-    if (!target.closest('.datesheet') && !target.closest('#chip-date')) {
-      $<HTMLElement>('datesheet').hidden = true;
-    }
+    // composedPath, not closest: paging the month rebuilds the grid, so the
+    // clicked day can already be detached by the time this runs.
+    const path = event.composedPath();
+    if (!path.includes($('datesheet')) && !path.includes($('chip-date'))) closeCalendar();
   });
 
   /* ── Remembering where you were ──────────────────────────────────────── */

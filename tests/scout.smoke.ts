@@ -926,7 +926,7 @@ describe('/scout: the alignment finder', () => {
 
 /* ── Retroactive light reconstruction ───────────────────────────────────────
    Issue #58. Two things no unit test can see: whether a date set on the real
-   `#date-input` actually routes the weather row to Open-Meteo's historical
+   calendar under `#chip-date` actually routes the weather row to Open-Meteo's historical
    archive instead of the live forecast, and whether "Log this visit" — fixed
    in this same change to stamp the slider's own instant rather than
    `Date.now()` — really does write back the date being reconstructed and not
@@ -972,13 +972,18 @@ describe('/scout: retroactive light reconstruction (#58)', () => {
     // weather row were still asking the live endpoint, this would come back
     // empty rather than the recorded past.
     const PAST_DATE = '2019-06-15';
+    // Through the calendar the date chip drops down: page back month by
+    // month to June 2019, then tap the 15th.
+    await page.click('#chip-date');
     await page.evaluate(
       `(() => {
-         const input = document.getElementById('date-input');
-         input.value = ${JSON.stringify(PAST_DATE)};
-         input.dispatchEvent(new Event('change', { bubbles: true }));
+         for (let i = 0; i < 400 && document.getElementById('cal-title').textContent !== 'June 2019'; i++) {
+           document.getElementById('cal-back').click();
+         }
        })()`,
     );
+    await page.locator('.cal-day', { hasText: /^15$/ }).click();
+    void PAST_DATE;
     // wx-label is empty until loadWeather()'s fetch resolves and renders —
     // the one DOM signal that the historical round trip actually completed.
     await page.waitForFunction(
