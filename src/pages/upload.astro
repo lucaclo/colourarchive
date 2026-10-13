@@ -64,9 +64,17 @@ const accent = manifest.chapters[0]
     {/* Rendered even when empty, so photos added in this session can drop
         straight into it without a page reload. */}
     <section class="manage" id="manage" hidden={allPhotos.length === 0} data-choices={JSON.stringify(choices)}>
-      <h2 class="manage-head">
-        In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
-      </h2>
+      <div class="manage-top">
+        <h2 class="manage-head">
+          In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
+        </h2>
+        {/* Newest first puts the last import where you'd check it (Immich's
+            Recently added); Colour is the archive's own order. */}
+        <div class="manage-order" id="manage-order" role="group" aria-label="Order">
+          <button type="button" data-order="colour" aria-pressed="true">Colour</button>
+          <button type="button" data-order="newest" aria-pressed="false">Newest</button>
+        </div>
+      </div>
       <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
         <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
@@ -99,7 +107,7 @@ const accent = manifest.chapters[0]
       </div>
       <div class="grid" id="grid">
         {allPhotos.map((p) => (
-          <figure class="cell" data-id={p.id} data-medium={p.medium} data-genre={p.genre ?? ''} data-auto={p.auto} data-base={p.base} data-edge={p.edge} data-file={p.filename}>
+          <figure class="cell" data-id={p.id} data-added={p.addedAt ?? ''} data-medium={p.medium} data-genre={p.genre ?? ''} data-auto={p.auto} data-base={p.base} data-edge={p.edge} data-file={p.filename}>
             <img src={p.placeholder} data-src={p.derivatives[0].avif} alt="" loading="lazy" />
             <button class="cell-remove" type="button" data-remove={p.id} aria-label={`Remove ${p.filename}`}>×</button>
             <button class="cell-medium" type="button" data-medium-btn={p.id} title="Toggle film / digital">{p.medium}</button>
@@ -205,6 +213,15 @@ const accent = manifest.chapters[0]
 
   .manage { margin-top: 0.8rem; }
   .drop:not([hidden]) ~ .manage { margin-top: 4rem; }
+  .manage-top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .manage-order { display: inline-flex; gap: 0.15rem; padding: 3px; border-radius: var(--r-pill); background: var(--fill); }
+  .manage-order button {
+    appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
+    min-height: 2rem; padding: 0 0.85rem; background: transparent; color: var(--secondary);
+    font-family: var(--font-ui); font-size: var(--t-caption);
+  }
+  .manage-order button[aria-pressed='true'] { background: var(--surface-3); color: var(--fg); }
+  .manage-order button:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
   .manage-head { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.7rem; margin: 0 0 0.3rem; display: flex; align-items: baseline; gap: 0.6rem; }
   .manage-count { font-family: var(--font-label); font-size: 0.9rem; color: var(--muted); }
   .manage-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.4rem; }
@@ -799,6 +816,30 @@ const accent = manifest.chapters[0]
     if (!ok && was) sel.value = was;
   }
 
+  // Order: the archive's colour order as rendered, or newest added first.
+  // The colour order is remembered from the page as served, so switching
+  // back restores it exactly.
+  const orderBox = document.getElementById('manage-order');
+  const colourOrder = grid ? [...grid.querySelectorAll('.cell')] : [];
+  const ORDER_KEY = 'ca-manage-order';
+  function applyOrder(order) {
+    if (!grid || !orderBox) return;
+    const cells = [...grid.querySelectorAll('.cell')];
+    const known = new Set(colourOrder);
+    const fresh = cells.filter((c) => !known.has(c));   // added this session
+    const sorted = order === 'newest'
+      ? [...cells].sort((a, b) => (b.dataset.added || '').localeCompare(a.dataset.added || ''))
+      : [...fresh, ...colourOrder.filter((c) => c.isConnected)];
+    grid.append(...sorted);
+    for (const b of orderBox.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.order === order));
+    try { localStorage.setItem(ORDER_KEY, order); } catch {}
+  }
+  orderBox?.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-order]');
+    if (b) applyOrder(b.dataset.order);
+  });
+  try { if (localStorage.getItem(ORDER_KEY) === 'newest') applyOrder('newest'); } catch {}
+
   const GENRE_ORDER = ['street', 'portrait', 'landscape', 'architecture'];
   const GENRE_LABELS = { street: 'Street', portrait: 'Portrait', landscape: 'Landscape', architecture: 'Architecture' };
 
@@ -809,6 +850,7 @@ const accent = manifest.chapters[0]
     const fig = document.createElement('figure');
     fig.className = 'cell just-added';
     fig.dataset.id = r.id;
+    fig.dataset.added = new Date().toISOString();
     fig.dataset.medium = r.medium || 'digital';
     fig.dataset.genre = r.genre || '';
     fig.dataset.auto = fig.dataset.base = baseOf(r.chapterKey);
