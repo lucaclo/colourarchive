@@ -1,8 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getMatch } from '../../../lib/match/session';
-import { atGroupStrength } from '../../../lib/match/adjustments';
-import { buildPresetFiles } from '../../../lib/match/xmp';
-import { recordDownload } from '../../../lib/match/roundtrip-store';
+import { presetDownload, strengthFromParams } from '../../../lib/match/preset-download';
 
 export const prerender = false;
 
@@ -19,16 +17,7 @@ export const prerender = false;
 export const GET: APIRoute = async ({ url }) => {
   try {
     const id = url.searchParams.get('id') || '';
-    const clampUnit = (v: number): number => Math.max(0, Math.min(1, v));
-    const strength = clampUnit(Number(url.searchParams.get('strength') ?? '0.5'));
-    // Light/Colour/Effects each default to the flat `strength` when the
-    // request doesn't carry its own — a link straight from `inspiration.astro`
-    // without the per-group sliders touched still works exactly as before.
-    const param = (key: string): number => {
-      const raw = url.searchParams.get(key);
-      return raw === null ? strength : clampUnit(Number(raw));
-    };
-    const groupStrength = { light: param('light'), colour: param('colour'), effects: param('effects') };
+    const groupStrength = strengthFromParams(url.searchParams);
     const variant = url.searchParams.get('variant') === 'safe' ? 'safe' : 'full';
 
     const record = getMatch(id);
@@ -39,39 +28,7 @@ export const GET: APIRoute = async ({ url }) => {
       );
     }
 
-    const adj = atGroupStrength(record.solution.restrained, record.solution.faithful, groupStrength);
-    // Extension first, THEN the archive's content-hash suffix — the hash is
-    // never at the end of the string while ".jpg" is still attached, so doing
-    // it the other way round leaves the hash in the name Lightroom displays.
-    const clean = (s: string) => s.replace(/\.[^.]+$/, '').replace(/\.[0-9a-f]{8,}$/i, '');
-    const name = `${clean(record.myName)} as ${clean(record.referenceName)}`.slice(0, 60);
-
-    const files = buildPresetFiles(adj, {
-      name,
-      group: 'Colour Archive',
-      seed: `${record.id}:${groupStrength.light.toFixed(2)}:${groupStrength.colour.toFixed(2)}:${groupStrength.effects.toFixed(2)}`,
-    });
-
-    // buildPresetFiles returns the masked preset first when masks exist, and
-    // always ends with the mask-free one.
-    const chosen = variant === 'safe' ? files[files.length - 1] : files[0];
-
-    // What this file sets, recorded now — the only moment it is certain —
-    // so a later round trip can be checked against it. See roundtrip-store.ts.
-    const hadMasks = variant === 'full' && files.length > 1;
-    await recordDownload({
-      matchId: record.id,
-      strength: groupStrength,
-      variant,
-      hadMasks,
-      // Only the masks the file can carry — a 'manual' one is described, never written.
-      applied: { ...adj, masks: hadMasks ? adj.masks.filter((m) => m.kind !== 'manual') : [] },
-      mine: record.mine,
-      reference: record.reference,
-      myName: record.myName,
-      referenceName: record.referenceName,
-    }).catch((err) => console.error('[match/preset] could not record the download', err));
-
+    const chosen = await presetDownload(record, groupStrength, variant);
     return new Response(chosen.contents, {
       status: 200,
       headers: {

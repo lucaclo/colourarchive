@@ -9,6 +9,8 @@ import { looksFor, photoLookRequest, type LookRequest } from '../lib/match/looks
 import { chapterDna } from '../lib/match/chapter-dna';
 import { groupPhotosByLens, gearPresets, type GearPreset } from '../lib/match/gear-dna';
 import { shadowHeadroom } from '../lib/match/shadow-headroom';
+import { encodePalette, oklchToHex, searchPalette } from '../lib/colour-search';
+import ColourFilter from '../components/ColourFilter.astro';
 
 // Prerenderable: `astro build` bakes a static snapshot of the archive (from the
 // current manifest) into dist/client — hostable read-only anywhere — while the
@@ -248,6 +250,11 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
         )}
       </div>
     )}
+    {hasPhotos && (
+      <div class="tb-group tb-colour">
+        <ColourFilter items=".archive .frame" suggest={manifest.chapters.map((ch) => ({ name: ch.name, hex: oklchToHex(ch.oklch) }))} />
+      </div>
+    )}
     {!STATIC && hasPhotos && (
       <div class="tb-group tb-search">
         <div class="search-box" id="search-box">
@@ -268,6 +275,16 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
         <span class="tb-label">Insights</span>
       </button>
     </span>
+    {hasPhotos && (
+      <div class="cf-tray" id="cf-tray" hidden>
+        <div class="cf-tray-head">
+          <span class="cf-tray-dots" aria-hidden="true"></span>
+          <span class="cf-tray-count" aria-live="polite"></span>
+          <button type="button" class="cf-tray-clear" hidden>Clear</button>
+        </div>
+        <div class="cf-tray-list" role="list" aria-label="Closest by colour"></div>
+      </div>
+    )}
   </header>
 
   <section class="cover">
@@ -374,6 +391,8 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
                       data-file={p.filename}
                       data-medium={p.medium}
                       data-genre={p.genre ?? ''}
+                      data-palette={p.palette ? encodePalette(searchPalette(p.palette, p.oklch)) : ''}
+                      data-swatches={(p.palette ?? []).map((s) => `${oklchToHex(s)}:${s.share}`).join(',')}
                       data-full={largest.avif}
                       data-set={avifSet}
                       data-orig={STATIC ? '' : `/api/original/${p.id}`}
@@ -909,10 +928,13 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
   let view = 'all';    // film / digital / all
   let genre = 'all';   // street / portrait / landscape / architecture / all
   let searchIds = null; // Set of matching ids from /api/search, or null when no query is active
+  let colourIds = null; // Set from the colour filter (components/ColourFilter.astro), or null
+  let colourLabel = '';
   const frameShown = (f) =>
     (view === 'all' || f.dataset.medium === view) &&
     (genre === 'all' || f.dataset.genre === genre) &&
-    (searchIds === null || searchIds.has(f.dataset.id));
+    (searchIds === null || searchIds.has(f.dataset.id)) &&
+    (colourIds === null || colourIds.has(f.dataset.id));
 
   // Split an ordered list of item heights into <=k CONTIGUOUS groups with the
   // most equal total heights (classic linear partition; binary search on the
@@ -1279,8 +1301,38 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       const [lat, lon] = loc.split(',').map((s) => s.trim());
       bits.push(`<span class="k">·</span> <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}" target="_blank" rel="noopener noreferrer">${loc} ↗</a>`);
     }
-    return bits.join(' &nbsp; ');
+    // The photo's main colours, widths by area. A tap searches the archive
+    // for that colour; Copy copies the one last pointed at, or all of them.
+    const sw = (f.dataset.swatches || '').split(',')
+      .map((x) => x.split(':'))
+      .filter(([hex, share]) => /^#[0-9a-f]{6}$/i.test(hex) && Number(share) > 0);
+    const strip = sw.length
+      ? `<span class="lb-palette-row"><span class="lb-palette" role="group" aria-label="Colours">${sw.map(([hex, share]) =>
+          `<button type="button" class="lb-swatch" data-hex="${hex}" style="background:${hex};flex-grow:${Number(share)}" aria-label="Search ${hex}" title="${hex}"></button>`).join('')}</span><button type="button" class="lb-copy">Copy</button></span><span class="lb-hex" aria-live="polite"></span>`
+      : '';
+    return bits.join(' &nbsp; ') + strip;
   };
+  let lbPointedHex = '';
+  lbCap?.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.lb-swatch'); if (b) lbPointedHex = b.dataset.hex; });
+  lbCap?.addEventListener('focusin', (e) => { const b = e.target.closest?.('.lb-swatch'); if (b) lbPointedHex = b.dataset.hex; });
+  lbCap?.addEventListener('click', async (e) => {
+    const swatch = e.target.closest?.('.lb-swatch');
+    if (swatch) {
+      // Search it: close the photo and let the colour filter take over.
+      const hex = swatch.dataset.hex;
+      closeLightbox();
+      setTimeout(() => window.dispatchEvent(new CustomEvent('colourfilter:set', { detail: { hex } })), 260);
+      return;
+    }
+    if (!e.target.closest?.('.lb-copy')) return;
+    const all = [...lbCap.querySelectorAll('.lb-swatch')].map((b) => b.dataset.hex);
+    const text = all.includes(lbPointedHex) ? lbPointedHex : all.join(' ');
+    const out = lbCap.querySelector('.lb-hex');
+    try { await navigator.clipboard.writeText(text); if (out) out.textContent = `${text} copied`; }
+    catch { if (out) out.textContent = text; }
+    clearTimeout(lbCap._hexTimer);
+    lbCap._hexTimer = setTimeout(() => { if (out) out.textContent = ''; }, 1600);
+  });
 
   // Where you are in the sequence, counted over what the filter actually shows.
   const lbCount = document.getElementById('lb-count');
@@ -1984,6 +2036,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     if (genre !== 'all' && genreCurrent) parts.push(genreCurrent.textContent);
     const q = searchInput?.value.trim();
     if (q) parts.push(`"${q}"`);
+    if (colourLabel) parts.push(colourLabel === 'tone' ? 'that tone' : colourLabel);
     archiveEmptyText.textContent = parts.length
       ? `Nothing matches ${parts.join(' · ')}.`
       : 'Nothing here yet.';
@@ -1992,7 +2045,92 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     applyView('all');
     applyGenre('all', 'All genres');
     if (searchInput) { searchInput.value = ''; runSearch(''); }
+    window.dispatchEvent(new Event('colourfilter:reset'));
   }));
+  // The colour filter is a module (it imports the ranking), this script is
+  // inline, so the ids arrive as an event rather than a function call.
+  window.addEventListener('colourfilter', (e) => {
+    const { ids, label, ranked, colours } = e.detail;
+    renderTray(ranked, colours);
+    if (ids === null && colourIds === null) return;
+    colourLabel = label;
+    relayout(() => { colourIds = ids; layoutAll(); refreshEmpties(); });
+  });
+
+  // The closest photos to a picked colour, in a row under the toolbar. The
+  // archive below keeps its hue order (that order is the archive); this row
+  // is the ranking, closest first, so a search answers at once without a scroll.
+  const tray = document.getElementById('cf-tray');
+  const trayList = tray?.querySelector('.cf-tray-list');
+  const trayCount = tray?.querySelector('.cf-tray-count');
+  const trayDots = tray?.querySelector('.cf-tray-dots');
+  const trayClear = tray?.querySelector('.cf-tray-clear');
+  const TRAY_MAX = 40;
+  const frameById = new Map();
+  const trayFrame = (id) => {
+    if (!frameById.size) for (const f of document.querySelectorAll('.archive .frame')) frameById.set(f.dataset.id, f);
+    return frameById.get(id);
+  };
+  function renderTray(ranked, colours) {
+    if (!tray) return;
+    const on = Array.isArray(ranked);
+    tray.hidden = !on;
+    if (!on) { trayList.replaceChildren(); return; }
+    trayDots.replaceChildren(...colours.map((hex) => {
+      const d = document.createElement('span');
+      d.style.background = hex;
+      return d;
+    }));
+    trayCount.textContent = String(ranked.length);
+    trayClear.hidden = ranked.length > 0;
+    const items = [];
+    for (const hit of ranked.slice(0, TRAY_MAX)) {
+      const f = trayFrame(hit.id);
+      if (!f) continue;
+      const pal = (f.dataset.palette || '').split(';').map((x) => x.split(',').map(Number));
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cf-tray-item';
+      b.setAttribute('role', 'listitem');
+      const covered = hit.parts.reduce((a, p) => a + p.covered, 0);
+      b.setAttribute('aria-label', `${f.dataset.file || 'Photograph'}, ${Math.round(Math.min(1, covered) * 100)}% of the frame`);
+      const img = document.createElement('img');
+      // The smallest derivative: these are 56–72 px tall.
+      img.src = (f.dataset.set || '').split(',')[0].trim().split(' ')[0] || f.dataset.full;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.style.aspectRatio = String(1 / (parseFloat(f.dataset.ratio) || 1));
+      const bar = document.createElement('span');
+      bar.className = 'cf-tray-bar';
+      for (const part of hit.parts) {
+        for (const i of part.swatches) {
+          const [L, C, H, share] = pal[i] || [];
+          if (!Number.isFinite(L)) continue;
+          const seg = document.createElement('span');
+          seg.style.background = `oklch(${L} ${C} ${H})`;
+          // An accent covers no area but did match; give it a sliver.
+          seg.style.flexGrow = String(Math.max(share, 0.04));
+          bar.append(seg);
+        }
+      }
+      b.append(img, bar);
+      b.addEventListener('click', () => openLightbox(f, false));
+      items.push(b);
+    }
+    trayList.replaceChildren(...items);
+    trayList.scrollLeft = 0;
+  }
+  trayList?.addEventListener('keydown', (e) => {
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    const all = [...trayList.querySelectorAll('.cf-tray-item')];
+    const i = all.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    all[Math.max(0, Math.min(all.length - 1, i + step))].focus();
+  });
+  trayClear?.addEventListener('click', () => window.dispatchEvent(new Event('colourfilter:reset')));
 
   // A filter or search used to repack the whole wall in one cut: every photo
   // jumped at once, and the page kept its scroll offset rather than its

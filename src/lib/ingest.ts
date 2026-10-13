@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import exifReader from 'exif-reader';
 import { PHOTOS_DIR, IMG_DIR, imgUrl } from './paths';
 import { dominantColour } from './dominant';
+import { computePalette } from './palette';
 import { spatialSignature } from './signature';
 import { embedBuffer } from './embed';
 import { clipEmbedBuffer } from './clip';
@@ -183,8 +184,9 @@ export async function processPhoto(
   // Genre is scored off the CLIP embedding rather than run as a separate
   // model call — see genre.ts — so it waits on clipEmbedding instead of
   // joining the Promise.all independently.
-  const [colourGrid, embedding, clipEmbedding] = await Promise.all([
+  const [colourGrid, palette, embedding, clipEmbedding] = await Promise.all([
     spatialSignature(buf),
+    computePalette(buf).catch((e) => { console.warn('[palette] skipped', e?.message); return undefined; }),
     embedBuffer(buf).catch((e) => { console.warn('[embed] skipped', e?.message); return undefined; }),
     clipEmbedBuffer(buf).catch((e) => { console.warn('[clip] skipped', e?.message); return undefined; }),
   ]);
@@ -203,6 +205,7 @@ export async function processPhoto(
     height,
     bytes: buf.length,
     oklch,
+    palette,
     autoChapter: chapter,
     chapter, // effective; overrides applied later during manifest assembly
     autoMedium: medium,

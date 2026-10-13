@@ -14,6 +14,7 @@ photos.locations.json
 .match-calibration/
 src/data/match/
 .scout-cache/
+.book-print/
 
 # Local dev TLS certs — contains private keys, never commit
 certs/
@@ -24,3 +25,8 @@ inspiration/
 
 # macOS
 .DS_Store
+
+# Local secrets (e.g. the Flickr key Scout can use) — never commit
+.env
+.env.*
+!.env.example

@@ -39,6 +39,10 @@ export interface Photo {
   height: number;
   bytes: number;
   oklch: OKLCH; // dominant colour
+  // Up to six main colours, area share each — colour search and the lightbox
+  // palette strip. Small, so it stays in the client manifest. Optional: older
+  // records get it from `npm run backfill:palette`.
+  palette?: import('./colour-search').Swatch[];
   autoChapter: string; // computed chapter key (before overrides)
   chapter: string; // effective chapter key (after overrides)
   autoMedium: Medium; // guessed film|digital (before overrides)

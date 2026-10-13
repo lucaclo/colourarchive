@@ -25,6 +25,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { BOOK_PATH } from './paths';
 import type { Chapter, Photo } from './types';
+import { isTreatment, isTrimId, type Treatment, type TrimId } from './book-pages';
 
 export interface BookCuration {
   /** Chapter key -> every one of that chapter's photo ids, in curated
@@ -43,6 +44,28 @@ export interface BookCuration {
    *  chapters is ignored (see `regroupedChapters`), so a chapter renamed or
    *  removed since a move was saved can't strand a photo. */
   moved?: Record<string, string>;
+  /** Photo id -> how it sits on the page (book-pages.ts). Absent means a
+   *  bordered photo on its own page. */
+  layout?: Record<string, Treatment>;
+  /** Photo ids with a blank page before them. */
+  blankBefore?: string[];
+  /** The page size last chosen, so the spread view and the PDF agree. */
+  trim?: TrimId;
+}
+
+/** The page-layout fields, validated. Shared by the file reader and the API. */
+export function readLayoutFields(raw: Record<string, unknown>): Pick<BookCuration, 'layout' | 'blankBefore' | 'trim'> {
+  const out: Pick<BookCuration, 'layout' | 'blankBefore' | 'trim'> = {};
+  if (raw.layout && typeof raw.layout === 'object' && !Array.isArray(raw.layout)) {
+    const layout: Record<string, Treatment> = {};
+    for (const [id, t] of Object.entries(raw.layout as Record<string, unknown>)) if (isTreatment(t) && t !== 'border') layout[id] = t;
+    if (Object.keys(layout).length) out.layout = layout;
+  }
+  if (Array.isArray(raw.blankBefore) && raw.blankBefore.every((id) => typeof id === 'string') && raw.blankBefore.length) {
+    out.blankBefore = [...new Set(raw.blankBefore as string[])];
+  }
+  if (isTrimId(raw.trim)) out.trim = raw.trim;
+  return out;
 }
 
 async function readJson(): Promise<unknown> {
@@ -82,7 +105,7 @@ function readCuration(value: unknown): BookCuration {
     if (Object.keys(moved).length) curation.moved = moved;
   }
 
-  return curation;
+  return { ...curation, ...readLayoutFields(raw) };
 }
 
 export async function readBookCuration(): Promise<BookCuration> {

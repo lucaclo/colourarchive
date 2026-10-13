@@ -4,7 +4,9 @@ import { readManifest, readStore } from '../lib/manifest';
 import { readBookCuration, orderedChaptersWithExclusions, curatedChapters } from '../lib/book';
 import { duplicateGroups } from '../lib/duplicates';
 import { readNotes } from '../lib/notes';
-import { oklchCss } from '../lib/color';
+import { oklchCss, readableInk } from '../lib/color';
+import { oklchToHex } from '../lib/colour-search';
+import { DEFAULT_TRIM, TRIMS, checkPages, padToEven, paginate } from '../lib/book-pages';
 
 export const prerender = false;
 
@@ -14,7 +16,19 @@ const chapters = orderedChaptersWithExclusions(manifest.chapters, curation);
 const includedCount = chapters.reduce((n, ch) => n + ch.photos.filter((p) => !p.excluded).length, 0);
 // One divider page per chapter that survives exclusion, plus one plate page
 // per included photo — the same count `export:print` actually produces.
-const pageCount = curatedChapters(manifest.chapters, curation).length + includedCount;
+const trimId = curation.trim ?? DEFAULT_TRIM;
+const pageCount = padToEven(
+  paginate(
+    curatedChapters(manifest.chapters, curation).map((ch) => ({
+      key: ch.key, name: ch.name, colour: '', photos: ch.photos.map((p) => ({ id: p.id, width: p.width, height: p.height })),
+    })),
+    { treatment: curation.layout, blankBefore: curation.blankBefore },
+  ),
+).length;
+const pageCheck = checkPages(pageCount, TRIMS[trimId]);
+const layoutInit = { layout: curation.layout ?? {}, blankBefore: curation.blankBefore ?? [], trim: trimId };
+const chapterColour = new Map(manifest.chapters.map((ch) => [ch.key, oklchToHex(ch.oklch)] as const));
+const chapterInk = new Map(manifest.chapters.map((ch) => [ch.key, readableInk(ch.oklch)] as const));
 // Every chapter, for the per-photo "move to chapter" control — includes
 // chapters a move has emptied, so a photo can always be moved back.
 const chapterList = manifest.chapters.map((ch) => ({ key: ch.key, name: ch.name }));
@@ -58,13 +72,52 @@ const accent = manifest.chapters[0]
 
   <main class="book-page">
     <header class="book-head">
-      <h1>The book</h1>
-      <p class="lead">
-        <span id="book-count">{includedCount} of {manifest.count} · {pageCount} pages</span>
-        <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-share-link">Share</a>
-        <a href="/book/zine" class="book-share-link">Magazine</a>
-      </p>
+      {/* Title and where else the book goes on one line; what's in it under the
+          title; then the tools, each group with its own job, the one primary
+          action last. */}
+      <div class="book-titlerow">
+        <h1>The book</h1>
+        <nav class="book-links" aria-label="The book elsewhere">
+          <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-link">Share<span aria-hidden="true"> ↗</span></a>
+          <a href="/book/zine" class="book-link">Magazine</a>
+        </nav>
+      </div>
+      <p class="book-sub"><span id="book-count">{includedCount} of {manifest.count}{chapters.length === 0 ? ` · ${pageCount} pages` : ''}</span></p>
+      {chapters.length > 0 && (
+        <div class="book-tools">
+          <div class="book-viewtoggle" role="group" aria-label="View">
+            <button type="button" data-bookview="list" aria-pressed="true">List</button>
+            <button type="button" data-bookview="spreads" aria-pressed="false">Spreads</button>
+          </div>
+          <span class="book-size">
+            <select id="book-trim" aria-label="Book size">
+              {Object.entries(TRIMS).map(([id, t]) => <option value={id} selected={id === trimId}>{t.label}</option>)}
+            </select>
+            <span class="book-check" id="book-check" data-ok={pageCheck.ok ? '1' : ''}>{pageCheck.message}</span>
+          </span>
+          <span class="book-print">
+            <label class="book-bleed"><input type="checkbox" id="book-bleed" checked /> Bleed</label>
+            <button type="button" class="book-pdf" id="book-pdf">Print PDF</button>
+          </span>
+          <span class="book-pdf-status" id="book-pdf-status" role="status" aria-live="polite"></span>
+        </div>
+      )}
     </header>
+    <script type="application/json" id="book-layout-init" is:inline set:html={JSON.stringify(layoutInit)} />
+
+    <section class="book-spreads" id="book-spreads" hidden aria-label="Spreads">
+      <div class="book-pagectl" id="book-pagectl" hidden>
+        <span class="book-pagectl-name" id="book-pagectl-name"></span>
+        <div class="book-seg" role="radiogroup" aria-label="Page layout" id="book-treatment">
+          <label><input type="radio" name="book-treatment" value="border" /> <span>Border</span></label>
+          <label><input type="radio" name="book-treatment" value="bleed" /> <span>Full bleed</span></label>
+          <label><input type="radio" name="book-treatment" value="pair" /> <span>Two-up</span></label>
+        </div>
+        <button type="button" class="book-blank" id="book-blank" aria-pressed="false">Blank before</button>
+        <span class="book-pagectl-note" id="book-pagectl-note"></span>
+      </div>
+      <div class="book-spread-list" id="book-spread-list"></div>
+    </section>
 
     {
       chapters.length === 0 ? (
@@ -75,7 +128,7 @@ const accent = manifest.chapters[0]
             {chapterList.map((c) => <option value={c.key}>{c.name}</option>)}
           </template>
           {chapters.map((ch) => (
-            <section class="book-chapter" data-chapter={ch.key}>
+            <section class="book-chapter" data-chapter={ch.key} data-name={ch.name} data-colour={chapterColour.get(ch.key)} data-ink={chapterInk.get(ch.key)}>
               <h2 class="book-chapter-head">
                 {ch.name}
                 <span class="book-chapter-count" data-chapter-count={ch.key}>
@@ -102,6 +155,8 @@ const accent = manifest.chapters[0]
                       data-excluded={p.excluded ? '1' : ''}
                       data-dup-group={dup?.key}
                       data-note={notes[p.id] ?? ''}
+                      data-w={p.width}
+                      data-h={p.height}
                       style={`aspect-ratio:${p.width}/${p.height}`}
                       aria-label={`${p.filename} — drag the handle or use arrow keys to move within this chapter`}
                     >
@@ -191,9 +246,19 @@ const accent = manifest.chapters[0]
   }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 44rem; }
   .lead code { font-size: 0.92em; }
-  .book-head .lead { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; align-items: baseline; }
+  .book-titlerow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--sp-2) var(--sp-4); }
+  .book-titlerow h1 { margin-bottom: 0; }
+  .book-links { display: flex; gap: var(--sp-1); margin-bottom: 0.2rem; }
+  .book-link {
+    display: inline-flex; align-items: center; min-height: var(--hit); padding: 0 var(--sp-3); border-radius: var(--r-pill);
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary); text-decoration: none; white-space: nowrap;
+    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  }
+  .book-link:hover { color: var(--fg); background: var(--fill); }
+  .book-link:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  .book-sub { margin: var(--sp-2) 0 var(--sp-5); font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary); }
+  /* The PDF's Download link, written by the print script. */
   .book-share-link { color: var(--fg); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; white-space: nowrap; }
-  #book-count { color: var(--fg); }
   .book-empty { color: var(--muted); }
 
   .book-chapter { margin-bottom: 3rem; }
@@ -371,6 +436,17 @@ const accent = manifest.chapters[0]
       border-radius: 50%;
     }
   }
+  /* Phone: the corner marks take less of each thumbnail. The chapter picker
+     is a <select>, so it keeps 16px type (iOS zooms on focus below that) and
+     is drawn smaller with a transform instead, which iOS doesn't look at. */
+  @media (max-width: 640px) {
+    .book-exclude { width: 22px; height: 22px; line-height: 22px; font-size: 13px; }
+    .book-handle { width: 22px; height: 22px; }
+    .book-move {
+      min-height: 0; font-size: 16px; padding: 0.15rem 0.45rem;
+      transform: scale(0.7); transform-origin: right bottom; max-width: 7.4rem;
+    }
+  }
 </style>
 
 <script is:inline>
@@ -406,7 +482,11 @@ const accent = manifest.chapters[0]
     saveBtn.disabled = false;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(save, AUTOSAVE_DELAY);
+    window.dispatchEvent(new Event('book:changed'));
   }
+  // The spread view (module script below) changes page layout through the
+  // same dirty/autosave path, and its state rides along with every save.
+  window.bookMarkDirty = markDirty;
 
   // --- Exclude toggle, with a one-step undo -------------------------------
   // A misclick during a fast curation pass used to be silent until the
@@ -478,23 +558,13 @@ const accent = manifest.chapters[0]
     if (countEl) countEl.textContent = `${included}/${cells.length}`;
   }
 
-  // One print page per surviving chapter divider, plus one per included
-  // photo — mirrors export-print.ts's own pagination (curatedChapters drops
-  // a chapter emptied entirely by exclusion or by every photo moving out).
-  function estimatedPageCount() {
-    let chaptersWithIncluded = 0;
-    document.querySelectorAll('.book-chapter').forEach((section) => {
-      if (section.querySelector('.book-cell:not([data-excluded="1"])')) chaptersWithIncluded++;
-    });
-    const included = document.querySelectorAll('.book-cell:not([data-excluded="1"])').length;
-    return chaptersWithIncluded + included;
-  }
-
   function updateTotalCount() {
     const cells = document.querySelectorAll('.book-cell');
     const included = [...cells].filter((c) => c.dataset.excluded !== '1').length;
     const el = document.getElementById('book-count');
-    if (el) el.textContent = `${included} of ${cells.length} · ${estimatedPageCount()} pages`;
+    // The page count lives in the tools row (#book-check), with the print
+    // service's limits beside it.
+    if (el) el.textContent = `${included} of ${cells.length}`;
   }
 
   // --- Chapter menus, filled on first touch ---------------------------------
@@ -649,7 +719,7 @@ const accent = manifest.chapters[0]
       const res = await fetch('/api/book', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chapters, excluded, moved }),
+        body: JSON.stringify({ chapters, excluded, moved, ...(window.bookLayoutState ? window.bookLayoutState() : {}) }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Save failed.');
@@ -764,3 +834,341 @@ const accent = manifest.chapters[0]
     e.returnValue = '';
   });
 </script>
+
+<script>
+  // The spread view and the print PDF. Pages come from book-pages.ts, the
+  // same pagination /api/book/pdf prints from, read off the list view's DOM
+  // so an unsaved reorder or exclusion shows up here straight away.
+  import { TRIMS, checkPages, isTrimId, padToEven, paginate, placements, spreads, type Page, type PageChapter, type Treatment, type TrimId } from '../lib/book-pages';
+
+  const init = JSON.parse(document.getElementById('book-layout-init')?.textContent || '{}');
+  const state: { layout: Record<string, Treatment>; blankBefore: Set<string>; trim: TrimId } = {
+    layout: { ...(init.layout ?? {}) },
+    blankBefore: new Set(init.blankBefore ?? []),
+    trim: isTrimId(init.trim) ? init.trim : 'blurb-land',
+  };
+  const w = window as unknown as {
+    bookMarkDirty?: () => void;
+    bookLayoutState?: () => unknown;
+  };
+  w.bookLayoutState = () => ({ layout: state.layout, blankBefore: [...state.blankBefore], trim: state.trim });
+
+  const thumbs = new Map<string, string>();
+  const inks = new Map<string, string>();
+  const names = new Map<string, string>();
+  function readChapters(): PageChapter[] {
+    const out: PageChapter[] = [];
+    for (const section of document.querySelectorAll<HTMLElement>('.book-chapter')) {
+      const photos = [];
+      for (const cell of section.querySelectorAll<HTMLElement>('.book-cell')) {
+        if (cell.dataset.excluded === '1') continue;
+        const id = cell.dataset.id!;
+        thumbs.set(id, cell.querySelector('img')?.getAttribute('src') || '');
+        names.set(id, cell.dataset.stem || id);
+        photos.push({ id, width: +(cell.dataset.w || 3), height: +(cell.dataset.h || 2) });
+      }
+      inks.set(section.dataset.chapter!, section.dataset.ink || '#0a0a0a');
+      if (photos.length) out.push({ key: section.dataset.chapter!, name: section.dataset.name || '', colour: section.dataset.colour || '#888', photos });
+    }
+    return out;
+  }
+  const pages = () => padToEven(paginate(readChapters(), { treatment: state.layout, blankBefore: [...state.blankBefore] }));
+
+  const list = document.getElementById('book-chapters');
+  const spreadsEl = document.getElementById('book-spreads')!;
+  const spreadList = document.getElementById('book-spread-list')!;
+  const trimSel = document.getElementById('book-trim') as HTMLSelectElement | null;
+  const check = document.getElementById('book-check');
+  const ctl = document.getElementById('book-pagectl')!;
+  const ctlName = document.getElementById('book-pagectl-name')!;
+  const ctlNote = document.getElementById('book-pagectl-note')!;
+  const blankBtn = document.getElementById('book-blank')!;
+  let selected: string | null = null; // the first photo id on the selected page
+  let current: Page[] = [];
+
+  function updateCheck() {
+    if (!check) return;
+    const c = checkPages(pages().length, TRIMS[state.trim]);
+    check.textContent = c.message;
+    check.dataset.ok = c.ok ? '1' : '';
+  }
+
+  const pct = (v: number, of: number) => `${(v / of) * 100}%`;
+  function pageEl(page: Page | null, number: number | null): HTMLElement {
+    const trim = TRIMS[state.trim];
+    const el = document.createElement(page && page.kind === 'photo' ? 'button' : 'div');
+    el.className = 'bs-page';
+    el.style.aspectRatio = `${trim.widthMM} / ${trim.heightMM}`;
+    if (!page) { el.classList.add('bs-none'); return el; }
+    if (page.kind === 'opener') {
+      el.classList.add('bs-opener');
+      el.style.background = page.colour;
+      const t = document.createElement('span');
+      t.textContent = page.name;
+      t.style.color = inks.get(page.chapterKey) || '#0a0a0a';
+      el.append(t);
+    } else if (page.kind === 'blank') {
+      el.classList.add('bs-blank');
+      if (page.reason === 'even') el.title = 'Added to make an even page count';
+    } else {
+      const btn = el as HTMLButtonElement;
+      btn.type = 'button';
+      const first = page.photos[0].id;
+      btn.dataset.first = first;
+      btn.setAttribute('aria-pressed', String(first === selected));
+      btn.setAttribute('aria-label', `Page ${number}: ${page.photos.map((p) => names.get(p.id)).join(' and ')}`);
+      if (page.note) btn.classList.add('bs-fallback');
+      for (const pl of placements(page, trim)) {
+        const img = document.createElement('img');
+        img.src = thumbs.get(pl.id) || '';
+        img.alt = '';
+        img.style.left = pct(pl.box.x, trim.widthMM);
+        img.style.top = pct(pl.box.y, trim.heightMM);
+        img.style.width = pct(pl.box.w, trim.widthMM);
+        img.style.height = pct(pl.box.h, trim.heightMM);
+        el.append(img);
+      }
+    }
+    if (number !== null) {
+      const n = document.createElement('span');
+      n.className = 'bs-num';
+      n.textContent = String(number);
+      el.append(n);
+    }
+    return el;
+  }
+
+  function render() {
+    current = pages();
+    updateCheck();
+    if (spreadsEl.hidden) return;
+    const frag = document.createDocumentFragment();
+    let n = 0;
+    for (const [l, r] of spreads(current)) {
+      const row = document.createElement('div');
+      row.className = 'bs-spread';
+      const ln = l ? ++n : null;
+      row.append(pageEl(l, ln));
+      const rn = r ? ++n : null;
+      row.append(pageEl(r, rn));
+      frag.append(row);
+    }
+    spreadList.replaceChildren(frag);
+    syncControls();
+  }
+
+  function selectedPage(): Extract<Page, { kind: 'photo' }> | null {
+    return (current.find((p) => p.kind === 'photo' && p.photos[0].id === selected) as Extract<Page, { kind: 'photo' }>) ?? null;
+  }
+  function syncControls() {
+    const page = selectedPage();
+    ctl.hidden = !page;
+    if (!page || !selected) return;
+    ctlName.textContent = page.photos.map((p) => names.get(p.id)).join(' + ');
+    const t = state.layout[selected] ?? 'border';
+    for (const r of ctl.querySelectorAll<HTMLInputElement>('input[name="book-treatment"]')) r.checked = r.value === t;
+    blankBtn.setAttribute('aria-pressed', String(state.blankBefore.has(selected)));
+    ctlNote.textContent = page.note ?? '';
+    for (const b of spreadList.querySelectorAll<HTMLElement>('[data-first]')) b.setAttribute('aria-pressed', String(b.dataset.first === selected));
+  }
+
+  function change() {
+    render();
+    w.bookMarkDirty?.();
+  }
+
+  spreadList.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-first]');
+    if (!b) return;
+    selected = b.dataset.first!;
+    syncControls();
+  });
+  spreadList.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const all = [...spreadList.querySelectorAll<HTMLElement>('[data-first]')];
+    const i = all.findIndex((b) => b === document.activeElement);
+    const next = all[i + (e.key === 'ArrowRight' ? 1 : -1)];
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
+    selected = next.dataset.first!;
+    syncControls();
+  });
+  ctl.addEventListener('change', (e) => {
+    const r = e.target as HTMLInputElement;
+    if (r.name !== 'book-treatment' || !selected) return;
+    if (r.value === 'border') delete state.layout[selected];
+    else state.layout[selected] = r.value as Treatment;
+    change();
+  });
+  blankBtn.addEventListener('click', () => {
+    if (!selected) return;
+    if (state.blankBefore.has(selected)) state.blankBefore.delete(selected);
+    else state.blankBefore.add(selected);
+    change();
+  });
+  trimSel?.addEventListener('change', () => {
+    if (isTrimId(trimSel.value)) { state.trim = trimSel.value; change(); }
+  });
+
+  document.querySelector('.book-viewtoggle')?.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-bookview]');
+    if (!b) return;
+    const spreadsOn = b.dataset.bookview === 'spreads';
+    for (const x of document.querySelectorAll('[data-bookview]')) x.setAttribute('aria-pressed', String(x === b));
+    spreadsEl.hidden = !spreadsOn;
+    if (list) list.hidden = spreadsOn;
+    render();
+  });
+  // A reorder, exclusion or move in the list view.
+  window.addEventListener('book:changed', () => { if (!spreadsEl.hidden) render(); else updateCheck(); });
+  updateCheck();
+
+  // --- Print PDF --------------------------------------------------------
+  const pdfBtn = document.getElementById('book-pdf') as HTMLButtonElement | null;
+  const pdfStatus = document.getElementById('book-pdf-status');
+  const bleed = document.getElementById('book-bleed') as HTMLInputElement | null;
+  pdfBtn?.addEventListener('click', async () => {
+    if (!pdfStatus) return;
+    pdfBtn.disabled = true;
+    const label = pdfBtn.textContent;
+    pdfBtn.textContent = 'Building…';
+    pdfStatus.textContent = '';
+    // The PDF is built from what's saved, so save first.
+    const saveBtn = document.getElementById('book-save') as HTMLButtonElement | null;
+    const savebar = document.getElementById('book-savebar');
+    if (savebar && !savebar.hidden && saveBtn && !saveBtn.disabled) {
+      saveBtn.click();
+      for (let i = 0; i < 50 && !(document.getElementById('book-savebar-text')?.textContent === 'Saved' || savebar.hidden); i++) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    try {
+      const res = await fetch(`/api/book/pdf?trim=${state.trim}&bleed=${bleed?.checked ? '1' : '0'}`, { method: 'POST' });
+      if (!res.ok || !res.body) throw new Error('The server could not build it.');
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = '';
+      let href = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += value;
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const msg = JSON.parse(buf.slice(0, nl));
+          buf = buf.slice(nl + 1);
+          if (msg.type === 'progress') pdfBtn.textContent = `Building… ${msg.done} of ${msg.total}`;
+          if (msg.type === 'done') {
+            if (!msg.ok) throw new Error(msg.error || 'Build failed.');
+            href = msg.href;
+          }
+        }
+      }
+      if (!href) throw new Error('Build stopped early.');
+      const a = document.createElement('a');
+      a.href = href;
+      a.textContent = 'Download';
+      a.className = 'book-share-link';
+      pdfStatus.replaceChildren(a);
+      a.click();
+    } catch (err) {
+      pdfStatus.textContent = err instanceof Error ? err.message : String(err);
+    } finally {
+      pdfBtn.disabled = false;
+      pdfBtn.textContent = label;
+    }
+  });
+</script>
+
+<style is:global>
+  /* One row of controls on a hairline, all one height, so the groups read
+     as groups: the view, the size with what it means for the page count, and
+     printing, with Print PDF as the one filled button at the trailing end. */
+  .book-tools {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5);
+    margin: 0 0 2.6rem; padding-top: var(--sp-4); border-top: 1px solid var(--rule);
+    font-family: var(--font-ui); font-size: var(--t-footnote);
+  }
+  .book-viewtoggle { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--fill); }
+  .book-viewtoggle button, .book-seg label {
+    appearance: none; border: 0; cursor: pointer; font: inherit; color: var(--secondary); background: transparent;
+    min-height: calc(var(--hit) - 6px); padding: 0 var(--sp-3); border-radius: var(--r-pill); display: inline-flex; align-items: center;
+  }
+  .book-viewtoggle button[aria-pressed='true'], .book-seg label:has(input:checked) { background: var(--fill-active); color: var(--fg); font-weight: 600; }
+  .book-viewtoggle button:focus-visible, .book-seg label:has(input:focus-visible), .book-blank:focus-visible, .book-pdf:focus-visible, #book-trim:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  .book-size { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); min-width: 0; max-width: 100%; }
+  /* A pop-up button, shaped like every other control in the row. 16px so
+     iPad Safari doesn't zoom into it. */
+  #book-trim {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    font: inherit; font-size: 16px; color: var(--fg); background-color: var(--fill); border: 0; border-radius: var(--r-pill);
+    min-height: var(--hit); padding: 0 2.1rem 0 var(--sp-4);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23a8a49d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.85rem center; background-size: 12px;
+  }
+  #book-trim:hover { background-color: var(--fill-hover); }
+  .book-check { font-size: var(--t-footnote); color: var(--secondary); white-space: nowrap; }
+  .book-check:not([data-ok='1']) { color: var(--fg); text-decoration: underline dotted; text-underline-offset: 4px; }
+  .book-print { display: inline-flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+  .book-bleed {
+    display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer;
+    min-height: var(--hit); padding: 0 var(--sp-3); border-radius: var(--r-pill); color: var(--secondary);
+  }
+  .book-bleed:hover { background: var(--fill); }
+  .book-bleed:has(input:checked) { color: var(--fg); }
+  .book-bleed:has(input:focus-visible) { outline: 2px solid var(--mark); outline-offset: 2px; }
+  .book-bleed input { accent-color: var(--fg); width: 18px; height: 18px; margin: 0; }
+  .book-pdf, .book-blank {
+    appearance: none; cursor: pointer; font: inherit; color: var(--fg); background: var(--fill); border: 0;
+    min-height: var(--hit); padding: 0 var(--sp-4); border-radius: var(--r-pill); font-weight: 600;
+  }
+  .book-pdf:hover, .book-blank:hover { background: var(--fill-hover); }
+  /* The one primary action. */
+  .book-pdf { background: var(--fg); color: var(--bg); padding: 0 var(--sp-5); }
+  .book-pdf:hover { background: color-mix(in oklab, var(--fg) 86%, var(--bg)); }
+  .book-pdf:active { transform: scale(0.97); }
+  .book-pdf:disabled { cursor: progress; background: var(--fill); color: var(--secondary); }
+  .book-blank { font-weight: 500; }
+  .book-blank[aria-pressed='true'] { background: var(--fill-active); font-weight: 600; }
+  .book-pdf-status { color: var(--secondary); }
+  @media (max-width: 640px) {
+    .book-print { margin-left: 0; }
+    #book-trim { max-width: 100%; }
+    .book-check { white-space: normal; }
+  }
+
+  .book-spreads { margin-bottom: 4rem; }
+  .book-pagectl {
+    position: sticky; top: calc(env(safe-area-inset-top, 0px) + 0.75rem); z-index: 5;
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-5); border-radius: var(--r-md);
+    background: var(--surface-2); border: 1px solid var(--glass-edge);
+    font-family: var(--font-ui); font-size: var(--t-footnote);
+  }
+  .book-pagectl[hidden] { display: none; }
+  .book-pagectl-name { font-family: var(--font-data); font-size: var(--t-caption); color: var(--secondary); margin-right: var(--sp-2); }
+  .book-seg { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--fill); }
+  .book-seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .book-pagectl-note { color: var(--secondary); font-family: var(--font-note); font-style: italic; }
+  .book-spread-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: var(--sp-6) var(--sp-5); }
+  .bs-spread { display: grid; grid-template-columns: 1fr 1fr; }
+  .bs-spread > .bs-page:not(.bs-none) { box-shadow: 0 12px 30px -16px rgb(0 0 0 / 0.7); }
+  /* The gutter: a soft fold line on the inside edge of each page. */
+  .bs-spread > .bs-page:first-child:not(.bs-none) { box-shadow: inset -6px 0 8px -6px rgb(0 0 0 / 0.18), 0 12px 30px -16px rgb(0 0 0 / 0.7); }
+  .bs-spread > .bs-page:last-child:not(.bs-none) { box-shadow: inset 6px 0 8px -6px rgb(0 0 0 / 0.18), 0 12px 30px -16px rgb(0 0 0 / 0.7); }
+  .bs-page {
+    position: relative; display: block; width: 100%; padding: 0; border: 0; margin: 0; overflow: hidden;
+    background: #fff; color: inherit; font: inherit;
+  }
+  button.bs-page { cursor: pointer; }
+  .bs-page.bs-none { background: transparent; box-shadow: none; }
+  .bs-page img { position: absolute; object-fit: cover; display: block; }
+  .bs-page[aria-pressed='true'] { outline: 2px solid var(--mark); outline-offset: 2px; z-index: 1; }
+  .bs-page:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; z-index: 1; }
+  .bs-opener { display: grid; place-items: center; }
+  .bs-opener > span:not(.bs-num) { font-family: var(--font-display); font-style: italic; font-size: clamp(0.8rem, 2vw, 1.1rem); }
+  .bs-fallback::after { content: ''; position: absolute; left: 10%; right: 10%; bottom: 4%; border-bottom: 1.5px dotted #0a0a0a; opacity: 0.6; }
+  .bs-num { position: absolute; bottom: 2%; font-family: var(--font-data); font-size: 9px; color: #0a0a0a; opacity: 0.55; }
+  .bs-spread > :first-child .bs-num { left: 4%; }
+  .bs-spread > :last-child .bs-num { right: 4%; }
+</style>

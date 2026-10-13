@@ -1,0 +1,464 @@
+---
+// Pick up to three colours and find the photos that hold all of them, with
+// chroma and lightness ranges over the whole photo. Used on the archive and on
+// the inspiration board. The page owns the photos: this only decides which
+// ids pass, and sends them out closest first as a `colourfilter` event on
+// window, so each page keeps its own layout and empty state.
+//
+// The ranking is client-side (src/lib/colour-search.ts) over each element's
+// `data-palette`, so it works offline and on the published static site.
+//
+// Other parts of a page can set a colour with a `colourfilter:set` event
+// ({ hex }), the way the lightbox's palette strip does, and clear it with
+// `colourfilter:reset`. The colours live in `?colour=` so a search can be
+// shared or come back with the back button.
+interface Props {
+  /** CSS selector for the elements that carry `data-id` and `data-palette`. */
+  items: string;
+  /** Colours offered as one-tap starting points: the archive's own chapters. */
+  suggest?: { name: string; hex: string }[];
+}
+const { items, suggest = [] } = Astro.props;
+---
+
+<div class="cf" data-cf data-items={items}>
+  <button type="button" class="cf-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Search by colour" title="Search by colour">
+    <span class="cf-dot" aria-hidden="true"></span>
+  </button>
+  <div class="cf-pop" role="dialog" aria-label="Search by colour" hidden>
+    <div class="cf-chips">
+      <div class="cf-chip-list" role="radiogroup" aria-label="Colours"></div>
+      <button type="button" class="cf-add" aria-label="Add a colour" title="Add a colour">+</button>
+    </div>
+    <div class="cf-row">
+      <input type="color" class="cf-wheel" value="#b0473a" aria-label="Pick a colour" />
+      <input type="text" class="cf-hex" inputmode="text" spellcheck="false" autocomplete="off" maxlength="7" placeholder="#b0473a" aria-label="Hex colour" />
+      <span class="cf-count" aria-live="polite"></span>
+    </div>
+    {suggest.length > 0 && (
+      <div class="cf-suggest" role="group" aria-label="Chapter colours">
+        {suggest.map((s) => (
+          <button type="button" class="cf-sug" data-hex={s.hex} style={`--sw:${s.hex}`} aria-label={s.name} title={s.name}></button>
+        ))}
+      </div>
+    )}
+    <fieldset class="cf-range">
+      <legend>Chroma</legend>
+      <div class="cf-dual cf-dual-c">
+        <input type="range" class="cf-cmin" min="0" max="100" value="0" aria-label="Minimum chroma" />
+        <input type="range" class="cf-cmax" min="0" max="100" value="100" aria-label="Maximum chroma" />
+      </div>
+    </fieldset>
+    <fieldset class="cf-range">
+      <legend>Lightness</legend>
+      <div class="cf-dual cf-dual-l">
+        <input type="range" class="cf-lmin" min="0" max="100" value="0" aria-label="Minimum lightness" />
+        <input type="range" class="cf-lmax" min="0" max="100" value="100" aria-label="Maximum lightness" />
+      </div>
+    </fieldset>
+    <div class="cf-foot">
+      <button type="button" class="cf-use">Use colour</button>
+      <button type="button" class="cf-clear">Clear</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {
+    decodePalette, hexToOklch, MAX_QUERY_COLOURS, oklchToHex, searchByColour,
+    type QueryColour, type Swatch,
+  } from '../lib/colour-search';
+
+  /** Share of the frame a colour should cover; a tap on its caption cycles. */
+  const SHARES: (number | undefined)[] = [undefined, 0.1, 0.25, 0.5];
+  const shareLabel = (s?: number) => (s == null ? 'any' : `${Math.round(s * 100)}%`);
+
+  interface Pick { hex: string; share?: number }
+
+  function readUrl(): Pick[] {
+    const raw = new URLSearchParams(location.search).get('colour');
+    if (!raw) return [];
+    const out: Pick[] = [];
+    for (const part of raw.split(',').slice(0, MAX_QUERY_COLOURS)) {
+      const [hex, pct] = part.split(':');
+      const q = hexToOklch(hex);
+      if (!q) continue;
+      const share = pct ? Number(pct) / 100 : undefined;
+      out.push({ hex: oklchToHex(q), share: SHARES.includes(share) ? share : undefined });
+    }
+    return out;
+  }
+  function writeUrl(picks: Pick[]) {
+    const url = new URL(location.href);
+    if (picks.length) url.searchParams.set('colour', picks.map((p) => p.hex.slice(1) + (p.share != null ? `:${Math.round(p.share * 100)}` : '')).join(','));
+    else url.searchParams.delete('colour');
+    // Readable in the address bar: `,` and `:` need no escaping in a query.
+    url.search = url.search.replace(/%2C/gi, ',').replace(/%3A/gi, ':');
+    if (url.href !== location.href) history.replaceState(history.state, '', url);
+  }
+
+  for (const root of document.querySelectorAll<HTMLElement>('[data-cf]')) {
+    const $ = <T extends Element>(s: string) => root.querySelector(s) as T;
+    const btn = $<HTMLButtonElement>('.cf-btn');
+    const pop = $<HTMLElement>('.cf-pop');
+    const chipList = $<HTMLElement>('.cf-chip-list');
+    const add = $<HTMLButtonElement>('.cf-add');
+    const wheel = $<HTMLInputElement>('.cf-wheel');
+    const hex = $<HTMLInputElement>('.cf-hex');
+    const count = $<HTMLElement>('.cf-count');
+    const cmin = $<HTMLInputElement>('.cf-cmin'), cmax = $<HTMLInputElement>('.cf-cmax');
+    const lmin = $<HTMLInputElement>('.cf-lmin'), lmax = $<HTMLInputElement>('.cf-lmax');
+    const use = $<HTMLButtonElement>('.cf-use');
+    const clear = $<HTMLButtonElement>('.cf-clear');
+
+    // Colour is opt-in: opening the popover and moving a tone slider filters by
+    // tone alone; picking a colour (wheel, hex, a chapter or "Use colour") adds it.
+    let picks: Pick[] = [];
+    let selected = 0;
+    let cache: { id: string; palette: Swatch[] }[] | null = null;
+    const items = () =>
+      (cache ??= Array.from(document.querySelectorAll<HTMLElement>(root.dataset.items || '[data-palette]')).map((el) => ({
+        id: el.dataset.id || '',
+        palette: decodePalette(el.dataset.palette),
+      })));
+
+    const pair = (a: HTMLInputElement, b: HTMLInputElement): [number, number] => [+a.value / 100, +b.value / 100];
+    const toneActive = () => +cmin.value > 0 || +cmax.value < 100 || +lmin.value > 0 || +lmax.value < 100;
+
+    // Two thumbs on one track: the span between them is clear, the rest dimmed.
+    // They can't cross: the one being moved stops at the other.
+    function paintRanges() {
+      for (const [lo, hi] of [[cmin, cmax], [lmin, lmax]] as const) {
+        const track = lo.parentElement as HTMLElement;
+        track.style.setProperty('--lo', `${lo.value}%`);
+        track.style.setProperty('--hi', `${hi.value}%`);
+        track.closest('.cf-range')!.classList.toggle('narrowed', +lo.value > 0 || +hi.value < 100);
+      }
+      const q = picks[selected] && hexToOklch(picks[selected].hex);
+      root.style.setProperty('--cf-hue', String(q && q.C > 0.02 ? Math.round(q.H) : 30));
+    }
+    for (const [lo, hi] of [[cmin, cmax], [lmin, lmax]] as const) {
+      lo.addEventListener('input', () => { if (+lo.value > +hi.value) lo.value = hi.value; paintRanges(); run(); });
+      hi.addEventListener('input', () => { if (+hi.value < +lo.value) hi.value = lo.value; paintRanges(); run(); });
+    }
+
+    function renderChips() {
+      chipList.replaceChildren(...picks.map((p, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'cf-chip-wrap';
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'cf-chip';
+        chip.setAttribute('role', 'radio');
+        chip.setAttribute('aria-checked', String(i === selected));
+        chip.tabIndex = i === selected ? 0 : -1;
+        chip.style.setProperty('--sw', p.hex);
+        chip.setAttribute('aria-label', `${p.hex}, ${shareLabel(p.share)}`);
+        chip.addEventListener('click', () => select(i));
+        chip.addEventListener('keydown', (e) => {
+          const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+          if (!step) return;
+          e.preventDefault();
+          select((i + step + picks.length) % picks.length);
+          (chipList.querySelectorAll<HTMLElement>('.cf-chip')[selected])?.focus();
+        });
+        const share = document.createElement('button');
+        share.type = 'button';
+        share.className = 'cf-share';
+        share.textContent = shareLabel(p.share);
+        share.setAttribute('aria-label', `Share of frame: ${shareLabel(p.share)}`);
+        share.addEventListener('click', () => {
+          p.share = SHARES[(SHARES.indexOf(p.share) + 1) % SHARES.length];
+          renderChips();
+          run();
+          (chipList.querySelectorAll<HTMLElement>('.cf-share')[i])?.focus();
+        });
+        wrap.append(chip, share);
+        if (picks.length > 1 && i === selected) {
+          const x = document.createElement('button');
+          x.type = 'button';
+          x.className = 'cf-remove';
+          x.textContent = '×';
+          x.setAttribute('aria-label', `Remove ${p.hex}`);
+          x.addEventListener('click', () => {
+            picks.splice(i, 1);
+            select(Math.min(selected, picks.length - 1));
+            run();
+          });
+          wrap.append(x);
+        }
+        return wrap;
+      }));
+      add.hidden = picks.length === 0 || picks.length >= MAX_QUERY_COLOURS;
+      chipList.hidden = picks.length === 0;
+    }
+
+    function select(i: number) {
+      selected = Math.max(0, i);
+      const p = picks[selected];
+      if (p) {
+        wheel.value = p.hex;
+        if (document.activeElement !== hex) hex.value = p.hex;
+      } else {
+        hex.value = '';
+      }
+      renderChips();
+      paintRanges();
+    }
+
+    let timer = 0;
+    function run() {
+      clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const query: QueryColour[] = picks.map((p) => ({ ...hexToOklch(p.hex)!, share: p.share }));
+        const active = query.length > 0 || toneActive();
+        const ranked = active ? searchByColour(items(), query.length ? query : null, { chroma: pair(cmin, cmax), lightness: pair(lmin, lmax) }) : null;
+        const ids = ranked ? new Set(ranked.map((p) => p.id)) : null;
+        const hexes = picks.map((p) => p.hex);
+        count.textContent = ranked ? String(ranked.length) : '';
+        root.classList.toggle('on', active);
+        root.style.setProperty('--cf-colour', hexes[0] ?? 'transparent');
+        root.style.setProperty('--cf-ring', hexes.length > 1
+          ? `conic-gradient(${hexes.map((h, i) => `${h} ${(i / hexes.length) * 360}deg ${((i + 1) / hexes.length) * 360}deg`).join(', ')})`
+          : hexes[0] ?? 'transparent');
+        btn.setAttribute('aria-pressed', String(active));
+        writeUrl(picks);
+        window.dispatchEvent(new CustomEvent('colourfilter', {
+          detail: {
+            ids,
+            // Closest first, with which swatches matched, for a ranked view.
+            ranked: query.length ? ranked : null,
+            colours: hexes,
+            label: hexes.length ? hexes.join(' + ') : active ? 'tone' : '',
+          },
+        }));
+      }, 60);
+    }
+
+    /** Set the selected colour, adding the first one if there is none. */
+    function setColour(h: string) {
+      const q = hexToOklch(h);
+      hex.toggleAttribute('aria-invalid', !q && h.trim() !== '');
+      if (!q) return;
+      const norm = oklchToHex(q);
+      if (picks.length === 0) { picks.push({ hex: norm }); selected = 0; }
+      else picks[selected].hex = norm;
+      wheel.value = norm;
+      if (document.activeElement !== hex) hex.value = norm;
+      renderChips();
+      paintRanges();
+      run();
+    }
+
+    wheel.addEventListener('input', () => { hex.value = wheel.value; setColour(wheel.value); });
+    hex.addEventListener('input', () => { if (hex.value.replace('#', '').length === 6) setColour(hex.value); });
+    hex.addEventListener('change', () => setColour(hex.value));
+    use.addEventListener('click', () => setColour(hex.value || wheel.value));
+    add.addEventListener('click', () => {
+      if (picks.length >= MAX_QUERY_COLOURS) return;
+      // Start the new colour opposite the last one: two of the same is no query.
+      const last = hexToOklch(picks[picks.length - 1].hex)!;
+      picks.push({ hex: oklchToHex({ L: 0.62, C: Math.max(0.1, last.C), H: (last.H + 180) % 360 }) });
+      select(picks.length - 1);
+      run();
+      hex.focus({ preventScroll: true });
+      hex.select();
+    });
+    for (const s of root.querySelectorAll<HTMLButtonElement>('.cf-sug')) {
+      s.addEventListener('click', () => setColour(s.dataset.hex!));
+    }
+    clear.addEventListener('click', reset);
+    function reset() {
+      picks = [];
+      selected = 0;
+      hex.value = '';
+      hex.removeAttribute('aria-invalid');
+      cmin.value = lmin.value = '0';
+      cmax.value = lmax.value = '100';
+      renderChips();
+      paintRanges();
+      run();
+    }
+    // A page's own "Clear filters" also clears this.
+    window.addEventListener('colourfilter:reset', reset);
+    // Another part of the page (the lightbox palette) asks for one colour.
+    window.addEventListener('colourfilter:set', (e) => {
+      const h = (e as CustomEvent<{ hex: string }>).detail?.hex;
+      if (!h || !hexToOklch(h)) return;
+      picks = [];
+      selected = 0;
+      setColour(h);
+    });
+
+    function open() {
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      // Keep it on screen: anchored to the button's right edge, it runs off
+      // a phone's left or right side depending on where the toolbar wraps.
+      pop.style.setProperty('--cf-shift', '0px');
+      const r = pop.getBoundingClientRect();
+      const shift = r.left < 8 ? 8 - r.left : r.right > innerWidth - 8 ? innerWidth - 8 - r.right : 0;
+      pop.style.setProperty('--cf-shift', `${shift}px`);
+      requestAnimationFrame(() => pop.classList.add('show'));
+      hex.focus({ preventScroll: true });
+    }
+    function close(focusBtn = false) {
+      pop.classList.remove('show');
+      btn.setAttribute('aria-expanded', 'false');
+      setTimeout(() => { pop.hidden = true; }, 140);
+      if (focusBtn) btn.focus();
+    }
+    btn.addEventListener('click', (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
+    // The path, not `contains`: a chip's share or × re-renders the chips, so by
+    // the time this runs the button clicked is no longer in the document and
+    // the click looked like one outside, which closed the popover.
+    document.addEventListener('click', (e) => { if (!pop.hidden && !e.composedPath().includes(root)) close(); });
+    root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) { e.stopPropagation(); close(true); } });
+
+    // A search that came in the address.
+    picks = readUrl();
+    renderChips();
+    paintRanges();
+    if (picks.length) { select(0); run(); }
+  }
+</script>
+
+<style is:global>
+  .cf { position: relative; display: inline-flex; --cf-hue: 30; }
+  /* The toolbar capsules each make a stacking context; lift this one while open
+     so the next capsule (search, on a phone's second row) can't cover it. */
+  .tb-group:has(.cf-pop:not([hidden])) { position: relative; z-index: 70; }
+  .cf-btn {
+    appearance: none; cursor: pointer; display: inline-grid; place-items: center;
+    width: var(--hit); height: var(--hit); padding: 0; border: 0; border-radius: var(--r-pill);
+    background: transparent; color: var(--fg);
+    transition: background var(--dur-fast) var(--ease);
+  }
+  .cf-btn:hover, .cf.on .cf-btn { background: var(--fill); }
+  .cf-btn:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  /* Off: a hollow ring drawn as a hue wheel, so it reads as "colour" without a word.
+     On: filled with the chosen colour, or split between them. */
+  .cf-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: conic-gradient(from 90deg, oklch(0.7 0.15 30), oklch(0.8 0.15 90), oklch(0.7 0.13 150), oklch(0.7 0.12 210), oklch(0.65 0.14 270), oklch(0.68 0.16 330), oklch(0.7 0.15 30));
+    -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+            mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+  }
+  .cf.on .cf-dot { background: var(--cf-ring); -webkit-mask: none; mask: none; box-shadow: 0 0 0 1px var(--mark); }
+  .cf-pop {
+    position: absolute; top: calc(100% + 0.6rem); right: 0; z-index: 60; width: min(17.5rem, calc(100vw - 1rem));
+    translate: var(--cf-shift, 0) 0;
+    padding: var(--sp-3); border-radius: var(--r-md);
+    /* Opaque: a blur nested inside the toolbar's own glass doesn't render,
+       and the chapter title showed through. */
+    background: var(--surface-2); border: 1px solid var(--glass-edge);
+    box-shadow: var(--glass-shadow), 0 24px 48px -12px rgb(0 0 0 / 0.5);
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg);
+    transform-origin: top right; transform: scale(0.95); opacity: 0;
+    transition: transform 180ms var(--spring), opacity 140ms var(--ease);
+  }
+  .cf-pop.show { transform: none; opacity: 1; }
+  .cf-pop[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { .cf-pop { transition: opacity 100ms linear; transform: none; } }
+
+  .cf-chips { display: flex; align-items: flex-start; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+  .cf-chips:has(.cf-chip-list[hidden]) { display: none; }
+  .cf-chip-list { display: flex; gap: var(--sp-2); }
+  .cf-chip-list[hidden] { display: none; }
+  .cf-chip-wrap { position: relative; display: grid; justify-items: center; gap: 2px; }
+  .cf-chip, .cf-add {
+    appearance: none; cursor: pointer; width: 36px; height: 36px; padding: 0; border-radius: 50%;
+  }
+  .cf-chip { background: var(--sw); border: 1px solid var(--glass-edge); }
+  .cf-chip[aria-checked='true'] { box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--mark); }
+  .cf-add {
+    display: grid; place-items: center; background: transparent; color: var(--secondary);
+    border: 1px dashed var(--mark); font: 300 1.25rem/1 var(--font-ui);
+  }
+  .cf-add[hidden] { display: none; }
+  .cf-add:hover { color: var(--fg); }
+  .cf-share {
+    appearance: none; cursor: pointer; border: 0; background: none; padding: 2px 4px; min-height: 24px;
+    font-family: var(--font-data); font-size: var(--t-caption); color: var(--secondary);
+  }
+  .cf-share:hover { color: var(--fg); }
+  .cf-remove {
+    position: absolute; top: -6px; right: -8px; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+    appearance: none; cursor: pointer; display: grid; place-items: center;
+    background: var(--surface-1); color: var(--fg); border: 1px solid var(--glass-edge);
+    font: 400 0.875rem/1 var(--font-ui);
+  }
+  .cf-chip:focus-visible, .cf-add:focus-visible, .cf-share:focus-visible, .cf-remove:focus-visible, .cf-sug:focus-visible {
+    outline: 2px solid var(--mark); outline-offset: 2px;
+  }
+
+  .cf-row { display: flex; align-items: center; gap: var(--sp-2); }
+  .cf-wheel {
+    flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border: 1px solid var(--mark); border-radius: 50%;
+    background: none; cursor: pointer; overflow: hidden;
+  }
+  .cf-wheel::-webkit-color-swatch-wrapper { padding: 0; }
+  .cf-wheel::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  .cf-hex {
+    flex: 1 1 auto; min-width: 0; min-height: 36px; padding: 0 var(--sp-2);
+    font-family: var(--font-data); font-size: var(--t-footnote); color: var(--fg);
+    background: var(--surface-1); border: 1px solid var(--mark); border-radius: var(--r-xs);
+  }
+  .cf-hex:focus-visible, .cf-wheel:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  .cf-hex[aria-invalid] { border-style: dashed; }
+  .cf-count { min-width: 2ch; text-align: right; font-family: var(--font-data); font-size: var(--t-caption); color: var(--secondary); }
+
+  .cf-suggest { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
+  .cf-sug {
+    appearance: none; cursor: pointer; width: 18px; height: 18px; padding: 0; border-radius: 50%;
+    background: var(--sw); border: 1px solid var(--glass-edge);
+    /* 18px to look at, 32px to hit. */
+    position: relative;
+  }
+  .cf-sug::after { content: ''; position: absolute; inset: -7px; }
+
+  .cf-range { border: 0; margin: var(--sp-3) 0 0; padding: 0; }
+  .cf-range legend { padding: 0; margin-bottom: var(--sp-1); font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .cf-range.narrowed legend { color: var(--fg); }
+  .cf-dual {
+    position: relative; height: 28px;
+    --wash: color-mix(in oklab, var(--surface-2) 55%, transparent);
+  }
+  /* The track: the axis itself as a gradient, dimmed outside the chosen span. */
+  .cf-dual::before {
+    content: ''; position: absolute; left: 9px; right: 9px; top: 50%; height: 8px; translate: 0 -50%;
+    border-radius: var(--r-pill);
+    background:
+      linear-gradient(to right, var(--wash) 0 var(--lo, 0%), transparent var(--lo, 0%) var(--hi, 100%), var(--wash) var(--hi, 100%)),
+      var(--track);
+    box-shadow: inset 0 0 0 1px var(--glass-edge);
+  }
+  .cf-dual-c { --track: linear-gradient(to right, oklch(0.65 0 var(--cf-hue)), oklch(0.65 0.16 var(--cf-hue))); }
+  .cf-dual-l { --track: linear-gradient(to right, oklch(0 0 0), oklch(1 0 0)); }
+  .cf-dual input {
+    position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+    appearance: none; -webkit-appearance: none; background: none; pointer-events: none;
+  }
+  .cf-dual input::-webkit-slider-runnable-track { background: none; height: 28px; }
+  .cf-dual input::-moz-range-track { background: none; }
+  .cf-dual input::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: auto; cursor: grab;
+    width: 18px; height: 18px; margin-top: 5px; border-radius: 50%;
+    background: var(--fg); border: 1px solid var(--bg); box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+  }
+  .cf-dual input::-moz-range-thumb {
+    pointer-events: auto; cursor: grab; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--fg); border: 1px solid var(--bg);
+  }
+  .cf-dual input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--mark); outline-offset: 2px; }
+  .cf-dual input:focus-visible::-moz-range-thumb { outline: 2px solid var(--mark); outline-offset: 2px; }
+
+  .cf-foot { display: flex; justify-content: space-between; margin-top: var(--sp-3); }
+  .cf-foot button {
+    appearance: none; cursor: pointer; min-height: 36px; padding: 0 var(--sp-3); border-radius: var(--r-pill);
+    font: inherit; color: var(--fg); background: var(--fill); border: 0;
+  }
+  .cf-foot button:hover { background: var(--fill-hover); }
+  .cf-foot .cf-clear { background: transparent; color: var(--secondary); }
+  .cf-foot button:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+</style>

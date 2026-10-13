@@ -314,6 +314,71 @@ interface Program {
   uniforms: Record<string, WebGLUniformLocation | null>;
 }
 
+interface PendingProgram {
+  program: WebGLProgram;
+  vs: WebGLShader;
+  fs: WebGLShader;
+  attributes: string[];
+  uniforms: string[];
+}
+
+/**
+ * Compile and link without asking how it went.
+ *
+ * Asking (`getShaderParameter`, `getProgramParameter`) makes the driver
+ * finish the work on the spot. Asked after every shader, it compiled three
+ * programs one at a time, about 0.7 s of a cold load in SwiftShader. Start
+ * them all, then finish them all, and the driver can overlap the work, in
+ * parallel where it supports KHR_parallel_shader_compile.
+ */
+function startBuild(
+  gl: WebGLRenderingContext,
+  vertex: string,
+  fragment: string,
+  attributes: string[],
+  uniforms: string[],
+): PendingProgram | null {
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  const program = gl.createProgram();
+  if (!vs || !fs || !program) return null;
+  gl.shaderSource(vs, vertex);
+  gl.compileShader(vs);
+  gl.shaderSource(fs, fragment);
+  gl.compileShader(fs);
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  return { program, vs, fs, attributes, uniforms };
+}
+
+/** One status query per program; the shaders' own logs only on failure. */
+function finishBuild(gl: WebGLRenderingContext, pending: PendingProgram | null): Program | null {
+  if (!pending) return null;
+  const { program, vs, fs, attributes, uniforms } = pending;
+  const linked = gl.getProgramParameter(program, gl.LINK_STATUS);
+  if (!linked) {
+    for (const shader of [vs, fs]) {
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.warn('[scout] shadow shader failed', gl.getShaderInfoLog(shader));
+      }
+    }
+    console.warn('[scout] shadow program failed', gl.getProgramInfoLog(program));
+  }
+  // A linked program keeps what it needs; the shader objects can go.
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
+  if (!linked) {
+    gl.deleteProgram(program);
+    return null;
+  }
+  return {
+    program,
+    attributes: Object.fromEntries(attributes.map((n) => [n, gl.getAttribLocation(program, n)])),
+    uniforms: Object.fromEntries(uniforms.map((n) => [n, gl.getUniformLocation(program, n)])),
+  };
+}
+
 function build(
   gl: WebGLRenderingContext,
   vertex: string,
@@ -321,37 +386,7 @@ function build(
   attributes: string[],
   uniforms: string[],
 ): Program | null {
-  const compile = (type: number, source: string) => {
-    const shader = gl.createShader(type);
-    if (!shader) return null;
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.warn('[scout] shadow shader failed', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-    return shader;
-  };
-
-  const vs = compile(gl.VERTEX_SHADER, vertex);
-  const fs = compile(gl.FRAGMENT_SHADER, fragment);
-  const program = vs && fs ? gl.createProgram() : null;
-  if (!vs || !fs || !program) return null;
-
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.warn('[scout] shadow program failed', gl.getProgramInfoLog(program));
-    return null;
-  }
-
-  return {
-    program,
-    attributes: Object.fromEntries(attributes.map((n) => [n, gl.getAttribLocation(program, n)])),
-    uniforms: Object.fromEntries(uniforms.map((n) => [n, gl.getUniformLocation(program, n)])),
-  };
+  return finishBuild(gl, startBuild(gl, vertex, fragment, attributes, uniforms));
 }
 
 /**
@@ -401,35 +436,48 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
    */
   let variant: string | null = null;
 
+  /**
+   * Programs already built, per projection. Panning across the globe-to-flat
+   * zoom crosses back and forth, and each crossing used to throw the programs
+   * away and compile them again.
+   */
+  const built = new Map<string, { blocker: Program | null; shadow: Program | null; wall: Program | null }>();
+
   /** (Re)build the projected programs for `shader`'s projection. */
   function compileFor(gl: WebGLRenderingContext, shader: ShaderData): boolean {
-    for (const p of [blockerProgram, shadowProgram]) if (p) gl.deleteProgram(p.program);
-    blockerProgram = build(
-      gl,
-      BLOCKER_VERTEX(shader.vertexShaderPrelude, shader.define),
-      BLOCKER_FRAGMENT,
-      ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_height'],
-      [...PROJECTION_UNIFORMS],
-    );
-    shadowProgram = build(
-      gl,
-      SHADOW_VERTEX(shader.vertexShaderPrelude, shader.define),
-      SHADOW_FRAGMENT,
-      ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
-      [...PROJECTION_UNIFORMS],
-    );
-    if (wallProgram) gl.deleteProgram(wallProgram.program);
-    // Best-effort, and deliberately not part of `ready`: a driver that
-    // cannot compile this one extra program should still get ground shadows
-    // and roofs rather than none of it. `render` just skips pass 4 when this
-    // is null.
-    wallProgram = build(
-      gl,
-      WALL_VERTEX(shader.vertexShaderPrelude, shader.define),
-      WALL_FRAGMENT,
-      ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
-      [...PROJECTION_UNIFORMS, 'u_tint', 'u_opacity'],
-    );
+    let set = built.get(shader.variantName);
+    if (!set) {
+      const blocker = startBuild(
+        gl,
+        BLOCKER_VERTEX(shader.vertexShaderPrelude, shader.define),
+        BLOCKER_FRAGMENT,
+        ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_height'],
+        [...PROJECTION_UNIFORMS],
+      );
+      const shadow = startBuild(
+        gl,
+        SHADOW_VERTEX(shader.vertexShaderPrelude, shader.define),
+        SHADOW_FRAGMENT,
+        ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
+        [...PROJECTION_UNIFORMS],
+      );
+      // Best-effort, and deliberately not part of `ready`: a driver that
+      // cannot compile this one extra program should still get ground shadows
+      // and roofs rather than none of it. `render` just skips pass 4 when this
+      // is null.
+      const wall = startBuild(
+        gl,
+        WALL_VERTEX(shader.vertexShaderPrelude, shader.define),
+        WALL_FRAGMENT,
+        ['a_pos', 'a_elevMercZ', 'a_elevM', 'a_ceiling', 'a_dark'],
+        [...PROJECTION_UNIFORMS, 'u_tint', 'u_opacity'],
+      );
+      set = { blocker: finishBuild(gl, blocker), shadow: finishBuild(gl, shadow), wall: finishBuild(gl, wall) };
+      built.set(shader.variantName, set);
+    }
+    blockerProgram = set.blocker;
+    shadowProgram = set.shadow;
+    wallProgram = set.wall;
     variant = shader.variantName;
     return Boolean(blockerProgram && shadowProgram);
   }
@@ -559,9 +607,11 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
     },
 
     onRemove(_map: maplibregl.Map, gl: WebGLRenderingContext) {
-      for (const p of [blockerProgram, shadowProgram, wallProgram, compositeProgram]) {
-        if (p) gl.deleteProgram(p.program);
+      for (const set of built.values()) {
+        for (const p of [set.blocker, set.shadow, set.wall]) if (p) gl.deleteProgram(p.program);
       }
+      built.clear();
+      if (compositeProgram) gl.deleteProgram(compositeProgram.program);
       for (const b of [shadowBuffer, blockerBuffer, wallBuffer, quadBuffer]) if (b) gl.deleteBuffer(b);
       if (texture) gl.deleteTexture(texture);
       if (depth) gl.deleteRenderbuffer(depth);

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { curatedChapters, orderedChaptersWithExclusions, type BookCuration } from './book.ts';
+import { curatedChapters, orderedChaptersWithExclusions, readLayoutFields, type BookCuration } from './book.ts';
 import type { Chapter, Photo } from './types.ts';
 
 const photo = (id: string): Photo => ({
@@ -114,4 +114,12 @@ describe('orderedChaptersWithExclusions', () => {
     assert.equal(result.length, 1);
     assert.equal(result[0].photos.length, 1);
   });
+});
+
+it('validates layout fields, and does not store the default treatment', () => {
+  assert.deepEqual(
+    readLayoutFields({ layout: { a: 'pair', b: 'border', c: 'nonsense' }, blankBefore: ['x', 'x', 'y'], trim: 'a4-port' }),
+    { layout: { a: 'pair' }, blankBefore: ['x', 'y'], trim: 'a4-port' },
+  );
+  assert.deepEqual(readLayoutFields({ layout: [], blankBefore: [1], trim: 'tabloid' }), {});
 });

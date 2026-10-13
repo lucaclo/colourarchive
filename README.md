@@ -151,6 +151,30 @@ is stated in the panel: a measurement of a photograph is a measurement of the
 scene *and* the grade, and this cannot separate them, so the parts are reported
 individually and nothing ever claims two photographs were given the same edit.
 
+### Saving from the share sheet
+
+To send something to the board from any app on the iPad, make an Apple
+Shortcut once (Shortcuts → +):
+
+1. Shortcut details → **Show in Share Sheet**, receiving **URLs** and **Images**.
+2. **If** *Shortcut Input* has any value of type Image:
+   **Get Contents of URL** `https://<your-mac>.local:4321/api/inspiration/add`,
+   method POST, request body Form, field `images` = *Shortcut Input* (File).
+3. **Otherwise**: **Open URLs**
+   `https://<your-mac>.local:4321/inspiration/add?url=` + *Shortcut Input*
+   (URL-encoded with **URL Encode**).
+
+A shared page (a post, an article) is followed to the picture it names as its
+own (`og:image`), so sharing a link usually works without saving the image
+first. A page that names none says so.
+
+### Several photos at once
+
+Drop several of your photos on Style Match's drop zone and each is matched to
+the same reference on its own, one after another, so a bright frame and a dark
+one each get a preset that suits them. **Download presets** hands them back as
+one `.zip`, which Lightroom imports in one go.
+
 ## Scout
 
 `/scout` is the location-planning tab: type a place or drag the pin, pick a

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  BoundsGrid,
   boundsOverlap,
   buildingHeight,
   buildingSetSignature,
@@ -278,6 +279,49 @@ describe('ringBounds and boundsOverlap', () => {
       boundsOverlap({ west: 0, south: 0, east: 1, north: 1 }, { west: 1, south: 1, east: 2, north: 2 }),
       true,
     );
+  });
+});
+
+describe('BoundsGrid', () => {
+  // A seeded generator, so a failure names a scene that can be rerun.
+  const rng = (seed: number) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const box = (r: () => number, lon: number, lat: number, maxDeg: number) => {
+    const w = lon + (r() - 0.5) * 0.02, s = lat + (r() - 0.5) * 0.02;
+    return { west: w, south: s, east: w + r() * maxDeg, north: s + r() * maxDeg };
+  };
+  const brute = (boxes: ReturnType<typeof box>[], q: ReturnType<typeof box>) =>
+    boxes.flatMap((b, i) => (boundsOverlap(q, b) ? [i] : []));
+
+  for (const [name, lon, lat, maxDeg] of [
+    ['a London street scene', -0.0877, 51.5079, 0.0008],
+    ['long low-sun shadows', -0.0877, 51.5079, 0.02],
+    ['across the antimeridian side of zero', -0.0001, -0.0001, 0.0006],
+    ['far north, where a degree of longitude is short', 18.95, 69.65, 0.001],
+  ] as const) {
+    it(`finds exactly the overlaps a full scan finds: ${name}`, () => {
+      const r = rng(7);
+      const boxes = Array.from({ length: 600 }, () => box(r, lon, lat, maxDeg));
+      const grid = new BoundsGrid(boxes);
+      for (let k = 0; k < 300; k++) {
+        const q = box(r, lon, lat, 0.0008);
+        const got = grid.candidates(q).filter((i) => boundsOverlap(q, boxes[i])).sort((a, b) => a - b);
+        assert.deepEqual(got, brute(boxes, q));
+      }
+    });
+  }
+
+  it('counts touching edges, as boundsOverlap does', () => {
+    const grid = new BoundsGrid([{ west: 0, south: 0, east: 0.001, north: 0.001 }]);
+    assert.deepEqual(grid.candidates({ west: 0.001, south: 0.001, east: 0.002, north: 0.002 }), [0]);
+  });
+
+  it('returns each index once', () => {
+    const boxes = [0, 1, 2].map(() => ({ west: 0, south: 0, east: 0.01, north: 0.01 }));
+    assert.deepEqual(new BoundsGrid(boxes).candidates({ west: 0.004, south: 0.004, east: 0.006, north: 0.006 }).sort(), [0, 1, 2]);
+  });
+
+  it('copes with an empty set', () => {
+    assert.deepEqual(new BoundsGrid([]).candidates({ west: 0, south: 0, east: 1, north: 1 }), []);
   });
 });
 

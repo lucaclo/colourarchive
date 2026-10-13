@@ -7,6 +7,8 @@ import { warmRegionModels } from '../lib/match/regions';
 import { warmGenre } from '../lib/genre';
 import { clusterByEmbedding } from '../lib/similar';
 import { GENRES, GENRE_LABEL } from '../lib/types';
+import { encodePalette, searchPalette } from '../lib/colour-search';
+import ColourFilter from '../components/ColourFilter.astro';
 
 export const prerender = false;
 
@@ -122,7 +124,9 @@ const accent = manifest.chapters[0]
             <button type="button" class="on" data-groupby="colour">Colour</button>
             <button type="button" data-groupby="genre">Genre</button>
             <button type="button" data-groupby="cluster">Similar</button>
+            <span class="insp-cf"><ColourFilter items=".insp-frame" /></span>
           </div>
+          <p class="insp-cf-empty" id="insp-cf-empty" hidden>No references near this colour.</p>
           <script type="application/json" id="insp-groupings" is:inline set:html={JSON.stringify({ genre: genreGroups, cluster: clusterGroups })} />
           <div class="insp-board" id="board">
             {/* Three parallel groupings of the same photos, not three copies —
@@ -144,6 +148,7 @@ const accent = manifest.chapters[0]
                       return (
                         <figure class="frame insp-frame" data-id={p.id} data-full={largest.avif}
                                 data-source={p.source ?? ''}
+                                data-palette={p.palette ? encodePalette(searchPalette(p.palette, p.oklch)) : ''}
                                 style={`--frame-bg:${oklchCss(p.oklch)};aspect-ratio:${p.width}/${p.height}`}>
                           <img class="ph" src={p.placeholder} alt="" aria-hidden="true" />
                           {/* Every derivative is AVIF, so <picture> had no second
@@ -255,9 +260,10 @@ const accent = manifest.chapters[0]
         <div class="mx-startcol">
           <div class="drop mx-zone" id="mx-zone" tabindex="0" role="button" aria-label="Drop your photo or browse">
             <p class="drop-title">Drop your photo here, or <span class="link">choose it</span></p>
+            <p class="drop-sub mx-batch-hint">Several at once for a preset each</p>
             <p class="drop-sub">RAW · JPEG · PNG · WebP · AVIF · HEIC</p>
           </div>
-          <input id="mx-file" type="file" hidden />
+          <input id="mx-file" type="file" multiple hidden />
           <div class="mx-working" id="mx-working" hidden>
             <div class="mx-workbar"><span id="mx-workbar-fill"></span></div>
             <p class="mx-workline">
@@ -265,6 +271,23 @@ const accent = manifest.chapters[0]
               <span class="mx-elapsed" id="mx-elapsed"></span>
               <button type="button" class="mx-stop" id="mx-stop">Stop waiting</button>
             </p>
+          </div>
+          <!-- Batch: several of your photos, each solved on its own against the
+               same reference, one preset per photo in a zip. -->
+          <div class="mx-batch" id="mx-batch" hidden>
+            <p class="mx-batch-head">
+              <span id="mx-batch-count" aria-live="polite"></span>
+              <button type="button" class="mx-stop" id="mx-batch-stop">Stop</button>
+            </p>
+            <ul class="mx-batch-list" id="mx-batch-list"></ul>
+            <div class="mx-batch-foot" id="mx-batch-foot" hidden>
+              <label class="mx-batch-strength">
+                <span>Strength</span>
+                <input type="range" id="mx-batch-strength" min="0" max="100" value="50" aria-label="Strength for every preset" />
+                <output id="mx-batch-strength-out">50%</output>
+              </label>
+              <button type="button" class="mx-batch-download" id="mx-batch-download">Download presets</button>
+            </div>
           </div>
           <label class="mx-field">
             <span>If it’s a RAW, start from</span>
@@ -404,6 +427,54 @@ const accent = manifest.chapters[0]
       </div>
     </div>
   </div>
+<script>
+  // Colour search on the board (components/ColourFilter.astro). Frames move
+  // between the Colour, Genre and Similar views, so the filter hides frames
+  // by id wherever they sit, then hides any group left with nothing in it.
+  const empty = document.getElementById('insp-cf-empty');
+  window.addEventListener('colourfilter', (e) => {
+    const { ids } = (e as CustomEvent<{ ids: Set<string> | null }>).detail;
+    let shown = 0;
+    for (const f of document.querySelectorAll<HTMLElement>('.insp-frame')) {
+      const out = ids !== null && !ids.has(f.dataset.id || '');
+      f.classList.toggle('cf-out', out);
+      if (!out) shown++;
+    }
+    for (const c of document.querySelectorAll<HTMLElement>('.insp-chapter, [data-collage]')) {
+      const box = c.matches('[data-collage]') ? c.closest<HTMLElement>('section') ?? c : c;
+      box.classList.toggle('cf-out', ids !== null && !c.querySelector('.insp-frame:not(.cf-out)'));
+    }
+    if (empty) empty.hidden = ids === null || shown > 0;
+  });
+</script>
+
+<style is:global>
+  .insp-frame.cf-out, .insp-chapter.cf-out, .insp-view section.cf-out { display: none !important; }
+  .insp-cf { display: inline-flex; margin-left: var(--sp-2); }
+  .insp-cf-empty { text-align: center; color: var(--secondary); font-family: var(--font-ui); font-size: var(--t-body); margin: var(--sp-6) 0; }
+</style>
+<style is:global>
+  .mx-batch-hint { margin-top: 0.3rem; }
+  .mx-batch[hidden], .mx-batch-foot[hidden] { display: none; }
+  .mx-batch { margin-top: var(--sp-3); font-family: var(--font-ui); font-size: var(--t-footnote); }
+  .mx-batch-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 var(--sp-2); font-family: var(--font-data); font-size: var(--t-caption); color: var(--secondary); }
+  .mx-batch-list { list-style: none; margin: 0; padding: 0; max-height: 14rem; overflow: auto; }
+  .mx-batch-list li { display: flex; justify-content: space-between; gap: var(--sp-3); padding: 0.4rem 0; border-bottom: 1px solid var(--rule); }
+  .mx-batch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .mx-batch-state { color: var(--secondary); text-align: right; flex: 0 1 auto; }
+  .mx-batch-list li[data-state='done'] .mx-batch-state { color: var(--fg); }
+  .mx-batch-list li[data-state='refused'] .mx-batch-state { font-family: var(--font-note); font-style: italic; }
+  .mx-batch-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-top: var(--sp-3); }
+  .mx-batch-strength { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--secondary); }
+  .mx-batch-strength input { accent-color: var(--fg); width: 8rem; }
+  .mx-batch-strength output { font-family: var(--font-data); font-size: var(--t-caption); min-width: 4ch; }
+  .mx-batch-download {
+    appearance: none; cursor: pointer; font: inherit; font-weight: 600; color: var(--fg); background: var(--fill);
+    border: 0; border-radius: var(--r-pill); min-height: 36px; padding: 0 var(--sp-4);
+  }
+  .mx-batch-download:hover { background: var(--fill-hover); }
+  .mx-batch-download:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+</style>
 </Layout>
 
 <style>
@@ -2500,15 +2571,91 @@ const accent = manifest.chapters[0]
   zoneEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileEl.click(); }
   });
-  fileEl.addEventListener('change', () => { if (fileEl.files?.[0]) analyse(fileEl.files[0]); });
+  const pick = (files: FileList | null | undefined) => {
+    if (!files?.length) return;
+    if (files.length > 1) void batch([...files]);
+    else analyse(files[0]);
+  };
+  fileEl.addEventListener('change', () => { pick(fileEl.files); fileEl.value = ''; });
   ['dragenter', 'dragover'].forEach((ev) =>
     zoneEl.addEventListener(ev, (e) => { e.preventDefault(); zoneEl.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((ev) =>
     zoneEl.addEventListener(ev, (e) => { e.preventDefault(); zoneEl.classList.remove('over'); }));
-  zoneEl.addEventListener('drop', (e) => {
-    const f = (e as DragEvent).dataTransfer?.files?.[0];
-    if (f) analyse(f);
+  zoneEl.addEventListener('drop', (e) => pick((e as DragEvent).dataTransfer?.files));
+
+  // ── Batch ──────────────────────────────────────────────────────────────
+  // One request per photo, one at a time: each is seconds of model work on
+  // the Mac, and a queue that reports as it goes can be stopped part-way.
+  // Each photo gets its own solve, so a preset fits its own exposure and
+  // light rather than one compromise for the lot.
+  const batchEl = $('mx-batch');
+  const batchList = $('mx-batch-list');
+  const batchCount = $('mx-batch-count');
+  const batchStop = $<HTMLButtonElement>('mx-batch-stop');
+  const batchFoot = $('mx-batch-foot');
+  const batchStrength = $<HTMLInputElement>('mx-batch-strength');
+  const batchStrengthOut = $('mx-batch-strength-out');
+  const batchDownload = $<HTMLButtonElement>('mx-batch-download');
+  let batchIds: string[] = [];
+  let batchAbort: AbortController | null = null;
+
+  batchStrength.addEventListener('input', () => { batchStrengthOut.textContent = `${batchStrength.value}%`; });
+  batchStop.addEventListener('click', () => batchAbort?.abort());
+  batchDownload.addEventListener('click', () => {
+    if (!batchIds.length) return;
+    const q = new URLSearchParams({ ids: batchIds.join(','), strength: String(Number(batchStrength.value) / 100) });
+    location.href = `/api/match/presets.zip?${q}`;
   });
+
+  async function batch(files: File[]) {
+    if (!refs.length) { statusEl.textContent = 'Pick a reference first.'; return; }
+    statusEl.textContent = '';
+    batchIds = [];
+    batchEl.hidden = false;
+    batchFoot.hidden = true;
+    batchStop.hidden = false;
+    const rows = files.map((f) => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 'mx-batch-name';
+      name.textContent = f.name;
+      const state = document.createElement('span');
+      state.className = 'mx-batch-state';
+      state.textContent = 'Waiting';
+      li.append(name, state);
+      return { li, state };
+    });
+    batchList.replaceChildren(...rows.map((r) => r.li));
+    batchAbort = new AbortController();
+    let done = 0;
+    for (let i = 0; i < files.length; i++) {
+      if (batchAbort.signal.aborted) { rows[i].state.textContent = 'Stopped'; continue; }
+      batchCount.textContent = `${i + 1} of ${files.length}`;
+      rows[i].state.textContent = 'Measuring…';
+      rows[i].li.dataset.state = 'running';
+      const fd = new FormData();
+      for (const r of refs) { fd.append('ref', r.id); fd.append('weight', String(r.weight)); }
+      fd.append('photo', files[i]);
+      fd.append('baseline', baselineEl.value);
+      try {
+        const res = await fetch('/api/match/analyse', { method: 'POST', body: fd, signal: batchAbort.signal });
+        const data = await res.json();
+        if (!data?.ok) throw new Error(data?.error || 'Could not match this one.');
+        batchIds.push(data.id);
+        done++;
+        rows[i].state.textContent = 'Ready';
+        rows[i].li.dataset.state = 'done';
+      } catch (err) {
+        const stopped = (err as Error).name === 'AbortError';
+        rows[i].state.textContent = stopped ? 'Stopped' : (err as Error).message;
+        rows[i].li.dataset.state = stopped ? 'stopped' : 'refused';
+      }
+    }
+    batchStop.hidden = true;
+    batchCount.textContent = `${done} of ${files.length} ready`;
+    batchFoot.hidden = done === 0;
+    batchDownload.textContent = `Download presets (${done})`;
+  }
 
   /**
    * Analyse, preferring the Mac.

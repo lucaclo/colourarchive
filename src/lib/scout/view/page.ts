@@ -102,6 +102,7 @@ import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-u
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
 import { shootPlan } from '../report';
 import {
+  BoundsGrid,
   boundsOverlap,
   buildingHeight,
   castPrisms,
@@ -326,6 +327,7 @@ import type { ColourGap } from '../../gaps';
 import { createTidePanel, type TideApiResponse } from './tide-panel';
 import type { GoTonightPanel, GoTonightPair } from './go-tonight-panel';
 import type { AuroraPanel } from './aurora-panel';
+import type { MeteorPanel } from './meteor-panel';
 import { createOfflineWarm } from './offline-warm';
 import { createPlanPanel, PLAN_SOURCE } from './plan-panel';
 import type { MonthGridView } from './month-grid';
@@ -648,28 +650,52 @@ export async function startScout(): Promise<void> {
   /* ── Map ─────────────────────────────────────────────────────────────── */
 
   const msgEl = $<HTMLDivElement>('mapmsg');
-  let messageKind: 'none' | 'not-painted' | 'no-webgl' | 'basemap' = 'none';
+  type MessageKind = 'none' | 'not-painted' | 'no-webgl' | 'basemap';
+  let messageKind = 'none' as MessageKind;
+
+  // A note, not an alarm: the title alone in the corner, the reason behind a
+  // tap, and a close that holds for the rest of the visit. A problem that
+  // doesn't stop the page (a tile source down, a slow first frame) also
+  // folds itself away after a while; no WebGL stays, since nothing draws.
+  const dismissedKinds = new Set<MessageKind>();
+  const msgToggle = $<HTMLButtonElement>('mapmsg-toggle');
+  const msgBody = $<HTMLElement>('mapmsg-body');
+  let msgTimer = 0;
+  const MESSAGE_FADES_MS = 9000;
 
   function showMapMessage(kind: typeof messageKind, title: string, body: string) {
+    if (dismissedKinds.has(kind)) return;
     messageKind = kind;
     $('mapmsg-title').textContent = title;
-    $('mapmsg-body').textContent = body;
+    msgBody.textContent = body;
+    msgBody.hidden = true;
+    msgToggle.setAttribute('aria-expanded', 'false');
     msgEl.hidden = false;
+    clearTimeout(msgTimer);
+    if (kind !== 'no-webgl') {
+      msgTimer = window.setTimeout(() => {
+        // Not while someone is reading it.
+        if (msgBody.hidden && !msgEl.matches(':hover, :focus-within')) clearMapMessage(kind);
+      }, MESSAGE_FADES_MS);
+    }
   }
   function clearMapMessage(only?: typeof messageKind) {
     if (only && messageKind !== only) return;
     messageKind = 'none';
     msgEl.hidden = true;
+    clearTimeout(msgTimer);
   }
+  msgToggle.addEventListener('click', () => {
+    const open = msgBody.hidden;
+    msgBody.hidden = !open;
+    msgToggle.setAttribute('aria-expanded', String(open));
+    if (open) clearTimeout(msgTimer);
+  });
+  $('mapmsg-close').addEventListener('click', () => {
+    dismissedKinds.add(messageKind);
+    clearMapMessage();
+  });
 
-  function webglAvailable(): boolean {
-    try {
-      const probe = document.createElement('canvas');
-      return Boolean(probe.getContext('webgl2') || probe.getContext('webgl'));
-    } catch {
-      return false;
-    }
-  }
 
   // The map is optional. Everything else on this page — the search, the sun
   // times, the slider — is arithmetic, and works perfectly well without a GPU.
@@ -696,16 +722,10 @@ export async function startScout(): Promise<void> {
   const maplibregl = (await import('maplibre-gl')).default;
   registerDespikedTerrainProtocol(maplibregl);
 
-  if (!webglAvailable()) {
-    showMapMessage(
-      'no-webgl',
-      'The map cannot be drawn here',
-      'This browser has no WebGL, which the map needs. Embedded preview panes — ' +
-        "VS Code's Simple Browser, for one — usually have it switched off. Open " +
-        'https://localhost:4321/scout in Chrome, Safari or Firefox and the map will appear. ' +
-        'Everything else on this page works either way.',
-    );
-  } else {
+  // Asking MapLibre for the map is the WebGL test: it throws when no context
+  // can be had. A separate probe canvas cost 360 ms of a cold load in
+  // SwiftShader, and its context was never released, so the page held two.
+  try {
     map = new maplibregl.Map({
       container: 'map',
       style: STYLES.light,
@@ -740,9 +760,22 @@ export async function startScout(): Promise<void> {
       // say why. Nothing warns about an unknown map option.
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
+  } catch {
+    map = null;
+    document.querySelector('#map canvas')?.remove();
+  }
+  if (!map) {
+    showMapMessage(
+      'no-webgl',
+      'No map in this browser',
+      "The map needs WebGL, which this browser has switched off (embedded preview panes, " +
+        "VS Code's Simple Browser for one, often do). Open Scout in Chrome, Safari or Firefox " +
+        'to see it. Everything else here works.',
+    );
+  } else {
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
     /**
-     * Start the credit folded on a phone, and only on a phone.
+     * Start the credit folded.
      *
      * `compact: true` above already asks MapLibre for the ⓘ form, but compact
      * still *opens* on load, and on a 375px screen that is a 355px bar of source
@@ -752,15 +785,28 @@ export async function startScout(): Promise<void> {
      *
      * Not hidden and not removed: this project does not show other people's work
      * without their name on it, and that applies to whoever surveyed the roads
-     * as much as to whoever made the photographs. On anything wider it stays
-     * open, because there it costs nothing.
+     * as much as to whoever made the photographs.
      */
-    if (window.innerWidth <= 820) {
-      map.once('load', () => {
-        document
-          .querySelector('.maplibregl-ctrl-attrib')
-          ?.classList.remove('maplibregl-compact-show');
-      });
+    // It started open on anything wider than a phone, "because there it costs
+    // nothing". It did cost something: on a desktop it opened as a 1,270 px bar
+    // of source names across the middle of the map. Folded everywhere now,
+    // still one tap from the full credit.
+    //
+    // MapLibre opens it again by itself: the compact form is only switched on
+    // once a source brings its credit, which is after `load`. So it is folded
+    // whenever MapLibre opens it, until someone opens it by hand.
+    const credit = map.getContainer().querySelector<HTMLElement>('.maplibregl-ctrl-attrib');
+    if (credit) {
+      let byHand = false;
+      credit.addEventListener('pointerdown', () => { byHand = true; }, { once: true });
+      credit.addEventListener('keydown', () => { byHand = true; }, { once: true });
+      const fold = () => {
+        if (byHand) return watcher.disconnect();
+        if (credit.classList.contains('maplibregl-compact-show')) credit.classList.remove('maplibregl-compact-show');
+      };
+      const watcher = new MutationObserver(fold);
+      watcher.observe(credit, { attributes: true, attributeFilter: ['class'] });
+      fold();
     }
     watchForFirstPaint(map);
 
@@ -888,11 +934,9 @@ export async function startScout(): Promise<void> {
         if (painted) return;
         showMapMessage(
           'not-painted',
-          'The map has not drawn',
-          'The page loaded and the map was set up, but no frame has been rendered. ' +
-            'That usually means WebGL is unavailable or throttled — most often in an ' +
-            'embedded preview pane rather than a real browser window. The sun times, ' +
-            'the slider and the radius are unaffected.',
+          "The map isn't drawing",
+          'No frame has been drawn yet. Usually WebGL is off or throttled, most often in an ' +
+            'embedded preview pane rather than a browser window. The times and the slider still work.',
         );
       }, 6000);
     };
@@ -1469,11 +1513,27 @@ export async function startScout(): Promise<void> {
     // --- Photo hotspots ---------------------------------------------------
     // Above the sun furniture, because these are the only things on the map
     // you are meant to *click*, and a target you have to hunt for is not one.
-    map.addSource(PHOTO_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    //
+    // At city zoom a hundred and fifty numbered discs buried central London
+    // and outshouted the sun ring. Spots now gather on screen: near ones
+    // become one paper disc with their total, which a tap opens up, and a lone
+    // spot below z13 is a small dot in its light colour, numbered from z13.
+    map.addSource(PHOTO_SOURCE, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+      cluster: true,
+      clusterRadius: 44,
+      clusterMaxZoom: 15,
+      clusterProperties: { total: ['+', ['get', 'count']] },
+    });
+    const single: MapLibre.FilterSpecification = ['!', ['has', 'point_count']];
+    const grouped: MapLibre.FilterSpecification = ['has', 'point_count'];
     map.addLayer({
       id: 'scout-photos-halo',
       type: 'circle',
       source: PHOTO_SOURCE,
+      filter: single,
+      minzoom: 13,
       paint: {
         // Grows with how many people stopped here — the size *is* the finding.
         'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 11, 10, 17, 60, 26, 200, 34],
@@ -1486,11 +1546,16 @@ export async function startScout(): Promise<void> {
       id: 'scout-photos',
       type: 'circle',
       source: PHOTO_SOURCE,
+      filter: single,
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 7, 10, 11, 60, 16, 200, 21],
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          12.5, 5,
+          13, ['interpolate', ['linear'], ['get', 'count'], 1, 7, 10, 11, 60, 16, 200, 21],
+        ],
         'circle-color': HOTSPOT_COLOUR,
         'circle-opacity': 0.92,
-        'circle-stroke-width': 2,
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 12.5, 1, 13, 2],
         'circle-stroke-color': 'rgba(10,14,22,0.75)',
       },
     });
@@ -1498,8 +1563,35 @@ export async function startScout(): Promise<void> {
       id: 'scout-photos-count',
       type: 'symbol',
       source: PHOTO_SOURCE,
+      filter: single,
+      minzoom: 13,
       layout: {
         'text-field': ['to-string', ['get', 'count']],
+        'text-size': 11,
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': '#08121c' },
+    });
+    map.addLayer({
+      id: 'scout-photos-cluster',
+      type: 'circle',
+      source: PHOTO_SOURCE,
+      filter: grouped,
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['get', 'total'], 1, 12, 10, 15, 60, 20, 200, 24],
+        'circle-color': '#f4efe6',
+        'circle-opacity': 0.95,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#3a3d42',
+      },
+    });
+    map.addLayer({
+      id: 'scout-photos-cluster-count',
+      type: 'symbol',
+      source: PHOTO_SOURCE,
+      filter: grouped,
+      layout: {
+        'text-field': ['to-string', ['get', 'total']],
         'text-size': 11,
         'text-allow-overlap': true,
       },
@@ -1795,7 +1887,16 @@ export async function startScout(): Promise<void> {
     // A hotspot is the one thing on this map you are meant to click, so it
     // wins over moving the pin. Without this, opening a photo spot would also
     // silently relocate the place you are scouting.
-    const hit = map!.queryRenderedFeatures(event.point, { layers: ['scout-photos'] })[0];
+    const hit = map!.queryRenderedFeatures(event.point, { layers: ['scout-photos-cluster', 'scout-photos'] })[0];
+    if (hit?.properties?.cluster) {
+      // A gathered group opens up: zoom to where it splits.
+      const source = map!.getSource(PHOTO_SOURCE) as GeoJSONSource;
+      const at = (hit.geometry as GeoJSON.Point).coordinates as [number, number];
+      void source.getClusterExpansionZoom(Number(hit.properties.cluster_id)).then((zoom) => {
+        map!.easeTo({ center: at, zoom: Math.min(zoom + 0.2, 17), duration: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 500 });
+      });
+      return;
+    }
     if (hit) {
       openHotspot(Number(hit.properties?.index));
       return;
@@ -1840,10 +1941,19 @@ export async function startScout(): Promise<void> {
     const detail = e?.error?.message ?? String(e);
     console.warn('[scout] map error', detail);
     // A single tile failing on a flaky connection is noise. The style or the
-    // tile source failing means an empty rectangle, and that has to be said out
-    // loud rather than left to look like a design choice.
+    // tile source failing means an empty rectangle, and that has to be said
+    // rather than left to look like a design choice. A layer this page asked
+    // about before adding it ("Cannot style non-existing layer") is this
+    // page's own slip, not the basemap's, and the console is where it goes;
+    // matching it on the word "style" once put it in front of the map as
+    // "The basemap could not load".
+    if (/non-existing|does not exist|cannot (style|remove)/i.test(detail)) return;
     if (/style|sprite|glyph|tiles\.json|source/i.test(detail)) {
-      showMapMessage('basemap', 'The basemap could not load', `${detail}. The sun geometry is unaffected.`);
+      showMapMessage(
+        'basemap',
+        "Part of the map didn't load",
+        'A map source did not answer, so some of the map may be blank. The sun, the times and the shadows are unaffected.',
+      );
     }
   });
 
@@ -3075,11 +3185,14 @@ export async function startScout(): Promise<void> {
       intensity: directionalIntensity(altitude, themeOf(basemap)),
     });
 
+    // MapLibre doesn't throw for a missing layer, it fires an `error` event,
+    // so the layer is checked first; the catch is for a bad value.
     const set = (layer: string, property: string, value: unknown) => {
+      if (!map!.getLayer(layer)) return;
       try {
         map!.setPaintProperty(layer, property, value as never);
       } catch {
-        /* layer not present yet */
+        /* a value this layer type won't take */
       }
     };
 
@@ -3669,13 +3782,20 @@ export async function startScout(): Promise<void> {
       // against a shadow whose box does not even reach it would be most of
       // this loop's cost for none of its answer, on a view that can hold a
       // few thousand of each.
+      //
+      // Even pruned, testing every building against every shadow box was
+      // sixteen million comparisons a frame in central London (95 ms a slider
+      // minute). The grid hands each building only the shadows near it, and
+      // the tie-break below keeps the answer the same as the full scan.
       if (result.prisms.length && buildingsCast) {
+        const near = new BoundsGrid(prismInfo.map((p) => p.bounds));
         for (const building of castable) {
           if (!(building.height > 0) || !building.hull || !building.bbox) continue;
           const [anchorLon, anchorLat] = building.ring[0];
           let bestCeiling: number | null = null;
           let bestDarkness = 0;
-          for (let i = 0; i < result.prisms.length; i++) {
+          let bestIndex = -1;
+          for (const i of near.candidates(building.bbox)) {
             const prism = result.prisms[i];
             // A building never shades its own wall — the ceiling formula
             // already answers that with "exactly the roof" on its own
@@ -3687,9 +3807,12 @@ export async function startScout(): Promise<void> {
             const relCeiling = shadowCeilingAt(prism, anchorLon, anchorLat);
             if (relCeiling === null) continue;
             const absCeiling = info.baseElevM + relCeiling;
-            if (bestCeiling === null || absCeiling > bestCeiling) {
+            // Candidates arrive unordered; on a tie the lower index wins, as
+            // it did when this loop scanned every prism in order.
+            if (bestCeiling === null || absCeiling > bestCeiling || (absCeiling === bestCeiling && i < bestIndex)) {
               bestCeiling = absCeiling;
               bestDarkness = info.darkness;
+              bestIndex = i;
             }
           }
           if (bestCeiling === null) continue;
@@ -5067,6 +5190,7 @@ export async function startScout(): Promise<void> {
     // change), the tide fold shows one specific day's extremes, so it has to
     // restate here as well as on every centre change below.
     tidePanel.restate();
+    meteorPanel.restate();
     save();
   }
 
@@ -5102,10 +5226,13 @@ export async function startScout(): Promise<void> {
     // reading's own short TTL — see `aurora-panel.ts`'s `restate`, the same
     // shape `loadSeeing`'s `seeingKey` guard keeps.
     auroraPanel.restate();
+    meteorPanel.restate();
   }
 
   function setCentre(place: Place, { refit = true } = {}) {
     centre = { lat: place.lat, lon: place.lon };
+    // After this function has set the new `label`, so the new place is kept.
+    queueMicrotask(rememberRecent);
     // Drawn from the old coordinate — issue #60 — so it would misdescribe
     // wherever the pin is going next.
     ghostFrame = null;
@@ -6029,11 +6156,10 @@ export async function startScout(): Promise<void> {
   function applyVisibility() {
     if (!map || !styleReady) return;
     const set = (layer: string, visible: boolean) => {
-      try {
-        map!.setLayoutProperty(layer, 'visibility', visible ? 'visible' : 'none');
-      } catch {
-        /* not installed yet */
-      }
+      // Not installed yet. Checked, not caught: MapLibre reports a missing
+      // layer as an `error` event rather than by throwing.
+      if (!map!.getLayer(layer)) return;
+      map!.setLayoutProperty(layer, 'visibility', visible ? 'visible' : 'none');
     };
     set('scout-hillshade', shown.hillshade);
     // Only ever one of these two is up: the custom layer when the context can
@@ -6044,7 +6170,7 @@ export async function startScout(): Promise<void> {
     set('scout-tree-trunks', shown.trees);
     set('scout-tree-crowns', shown.trees);
     set('scout-sun-events', shown.sunPath);
-    for (const id of ['scout-photos', 'scout-photos-halo', 'scout-photos-count']) {
+    for (const id of ['scout-photos', 'scout-photos-halo', 'scout-photos-count', 'scout-photos-cluster', 'scout-photos-cluster-count']) {
       set(id, shown.photos);
     }
     set('scout-moon-ray', shown.moonPath);
@@ -6061,6 +6187,8 @@ export async function startScout(): Promise<void> {
     const button = (event.target as HTMLElement).closest('button');
     const next = button?.dataset.view as '2d' | '3d' | undefined;
     if (!next || next === view) return;
+    // Choosing 2D or 3D leaves eye level for that view, not the one before it.
+    if (eyeView) { eyeView = null; $('eye-button').setAttribute('aria-pressed', 'false'); }
     view = next;
     for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
     applyView();
@@ -7293,7 +7421,82 @@ export async function startScout(): Promise<void> {
   }
 
   on('night-button', 'click', () => {
+    if (eyeView) setEyeLevel(false);
     setNightMode($('night-button').getAttribute('aria-pressed') !== 'true');
+  });
+
+  /* ── Eye level ─────────────────────────────────────────────────────────
+     Stand at the pin and look: the camera at head height above the ground,
+     facing the frame's aim when there is one, else the sun. Everything the
+     3D view already draws (terrain, buildings, trees, their shadows) is in
+     the scene, so this is the same light seen from where you would stand,
+     the view ShadowMap and Planit offer and a top-down map cannot. */
+  const EYE_HEIGHT_M = 1.7;
+  const EYE_PITCH = 85;
+  let eyeView: { bearing: number; pitch: number; zoom: number; center: MapLibre.LngLatLike; view: ViewMode } | null = null;
+
+  function eyeBearing(): number {
+    if (shown.frame) return lens.bearing;
+    // Toward the sun even in twilight: that's where the light is coming from.
+    return current()?.azimuth ?? map?.getBearing() ?? 0;
+  }
+
+  function setEyeLevel(onNow: boolean) {
+    const btn = $('eye-button');
+    if (!map || !centre) return;
+    if (!onNow) {
+      btn.setAttribute('aria-pressed', 'false');
+      const back = eyeView;
+      eyeView = null;
+      if (!back) return;
+      if (back.view !== view) {
+        view = back.view;
+        for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+        applyView();
+      }
+      map.easeTo({ bearing: back.bearing, pitch: back.pitch, zoom: back.zoom, center: back.center, duration: prefersReducedMotion() ? 0 : 700 });
+      return;
+    }
+    if (freeLookCleanup) return; // Milky Way mode owns the camera
+    eyeView = { bearing: map.getBearing(), pitch: map.getPitch(), zoom: map.getZoom(), center: map.getCenter(), view };
+    btn.setAttribute('aria-pressed', 'true');
+    if (view !== '3d') {
+      view = '3d';
+      for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+      applyView();
+    }
+    const at = centre;
+    const place = () => {
+      if (!map || !eyeView) return;
+      // MapLibre's camera sits `cameraToCenterDistance` pixels behind the
+      // centre along the view (1.5 × the canvas height at its default 36.87°
+      // field of view). Put the centre a few metres ahead along the aim and
+      // pick the zoom that makes that distance put the eye EYE_HEIGHT_M above
+      // the ground there; the centre itself is clamped to the terrain.
+      const bearing = eyeBearing();
+      const pitch = EYE_PITCH;
+      const distM = EYE_HEIGHT_M / Math.cos((pitch * Math.PI) / 180);
+      const ahead = destination(at, bearing, distM * Math.sin((pitch * Math.PI) / 180));
+      const H = map.getCanvas().clientHeight || 800;
+      const metresPerPxAtZ0 = (2 * Math.PI * 6378137 * Math.cos((at.lat * Math.PI) / 180)) / 512;
+      const zoom = Math.min(map.getMaxZoom(), Math.log2((1.5 * H * metresPerPxAtZ0) / distM));
+      map.jumpTo({ center: [ahead.lon, ahead.lat], zoom, pitch, bearing });
+    };
+    // Terrain must have a tile under the pin before the camera goes that low:
+    // jumping first reads elevation from a tile that isn't there yet.
+    const whenGrounded = (tries: number) => {
+      if (!map || !eyeView) return;
+      if (map.queryTerrainElevation([at.lon, at.lat]) !== null || tries <= 0) {
+        try { place(); } catch (err) { console.warn('[scout] eye level', err); }
+        return;
+      }
+      map.once('idle', () => whenGrounded(tries - 1));
+    };
+    whenGrounded(4);
+  }
+
+  on('eye-button', 'click', () => {
+    setEyeLevel($('eye-button').getAttribute('aria-pressed') !== 'true');
   });
 
   on('compass', 'click', () => {
@@ -7461,6 +7664,36 @@ export async function startScout(): Promise<void> {
 
   let keptSpots: SavedSpot[] = [];
 
+  /** The last few places opened, for the empty search: newest first. Names
+   *  and coordinates only, in this browser. */
+  interface RecentPlace { name: string; lat: number; lon: number; timeZone: string }
+  const RECENT_KEY = 'scout.recent';
+  const RECENT_KEPT = 8;
+  const RECENT_SHOWN = 5;
+  let recentPlaces: RecentPlace[] = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    if (Array.isArray(raw)) {
+      recentPlaces = raw
+        .filter((r) => r && typeof r.name === 'string' && Number.isFinite(r.lat) && Number.isFinite(r.lon))
+        .slice(0, RECENT_KEPT);
+    }
+  } catch {
+    /* storage blocked or garbled: start empty */
+  }
+  function rememberRecent() {
+    if (!centre || !label.name) return;
+    const here = { name: label.name, lat: centre.lat, lon: centre.lon, timeZone };
+    const first = recentPlaces[0];
+    if (first && first.name === here.name && Math.abs(first.lat - here.lat) < 1e-4 && Math.abs(first.lon - here.lon) < 1e-4) return;
+    recentPlaces = [here, ...recentPlaces.filter((r) => r.name !== here.name)].slice(0, RECENT_KEPT);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(recentPlaces));
+    } catch {
+      /* private mode */
+    }
+  }
+
   /**
    * Proof photos that arrived on a link, waiting for somewhere to live.
    *
@@ -7581,9 +7814,31 @@ export async function startScout(): Promise<void> {
     const list = $<HTMLElement>('kept-list');
     // Only while the field is empty: with a query typed, the results below are
     // what you asked for and this would be arguing with them.
-    const wanted = keptSpots.length > 0 && !searchBox.query() && searchBox.isOpen();
+    // Places opened lately, less any already kept: kept wins, being the one
+    // you chose to keep.
+    const recents = recentPlaces.filter((r) => indexOfSpot(keptSpots, r) === -1).slice(0, RECENT_SHOWN);
+    const wanted = (keptSpots.length > 0 || recents.length > 0) && !searchBox.query() && searchBox.isOpen();
     box.hidden = !wanted;
     if (!wanted) return;
+    $<HTMLElement>('kept-head').hidden = keptSpots.length === 0;
+    list.hidden = keptSpots.length === 0;
+    $<HTMLElement>('recent-head').hidden = recents.length === 0;
+    const recentList = $<HTMLElement>('recent-list');
+    recentList.hidden = recents.length === 0;
+    recentList.replaceChildren(
+      ...recents.map((place) => {
+        const li = document.createElement('li');
+        li.dataset.recent = String(recentPlaces.indexOf(place));
+        const body = document.createElement('span');
+        body.className = 'result-body';
+        const name = document.createElement('span');
+        name.className = 'nm';
+        name.textContent = place.name;
+        body.append(name);
+        li.append(body);
+        return li;
+      }),
+    );
 
     list.replaceChildren(
       ...keptSpots.map((spot, index) => {
@@ -7784,6 +8039,20 @@ export async function startScout(): Promise<void> {
   // all, and `fetchTide` returning null there is what tells the panel to
   // stay quiet rather than fail loudly — the same shape `loadSeeing` already
   // uses for a different network dependency this build cannot reach.
+  // Follows the page's date, like the Milky Way core; built on first open.
+  const meteorPanel: MeteorPanel = lazyFoldPanel('fold-meteor', () =>
+    import('./meteor-panel').then(({ createMeteorPanel }) =>
+      createMeteorPanel({
+        centre: () => centre,
+        lightPollutionZone: () =>
+          centre && lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null,
+        day: () => day?.dayStart ?? new Date(),
+        timeZone: () => timeZone,
+        goTo: goToInstant,
+      }),
+    ),
+  );
+
   const tidePanel = createTidePanel({
     centre: () => centre,
     isoDate: () => isoDate,
@@ -8639,6 +8908,20 @@ export async function startScout(): Promise<void> {
     goTonightPanel.restate();
   });
 
+  on('recent-list', 'click', (event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('[data-recent]');
+    const place = row && recentPlaces[Number(row.dataset.recent)];
+    if (!place) return;
+    searchBox.setQuery(place.name);
+    searchBox.closeResults();
+    searchBox.hide();
+    renderKept();
+    setCentre(
+      { name: place.name, detail: '', lat: place.lat, lon: place.lon, kind: 'kept', timeZone: place.timeZone || timeZone },
+      { refit: true },
+    );
+  });
+
   on('kept-list', 'click', (event) => {
     const target = event.target as HTMLElement;
     const dropped = target.closest<HTMLElement>('[data-drop]');
@@ -9149,6 +9432,7 @@ export async function startScout(): Promise<void> {
 
   function save() {
     if (!centre) return;
+    rememberRecent();
     try {
       sessionStorage.setItem(
         STORE_KEY,
@@ -9298,6 +9582,7 @@ export async function startScout(): Promise<void> {
 
     // A link that arrived without a name gets one, so the panel is not blank.
     if (link && !link.name) void nameTheSpot();
+    rememberRecent();
   })();
 
   /**
@@ -9396,6 +9681,7 @@ export async function startScout(): Promise<void> {
        it to land. */
     let lastPadding = '';
     let pendingPadding: { left: number; bottom: number } | null = null;
+    let wantedPadding = { left: 0, bottom: 0 };
     const padMap = (left: number, bottom: number) => {
       if (!map) return;
       const key = `${left}/${bottom}`;
@@ -9410,7 +9696,21 @@ export async function startScout(): Promise<void> {
         return;
       }
       lastPadding = key;
+      wantedPadding = { left, bottom };
       map.easeTo({ padding: { top: 0, right: 0, left, bottom }, duration: reducedMotion?.matches ? 0 : 380 });
+      // A place's fly-in can cancel this ease part-way (it measured 1.9 px of
+      // 398 on one load), and with `lastPadding` already set nothing asked
+      // again: the ring stayed centred on the whole map, half under the panel.
+      // So check where it landed, and finish the job if it didn't.
+      const m = map;
+      m.once('moveend', () => {
+        const now = m.getPadding();
+        const want = wantedPadding;
+        if (Math.abs((now.left ?? 0) - want.left) > 1 || Math.abs((now.bottom ?? 0) - want.bottom) > 1) {
+          lastPadding = '';
+          padMap(want.left, want.bottom);
+        }
+      });
     };
 
     /* The sidebar can be put away on a wide screen, for the whole map.

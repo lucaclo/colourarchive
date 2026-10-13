@@ -400,6 +400,95 @@ export function boundsOverlap(a: Bounds, b: Bounds): boolean {
 }
 
 /**
+ * Which of a set of boxes might touch a given box, without testing them all.
+ *
+ * The wall-curtain pass asks it of every building against every cast shadow:
+ * four thousand of each in central London is sixteen million box tests a
+ * frame, which measured 95 ms of a 95 ms slider minute. Boxes go into a
+ * uniform grid of about `cellM` metres; a query reads only the cells its box
+ * covers. Candidates still need `boundsOverlap`. The grid only rules out
+ * boxes that can't touch.
+ *
+ * Indices come back unordered. A caller that keeps the first of equal
+ * answers must break ties by index itself to match a brute-force loop.
+ */
+export class BoundsGrid {
+  private readonly cells = new Map<number, number[]>();
+  /** Boxes too big to bucket cheaply (a long low-sun shadow); always candidates. */
+  private readonly oversize: number[] = [];
+  private readonly lonCell: number;
+  private readonly latCell: number;
+  private readonly seen: Int32Array;
+  private stamp = 0;
+
+  constructor(
+    private readonly boxes: readonly Bounds[],
+    cellM = 150,
+  ) {
+    let lat = 0;
+    for (const b of boxes) lat += (b.south + b.north) / 2;
+    lat = boxes.length ? lat / boxes.length : 0;
+    this.latCell = cellM / 111_320;
+    this.lonCell = this.latCell / Math.max(0.05, Math.cos((lat * Math.PI) / 180));
+    this.seen = new Int32Array(boxes.length);
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      const [x0, x1, y0, y1] = this.span(b);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > 1024) {
+        this.oversize.push(i);
+        continue;
+      }
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          const key = BoundsGrid.key(x, y);
+          const cell = this.cells.get(key);
+          if (cell) cell.push(i);
+          else this.cells.set(key, [i]);
+        }
+      }
+    }
+  }
+
+  private span(b: Bounds): [number, number, number, number] {
+    return [
+      Math.floor(b.west / this.lonCell),
+      Math.floor(b.east / this.lonCell),
+      Math.floor(b.south / this.latCell),
+      Math.floor(b.north / this.latCell),
+    ];
+  }
+
+  private static key(x: number, y: number): number {
+    return (x + 2_000_000) * 4_000_000 + (y + 2_000_000);
+  }
+
+  /** Indices of boxes whose cells meet this box's cells, each once, unordered. */
+  candidates(b: Bounds): number[] {
+    const out: number[] = [];
+    const stamp = ++this.stamp;
+    const take = (i: number) => {
+      if (this.seen[i] === stamp) return;
+      this.seen[i] = stamp;
+      out.push(i);
+    };
+    for (const i of this.oversize) take(i);
+    const [x0, x1, y0, y1] = this.span(b);
+    // A query box bigger than the whole set is cheaper answered by listing everything.
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > this.cells.size) {
+      for (let i = 0; i < this.boxes.length; i++) take(i);
+    } else {
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          const cell = this.cells.get(BoundsGrid.key(x, y));
+          if (cell) for (const i of cell) take(i);
+        }
+      }
+    }
+    return out;
+  }
+}
+
+/**
  * Does this footprint touch the box at all?
  *
  * Needed because OpenMapTiles merges buildings into enormous MultiPolygons —

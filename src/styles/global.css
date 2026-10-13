@@ -1333,6 +1333,18 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 }
 @media (prefers-reduced-motion: reduce) { .lb-caption, .lightbox.details .lb-caption { transform: translateX(-50%); } }
 .lb-caption .k { color: var(--muted); }
+.lb-palette-row { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); margin: 0.45rem auto 0.1rem; }
+.lb-palette { display: flex; width: min(22rem, 62vw); height: 22px; border-radius: var(--r-xs); overflow: hidden; }
+.lb-swatch { appearance: none; border: 0; padding: 0; margin: 0; min-width: 6px; height: 100%; cursor: pointer; }
+.lb-copy {
+  appearance: none; border: 0; background: none; cursor: copy; min-height: 32px; padding: 0 var(--sp-1);
+  font-family: var(--font-ui); font-size: var(--t-caption); color: var(--secondary);
+}
+.lb-copy:hover { color: var(--fg); }
+.lb-copy:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; border-radius: var(--r-xs); }
+.lb-swatch:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
+.lb-hex { display: block; min-height: 1.2em; font-family: var(--font-data); font-size: var(--t-caption); color: var(--secondary); }
+.lb-hex:empty { min-height: 0; }
 .meta a, .lb-caption a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .meta .meta-scout-link { display: block; margin-top: 0.25rem; }
 .lb-hint {
@@ -1544,9 +1556,34 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   input:not([type='range']):not([type='checkbox']):not([type='radio']),
   select,
   textarea {
-    min-height: 44px;
+    min-height: var(--hit);
     font-size: max(16px, 1em);
   }
+}
+
+/* ===== Phone: smaller chrome ==============================================
+   At 44px every bar, pill and button took a band out of a 402px-wide screen,
+   and the photographs are the point. On a phone the touch floor drops to
+   36px — still a fair thumb, and every control that reads --hit follows —
+   and the tab bar gets slimmer to match. Text fields keep 16px type so iOS
+   still won't zoom on focus. */
+@media (max-width: 640px) {
+  :root { --hit: 36px; --tabbar-h: 2.75rem; --tabbar-inset: 0.5rem; }
+
+  .tab { min-width: 3.7rem; padding: 0 var(--sp-2); gap: 1px; }
+  .tab svg, .tabbar-add svg { width: 19px; height: 19px; }
+  .tab-label { font-size: 0.5625rem; }
+  .tabbar.compact .tab { min-width: 2.9rem; }
+  .tabbar.compact .tab svg { width: 18px; height: 18px; }
+
+  .tb-group { padding: 3px; }
+  .view-toggle button, .genre-btn, .search-box { min-height: 1.85rem; }
+  .view-toggle button, .genre-btn { padding: 0 0.6rem; }
+  .tb-button svg, .genre-btn svg.tb-icon { width: 15px; height: 15px; }
+  /* The capsule already makes the 36px target; the field inside it needn't. */
+  .tb-search .search-box input:not([type='range']):not([type='checkbox']) { min-height: 0; }
+
+  .spectrum { height: 26px; }
 }
 
 /* ============================================================================
@@ -1581,4 +1618,51 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   background-size: var(--cropmarks-size);
   background-position: var(--cropmarks-pos);
   background-repeat: no-repeat;
+}
+
+/* ── Colour results tray (index.astro) ────────────────────────────────────
+   The closest photos to a picked colour, as the toolbar's last row. Items
+   are built at runtime, so these rules are global. */
+/* The tray takes its own row, sized to what it holds: a full-width
+   break before it, then a box only as wide as its photos. */
+.topbar:has(.cf-tray:not([hidden])) { flex-wrap: wrap; row-gap: var(--sp-2); }
+.topbar:has(.cf-tray:not([hidden]))::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
+.cf-tray {
+  order: 10; flex: 0 1 auto; max-width: 100%; min-width: 0;
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  animation: cf-tray-in 180ms var(--spring);
+}
+.cf-tray[hidden] { display: none; }
+@keyframes cf-tray-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .cf-tray { animation-name: cf-tray-fade; } @keyframes cf-tray-fade { from { opacity: 0; } } }
+.cf-tray-head { flex: 0 0 auto; display: grid; justify-items: center; gap: var(--sp-1); }
+.cf-tray-dots { display: flex; gap: 3px; }
+.cf-tray-dots span { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1px var(--glass-edge); }
+.cf-tray-count { font-family: var(--font-data); font-size: var(--t-caption); color: var(--secondary); }
+.cf-tray-clear {
+  appearance: none; border: 0; background: none; cursor: pointer; min-height: 28px; padding: 0;
+  font-family: var(--font-ui); font-size: var(--t-caption); color: var(--fg); text-decoration: underline;
+}
+.cf-tray-clear[hidden] { display: none; }
+.cf-tray-list {
+  flex: 1 1 auto; min-width: 0; display: flex; gap: var(--sp-2);
+  overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+  -webkit-mask: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+          mask: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.cf-tray-list::-webkit-scrollbar { display: none; }
+.cf-tray-item {
+  flex: 0 0 auto; scroll-snap-align: start; appearance: none; border: 0; padding: 0; background: none; cursor: pointer;
+  display: grid; gap: 3px;
+}
+.cf-tray-item img { display: block; height: 72px; width: auto; border-radius: var(--r-xs); object-fit: cover; background: var(--surface-2); }
+.cf-tray-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; }
+.cf-tray-item:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; border-radius: var(--r-xs); }
+.cf-tray-item:hover img { filter: brightness(1.08); }
+@media (max-width: 600px) {
+  .cf-tray { padding: var(--sp-1) var(--sp-2); gap: var(--sp-2); }
+  .cf-tray-item img { height: 56px; }
 }

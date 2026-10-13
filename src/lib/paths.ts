@@ -32,6 +32,9 @@ export const BOOK_PATH = path.join(ROOT, 'src', 'data', 'book.json');
 // its own file, not folded into overrides or the book curation: this is
 // never derived and never affects rendering, chapter, or export — the only
 // thing that ever reads it is a human.
+// Print PDFs built from the book (api/book/pdf). Regenerated on demand,
+// large, and full of originals, so git-ignored.
+export const BOOK_PRINT_DIR = path.join(ROOT, '.book-print');
 export const NOTES_PATH = path.join(ROOT, 'src', 'data', 'notes.json');
 // Scout's curated list of named photographers to look for near a spot — see
 // `scout/sources/notable.ts`'s header. Hand-edited, like NOTES_PATH, so it is

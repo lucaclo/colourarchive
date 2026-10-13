@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { readManifest } from '../../lib/manifest';
-import { readBookCuration, writeBookCuration, orderedChaptersWithExclusions, type BookCuration } from '../../lib/book';
+import { readBookCuration, writeBookCuration, orderedChaptersWithExclusions, readLayoutFields, type BookCuration } from '../../lib/book';
 
 export const prerender = false;
 
@@ -38,7 +38,9 @@ export const POST: APIRoute = async ({ request }) => {
       excluded?: unknown;
       moved?: Record<string, unknown>;
     };
-    const curation: BookCuration = {};
+    // Page layout (book-pages.ts) rides along with every save: POST replaces
+    // the curation wholesale, so a reorder must not drop it.
+    const curation: BookCuration = readLayoutFields(body as Record<string, unknown>);
 
     if (body.chapters && typeof body.chapters === 'object') {
       const chapters: Record<string, string[]> = {};

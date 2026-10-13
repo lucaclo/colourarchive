@@ -23,13 +23,36 @@ let cached: Promise<LightPollutionField | null> | null = null;
  * not a page error over an optional refinement.
  */
 export function loadLightPollution(): Promise<LightPollutionField | null> {
-  if (!cached) cached = decode();
+  if (!cached) cached = decodeInWorker().then((field) => field ?? decodeZones(ASSET_URL));
   return cached;
 }
 
-async function decode(): Promise<LightPollutionField | null> {
+/** The worker's answer, or undefined when the main thread has to do it. */
+function decodeInWorker(): Promise<LightPollutionField | null | undefined> {
+  return new Promise((resolve) => {
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./light-pollution.worker.ts', import.meta.url), { type: 'module' });
+    } catch {
+      resolve(undefined);
+      return;
+    }
+    worker.onmessage = (e: MessageEvent<{ ok: boolean; unsupported?: boolean; field?: LightPollutionField }>) => {
+      worker.terminate();
+      resolve(e.data.ok ? e.data.field : e.data.unsupported ? undefined : null);
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      resolve(undefined);
+    };
+    worker.postMessage({ url: new URL(ASSET_URL, location.href).href });
+  });
+}
+
+/** Fetch and decode, wherever it runs: a worker, or this page as the fallback. */
+export async function decodeZones(url: string): Promise<LightPollutionField | null> {
   try {
-    const response = await fetch(ASSET_URL);
+    const response = await fetch(url);
     if (!response.ok) return null;
     const bitmap = await createImageBitmap(await response.blob());
     const { width, height } = bitmap;
