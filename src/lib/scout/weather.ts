@@ -250,6 +250,11 @@ export interface CloudStructure {
   blocking: number | null;
   /** The deck with the most sky, or null when they are level or unknown. */
   dominant: Deck | null;
+  /**
+   * A low deck in front of the sun, thick enough to flatten the light. A low
+   * deck that merely outnumbers the others at 13% is not that.
+   */
+  flat: boolean;
   /** Whole sentence naming what is where. Empty when nothing was measured. */
   note: string;
 }
@@ -273,7 +278,7 @@ export function cloudStructure(hour: WeatherHour | null | undefined): CloudStruc
   const high = hour?.cloudHigh ?? null;
   const blocking = blockingCover(hour ?? null);
   if (low == null && mid == null && high == null) {
-    return { low, mid, high, blocking, dominant: null, note: '' };
+    return { low, mid, high, blocking, dominant: null, flat: false, note: '' };
   }
 
   const decks: Array<[Deck, number]> = [];
@@ -289,10 +294,12 @@ export function cloudStructure(hour: WeatherHour | null | undefined): CloudStruc
     topCover >= 10 && (decks.length === 1 || topCover - decks[1][1] >= 10) ? topDeck : null;
 
   const parts = decks.map(([deck, cover]) => `${DECK_WORD[deck].toLowerCase()} ${Math.round(cover)}%`);
+  // The same line lightQuality draws for "mostly cloud".
+  const flat = dominant === 'low' && (blocking ?? 0) >= 65;
   let consequence = '';
   if (dominant === 'high' && (blocking ?? 0) < 30) {
     consequence = ' Thin high cloud over a clear sun. Shadows keep their edge, and there’s something up there to catch colour.';
-  } else if (dominant === 'low') {
+  } else if (flat) {
     consequence = ' The sun is behind the lowest deck. Flat light, whatever the total says.';
   } else if ((blocking ?? 0) >= 70) {
     consequence = ' Enough low and mid cloud to take the direct sun out.';
@@ -300,7 +307,7 @@ export function cloudStructure(hour: WeatherHour | null | undefined): CloudStruc
     consequence = ' Nothing much between the sun and the ground.';
   }
   const head = parts.join(', ').replace(/^./, (c) => c.toUpperCase());
-  return { low, mid, high, blocking, dominant, note: `${head}.${consequence}` };
+  return { low, mid, high, blocking, dominant, flat, note: `${head}.${consequence}` };
 }
 
 /* ── The light at the horizon ──────────────────────────────────────────────── */

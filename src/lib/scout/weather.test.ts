@@ -341,7 +341,15 @@ describe('cloudStructure', () => {
 
     const stratus = cloudStructure(hour({ cloudLow: 90, cloudMid: 20, cloudHigh: 0 }));
     assert.equal(stratus.dominant, 'low');
+    assert.equal(stratus.flat, true);
     assert.match(stratus.note, /Flat light/);
+  });
+
+  it('does not call a thin low deck flat light just because it leads', () => {
+    const scrap = cloudStructure(hour({ cloudLow: 13, cloudMid: 0, cloudHigh: 0 }));
+    assert.equal(scrap.dominant, 'low');
+    assert.equal(scrap.flat, false);
+    assert.doesNotMatch(scrap.note, /Flat light/);
   });
 
   it('refuses to name one when two decks are level', () => {

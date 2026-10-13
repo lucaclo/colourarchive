@@ -4114,8 +4114,7 @@ export async function startScout(): Promise<void> {
     const segment = day.segments.find((s) => lookup >= s.startMinute && lookup < s.endMinute);
     // A low deck in front of the sun is flat light whatever the cover figure,
     // the same call the deck note under the Sky tile makes.
-    const word =
-      structure?.dominant === 'low' && now.altitude > -0.833 ? 'Flat light' : lightWord(cover, now.altitude);
+    const word = structure?.flat && now.altitude > -0.833 ? 'Flat light' : lightWord(cover, now.altitude);
     set('glance-head', word ?? (segment ? PHASE_LABEL[segment.phase] : '—'));
 
     const next = nextLight(eventRows, instant);
@@ -4828,7 +4827,7 @@ export async function startScout(): Promise<void> {
     // With a low deck in front of the sun, the deck note's "flat light" is
     // the specific reading and the cover-based sentence would contradict it.
     $('wx-note').textContent =
-      structure.dominant === 'low'
+      structure.flat
         ? ''
         : lightQuality(structure.blocking ?? hour.cloudCover, current()?.altitude ?? -90);
     decks.textContent = structure.note;
