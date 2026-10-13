@@ -253,6 +253,8 @@ test('F04-E2 arrow keys move the selected page', async () => {
 
 test('F04-E3 a smaller trim keeps the page count and changes the check', async () => {
   const o = await openBook();
+  // Size, page check and bleed live behind Print since round 3.
+  await o.page.getByRole('button', { name: 'Print', exact: true }).click();
   await o.page.getByRole('combobox').filter({ hasText: 'Blurb' }).selectOption('a5-port');
   await o.page.waitForTimeout(200);
   assert.doesNotMatch((await pageCheck(o.page)) ?? '', /Blurb/);
@@ -266,10 +268,12 @@ test('F04-H3 print PDF counts up and offers the file', async () => {
     body: ['{"type":"progress","done":1,"total":2}', '{"type":"progress","done":2,"total":2}', '{"type":"done","ok":true,"href":"/api/book/pdf?file=colour-archive-test.pdf"}', ''].join('\n'),
   }));
   await o.page.route('**/api/book/pdf?file=*', (route) => route.fulfill({ body: '%PDF-1.4', headers: { 'content-type': 'application/pdf' } }));
-  await o.page.getByRole('button', { name: 'Print PDF' }).click();
+  await o.page.getByRole('button', { name: 'Print', exact: true }).click();
+  await o.page.getByRole('button', { name: 'Make PDF' }).click();
   await o.page.waitForTimeout(800);
   assert.ok(await o.page.getByRole('link', { name: 'Download' }).isVisible());
-  assert.equal(await o.page.getByRole('button', { name: 'Print PDF' }).isEnabled(), true);
+  // The panel closes once the download starts; the button is ready again behind it.
+  assert.equal(await o.page.locator('#book-pdf').isEnabled(), true);
   await done(o);
 });
 
@@ -279,7 +283,8 @@ test('F04-N1 a failed build says so', async () => {
     headers: { 'content-type': 'application/x-ndjson' },
     body: '{"type":"done","ok":false,"error":"A photo is missing."}\n',
   }));
-  await o.page.getByRole('button', { name: 'Print PDF' }).click();
+  await o.page.getByRole('button', { name: 'Print', exact: true }).click();
+  await o.page.getByRole('button', { name: 'Make PDF' }).click();
   await o.page.waitForTimeout(600);
   assert.match((await o.page.locator('#book-pdf-status').textContent()) ?? '', /A photo is missing/);
   await done(o);
@@ -292,6 +297,8 @@ const SCOUT = '/scout?at=55.9533,-3.1883&d=2026-08-12&t=720&tz=Europe/London&r=3
 test('F05-H1 the meteor fold names a shower and the best hour', async () => {
   const o = await open(SCOUT);
   await o.page.waitForTimeout(3000);
+  // The meteor fold sits in the Night sky group since round 3.
+  await o.page.getByText('Night sky', { exact: true }).click();
   await o.page.getByText('Meteor showers', { exact: true }).click();
   await o.page.waitForTimeout(1500);
   const line = (await o.page.locator('#meteor-line').textContent()) ?? '';
