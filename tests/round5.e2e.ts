@@ -318,3 +318,48 @@ test('R5-5-H3 an iPad still shows the two side by side', async () => {
   assert.equal(await o.page.locator('#mx-reffig').getAttribute('role'), null);
   await done(o);
 });
+
+// ── R5-6 ⌘K knows where you are ────────────────────────────────────────────
+
+const paletteRows = (page: Page) => page.evaluate(`[...document.querySelectorAll('#cmdk-list li')].map((li) => (li.classList.contains('cmdk-group') ? '# ' : '') + li.textContent)`) as Promise<string[]>;
+
+test('R5-6-H1 on Book the palette opens on its actions, and choosing one presses it', async () => {
+  const o = await open('/book');
+  const { page } = o;
+  await page.keyboard.press('Meta+k');
+  const rows = await paletteRows(page);
+  assert.equal(rows[0], '# This page');
+  assert.ok(rows.includes('Print') && rows.includes('Spreads'), rows.join(' | '));
+  assert.ok(!rows.includes('List view'), 'the current view is not offered');
+  assert.ok(rows.includes('# Go to') && rows.includes('Archive'), 'pages still listed');
+  assert.ok(!rows.includes('Book'), 'not the page you are on');
+  await page.keyboard.type('spre');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('[data-bookview="spreads"]').getAttribute('aria-pressed'), 'true');
+  await page.keyboard.press('Meta+k');
+  await page.keyboard.type('pdf');
+  assert.equal((await paletteRows(page))[1], 'Print', 'found by a keyword');
+  await done(o);
+});
+
+test('R5-6-H2 lightbox actions are offered only while the lightbox is open', async () => {
+  const o = await open('/');
+  const { page } = o;
+  await page.keyboard.press('Meta+k');
+  let rows = await paletteRows(page);
+  assert.ok(rows.includes('Overview') && !rows.includes('Similar photos'), rows.join(' | '));
+  await page.keyboard.press('Escape');
+  const f = page.locator('figure.frame').nth(3);
+  await f.scrollIntoViewIfNeeded();
+  await f.click({ force: true });
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Meta+k');
+  rows = await paletteRows(page);
+  assert.ok(rows.includes('Similar photos') && rows.includes('Photo details'), rows.join(' | '));
+  await page.keyboard.type('details');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('#lb-info').getAttribute('aria-pressed'), 'true');
+  await done(o);
+});

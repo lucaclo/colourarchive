@@ -22,7 +22,7 @@ const { items, suggest = [] } = Astro.props;
 ---
 
 <div class="cf" data-cf data-items={items}>
-  <button type="button" class="cf-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Search by colour" title="Search by colour">
+  <button type="button" class="cf-btn" data-cmdk="Search by colour" data-cmdk-keywords="hex, palette, hue" aria-haspopup="dialog" aria-expanded="false" aria-label="Search by colour" title="Search by colour">
     <span class="cf-dot" aria-hidden="true"></span>
   </button>
   <div class="cf-pop" role="dialog" aria-label="Search by colour" hidden>

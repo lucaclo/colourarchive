@@ -42,7 +42,7 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
       class="cmdk-input"
       id="cmdk-input"
       type="text"
-      placeholder="Go to a page, chapter, place or colour"
+      placeholder="Do something here, or go anywhere"
       autocomplete="off"
       spellcheck="false"
       role="combobox"
@@ -98,7 +98,7 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
 </style>
 
 <script>
-  import { queryCommands, rankCommands, type Command } from '../lib/command-palette';
+  import { pageCommands, queryCommands, rankCommands, type Command } from '../lib/command-palette';
   import { encodeScoutLink } from '../lib/scout/share';
   import { readSpots } from '../lib/scout/spots';
   import { SPOTS_KEY } from '../lib/scout/view/session';
@@ -137,6 +137,31 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
       /* storage blocked: no places */
     }
     return out;
+  }
+
+  /** The controls this page marks with `data-cmdk`, as they stand right now. */
+  function here(): Command[] {
+    let els = [...document.querySelectorAll<HTMLElement>('[data-cmdk]')].filter((el) => !root.contains(el));
+    // With a modal open (the lightbox, a dialog), only its own controls can be
+    // pressed, so only those are offered.
+    const modal = [...document.querySelectorAll<HTMLElement>('[aria-modal="true"], dialog[open]')].find(
+      (m) => !root.contains(m) && m.checkVisibility?.() !== false && !m.hidden,
+    );
+    if (modal) els = els.filter((el) => modal.contains(el));
+    return pageCommands(
+      els.map((el, i) => {
+        el.dataset.cmdkId ||= `a${i}`;
+        const visible = typeof el.checkVisibility === 'function' ? el.checkVisibility({ checkVisibilityCSS: true }) : el.offsetParent !== null;
+        return {
+          id: el.dataset.cmdkId,
+          title: el.dataset.cmdk || '',
+          keywords: el.dataset.cmdkKeywords,
+          visible: visible && !el.closest('[inert]'),
+          disabled: (el as HTMLButtonElement).disabled === true || el.getAttribute('aria-disabled') === 'true',
+          current: el.getAttribute('aria-pressed') === 'true' || el.hasAttribute('aria-current') || el.getAttribute('aria-selected') === 'true',
+        };
+      }),
+    );
   }
 
   let all: Command[] = base;
@@ -183,7 +208,9 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
   function open() {
     if (!root.hidden) return;
     returnFocus = document.activeElement as HTMLElement | null;
-    all = [...base, ...places()];
+    // The page you're on isn't somewhere to go.
+    const away = base.filter((c) => c.group !== 'Go to' || new URL(c.href!, location.href).pathname !== location.pathname);
+    all = [...here(), ...away, ...places()];
     input.value = '';
     active = 0;
     root.hidden = false;
@@ -199,6 +226,13 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
     const c = shown[i];
     if (!c) return;
     close();
+    if (c.action) {
+      const el = document.querySelector<HTMLElement>(`[data-cmdk-id="${CSS.escape(c.action)}"]`);
+      if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName) && !['checkbox', 'radio'].includes((el as HTMLInputElement).type)) el.focus();
+      else el?.click();
+      return;
+    }
+    if (!c.href) return;
     const url = new URL(c.href, location.href);
     // Same page, only the hash differs (a chapter on the archive): no reload.
     if (url.pathname === location.pathname && url.search === location.search && url.hash) {

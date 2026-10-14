@@ -85,7 +85,7 @@ const accent = manifest.chapters[0]
          Dragging files over the page or pasting anywhere also adds. -->
     <header class="insp-head">
       <h1>Reference</h1>
-      <button class="insp-addbtn" id="add-toggle" type="button" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add">Add</button>
+      <button class="insp-addbtn" id="add-toggle" type="button" data-cmdk="Add a reference" data-cmdk-keywords="upload, paste, link" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add">Add</button>
     </header>
 
     <section class="insp-add" id="insp-add" hidden={hasItems}>

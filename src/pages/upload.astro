@@ -38,7 +38,7 @@ const accent = manifest.chapters[0]
         adds too. The big drop zone is only the empty archive's first screen. */}
     <header class="ingest-head">
       <h1>Add &amp; remove</h1>
-      <button class="ingest-addbtn" id="add-photos" type="button">Add photos</button>
+      <button class="ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import">Add photos</button>
     </header>
 
     <form id="form" class="drop" aria-label="Upload photographs" hidden={allPhotos.length > 0}>
@@ -71,8 +71,8 @@ const accent = manifest.chapters[0]
         {/* Newest first puts the last import where you'd check it (Immich's
             Recently added); Colour is the archive's own order. */}
         <div class="manage-order" id="manage-order" role="group" aria-label="Order">
-          <button type="button" data-order="colour" aria-pressed="true">Colour</button>
-          <button type="button" data-order="newest" aria-pressed="false">Newest</button>
+          <button type="button" data-order="colour" aria-pressed="true" data-cmdk="Order by colour">Colour</button>
+          <button type="button" data-order="newest" aria-pressed="false" data-cmdk="Newest first" data-cmdk-keywords="recent, latest">Newest</button>
         </div>
       </div>
       <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>

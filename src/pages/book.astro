@@ -78,7 +78,7 @@ const accent = manifest.chapters[0]
       <div class="book-titlerow">
         <h1>The book</h1>
         <nav class="book-links" aria-label="The book elsewhere">
-          <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-link">Share<span aria-hidden="true"> ↗</span></a>
+          <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-link" data-cmdk="Share the book" data-cmdk-keywords="view, link">Share<span aria-hidden="true"> ↗</span></a>
           <a href="/book/zine" class="book-link">Magazine</a>
         </nav>
       </div>
@@ -86,14 +86,14 @@ const accent = manifest.chapters[0]
       {chapters.length > 0 && (
         <div class="book-tools">
           <div class="book-viewtoggle" role="group" aria-label="View">
-            <button type="button" data-bookview="list" aria-pressed="true">List</button>
-            <button type="button" data-bookview="spreads" aria-pressed="false">Spreads</button>
+            <button type="button" data-bookview="list" aria-pressed="true" data-cmdk="List view">List</button>
+            <button type="button" data-bookview="spreads" aria-pressed="false" data-cmdk="Spreads" data-cmdk-keywords="pages, layout">Spreads</button>
           </div>
           {/* Size, page count and bleed are only needed when printing, so they
               live behind Print rather than in the header all the time. */}
           <span class="book-printwrap">
             <span class="book-pdf-status" id="book-pdf-status" role="status" aria-live="polite"></span>
-            <button type="button" class="book-printbtn" id="book-print-open" aria-expanded="false" aria-controls="book-printpop" data-warn={pageCheck.ok ? '' : '1'}>Print</button>
+            <button type="button" class="book-printbtn" id="book-print-open" data-cmdk="Print" data-cmdk-keywords="pdf, export, trim, bleed" aria-expanded="false" aria-controls="book-printpop" data-warn={pageCheck.ok ? '' : '1'}>Print</button>
             <div class="book-printpop" id="book-printpop" hidden role="dialog" aria-label="Print">
               <label class="book-poprow">
                 <span>Size</span>

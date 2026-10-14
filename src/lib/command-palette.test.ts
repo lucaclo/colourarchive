@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseHex, queryCommands, rankCommands, scoreCommand, type Command } from './command-palette.ts';
+import { pageCommands, parseHex, queryCommands, rankCommands, scoreCommand, type Command } from './command-palette.ts';
 
 const C: Command[] = [
   { id: 'archive', title: 'Archive', group: 'Go to', href: '/' },
@@ -62,4 +62,28 @@ test('results come grouped, groups in the order of their best match', () => {
 test('without a text search only a hex gives a row', () => {
   assert.deepEqual(queryCommands('sea', { textSearch: false }), []);
   assert.equal(queryCommands('#fff', { textSearch: false }).length, 1);
+});
+
+const ctl = (id: string, title: string, more: Partial<import('./command-palette.ts').PageControl> = {}) =>
+  ({ id, title, visible: true, disabled: false, current: false, ...more });
+
+test('the page’s own controls become actions, minus hidden, disabled, current and repeats', () => {
+  const here = pageCommands([
+    ctl('print', 'Print'),
+    ctl('spreads', 'Spreads', { current: true }),
+    ctl('list', 'List'),
+    ctl('hidden', 'Similar', { visible: false }),
+    ctl('off', 'Download', { disabled: true }),
+    ctl('print2', 'print'),
+    ctl('blank', '  '),
+  ]);
+  assert.deepEqual(here.map((c) => [c.id, c.group, c.action]), [['here:print', 'This page', 'print'], ['here:list', 'This page', 'list']]);
+});
+
+test('page actions come first when nothing is typed, and are found by their keywords', () => {
+  const here = pageCommands([ctl('print', 'Print', { keywords: 'pdf, export' }), ctl('add', 'Add photos')]);
+  const all = [...here, ...C];
+  assert.deepEqual(rankCommands(all, '').slice(0, 3).map((c) => c.id), ['here:print', 'here:add', 'archive']);
+  assert.ok(rankCommands(all, '').some((c) => c.id === 'upload'), 'every page still listed');
+  assert.equal(rankCommands(all, 'pdf')[0].id, 'here:print');
 });
