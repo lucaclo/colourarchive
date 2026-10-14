@@ -1027,6 +1027,7 @@ const accent = '#f0b866';
           <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
+        <p class="cal-sky" id="cal-sky" hidden><span id="cal-sky-what">Sunset</span> <i class="sky-lit" aria-hidden="true"></i> may colour <i class="sky-bare" aria-hidden="true"></i> clear</p>
         <p class="cal-sub">Jump to</p>
         <div class="seasons" id="seasons"></div>
       </div>
@@ -3393,6 +3394,22 @@ const accent = '#f0b866';
   .cal-grid :global(.cal-day:focus-visible) { outline: 2px solid #ece9e3; outline-offset: 1px; }
   .cal-grid :global(.cal-day[aria-current='date']) { box-shadow: inset 0 0 0 1px color-mix(in oklab, #c1863c 80%, #ece9e3); color: #f0b866; }
   .cal-grid :global(.cal-day[aria-pressed='true']) { background: #ece9e3; color: #0b0b0b; box-shadow: none; }
+  /* The week's sky: a mark under the day's number. */
+  .cal-grid :global(.cal-day[data-sky]) { position: relative; }
+  .cal-grid :global(.cal-day[data-sky])::after,
+  .cal-sky i {
+    content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  }
+  .cal-grid :global(.cal-day[data-sky])::after { position: absolute; left: 50%; bottom: 4px; translate: -50% 0; }
+  .cal-grid :global(.cal-day[data-sky='lit'])::after, .cal-sky .sky-lit { background: #f0a24a; }
+  .cal-grid :global(.cal-day[data-sky='bare'])::after, .cal-sky .sky-bare { box-shadow: inset 0 0 0 1px var(--cal-muted); }
+  .cal-grid :global(.cal-day[aria-pressed='true'][data-sky='bare'])::after { box-shadow: inset 0 0 0 1px #0b0b0b; }
+  .cal-sky {
+    margin: 0.35rem 0 0; display: flex; align-items: center; gap: 0.35rem;
+    font-family: var(--font-ui); font-size: var(--t-caption); color: var(--cal-muted);
+  }
+  .cal-sky[hidden] { display: none; }
+  .cal-sky i:last-of-type { margin-left: 0.4rem; }
   .cal-sub {
     margin: 0.6rem 0 0.2rem; padding-top: 0.55rem; border-top: 1px solid var(--cal-sep);
     font-family: var(--font-ui); font-size: var(--t-caption); color: var(--cal-muted);

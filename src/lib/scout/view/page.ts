@@ -124,6 +124,7 @@ import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-la
 import { nightCameraConstraintsFor } from './night-camera';
 import { isAfterDark, lightWord, morningRows, nextLight, phaseRows, readableTitle } from '../glance';
 import { monthGrid, monthTitle, shiftMonth } from '../calendar';
+import { bearingsFor, skyDays, skyMarks, type SkyEvent, type SkyMark } from '../sky-week';
 import {
   MINUTES_PER_DAY,
   PHASE_LABEL,
@@ -5265,6 +5266,55 @@ export async function startScout(): Promise<void> {
      page through, today ringed, the chosen day filled. */
   let calMonth = '';
 
+  /* The week's sky (Alpenglow's seven days, Sunsethue): each forecast day
+     carries the panel's own horizon verdict for the sunset, or the sunrise
+     when the morning is the one being planned. Lit is a filled mark, bare
+     a ring, blocked nothing; the reason is the day's tooltip. Fetched when
+     the calendar opens, once per place, event and day. */
+  let skyWeek: { key: string; event: SkyEvent; marks: Map<string, SkyMark> } | null = null;
+  let skyWeekLoading = '';
+
+  async function loadSkyWeek() {
+    if (!centre) return;
+    const at = centre;
+    const event: SkyEvent = chosenSkyEvent() ?? 'sunset';
+    const from = todayHere();
+    const key = `${at.lat.toFixed(3)},${at.lon.toFixed(3)},${event},${from}`;
+    if (skyWeek?.key === key || skyWeekLoading === key) return;
+    skyWeekLoading = key;
+    const days = skyDays(at.lat, at.lon, from, timeZone, event);
+    const distanceM = horizonSampleDistanceM();
+    let pin: WeatherReport | null = null;
+    const gates = new Map<number, WeatherReport | null>();
+    await Promise.all(
+      bearingsFor(days).map(async (bearing) => {
+        try {
+          const pair = STATIC
+            ? await fetchHorizonPairDirect(at.lat, at.lon, bearing, distanceM)
+            : await fetch(
+                `/api/scout/weather?${new URLSearchParams({
+                  lat: String(at.lat),
+                  lon: String(at.lon),
+                  bearing: bearing.toFixed(2),
+                  gateKm: (distanceM / 1000).toFixed(0),
+                })}`,
+              )
+                .then((response) => response.json())
+                .then((data) => (data.ok ? { pin: data.report as WeatherReport, gate: (data.gate ?? null) as WeatherReport | null } : null));
+          pin ??= pair?.pin ?? null;
+          gates.set(bearing, pair?.gate ?? null);
+        } catch {
+          gates.set(bearing, null);
+        }
+      }),
+    );
+    if (skyWeekLoading !== key) return;
+    skyWeekLoading = '';
+    if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
+    skyWeek = { key, event, marks: new Map(skyMarks(days, pin, gates, distanceM).map((m) => [m.iso, m])) };
+    if (!$<HTMLElement>('datesheet').hidden) renderCalendar();
+  }
+
   function renderCalendar() {
     if (!calMonth) calMonth = isoDate.slice(0, 7);
     $('cal-title').textContent = monthTitle(calMonth);
@@ -5285,6 +5335,16 @@ export async function startScout(): Promise<void> {
           button.setAttribute('aria-label', formatDayLabel(iso, timeZone));
           button.setAttribute('aria-pressed', String(iso === isoDate));
           if (iso === today) button.setAttribute('aria-current', 'date');
+          const sky = skyWeek?.marks.get(iso);
+          if (sky && sky.verdict !== 'blocked') {
+            button.dataset.sky = sky.verdict;
+            const what = skyWeek!.event === 'sunrise' ? 'Sunrise' : 'Sunset';
+            button.title = `${what}: ${sky.note}`;
+            button.setAttribute(
+              'aria-label',
+              `${formatDayLabel(iso, timeZone)}, ${what.toLowerCase()} ${sky.verdict === 'lit' ? 'sky may colour' : 'clear, little cloud to catch it'}`,
+            );
+          }
           button.addEventListener('click', () => {
             setDate(iso);
             closeCalendar();
@@ -5294,6 +5354,10 @@ export async function startScout(): Promise<void> {
         return row;
       }),
     );
+    const key = $<HTMLElement>('cal-sky');
+    const shown = !!skyWeek && [...skyWeek.marks.values()].some((m) => m.verdict !== 'blocked' && m.iso.startsWith(calMonth));
+    key.hidden = !shown;
+    if (shown) $('cal-sky-what').textContent = skyWeek!.event === 'sunrise' ? 'Sunrise' : 'Sunset';
   }
 
   /** Hang the calendar off the chip: below it if it fits, else above. */
@@ -5314,6 +5378,7 @@ export async function startScout(): Promise<void> {
   function openCalendar() {
     calMonth = isoDate.slice(0, 7);
     renderCalendar();
+    void loadSkyWeek();
     const pop = $<HTMLElement>('datesheet');
     pop.hidden = false;
     placeCalendar();

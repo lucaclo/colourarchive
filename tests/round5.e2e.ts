@@ -197,3 +197,61 @@ test('R5-3-H2 holding a photo zooms every photo in the group to the same spot', 
   assert.match(await page.locator('.survey-frame img').first().evaluate((e) => getComputedStyle(e).transform), /^none|matrix\(1, 0, 0, 1/);
   await done(o);
 });
+
+// ── R5-4 the week's sky in the Scout calendar ──────────────────────────────
+
+/** An hourly forecast over the next eight days with the same cloud every hour. */
+function fakeReport(low: number, mid: number, high: number) {
+  const start = Math.floor(Date.now() / 3_600_000) * 3_600_000;
+  const hours = Array.from({ length: 8 * 24 }, (_, i) => ({
+    time: start + i * 3_600_000, temperatureC: 12, dewPointC: 8, cloudCover: Math.max(low, mid, high),
+    cloudLow: low, cloudMid: mid, cloudHigh: high, weatherCode: 2, windSpeedKmh: 10, windDirection: 200, precipitationMm: 0,
+  }));
+  return { latitude: 51.5, longitude: -0.09, fetchedAt: Date.now(), current: hours[0], hours };
+}
+
+test('R5-4-H1 forecast days in the calendar carry the sunset verdict, one far sample per bearing', async () => {
+  const o = await open('/scout');
+  const { page } = o;
+  const asked: string[] = [];
+  await page.route(/\/api\/scout\/weather/, (r) => {
+    const u = new URL(r.request().url());
+    if (u.searchParams.get('bearing')) asked.push(u.searchParams.get('bearing')!);
+    // Overhead: high cloud to catch the light. Far out: an open horizon.
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, report: fakeReport(5, 20, 60), gate: fakeReport(10, 5, 0) }) });
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  await page.goto(`${ORIGIN}/scout?at=51.5079,-0.0877&tz=Europe/London&n=London&d=${today}&t=1020&r=4`);
+  await page.waitForTimeout(4000);
+  await page.locator('#chip-date').click();
+  await page.waitForFunction(`document.querySelectorAll('.cal-day[data-sky]').length > 0`, null, { timeout: 15_000 });
+  // The month on screen may stop before the week does.
+  const lit = await page.locator('.cal-day[data-sky="lit"]').count();
+  assert.ok(lit >= 1 && lit <= 7, `marked ${lit}`);
+  assert.equal(await page.locator('.cal-day[data-sky="bare"]').count(), 0);
+  assert.match((await page.locator('.cal-day[data-sky="lit"]').first().getAttribute('title')) ?? '', /^Sunset: The horizon is open/);
+  assert.ok(await page.locator('#cal-sky').isVisible());
+  const bearings = new Set(asked);
+  assert.ok(bearings.size >= 2 && bearings.size < 7, `bearings asked: ${[...bearings]}`);
+  // Opening it again asks for nothing new.
+  const n = asked.length;
+  await page.locator('#chip-date').click();
+  await page.locator('#chip-date').click();
+  await page.waitForTimeout(500);
+  assert.equal(asked.length, n);
+  await done(o);
+});
+
+test('R5-4-E1 a low deck on the horizon marks nothing', async () => {
+  const o = await open('/scout');
+  const { page } = o;
+  await page.route(/\/api\/scout\/weather/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, report: fakeReport(5, 20, 60), gate: fakeReport(90, 40, 0) }) }));
+  const today = new Date().toISOString().slice(0, 10);
+  await page.goto(`${ORIGIN}/scout?at=51.5079,-0.0877&tz=Europe/London&n=London&d=${today}&t=1020&r=4`);
+  await page.waitForTimeout(4000);
+  await page.locator('#chip-date').click();
+  await page.waitForTimeout(2500);
+  assert.equal(await page.locator('.cal-day[data-sky]').count(), 0);
+  assert.equal(await page.locator('#cal-sky').isHidden(), true);
+  await done(o);
+});
