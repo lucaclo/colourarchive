@@ -120,3 +120,29 @@ test('R5-1-H4 bulk remove takes all the selected at once, with one Undo', async 
   assert.equal(await cellCount(o.page), before);
   await done(o);
 });
+
+// ── R5-2 colours that go with it ───────────────────────────────────────────
+
+test('R5-2-H1 a partner colour adds itself, and finds as many photos as it said', async () => {
+  const o = await open('/?colour=3a7f9a');
+  const { page } = o;
+  await page.getByRole('button', { name: 'Search by colour' }).first().click();
+  const comp = page.locator('.cf-goes-btn[data-partner="complementary"]').first();
+  assert.ok(await comp.isVisible());
+  const said = Number(await comp.locator('.cf-goes-n').textContent());
+  assert.match((await comp.getAttribute('aria-label')) ?? '', /^Complementary, #/);
+  await comp.click();
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('.cf-chip').count(), 2, 'two colours now');
+  assert.equal(Number(await page.locator('.cf-count').first().textContent()), said);
+  assert.match(page.url(), /colour=3a7f9a,[0-9a-f]{6}/);
+  assert.equal(await page.locator('.cf-goes').first().isHidden(), true, 'offered for one colour only');
+  await done(o);
+});
+
+test('R5-2-E1 a grey has nothing to go with', async () => {
+  const o = await open('/?colour=808080');
+  await o.page.getByRole('button', { name: 'Search by colour' }).first().click();
+  assert.equal(await o.page.locator('.cf-goes').first().isHidden(), true);
+  await done(o);
+});
