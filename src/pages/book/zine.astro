@@ -2,7 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { readManifest } from '../../lib/manifest';
 import { readBookCuration, curatedChapters } from '../../lib/book';
-import { FOLD_STEPS } from '../../lib/zine/imposition';
+import { FOLD_STEPS, FOLD_STEPS_16 } from '../../lib/zine/imposition';
 
 // The magazine maker: an eight-page, one-sheet zine built from the archive,
 // laid out the way Dirty Little Zine (dirtylittlezine.com) does it. Server-
@@ -40,6 +40,10 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       </a>
       <h1 class="zn-title">Magazine</h1>
       <div class="zn-tools">
+        <div class="zn-seg" role="radiogroup" aria-label="Pages" id="zn-format">
+          <button type="button" role="radio" data-format="8" aria-checked="true" aria-label="8 pages, one sheet" title="8 pages, one sheet">8 pp</button>
+          <button type="button" role="radio" data-format="16" aria-checked="false" aria-label="16 pages, two sheets" title="16 pages, two sheets nested" data-cmdk="Sixteen pages" data-cmdk-keywords="16, two sheets">16 pp</button>
+        </div>
         <div class="zn-seg" role="radiogroup" aria-label="Paper size" id="zn-paper">
           <button type="button" role="radio" data-paper="letter" aria-checked="false">Letter</button>
           <button type="button" role="radio" data-paper="a4" aria-checked="true">A4</button>
@@ -128,12 +132,17 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
           <text x="185" y="85">3</text>
         </g>
       </svg>
-      <ol class="zn-steps">
+      <ol class="zn-steps" data-for="8">
         {FOLD_STEPS.map((s) => (
           <li><strong>{s.title}</strong> {s.body}</li>
         ))}
       </ol>
-      <p class="zn-foldtip">Print at 100%, one side.</p>
+      <ol class="zn-steps" data-for="16" hidden>
+        {FOLD_STEPS_16.map((s) => (
+          <li><strong>{s.title}</strong> {s.body}</li>
+        ))}
+      </ol>
+      <p class="zn-foldtip" id="zn-foldtip">Print at 100%, one side.</p>
     </div>
   </dialog>
 
@@ -268,7 +277,9 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-quiet { color: var(--muted); }
 
   /* ── Rail ──────────────────────────────────────────────────────────── */
-  .zn-rail { grid-area: rail; border-right: 1px solid var(--separator); overflow-y: auto; }
+  /* contain: size, so a long rail (sixteen pages is nine thumbnails) scrolls
+     inside its column instead of making the stage and editor rows taller. */
+  .zn-rail { grid-area: rail; border-right: 1px solid var(--separator); overflow-y: auto; contain: size; }
   .zn-rail ol { list-style: none; margin: 0; padding: 0.9rem 0.8rem; display: flex; flex-direction: column; gap: 0.9rem; }
   .zn-rail :global(li) { position: relative; }
   .zn-rail :global(.zn-thumb) {
@@ -442,6 +453,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-folddiagram text { fill: var(--secondary); font-family: var(--font-display); font-style: italic; font-size: 11px; text-anchor: middle; dominant-baseline: middle; }
   .zn-foldcap { text-align: center; font-size: var(--t-caption); color: var(--muted); margin: 0.4rem 0 1rem; }
   .zn-steps { margin: 0; padding-left: 1.4rem; display: grid; gap: 0.7rem; font-size: var(--t-body); line-height: 1.5; color: var(--secondary); }
+  .zn-steps[hidden] { display: none; }
   .zn-steps strong { display: block; color: var(--fg); font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.05rem; }
   .zn-foldtip { margin: 1.1rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--separator); font-size: var(--t-footnote); color: var(--secondary); }
 
@@ -551,7 +563,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     .zn-tools { margin-left: 0; width: 100%; }
     .zn-tools .zn-primary { margin-left: auto; }
     .zn-stage { height: 54svh; padding: 1rem 1rem 1.6rem; }
-    .zn-rail { border-right: 0; border-bottom: 1px solid var(--separator); overflow-x: auto; }
+    .zn-rail { border-right: 0; border-bottom: 1px solid var(--separator); overflow-x: auto; contain: none; }
     .zn-rail ol { flex-direction: row; padding: 0.6rem 1rem; gap: 0.5rem; }
     .zn-rail :global(li) { flex: 0 0 auto; }
     .zn-edit { padding-inline: 1rem; }
@@ -567,13 +579,16 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 </style>
 
 <script>
-  import { SLIDES, SPREADS, PANELS, PAPER, COVER_PANEL, BACK_PANEL, pageAspect, sheetPixels, sheetPoints, type PaperId, type Slide } from '../../lib/zine/imposition';
   import {
-    freshDoc, reviveDoc, swapPages, moveSpread, mergeSpread, splitSpread, setFit, applyCombination, photosInDoc, isEmpty, READING_ORDER, FONTS, INKS, TONES,
+    PAPER, COVER_PANEL, BACK_PANEL, pageAspect, sheetPixels, sheetPoints, slidesFor, spreadsFor, readingOrder, pageNumber, canMerge, sheetsFor,
+    type PaperId, type Slide, type ZineFormat,
+  } from '../../lib/zine/imposition';
+  import {
+    freshDoc, reviveDoc, swapPages, moveSpread, mergeSpread, splitSpread, setFit, setFormat, applyCombination, photosInDoc, isEmpty, FONTS, INKS, TONES,
     type ZineDoc, type PhotoRef, type PageDoc, type CoverDoc, type MergeDoc, type TextStyle, type FrameStyle, type Fit,
   } from '../../lib/zine/doc';
   import { drawPage, drawSpread, drawSheet, drawGutter, coverGeometry, photoBox, type RenderOpts } from '../../lib/zine/render';
-  import { jpegToPdf } from '../../lib/zine/pdf';
+  import { jpegsToPdf } from '../../lib/zine/pdf';
   import {
     isHex, hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, nearestWada, readCover, RULE_LABEL, type CoverReading, combination, combinationsWith, dominantColours, rankCombinations, type Swatch,
   } from '../../lib/zine/colour';
@@ -584,6 +599,8 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     chapters: { name: string; photos: ArchivePhoto[] }[];
   };
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+  /** What you edit, in reading order, for the zine's page count. */
+  const slides = () => slidesFor(doc.format);
 
   // ── Storage ─────────────────────────────────────────────────────────────
   // The zine itself goes in localStorage. Photos from this device are too big
@@ -742,7 +759,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   }
 
   function renderStage() {
-    const s = SLIDES[current];
+    const s = slides()[current];
     stageAvail ??= measureStage();
     const { w: availW, h: availH } = stageAvail;
     const a = slideAspect(s);
@@ -760,7 +777,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   function renderRail() {
     const h = window.matchMedia('(max-width: 760px)').matches ? 68 : 90;
     document.querySelectorAll<HTMLCanvasElement>('#zn-rail canvas').forEach((c) => {
-      const s = SLIDES[Number(c.dataset.slide)];
+      const s = slides()[Number(c.dataset.slide)];
       const w = Math.round(h * slideAspect(s));
       const ctx = sizeCanvas(c, w, h);
       drawSlide(ctx, s, w, h, screenOpts(false), true);
@@ -782,11 +799,11 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   const rail = $('zn-rail');
   function buildRail() {
     rail.replaceChildren(
-      ...SLIDES.map((s, i) => {
+      ...slides().map((s, i) => {
         const li = document.createElement('li');
         if (s.kind === 'spread') {
           li.draggable = true;
-          li.dataset.spread = String(SPREADS.indexOf(s.spread));
+          li.dataset.spread = String(spreadsFor(doc.format).indexOf(s.spread));
         }
         const b = document.createElement('button');
         b.type = 'button';
@@ -843,7 +860,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   });
 
   function go(i: number) {
-    current = Math.max(0, Math.min(SLIDES.length - 1, i));
+    current = Math.max(0, Math.min(slides().length - 1, i));
     rail.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => b.setAttribute('aria-current', String(Number(b.dataset.go) === current)));
     buildEdit();
     renderStage();
@@ -969,9 +986,8 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 
   function pagePanel(panel: number, side: string) {
     const p: PageDoc = doc.pages[panel];
-    const info = PANELS[panel];
     return `<div class="zn-page">
-      <p class="zn-pagehead">${side} <small>page ${info.page}</small></p>
+      <p class="zn-pagehead">${side} <small>page ${pageNumber(doc.format, panel)}</small></p>
       ${well(`page.${panel}`, p.photo, 'Add photo')}
       <div class="zn-fields">
         <label class="zn-field"><span>Caption</span><textarea rows="2" data-text="page.${panel}.caption" placeholder="">${esc(p.caption)}</textarea></label>
@@ -1005,7 +1021,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   }, true);
 
   function buildEdit() {
-    const s = SLIDES[current];
+    const s = slides()[current];
     edit.style.setProperty('--page-aspect', String(pageAspect(doc.paper)));
     if (s.kind === 'single') {
       edit.innerHTML = s.panel === COVER_PANEL ? coverPanel(COVER_PANEL, doc.cover, 'cover') : coverPanel(BACK_PANEL, doc.back, 'back');
@@ -1028,8 +1044,8 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       <div class="zn-mid">
         <button type="button" class="zn-icon" data-act="swap" aria-label="Swap the two pages" title="Swap the two pages"><svg viewBox="0 0 24 24">${ICON.swap}</svg></button>
         <span class="zn-midlabel">Swap</span>
-        <button type="button" class="zn-icon" data-act="merge" aria-label="Make one picture across both pages" title="Make one picture across both pages"><svg viewBox="0 0 24 24">${ICON.merge}</svg></button>
-        <span class="zn-midlabel">Join</span>
+        ${canMerge(sp) ? `<button type="button" class="zn-icon" data-act="merge" aria-label="Make one picture across both pages" title="Make one picture across both pages"><svg viewBox="0 0 24 24">${ICON.merge}</svg></button>
+        <span class="zn-midlabel">Join</span>` : ''}
       </div>
       ${pagePanel(sp.right, 'Right page')}
     </div>`;
@@ -1063,7 +1079,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       return;
     }
     if (el.dataset.wheel) { openWheel(el.dataset.wheel); return; }
-    const s = SLIDES[current];
+    const s = slides()[current];
     if (el.dataset.set) {
       if (el.dataset.set === 'font') doc.font = el.dataset.value as ZineDoc['font'];
       else {
@@ -1154,7 +1170,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 
   // Dropping a file: onto a photo well, or onto the page itself on the stage.
   function dropTargetOnStage(clientX: number): string {
-    const s = SLIDES[current];
+    const s = slides()[current];
     if (s.kind === 'single') return `page.${s.panel}`;
     if (doc.merged[s.spread.id].on) return `merged.${s.spread.id}`;
     const r = canvas.getBoundingClientRect();
@@ -1191,7 +1207,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   // A photo that fills its page can be dragged to choose what the crop keeps.
   interface PanTarget { ref: PhotoRef; boxW: number; boxH: number }
   function panTargetAt(clientX: number): PanTarget | null {
-    const s = SLIDES[current];
+    const s = slides()[current];
     const { w, h } = stageBox;
     const boxed = (ref: PhotoRef, f: FrameStyle, bw: number, u: number) => {
       const b = photoBox(f, 0, 0, bw, h, u);
@@ -1239,7 +1255,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   canvas.addEventListener('pointercancel', endPan);
 
   function updateStageHint() {
-    const s = SLIDES[current];
+    const s = slides()[current];
     const has = s.kind === 'single'
       ? Boolean(doc.pages[s.panel].photo)
       : doc.merged[s.spread.id].on
@@ -1253,6 +1269,24 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   function syncPaper() {
     paperSeg.querySelectorAll<HTMLElement>('[data-paper]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.paper === doc.paper)));
   }
+  // Eight pages or sixteen. Nothing is lost switching back and forth.
+  const formatSeg = $('zn-format');
+  function syncFormat() {
+    formatSeg.querySelectorAll<HTMLElement>('[data-format]').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.format) === doc.format)));
+    document.querySelectorAll<HTMLElement>('.zn-steps[data-for]').forEach((ol) => { ol.hidden = Number(ol.dataset.for) !== doc.format; });
+    $('zn-foldtip').textContent = doc.format === 16 ? 'Print both sheets at 100%, one side each.' : 'Print at 100%, one side.';
+  }
+  formatSeg.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-format]');
+    if (!b) return;
+    const format = Number(b.dataset.format) as ZineFormat;
+    if (format === doc.format) return;
+    setFormat(doc, format);
+    current = Math.min(current, slides().length - 1);
+    syncFormat();
+    changed(true);
+  });
+
   paperSeg.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-paper]');
     if (!b) return;
@@ -1265,6 +1299,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   const viewer = $<HTMLDialogElement>('zn-viewer');
   const viewCanvas = $<HTMLCanvasElement>('zn-viewcanvas');
   let viewAt = 0;
+  let viewSheet = 0;
   let viewMode: 'pages' | 'sheet' = 'pages';
   function renderViewer() {
     const body = viewCanvas.parentElement!;
@@ -1272,31 +1307,41 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     const availW = body.clientWidth - (narrow ? 32 : 160);
     const availH = body.clientHeight - (narrow ? 80 : 0);
     const sheet = viewMode === 'sheet';
-    const a = sheet ? PAPER[doc.paper].widthMM / PAPER[doc.paper].heightMM : slideAspect(SLIDES[viewAt]);
+    const a = sheet ? PAPER[doc.paper].widthMM / PAPER[doc.paper].heightMM : slideAspect(slides()[viewAt]);
     let w = availW;
     let h = w / a;
     if (h > availH) { h = availH; w = h * a; }
     w = Math.floor(w);
     h = Math.floor(h);
     const ctx = sizeCanvas(viewCanvas, w, h);
-    if (sheet) drawSheet(ctx, doc, w, h, screenOpts(false), true);
-    else drawSlide(ctx, SLIDES[viewAt], w, h, screenOpts(false), false);
-    $('zn-viewlabel').textContent = sheet ? `${PAPER[doc.paper].label}, as it prints` : SLIDES[viewAt].label;
+    const sheets = sheetsFor(doc.format);
+    viewSheet = Math.min(viewSheet, sheets - 1);
+    if (sheet) drawSheet(ctx, doc, w, h, screenOpts(false), true, viewSheet);
+    else drawSlide(ctx, slides()[viewAt], w, h, screenOpts(false), false);
+    const which = sheets > 1 ? `${viewSheet === 0 ? 'Outside' : 'Inside'} sheet, ` : '';
+    $('zn-viewlabel').textContent = sheet ? `${which}${PAPER[doc.paper].label}, as it prints` : slides()[viewAt].label;
     $('zn-viewnote').textContent = sheet
-      ? ''
-      : `${viewAt + 1} / ${SLIDES.length}`;
-    $<HTMLButtonElement>('zn-prev').disabled = sheet || viewAt === 0;
-    $<HTMLButtonElement>('zn-next').disabled = sheet || viewAt === SLIDES.length - 1;
+      ? (sheets > 1 ? `${viewSheet + 1} / ${sheets}` : '')
+      : `${viewAt + 1} / ${slides().length}`;
+    $<HTMLButtonElement>('zn-prev').disabled = sheet ? viewSheet === 0 : viewAt === 0;
+    $<HTMLButtonElement>('zn-next').disabled = sheet ? viewSheet >= sheets - 1 : viewAt === slides().length - 1;
   }
   $('zn-preview').addEventListener('click', () => {
     viewAt = current;
     viewer.showModal();
     renderViewer();
   });
-  $('zn-prev').addEventListener('click', () => { viewAt = Math.max(0, viewAt - 1); renderViewer(); });
-  $('zn-next').addEventListener('click', () => { viewAt = Math.min(SLIDES.length - 1, viewAt + 1); renderViewer(); });
+  $('zn-prev').addEventListener('click', () => {
+    if (viewMode === 'sheet') viewSheet = Math.max(0, viewSheet - 1);
+    else viewAt = Math.max(0, viewAt - 1);
+    renderViewer();
+  });
+  $('zn-next').addEventListener('click', () => {
+    if (viewMode === 'sheet') viewSheet = Math.min(sheetsFor(doc.format) - 1, viewSheet + 1);
+    else viewAt = Math.min(slides().length - 1, viewAt + 1);
+    renderViewer();
+  });
   viewer.addEventListener('keydown', (e) => {
-    if (viewMode !== 'pages') return;
     if (e.key === 'ArrowLeft') $('zn-prev').click();
     if (e.key === 'ArrowRight') $('zn-next').click();
   });
@@ -1762,13 +1807,14 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   function fillFromBook() {
     const photos = data.chapters.flatMap((c) => c.photos);
     if (!photos.length) { toast('The book is empty, so there’s nothing to fill it with yet.'); return; }
-    const { paper, font, palette, cover, back } = doc;
-    doc = freshDoc(paper);
+    const { paper, format, font, palette, cover, back } = doc;
+    doc = freshDoc(paper, format);
     Object.assign(doc, { font, palette, cover, back });
-    // Spread the book across all eight pages, so a long book gives a sample
-    // of every chapter rather than eight frames from the first.
-    READING_ORDER.forEach((panel, i) => {
-      const p = photos[Math.floor((i * photos.length) / READING_ORDER.length)];
+    // Spread the book across every page, so a long book gives a sample of
+    // every chapter rather than the first chapter's frames.
+    const order = readingOrder(doc.format);
+    order.forEach((panel, i) => {
+      const p = photos[Math.floor((i * photos.length) / order.length)];
       if (p) doc.pages[panel].photo = fromArchive(p);
     });
     current = 0;
@@ -1781,7 +1827,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   });
   $('zn-reset').addEventListener('click', () =>
     ask('Start over?', 'This clears every page.', 'Start over', () => {
-      doc = freshDoc(doc.paper);
+      doc = freshDoc(doc.paper, doc.format);
       current = 0;
       void clearFiles();
       syncPaper();
@@ -1799,24 +1845,31 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     });
   }
 
-  async function renderPrint(): Promise<{ jpeg: Blob; w: number; h: number }> {
+  /** Every sheet as a print-sized JPEG: one for eight pages, two for sixteen. */
+  async function renderPrint(): Promise<{ jpeg: Blob; w: number; h: number }[]> {
     const refs = photosInDoc(doc);
     const loaded = new Map<string, HTMLImageElement>();
     await Promise.all(refs.map(async (r) => loaded.set(r.full, await loadFull(r))));
     await document.fonts.ready;
     const { w, h } = sheetPixels(doc.paper);
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    drawSheet(c.getContext('2d')!, doc, w, h, { image: (r) => loaded.get(r.full) ?? null, hints: false });
-    const jpeg = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.92));
-    if (!jpeg) throw new Error('this browser couldn’t make the image');
-    return { jpeg, w, h };
+    const out: { jpeg: Blob; w: number; h: number }[] = [];
+    // One canvas at a time: two print-sized ones at once is past what iOS allows.
+    for (let sheet = 0; sheet < sheetsFor(doc.format); sheet++) {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      drawSheet(c.getContext('2d')!, doc, w, h, { image: (r) => loaded.get(r.full) ?? null, hints: false }, false, sheet);
+      const jpeg = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.92));
+      c.width = c.height = 0;
+      if (!jpeg) throw new Error('this browser couldn’t make the image');
+      out.push({ jpeg, w, h });
+    }
+    return out;
   }
 
-  function fileName(ext: string) {
+  function fileName(ext: string, part = '') {
     const slug = doc.cover.title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    return `${slug || 'zine'}-${PAPER[doc.paper].label.toLowerCase()}.${ext}`;
+    return `${slug || 'zine'}-${doc.format}pp-${PAPER[doc.paper].label.toLowerCase()}${part ? `-${part}` : ''}.${ext}`;
   }
   function saveBlob(blob: Blob, name: string) {
     const a = document.createElement('a');
@@ -1833,14 +1886,17 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     btn.disabled = true;
     btn.textContent = 'Making it…';
     try {
-      const { jpeg, w, h } = await renderPrint();
-      if (kind === 'jpg') saveBlob(jpeg, fileName('jpg'));
-      else {
+      const sheets = await renderPrint();
+      if (kind === 'jpg') {
+        sheets.forEach((s, i) => saveBlob(s.jpeg, fileName('jpg', sheets.length > 1 ? (i === 0 ? 'outside' : 'inside') : '')));
+      } else {
         const pt = sheetPoints(doc.paper);
-        const pdf = jpegToPdf(new Uint8Array(await jpeg.arrayBuffer()), w, h, pt.w, pt.h);
-        saveBlob(new Blob([pdf], { type: 'application/pdf' }), fileName('pdf'));
+        const images = await Promise.all(sheets.map(async (s) => ({ jpeg: new Uint8Array(await s.jpeg.arrayBuffer()), pxW: s.w, pxH: s.h })));
+        saveBlob(new Blob([jpegsToPdf(images, pt.w, pt.h)], { type: 'application/pdf' }), fileName('pdf'));
       }
-      toast(`Print on ${PAPER[doc.paper].label} at 100%.`);
+      toast(sheets.length > 1
+        ? `Print both sheets on ${PAPER[doc.paper].label} at 100%, one side each.`
+        : `Print on ${PAPER[doc.paper].label} at 100%.`);
     } catch (err) {
       toast(`Couldn’t make the file: ${(err as Error).message}.`);
     } finally {
@@ -1853,6 +1909,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 
   // ── Start ───────────────────────────────────────────────────────────────
   syncPaper();
+  syncFormat();
   buildRail();
   buildEdit();
   renderAll();

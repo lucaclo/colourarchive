@@ -120,3 +120,50 @@ describe('editing', () => {
     assert.deepEqual(READING_ORDER.map((i) => PANELS[i].page), [1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });
+
+import { setFormat, MAX_SLOTS } from './doc';
+import { SPREADS_16 } from './imposition';
+
+describe('sixteen pages', () => {
+  it('keeps every slot, so changing format loses nothing', () => {
+    const doc = freshDoc('a4');
+    assert.equal(doc.pages.length, MAX_SLOTS);
+    doc.pages[12].caption = 'inside';
+    setFormat(doc, 16);
+    setFormat(doc, 8);
+    setFormat(doc, 16);
+    assert.equal(doc.pages[12].caption, 'inside');
+  });
+
+  it('revives an eight-page save as eight pages, padded to every slot', () => {
+    const old = JSON.parse(JSON.stringify(freshDoc('letter')));
+    old.pages = old.pages.slice(0, 8);
+    delete old.format;
+    old.merged = { p23: old.merged.p23, p45: old.merged.p45, p67: old.merged.p67 };
+    const doc = reviveDoc(old);
+    assert.equal(doc.format, 8);
+    assert.equal(doc.pages.length, MAX_SLOTS);
+    assert.ok(doc.merged.i45 && doc.merged.x45);
+  });
+
+  it('won’t join a spread that runs across the two sheets, and splits one that lands there', () => {
+    const doc = freshDoc('a4', 16);
+    const cross = SPREADS_16.find((s) => s.id === 'x45')!;
+    mergeSpread(doc, cross);
+    assert.equal(doc.merged.x45.on, false);
+    mergeSpread(doc, SPREADS_16[0]);
+    assert.equal(doc.merged.p23.on, true);
+    moveSpread(doc, 0, 1); // 2–3 (joined) to 4–5
+    assert.equal(doc.merged.x45.on, false);
+  });
+
+  it('counts photos on the inside sheet in reading order', () => {
+    const doc = freshDoc('a4', 16);
+    const ref = (id: string) => ({ kind: 'archive' as const, id, thumb: '', full: '', w: 1, h: 1, panX: 0, panY: 0 });
+    doc.pages[8 + 5].photo = ref('p5');
+    doc.pages[2].photo = ref('p13');
+    assert.deepEqual(photosInDoc(doc).map((p) => p.id), ['p5', 'p13']);
+    setFormat(doc, 8);
+    assert.deepEqual(photosInDoc(doc).map((p) => p.id), ['p13'], 'the inside sheet sits out');
+  });
+});

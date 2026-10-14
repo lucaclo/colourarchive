@@ -363,3 +363,62 @@ test('R5-6-H2 lightbox actions are offered only while the lightbox is open', asy
   assert.equal(await page.locator('#lb-info').getAttribute('aria-pressed'), 'true');
   await done(o);
 });
+
+// ── R5-7 sixteen pages from two nested sheets ──────────────────────────────
+
+test('R5-7-H1 sixteen pages: nine slides, no join across sheets, a two-page PDF, and back to eight losing nothing', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 }, ignoreHTTPSErrors: true, serviceWorkers: 'block', acceptDownloads: true });
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(ORIGIN + '/book/zine');
+  await page.waitForTimeout(1500);
+  await page.locator('[data-format="16"]').click();
+  assert.deepEqual(await page.locator('#zn-rail li span').allTextContents(), [
+    'Cover', 'Pages 2–3', 'Pages 4–5', 'Pages 6–7', 'Pages 8–9', 'Pages 10–11', 'Pages 12–13', 'Pages 14–15', 'Back cover',
+  ]);
+  await page.locator('#zn-frombook').click();
+  if (await page.locator('#zn-confirm-ok').isVisible()) await page.locator('#zn-confirm-ok').click();
+  await page.waitForTimeout(800);
+  await page.locator('#zn-rail [data-go="2"]').click();
+  assert.equal(await page.locator('[data-act="merge"]').count(), 0, '4–5 spans two sheets');
+  assert.match((await page.locator('.zn-pagehead small').allTextContents()).join(' '), /page 4 page 5/);
+  await page.locator('#zn-rail [data-go="4"]').click();
+  assert.equal(await page.locator('[data-act="merge"]').count(), 1, '8–9 is the inside sheet’s middle');
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.locator('#zn-download').click()]);
+  assert.match(dl.suggestedFilename(), /16pp-a4\.pdf$/);
+  const bytes = await (await import('node:fs/promises')).readFile((await dl.path())!);
+  const text = bytes.toString('latin1');
+  assert.match(text, /\/Count 2/);
+  assert.equal(text.match(/\/Subtype \/Image/g)?.length, 2);
+  // Page 9's photo survives a trip to eight pages and back.
+  const before = await page.evaluate(`JSON.parse(localStorage.getItem('zine:doc:v1')).pages[10].photo?.id`);
+  assert.ok(before);
+  await page.locator('[data-format="8"]').click();
+  assert.equal(await page.locator('#zn-rail li').count(), 5);
+  await page.locator('[data-format="16"]').click();
+  assert.equal(await page.evaluate(`JSON.parse(localStorage.getItem('zine:doc:v1')).pages[10].photo?.id`), before);
+  await page.locator('#zn-fold').click();
+  await page.waitForTimeout(400);
+  assert.ok(await page.locator('.zn-steps[data-for="16"]').isVisible());
+  assert.equal(await page.locator('.zn-steps[data-for="8"]').isHidden(), true);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('R5-7-H2 eight pages is unchanged: five slides, join on 4–5, a one-page PDF', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 }, ignoreHTTPSErrors: true, serviceWorkers: 'block', acceptDownloads: true });
+  const page = await ctx.newPage();
+  await page.goto(ORIGIN + '/book/zine');
+  await page.waitForTimeout(1500);
+  assert.equal(await page.locator('[data-format="8"]').getAttribute('aria-checked'), 'true');
+  assert.deepEqual(await page.locator('#zn-rail li span').allTextContents(), ['Cover', 'Pages 2–3', 'Pages 4–5', 'Pages 6–7', 'Back cover']);
+  await page.locator('#zn-frombook').click();
+  if (await page.locator('#zn-confirm-ok').isVisible()) await page.locator('#zn-confirm-ok').click();
+  await page.locator('#zn-rail [data-go="2"]').click();
+  assert.equal(await page.locator('[data-act="merge"]').count(), 1);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), page.locator('#zn-download').click()]);
+  const text = (await (await import('node:fs/promises')).readFile((await dl.path())!)).toString('latin1');
+  assert.match(text, /\/Count 1/);
+  await ctx.close();
+});
