@@ -250,7 +250,6 @@ const accent = manifest.chapters[0]
     min-height: 2.25rem; padding: 0 0.95rem; transition: border-color 140ms, background 140ms;
   }
   .bulk-btn:hover, .bulk-genre:hover { background: var(--fill-hover); }
-  .bulk-remove.armed { border-color: #c0392b; background: color-mix(in oklab, #c0392b 25%, transparent); }
 
   :global(.cell.selected) { box-shadow: 0 0 0 2px var(--accent-mix) inset; cursor: pointer; }
   :global(.cell) { cursor: pointer; }
@@ -319,7 +318,23 @@ const accent = manifest.chapters[0]
   }
   :global(.cell:hover .cell-remove), :global(.cell:focus-within .cell-remove) { opacity: 1; }
   :global(.cell-remove:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
-  :global(.cell-remove.armed) { background: #c0392b; opacity: 1; }
+  /* Removed · Undo — built at runtime, so :global. Sits just above the tab bar. */
+  :global(.undo-bar) {
+    position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+    bottom: calc(var(--tabbar-space) + 0.5rem);
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 0.35rem 0.4rem 0.35rem 1rem; border-radius: var(--r-pill);
+    background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow); border: 1px solid var(--glass-edge);
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg);
+  }
+  :global(.undo-bar[hidden]) { display: none; }
+  :global(.undo-btn) {
+    appearance: none; border: 0; cursor: pointer; min-height: 32px; padding: 0 0.9rem;
+    border-radius: var(--r-pill); background: var(--fg); color: var(--bg);
+    font: inherit; font-weight: 600;
+  }
+  :global(.undo-btn[hidden]) { display: none; }
   :global(.cell-remove:active) { transform: scale(0.88); }
   :global(.cell-medium) {
     position: absolute; left: 6px; bottom: 6px; z-index: 2;
@@ -1037,46 +1052,93 @@ const accent = manifest.chapters[0]
     bulkGenre.value = '';
   });
 
-  // No auto-expiry: an armed confirm only cancels on an explicit outside
-  // click (below), never just because the user paused to think it over.
-  let bulkRemoveArmed = false;
-  const disarmBulkRemove = () => {
-    bulkRemoveArmed = false;
-    if (bulkRemove) { bulkRemove.textContent = 'Remove'; bulkRemove.classList.remove('armed'); }
-  };
-  bulkRemove?.addEventListener('click', async () => {
-    if (!bulkRemoveArmed) {
-      bulkRemoveArmed = true;
-      bulkRemove.textContent = `Remove ${selected.size}? Click again`;
-      bulkRemove.classList.add('armed');
+  // ======================================================================
+  //  Remove, then Undo. A photo leaves the grid at once and the server only
+  //  hears about it when the Undo window runs out (or the page is left), so
+  //  a slip is one tap to take back rather than two taps to guard against.
+  //  Nothing changes on the server: /api/remove still moves the original to
+  //  photos/.trash, it is just asked a few seconds later.
+  // ======================================================================
+  const UNDO_MS = 6000;
+  /** @type {null | { items: Array<{ id: string, cell: Element, next: Node | null }>, timer: number }} */
+  let pending = null;
+  const undoBar = document.createElement('div');
+  undoBar.className = 'undo-bar';
+  undoBar.setAttribute('role', 'status');
+  undoBar.hidden = true;
+  const undoText = document.createElement('span');
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.className = 'undo-btn';
+  undoBtn.textContent = 'Undo';
+  undoBar.append(undoText, undoBtn);
+  document.body.appendChild(undoBar);
+
+  function refreshCounts() {
+    if (!grid) return;
+    if (manageCount) manageCount.textContent = String(grid.children.length);
+    const empty = grid.children.length === 0;
+    if (manage) manage.hidden = empty;
+    if (manageSearchBox) manageSearchBox.hidden = empty;
+  }
+  function showUndo(text, withUndo) {
+    undoText.textContent = text;
+    undoBtn.hidden = !withUndo;
+    undoBar.hidden = false;
+  }
+  function hideUndo() { undoBar.hidden = true; }
+
+  /** Take cells off the grid now; the server call waits for the Undo window. */
+  function removeLater(ids) {
+    if (!grid || !ids.length) return;
+    if (pending) commitRemoval();
+    const items = ids.map((id) => cellFor(id)).filter(Boolean).map((cell) => ({ id: cell.dataset.id, cell, next: cell.nextSibling }));
+    // Detach back to front so each remembered nextSibling is still in the grid
+    // when Undo puts them back front to back.
+    for (const it of [...items].reverse()) { selected.delete(it.id); it.cell.remove(); }
+    updateBulkBar();
+    refreshCounts();
+    pending = { items, timer: setTimeout(commitRemoval, UNDO_MS) };
+    showUndo(items.length === 1 ? 'Removed' : `Removed ${items.length}`, true);
+  }
+  function undoRemoval() {
+    if (!pending || !grid) return;
+    clearTimeout(pending.timer);
+    for (const it of pending.items) grid.insertBefore(it.cell, it.next && it.next.parentNode === grid ? it.next : null);
+    pending = null;
+    refreshCounts();
+    hideUndo();
+  }
+  /** Send the removals. `leaving` uses keepalive so they survive the page going away. */
+  async function commitRemoval(leaving = false) {
+    if (!pending) return;
+    const { items, timer } = pending;
+    pending = null;
+    clearTimeout(timer);
+    if (leaving) {
+      for (const it of items) fetch('/api/remove', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id }) });
       return;
     }
-    bulkRemoveArmed = false;
-    bulkRemove.textContent = '…';
-    const ids = [...selected];
-    const results = await Promise.all(ids.map((id) => post('/api/remove', { id })));
-    ids.forEach((id, i) => {
-      if (results[i]) { cellFor(id)?.remove(); selected.delete(id); }
-    });
-    bulkRemove.textContent = 'Remove';
-    bulkRemove.classList.remove('armed');
-    if (manageCount) manageCount.textContent = String(grid.children.length);
-    if (manage && grid.children.length === 0) manage.hidden = true;
-    if (manageSearchBox && grid.children.length === 0) manageSearchBox.hidden = true;
-    updateBulkBar();
+    hideUndo();
+    const results = await Promise.all(items.map((it) => post('/api/remove', { id: it.id })));
+    const failed = items.filter((_, i) => !results[i]);
+    if (!failed.length || !grid) return;
+    for (const it of failed) grid.insertBefore(it.cell, it.next && it.next.parentNode === grid ? it.next : null);
+    refreshCounts();
+    showUndo(failed.length === 1 ? 'Couldn’t remove it' : `Couldn’t remove ${failed.length}`, false);
+    setTimeout(hideUndo, 4000);
+  }
+  undoBtn.addEventListener('click', undoRemoval);
+  addEventListener('keydown', (e) => {
+    if (pending && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.closest?.('input, textarea')) { e.preventDefault(); undoRemoval(); }
   });
+  addEventListener('pagehide', () => commitRemoval(true));
+
+  bulkRemove?.addEventListener('click', () => removeLater([...selected]));
   bulkClear?.addEventListener('click', clearSelection);
-  // Clicking anywhere outside the bar or the grid's cells cancels an armed
-  // bulk-remove, same reasoning as the per-cell confirm below.
-  document.addEventListener('click', (e) => {
-    if (bulkRemoveArmed && !e.target.closest('.bulk-remove')) disarmBulkRemove();
-  }, true);
 
   // One delegated listener for the whole grid, so cells added after load behave
   // exactly like the ones rendered on the server.
-  let armed = null;
-  const disarm = () => { if (armed) { armed.textContent = '×'; armed.classList.remove('armed'); armed = null; } };
-
   grid?.addEventListener('click', async (e) => {
     const target = e.target.closest('button');
     if (!target) return;
@@ -1105,31 +1167,9 @@ const accent = manifest.chapters[0]
       return;
     }
 
-    // --- remove (two-step confirm) ---
-    if (target.classList.contains('cell-remove')) {
-      if (armed !== target) {
-        disarm();
-        armed = target; target.textContent = '✓'; target.classList.add('armed');
-        target.title = 'Click again to remove';
-        return;
-      }
-      armed = null; target.textContent = '…';
-      if (await post('/api/remove', { id: cell.dataset.id })) {
-        selected.delete(cell.dataset.id);
-        updateBulkBar();
-        cell.remove();
-        if (manageCount) manageCount.textContent = String(grid.children.length);
-        if (manage && grid.children.length === 0) manage.hidden = true;
-        if (manageSearchBox && grid.children.length === 0) manageSearchBox.hidden = true;
-      } else {
-        target.textContent = '×';
-        target.classList.remove('armed');
-      }
-    }
+    // --- remove (Undo for a few seconds after) ---
+    if (target.classList.contains('cell-remove')) removeLater([cell.dataset.id]);
   });
-  // Clicking anywhere else cancels an armed delete, rather than leaving a photo
-  // one stray click from removal indefinitely.
-  document.addEventListener('click', (e) => { if (armed && !e.target.closest('.cell-remove')) disarm(); }, true);
 
   async function post(url, body) {
     try {
