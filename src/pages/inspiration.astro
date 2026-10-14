@@ -328,10 +328,11 @@ const accent = manifest.chapters[0]
           <div class="mx-frames">
             <figure class="mx-fig">
               <canvas id="mx-canvas"></canvas>
+              <span class="mx-divider" id="mx-divider" aria-hidden="true" hidden></span>
               <figcaption><span id="mx-wipehint">Yours, graded</span></figcaption>
               <span class="mx-holdhint" aria-hidden="true">Hold for the original</span>
             </figure>
-            <figure class="mx-fig">
+            <figure class="mx-fig mx-reffig" id="mx-reffig">
               <img id="mx-refside" alt="" />
               <figcaption><span id="mx-refside-caption">The reference</span></figcaption>
             </figure>
@@ -979,7 +980,18 @@ const accent = manifest.chapters[0]
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.45);
     opacity: calc(var(--s) * 0.75); transition: opacity 160ms;
   }
-  .mx-holding .mx-holdhint { opacity: 0; }
+  .mx-holding .mx-holdhint, .mx-wiping .mx-holdhint { opacity: 0; }
+  .mx-divider {
+    position: absolute; width: 2px; translate: -1px 0; pointer-events: none;
+    background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  }
+  .mx-divider[hidden] { display: none; }
+  .mx-divider::after {
+    content: ''; position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; translate: -50% -50%;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  }
+  .mx-wiping #mx-canvas { cursor: ew-resize; }
+
   @media (hover: hover) and (pointer: fine) {
     .mx-holdhint { opacity: 0; }
     .mx-fig:hover .mx-holdhint { opacity: calc(var(--s) * 0.75); }
@@ -1403,6 +1415,27 @@ const accent = manifest.chapters[0]
     .mx-bar { gap: 0.5rem 1rem; }
     .mx-strengthlabel { flex-basis: 100%; }
     :global(.mx-noterow) { grid-template-columns: 1fr; }
+  }
+
+  /* Phone: one picture, full width. The reference is a thumbnail on it that
+     a tap brings up in its place; the hold hint moves to the other corner so
+     the two never sit on each other. */
+  @media (max-width: 640px) {
+    .mx-frames { grid-template-columns: 1fr; position: relative; }
+    .mx-fig canvas { max-height: calc(12vh + 28vh * var(--s)); }
+    .mx-reffig {
+      position: absolute; top: 8px; right: 8px; z-index: 2; cursor: pointer;
+      width: auto; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.55);
+      box-shadow: 0 2px 10px rgb(0 0 0 / 0.45);
+      opacity: max(0.0001, var(--s)); transition: opacity 120ms linear;
+    }
+    .mx-reffig img { max-height: 84px; max-width: 72px; }
+    .mx-reffig figcaption { display: none; }
+    .mx-reffig.big { inset: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--bg); }
+    .mx-reffig.big img { max-height: calc(12vh + 28vh * var(--s)); max-width: 100%; }
+    .mx-reffig.big figcaption { display: block; }
+    .mx-reffig:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+    .mx-holdhint { top: auto; bottom: 8px; right: 10px; }
   }
 
   /* ── Phone ───────────────────────────────────────────────────────────────
@@ -3038,17 +3071,38 @@ const accent = manifest.chapters[0]
       : base;
     if (preview) {
       const spec = deriveRenderSpec(adj, current.maskChannels ?? []);
-      preview.render(spec, holding ? 1.01 : wipeEl.checked ? 0.5 : -1);
+      preview.render(spec, holding ? 1.01 : wipeEl.checked ? splitAt : -1);
     }
+    placeDivider();
     renderValues(adj);
   }
 
   strengthEl.addEventListener('input', draw);
   const wipeCaption = () => (holding ? 'The original' : wipeEl.checked ? 'Left: original · Right: graded' : 'Yours, graded');
   wipeEl.addEventListener('change', () => {
+    splitAt = 0.5;
+    resultEl.classList.toggle('mx-wiping', wipeEl.checked);
     wipeHint.textContent = wipeCaption();
     draw();
   });
+
+  // With Before / after on, the split is a line on the photo you drag
+  // (Photomator's comparison slider) rather than a fixed half.
+  let splitAt = 0.5;
+  let dragging = false;
+  const divider = $<HTMLElement>('mx-divider');
+  function placeDivider() {
+    divider.hidden = !wipeEl.checked || holding;
+    if (divider.hidden) return;
+    divider.style.left = `${canvasEl.offsetLeft + splitAt * canvasEl.offsetWidth}px`;
+    divider.style.top = `${canvasEl.offsetTop}px`;
+    divider.style.height = `${canvasEl.offsetHeight}px`;
+  }
+  const splitFrom = (e: PointerEvent) => {
+    const r = canvasEl.getBoundingClientRect();
+    splitAt = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    draw();
+  };
 
   // Press and hold the picture for the original, let go for the grade: the
   // gesture Lightroom and Photos both use, so it needs no button. `\` does
@@ -3065,9 +3119,37 @@ const accent = manifest.chapters[0]
   canvasEl.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     canvasEl.setPointerCapture(e.pointerId);
+    if (wipeEl.checked) { dragging = true; splitFrom(e); return; }
     setHolding(true);
   });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvasEl.addEventListener(ev, () => setHolding(false));
+  canvasEl.addEventListener('pointermove', (e) => { if (dragging) splitFrom(e); });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvasEl.addEventListener(ev, () => { dragging = false; setHolding(false); });
+  addEventListener('resize', placeDivider);
+
+  // On a phone the reference is a thumbnail on your photo; a tap shows it
+  // in its place, another puts your photo back.
+  const refFig = $<HTMLElement>('mx-reffig');
+  const narrow = matchMedia('(max-width: 640px)');
+  const syncRefFig = () => {
+    if (narrow.matches) {
+      refFig.setAttribute('role', 'button');
+      refFig.tabIndex = 0;
+      refFig.setAttribute('aria-pressed', String(refFig.classList.contains('big')));
+      refFig.setAttribute('aria-label', 'Show the reference');
+    } else {
+      refFig.classList.remove('big');
+      for (const a of ['role', 'tabindex', 'aria-pressed', 'aria-label']) refFig.removeAttribute(a);
+    }
+  };
+  const toggleRef = () => {
+    if (!narrow.matches) return;
+    refFig.classList.toggle('big');
+    refFig.setAttribute('aria-pressed', String(refFig.classList.contains('big')));
+  };
+  refFig.addEventListener('click', toggleRef);
+  refFig.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRef(); } });
+  narrow.addEventListener('change', syncRefFig);
+  syncRefFig();
   canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
   addEventListener('keydown', (e) => {
     if (e.key !== '\\' || resultEl.hidden || (e.target as HTMLElement).closest('input, textarea, select')) return;
