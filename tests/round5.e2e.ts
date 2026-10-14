@@ -146,3 +146,54 @@ test('R5-2-E1 a grey has nothing to go with', async () => {
   assert.equal(await o.page.locator('.cf-goes').first().isHidden(), true);
   await done(o);
 });
+
+// ── R5-3 survey a burst before keeping one ─────────────────────────────────
+
+test('R5-3-H1 the ⧉ badge opens the group side by side, and Keep leaves the others out with Undo', async () => {
+  const o = await open('/book');
+  const { page } = o;
+  const outBefore = await page.locator('.book-cell[data-excluded="1"]').count();
+  const group = await page.locator('.book-dup').first().getAttribute('data-dup-group');
+  const groupOut = await page.locator(`.book-cell[data-dup-group="${group}"][data-excluded="1"]`).count();
+  assert.equal(groupOut, 0, 'the first group starts all in the book');
+  const size = await page.locator(`.book-cell[data-dup-group="${group}"]`).count();
+  await page.locator('.book-dup').first().evaluate((e) => (e as HTMLElement).click());
+  const dialog = page.getByRole('dialog', { name: 'Similar shots' });
+  assert.ok(await dialog.isVisible());
+  assert.equal(await dialog.locator('.survey-item').count(), size);
+  const heights = await dialog.locator('.survey-frame img').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+  assert.ok(Math.max(...heights) - Math.min(...heights) <= 2, `same size side by side: ${heights}`);
+  assert.equal(await page.locator('.book-cell[data-excluded="1"]').count(), outBefore, 'nothing changes on opening');
+  const keepId = await dialog.locator('.survey-item').nth(1).getAttribute('data-id');
+  await dialog.locator('.survey-keep').nth(1).click();
+  assert.equal(await dialog.isVisible(), false);
+  const out = await page.locator(`.book-cell[data-dup-group="${group}"][data-excluded="1"]`).count();
+  assert.equal(out, size - 1);
+  assert.equal(await page.locator(`.book-cell[data-id="${keepId}"]`).getAttribute('data-excluded'), '');
+  assert.match((await page.locator('#book-undo-text').textContent()) ?? '', /^Kept .+, left out \d/);
+  await page.locator('#book-undo-btn').click();
+  assert.equal(await page.locator('.book-cell[data-excluded="1"]').count(), outBefore);
+  await done(o);
+});
+
+test('R5-3-H2 holding a photo zooms every photo in the group to the same spot', async () => {
+  const o = await open('/book');
+  const { page } = o;
+  await page.locator('.book-dup').first().evaluate((e) => (e as HTMLElement).click());
+  const frame = page.locator('.survey-frame').first();
+  const b = (await frame.boundingBox())!;
+  await page.mouse.move(b.x + b.width * 0.25, b.y + b.height * 0.75);
+  await page.mouse.down();
+  const t = await page.locator('.survey-frame img').evaluateAll((els) => els.map((e) => getComputedStyle(e).transform + ' @ ' + getComputedStyle(e).transformOrigin));
+  assert.ok(t.every((x) => x.startsWith('matrix(2.5')), t.join(' | '));
+  const origins = await page.locator('.survey-frame img').evaluateAll((els) => els.map((e) => {
+    const [x, y] = getComputedStyle(e).transformOrigin.split(' ').map(parseFloat);
+    const el = e as HTMLElement; // offset sizes are the unscaled box
+    return `${Math.round((x / el.offsetWidth) * 100)},${Math.round((y / el.offsetHeight) * 100)}`;
+  }));
+  assert.equal(new Set(origins).size, 1, `one spot for all: ${origins}`);
+  assert.equal(origins[0], '25,75');
+  await page.mouse.up();
+  assert.match(await page.locator('.survey-frame img').first().evaluate((e) => getComputedStyle(e).transform), /^none|matrix\(1, 0, 0, 1/);
+  await done(o);
+});
