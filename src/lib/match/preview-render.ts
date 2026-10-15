@@ -1,6 +1,7 @@
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
 import { HSL_BANDS } from './types';
 import type { Adjustments } from './adjustments';
+import { splineOf } from './curve';
 
 // Live preview: the same transform, in a fragment shader.
 //
@@ -72,16 +73,12 @@ function lightroomHueToOklabDirection(hue: number): [number, number] {
   return [A / mag, B / mag];
 }
 
+/** The curve as Lightroom draws it (a natural spline — see curve.ts), sampled
+ *  at the 256 inputs an 8-bit photo can hold. */
 function curveToLut(curve: Adjustments['curve']): Uint8Array {
+  const f = splineOf(curve);
   const lut = new Uint8Array(256);
-  for (let x = 0; x < 256; x++) {
-    let i = 0;
-    while (i < curve.length - 2 && curve[i + 1].x < x) i++;
-    const p0 = curve[i];
-    const p1 = curve[i + 1] ?? curve[i];
-    const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-    lut[x] = Math.max(0, Math.min(255, Math.round(p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t)))));
-  }
+  for (let x = 0; x < 256; x++) lut[x] = Math.max(0, Math.min(255, Math.round(f(x))));
   return lut;
 }
 

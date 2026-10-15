@@ -6,6 +6,7 @@ import {
   type CurvePoint,
   type MaskAdjustment,
 } from './adjustments';
+import { keepMonotone, splineOf } from './curve';
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
 // From texture-core, not texture: the solver runs in the browser on the offline
 // fallback path, and texture.ts pulls in sharp.
@@ -287,17 +288,12 @@ function applyExposure(s: State, stops: number): void {
 }
 
 /** Apply a curve expressed in Lightroom's 0..255 space to the state's OKLab L
- *  values, matching what the preview shader will do. */
+ *  values — drawn as Lightroom draws it, a natural spline (see curve.ts). */
 function applyCurve(s: State, curve: CurvePoint[]): void {
+  const f = splineOf(curve);
   const map = (L: number): number => {
     const x = srgbEncode(Math.max(0, Math.min(1, L)) ** 3) * 255;
-    // Piecewise-linear through the control points.
-    let i = 0;
-    while (i < curve.length - 2 && curve[i + 1].x < x) i++;
-    const p0 = curve[i];
-    const p1 = curve[i + 1] ?? curve[i];
-    const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-    const y = (p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t))) / 255;
+    const y = f(x) / 255;
     // Back to OKLab L: invert the sRGB encode, then cube-root.
     const lin = y <= 0.04045 ? y / 12.92 : Math.pow((y + 0.055) / 1.055, 2.4);
     return Math.cbrt(Math.max(0, lin));
@@ -447,28 +443,25 @@ function fitCurve(from: number[], to: number[]): { points: CurvePoint[]; x: numb
     if (mono[i].y > maxY) mono[i].y = Math.round(maxY);
   }
 
-  return { points: mono, x: mono.map((p) => p.x) };
+  // Lightroom joins these points with a spline, which can fall back between
+  // monotone points where the slope changes sharply. Relax until it doesn't.
+  const smooth = keepMonotone(mono).map((p) => ({ x: p.x, y: Math.round(p.y) }));
+  return { points: smooth, x: smooth.map((p) => p.x) };
 }
 
 /** Pull a curve toward identity — the restrained solution's tone move. */
 const softenCurve = (c: CurvePoint[], pull: number): CurvePoint[] =>
   c.map((p) => ({ x: p.x, y: p.y + (p.x - p.y) * pull }));
 
-/** A fitted curve's y at an arbitrary x, by linear interpolation between the
- *  two control points bracketing it — the curve's own shape evaluated at a
- *  point that may not be one of its own taps. Used both to describe a curve
- *  with the Basic sliders below, and to resample one curve onto another's
- *  shared x-grid (see solveOne's blending note on `sharedCurveX`) — the two
- *  passes fit against different tone gaps, so their own taps land at
- *  different x positions and reading `curve[i].y` at a shared index is not
- *  the same value as reading the curve's shape at that shared x. */
+/** A fitted curve's y at an arbitrary x, read off the spline Lightroom draws
+ *  through its points. Used both to describe a curve with the Basic sliders
+ *  below, and to resample one curve onto another's shared x-grid (see
+ *  solveOne's blending note on `sharedCurveX`) — the two passes fit against
+ *  different tone gaps, so their own taps land at different x positions and
+ *  reading `curve[i].y` at a shared index is not the same value as reading the
+ *  curve's shape at that shared x. */
 function sampleCurve(curve: CurvePoint[], x: number): number {
-  let i = 0;
-  while (i < curve.length - 2 && curve[i + 1].x < x) i++;
-  const p0 = curve[i];
-  const p1 = curve[i + 1] ?? curve[i];
-  const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-  return p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t));
+  return splineOf(curve)(x);
 }
 
 /**

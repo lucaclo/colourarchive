@@ -363,14 +363,17 @@ describe('curveX', () => {
     // interior point wrong here, not just the anchor: confirmed by running
     // the pre-fix solver against this exact fixture, which produced
     // [{0,0},{18,76},{99,150},{255,223}] instead of the values below.
+    // (Round 6: the shape is now read off Lightroom's spline rather than
+    // straight lines between points, which moved the interior values from
+    // 26/114 to 25/118. The resample-by-x property is unchanged.)
     const ref = photo('resample-ref', { curve: (v) => v });
     const mine = photo('resample-mine', { curve: (v) => v ** 2 });
     const sol = solveMatch(ref, mine);
 
     assert.deepEqual(sol.restrained.curve, [
       { x: 0, y: 0 },
-      { x: 18, y: 26 },
-      { x: 99, y: 114 },
+      { x: 18, y: 25 },
+      { x: 99, y: 118 },
       { x: 255, y: 255 },
     ]);
   });

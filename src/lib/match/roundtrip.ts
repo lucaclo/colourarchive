@@ -36,6 +36,7 @@ import {
   type Adjustments, type CurvePoint, type GradeWheel, type MaskAdjustment,
 } from './adjustments';
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
+import { evalSpline } from './curve';
 import { HSL_BANDS, type PhotoAnalysis } from './types';
 
 // ─── 1. How close did the edit get ──────────────────────────────────────────
@@ -136,19 +137,11 @@ function castRow(mine: PhotoAnalysis, edited: PhotoAnalysis, reference: PhotoAna
 
 // ─── 2. The follow-up ───────────────────────────────────────────────────────
 
-/** Piecewise-linear read of a point curve. Lightroom draws a spline through
- *  the same points, so this is close between points and exact on them. */
+/** Read a point curve the way Lightroom draws it: a natural spline through
+ *  the points (see curve.ts). */
 export function evalCurve(curve: CurvePoint[], x: number): number {
-  const pts = [...curve].sort((a, b) => a.x - b.x);
-  if (pts.length === 0) return x;
-  if (x <= pts[0].x) return pts[0].y;
-  for (let i = 1; i < pts.length; i++) {
-    if (x <= pts[i].x) {
-      const t = (x - pts[i - 1].x) / Math.max(1e-9, pts[i].x - pts[i - 1].x);
-      return pts[i - 1].y + t * (pts[i].y - pts[i - 1].y);
-    }
-  }
-  return pts[pts.length - 1].y;
+  if (curve.length === 0) return x;
+  return evalSpline(curve, x);
 }
 
 /** An exposure move expressed on the curve's gamma-encoded 0..255 scale. The
