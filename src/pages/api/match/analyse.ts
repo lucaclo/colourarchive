@@ -4,7 +4,7 @@ import path from 'node:path';
 import { readInspStore } from '../../../lib/inspiration';
 import { readStore } from '../../../lib/manifest';
 import { INSPIRATION_DIR, PHOTOS_DIR } from '../../../lib/paths';
-import { runMatch, MATCH_STAGE_LABEL, type ReferenceInput } from '../../../lib/match/session';
+import { leanAnalyses, runMatch, MATCH_STAGE_LABEL, type ReferenceInput } from '../../../lib/match/session';
 import { canDecodeRaw, isRawFilename } from '../../../lib/match/decode';
 import type { BaselineMode } from '../../../lib/match/types';
 
@@ -77,9 +77,7 @@ export const POST: APIRoute = async ({ request }) => {
     const payload = (record: Awaited<ReturnType<typeof runMatch>>) => ({
       ok: true as const,
       id: record.id,
-      references: record.references,
-      reference: record.reference,
-      mine: record.mine,
+      ...leanAnalyses(record),
       solution: record.solution,
       preview: record.preview,
       maskChannels: record.maskChannels,

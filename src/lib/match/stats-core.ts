@@ -152,8 +152,9 @@ export class Measurer {
     this.accs = maskKeys.map(() => newAcc());
   }
 
-  /** One pixel, linear sRGB, with its region bits. */
-  add(r: number, g: number, b: number, bits: number): void {
+  /** One pixel, linear sRGB, with its region bits and an optional weight
+   *  (how many pixels it stands for — see composition.ts). */
+  add(r: number, g: number, b: number, bits: number, weight = 1): void {
     // Linear sRGB -> OKLab (Ottosson).
     const l_ = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
     const m_ = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
@@ -176,25 +177,25 @@ export class Measurer {
       acc.hist[bin] += w;
     };
 
-    push(this.globalAcc, 1);
+    push(this.globalAcc, weight);
     // Every pixel contributes to all three zones, weighted — see zoneWeights.
     const zw = zoneWeights(L);
-    if (zw[0] > 0) push(this.zoneAccs[0], zw[0]);
-    if (zw[1] > 0) push(this.zoneAccs[1], zw[1]);
-    if (zw[2] > 0) push(this.zoneAccs[2], zw[2]);
+    if (zw[0] > 0) push(this.zoneAccs[0], zw[0] * weight);
+    if (zw[1] > 0) push(this.zoneAccs[1], zw[1] * weight);
+    if (zw[2] > 0) push(this.zoneAccs[2], zw[2] * weight);
 
-    if (bits) for (let k = 0; k < this.accs.length; k++) if (bits & (1 << k)) push(this.accs[k], 1);
+    if (bits) for (let k = 0; k < this.accs.length; k++) if (bits & (1 << k)) push(this.accs[k], weight);
 
     if (C >= CHROMA_FLOOR) {
       let hue = (Math.atan2(B, A) * 180) / Math.PI;
       if (hue < 0) hue += 360;
       const band = this.bandAcc[BAND_OF_HUE[hue | 0]];
-      band.n++;
-      band.sumC += C;
-      band.sumL += L;
-      band.sumA += A;
-      band.sumB += B;
-      this.chromaticN++;
+      band.n += weight;
+      band.sumC += weight * C;
+      band.sumL += weight * L;
+      band.sumA += weight * A;
+      band.sumB += weight * B;
+      this.chromaticN += weight;
     }
   }
 
@@ -364,10 +365,15 @@ export function decodeSample(s: PixelSample): DecodedSample {
   return { n, linear, bits, regions: s.regions, coverage: s.coverage };
 }
 
-/** Measure a decoded sample exactly as a photo is measured. */
-export function measureSample(s: DecodedSample, linear: Float32Array = s.linear): Pick<MeasureResult, 'regions' | 'hslBands'> {
+/** Measure a decoded sample exactly as a photo is measured, optionally with a
+ *  weight per pixel. */
+export function measureSample(
+  s: DecodedSample,
+  linear: Float32Array = s.linear,
+  weights?: Float32Array,
+): Pick<MeasureResult, 'regions' | 'hslBands'> {
   const m = new Measurer(s.regions);
-  for (let i = 0; i < s.n; i++) m.add(linear[i * 3], linear[i * 3 + 1], linear[i * 3 + 2], s.bits[i]);
+  for (let i = 0; i < s.n; i++) m.add(linear[i * 3], linear[i * 3 + 1], linear[i * 3 + 2], s.bits[i], weights ? weights[i] : 1);
   return m.result(s.coverage);
 }
 

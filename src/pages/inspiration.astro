@@ -2193,7 +2193,9 @@ const accent = manifest.chapters[0]
   import { atGroupStrength, type GroupStrength } from '../lib/match/adjustments';
   import { MatchPreview, deriveRenderSpec } from '../lib/match/preview-render';
   import { HSL_BANDS, REGION_LABEL, REGION_ORDER, BASELINE_LABEL } from '../lib/match/types';
-  import { mergeReferences, solveMatch } from '../lib/match/solve';
+  import { mergeReferences } from '../lib/match/solve';
+  import { solveAndRefine } from '../lib/match/engine';
+  import { lrTablesInBrowser } from '../lib/match/lr-tables-browser';
   import { buildPresetFiles } from '../lib/match/xmp';
   import { photoName, matchTitle } from '../lib/match/names';
   import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
@@ -2986,7 +2988,7 @@ const accent = manifest.chapters[0]
   /** Measure every reference and the photo here, with no server and no
    *  models — masks are unavailable offline, but the blend across several
    *  references works exactly as it does server-side, since mergeReferences
-   *  and solveMatch are the same isomorphic code either way. */
+   *  and solveAndRefine are the same isomorphic code either way. */
   async function analyseLocally(file: File) {
     const [analyses, mine] = await Promise.all([
       Promise.all(refs.map((r) => analyseReferenceInBrowser(r.url, r.name))),
@@ -2994,7 +2996,10 @@ const accent = manifest.chapters[0]
     ]);
     const weighted = refs.map((r, i) => ({ analysis: analyses[i], weight: r.weight }));
     const reference = mergeReferences(weighted);
-    const solution = solveMatch(reference, mine);
+    // Checked through the Lightroom model when its tables can be fetched;
+    // fully offline, the solver's own answer stands.
+    const tables = await lrTablesInBrowser().catch(() => null);
+    const solution = solveAndRefine(weighted, mine, { tables });
     return {
       id: `local-${Date.now()}`,
       references: refs.map((r, i) => ({ analysis: analyses[i], weight: r.weight, name: r.name, previewUrl: r.url })),

@@ -11,6 +11,7 @@ import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
 // From texture-core, not texture: the solver runs in the browser on the offline
 // fallback path, and texture.ts pulls in sharp.
 import { textureComparable } from './texture-core';
+import type { Closeness, SimTarget } from './simulate';
 import {
   BASELINE_FIDELITY,
   HSL_BANDS,
@@ -169,6 +170,22 @@ export interface MatchSolution {
   /** RMS OKLab error across zones after solving — how well the colour grading
    *  replication actually landed. Lower is better; below ~0.01 is a close match. */
   colourResidual: number;
+  /** Where the restrained solution means to land — its own predicted result,
+   *  which refinement (refine.ts) then makes Lightroom actually reach. */
+  restrainedIntent?: SimTarget;
+  /** How close Lightroom should get, simulated on your photo's pixels through
+   *  the Lightroom model and measured against the reference. Absent when the
+   *  photo has no pixel sample (old analyses). */
+  predicted?: Prediction;
+}
+
+export interface Prediction {
+  untouched: Closeness;
+  restrained: Closeness;
+  faithful: Closeness;
+  /** The faithful solution as the solver first wrote it, before refinement —
+   *  kept so the gain refinement made can be shown, not just claimed. */
+  unrefined: Closeness;
 }
 
 // --- Colour helpers -----------------------------------------------------------
@@ -500,6 +517,32 @@ interface Build {
   reachability: number;
   /** RMS OKLab a/b error across the luminance zones after the full solve. */
   colourResidual: number;
+}
+
+/**
+ * What a pass means to achieve, as a simulation target.
+ *
+ * Two things the running state does not carry are folded in here, because a
+ * target that left them out would tell refinement to undo them: the Colour
+ * Mixer's move on each band's own statistics (the state applies the mixer to
+ * regions, not to `bands`), and masks — the state never applies them, so
+ * masked regions are left out and the restrained masks stay as solved.
+ */
+function intentOf(state: State, ref: PhotoAnalysis, adj: Adjustments, cal: Calibration): SimTarget {
+  const zones: SimTarget['zones'] = {};
+  for (const [key, v] of state.regions) {
+    if (key.startsWith('zone.')) zones[key] = { L: v.L, a: v.a, b: v.b, C: v.C, coverage: ref.regions[key]?.coverage ?? 0 };
+  }
+  const bands = state.bands.map((b, i) => {
+    const m = adj.hsl[HSL_BANDS[i].key];
+    return {
+      ...b,
+      chroma: b.chroma * Math.max(0, 1 + m.sat / (100 * cal.hslSaturationGain)),
+      L: Math.max(0, Math.min(1, b.L + m.lum / cal.hslLuminanceGain)),
+      hue: (((b.hue + (m.hue / 100) * cal.hslHueDegreesAt100) % 360) + 360) % 360,
+    };
+  });
+  return { percentiles: [...state.percentiles], zones, bands, regions: {} };
 }
 
 function solveOne(
@@ -1276,5 +1319,6 @@ export function solveMatch(
     // whereas the restrained pass deliberately stops short of it.
     reachability: faithful.reachability,
     colourResidual: faithful.colourResidual,
+    restrainedIntent: intentOf(restrained.state, mergedRef, restrained.adj, cal),
   };
 }

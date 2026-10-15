@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getMatch, listKeptMatches, unkeepMatch } from '../../../lib/match/session';
+import { getMatch, leanAnalyses, listKeptMatches, unkeepMatch } from '../../../lib/match/session';
 
 export const prerender = false;
 
@@ -25,9 +25,7 @@ export const GET: APIRoute = async ({ url }) => {
       return json({
         ok: true,
         id: record.id,
-        references: record.references,
-        reference: record.reference,
-        mine: record.mine,
+        ...leanAnalyses(record),
         solution: record.solution,
         preview: record.preview,
         maskChannels: record.maskChannels,
