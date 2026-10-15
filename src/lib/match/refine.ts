@@ -26,6 +26,8 @@ import { HSL_BANDS, type PhotoAnalysis, type RegionKey } from './types';
 const ZONES: RegionKey[] = ['zone.shadow', 'zone.midtone', 'zone.highlight'];
 const ITERATIONS = 8;
 const JACOBIAN_STRIDE = 3;
+/** How solve.ts's low-reachability note begins. */
+const SHORT_NOTE = 'These two will only get about';
 /** Furthest the curve's black end may lift (or its white end drop), in levels. */
 const MAX_FADE = 60;
 
@@ -296,6 +298,8 @@ export interface RefineResult {
   before: Closeness;
   after: Closeness;
   iterations: number;
+  /** Fit plus prior, lower is better — comparable between runs on one target. */
+  total: number;
 }
 
 /**
@@ -408,8 +412,10 @@ export function refine(
   // Curve y values round in clampAdjustments; re-measure what will ship.
   const after = closeness(run(finalAdj), target);
   // Never hand back something the model says is worse than what came in.
-  if (total(after, finalAdj) > total(before, initial)) return { adj: clampAdjustments(initial), before, after: before, iterations };
-  return { adj: finalAdj, before, after, iterations };
+  const t0 = total(before, initial);
+  const t1 = total(after, finalAdj);
+  if (t1 > t0) return { adj: clampAdjustments(initial), before, after: before, iterations, total: t0 };
+  return { adj: finalAdj, before, after, iterations, total: t1 };
 }
 
 /**
@@ -427,18 +433,36 @@ export function refineSolution(
   if (!mine.sample) return solution;
   const sample = decodeSample(mine.sample);
   const target = targetFromAnalysis(reference);
-  const faithful = refine(solution.faithful, target, mine, sample, tables, { cal });
+  // The faithful pass starts from the solver's full-strength answer, and also
+  // from the restrained one: when the full answer's big moves are mostly
+  // chasing content, the prior pulls them back, and the nearer, smaller
+  // answer is the better starting point. Whichever lands better is kept —
+  // otherwise "Full" could land further from the reference than the middle.
+  const fromFull = refine(solution.faithful, target, mine, sample, tables, { cal });
+  const fromRestrained = refine(solution.restrained, target, mine, sample, tables, { cal });
+  const faithful = fromRestrained.total < fromFull.total ? { ...fromRestrained, before: fromFull.before } : fromFull;
   const restrained = solution.restrainedIntent
     ? refine(solution.restrained, solution.restrainedIntent, mine, sample, tables, { restrained: true, cal })
     : null;
   const restrainedAdj = restrained?.adj ?? solution.restrained;
   const measure = (a: Adjustments) => closeness(simulate(a, sample, tables, cal), target);
+  const untouched = measure(identityAdjustments(solution.curveX));
+
+  // The solver's reachability came from region averages; the simulation is
+  // the better witness, so it replaces it — and the "only gets so far" note
+  // is corrected to match, or dropped when it no longer applies.
+  const reachability = untouched.distance > 0.05 ? Math.max(0, Math.min(1, 1 - faithful.after.distance / untouched.distance)) : 1;
+  const notes = solution.notes
+    .map((n) => (n.text.startsWith(SHORT_NOTE) ? { ...n, text: n.text.replace(/about \d+%/, `about ${Math.round(reachability * 100)}%`) } : n))
+    .filter((n) => !n.text.startsWith(SHORT_NOTE) || reachability < 0.55);
   return {
     ...solution,
+    notes,
+    reachability,
     faithful: faithful.adj,
     restrained: restrainedAdj,
     predicted: {
-      untouched: measure(identityAdjustments(solution.curveX)),
+      untouched,
       restrained: measure(restrainedAdj),
       faithful: faithful.after,
       unrefined: faithful.before,

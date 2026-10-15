@@ -118,8 +118,8 @@ describe('refine', () => {
     const img = card();
     const sol = solveAndRefine(analyse(grade(img, warmFade()), 'ref'), analyse(img, 'mine'), { tables: T });
     const p = sol.predicted!;
-    assert.ok(p.restrained.deltaE > p.faithful.deltaE);
-    assert.ok(p.restrained.deltaE < p.untouched.deltaE);
+    assert.ok(p.restrained.distance > p.faithful.distance);
+    assert.ok(p.restrained.distance < p.untouched.distance);
   });
 
   it('leaves the solution alone without a pixel sample (an old analysis)', () => {

@@ -83,6 +83,11 @@ export interface Closeness {
   toneLevels: number;
   /** ΔE per segmented region both photos have. */
   regions: Partial<Record<RegionKey, number>>;
+  /** One figure for "how far apart", in ΔE units: the zone colour gap and the
+   *  tone gap along the histogram together (255 levels ≈ 100 of lightness).
+   *  Zone ΔE alone can't see two photos with the same average tones and
+   *  different contrast; this can. */
+  distance: number;
 }
 
 export function closeness(sim: Measured, target: SimTarget): Closeness {
@@ -107,5 +112,7 @@ export function closeness(sim: Measured, target: SimTarget): Closeness {
     const s = sim.regions[key];
     if (s) regions[key] = 100 * Math.hypot(t.L - s.L.mean, t.a - s.ab.a, t.b - s.ab.b);
   }
-  return { deltaE: n ? sum / n : 0, toneLevels: tn ? tone / tn : 0, regions };
+  const deltaE = n ? sum / n : 0;
+  const toneLevels = tn ? tone / tn : 0;
+  return { deltaE, toneLevels, regions, distance: Math.hypot(deltaE, toneLevels * (100 / 255)) };
 }
