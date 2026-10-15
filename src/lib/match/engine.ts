@@ -28,10 +28,15 @@ export function solveAndRefine(
   mine: PhotoAnalysis,
   opts: EngineOptions = {},
 ): MatchSolution {
-  const merged = Array.isArray(refs) ? mergeReferences(refs) : refs;
-  // Composition needs one reference's pixels; a blend of several has none.
-  const composed = !Array.isArray(refs) || refs.length === 1 ? composeReference(merged, mine) : null;
-  const reference = composed?.reference ?? merged;
+  const list: WeightedReference[] = Array.isArray(refs) ? refs : [{ analysis: refs, weight: 1 }];
+  // Each reference is put in your photo's proportions before blending, and —
+  // as Capture One's Match Look does — counts in proportion to how alike its
+  // make-up is to yours, on top of any weight you gave it.
+  const composedEach = list.map((r) => composeReference(r.analysis, mine));
+  const likeness = composedEach.map((c) => (c ? Math.max(0.15, 1 - c.mismatch) ** 2 : 1));
+  const weighted = list.map((r, i) => ({ analysis: composedEach[i]?.reference ?? r.analysis, weight: r.weight * likeness[i] }));
+  const reference = weighted.length === 1 ? weighted[0].analysis : mergeReferences(weighted);
+  const composed = list.length === 1 ? composedEach[0] : null;
 
   let solution = solveMatch(reference, mine, { calibration: opts.calibration });
   if (opts.tables) solution = refineSolution(solution, reference, mine, opts.tables, opts.calibration);
@@ -45,6 +50,19 @@ export function solveAndRefine(
         `The two photos are made of different things (${label(d.region)}: ${pct(d.reference)} of the reference, ${pct(d.mine)} of yours). ` +
         'The reference was read in your photo’s proportions, so you get its treatment of each kind of thing, not extra brightness or colour to make up for what isn’t in your frame.',
     });
+  }
+  if (list.length > 1 && composedEach.some(Boolean)) {
+    const total = weighted.reduce((sum, r) => sum + r.weight, 0) || 1;
+    const shares = weighted.map((r) => Math.round((r.weight / total) * 100));
+    if (Math.max(...shares) - Math.min(...shares) >= 10) {
+      solution.notes.unshift({
+        severity: 'info',
+        panel: 'Overall',
+        text:
+          `The references count by how alike they are to your photo: ${list.map((r, i) => `${r.analysis.filename.replace(/\.[^.]+$/, '')} ${shares[i]}%`).join(', ')}. ` +
+          'Each one was also read in your photo’s proportions before they were blended.',
+      });
+    }
   }
   return solution;
 }

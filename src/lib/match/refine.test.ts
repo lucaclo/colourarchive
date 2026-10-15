@@ -171,3 +171,16 @@ describe('composition', () => {
     assert.equal(composeReference(analyse(card(), 'a'), analyse(card(), 'b')), null);
   });
 });
+
+describe('several references', () => {
+  it('count by how alike their make-up is to your photo', () => {
+    const mine = analyse(card(16), 'mine', skyMasks(16));
+    const alike = analyse(card(20), 'alike', skyMasks(20));
+    const unlike = analyse(card(56), 'unlike', skyMasks(56));
+    const sol = solveAndRefine([{ analysis: alike, weight: 1 }, { analysis: unlike, weight: 1 }], mine, { tables: T });
+    const note = sol.notes.find((n) => n.text.startsWith('The references count by'));
+    assert.ok(note, 'the weighting is explained');
+    const share = (name: string) => Number(new RegExp(`${name} (\\d+)%`).exec(note!.text)![1]);
+    assert.ok(share('alike') > share('unlike'), note!.text);
+  });
+});
