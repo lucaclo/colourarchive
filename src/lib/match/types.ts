@@ -218,28 +218,70 @@ export interface PhotoAnalysis {
   /** Seconds spent, per stage — shown in the UI so a slow run explains itself. */
   timings: Record<string, number>;
   warnings: string[];
+  /** Which measurement this is — see ANALYSIS_VERSION. Absent on analyses
+   *  cached before round 6. */
+  version?: number;
+  /** An even sample of the photo's pixels and their regions, so a grade can be
+   *  simulated on this photo before it is recommended. Absent on old caches
+   *  and on merged references. */
+  sample?: PixelSample;
 }
 
-/** Lightroom's eight HSL bands, with the OKLCH hue angle each is centred on.
- *  These are the bands the app actually exposes, so advice must be expressed in
- *  them — not in arbitrary bins of our own. */
+/** Bump whenever a measurement changes meaning, so cached analyses measured
+ *  the old way are re-measured rather than compared with new ones.
+ *  2 (round 6): Lightroom's measured HSL band edges, and the pixel sample. */
+export const ANALYSIS_VERSION = 2;
+
+/** ~16k pixels on an even grid, sRGB bytes plus a bit per segmented region. */
+export interface PixelSample {
+  width: number;
+  height: number;
+  /** base64 of width × height × 3 sRGB bytes. */
+  rgb: string;
+  /** base64 of a Uint16 per pixel: bit k set = inside `regions[k]` (eroded). */
+  bits: string;
+  regions: RegionKey[];
+  /** Each region's share of the frame before erosion. */
+  coverage: Partial<Record<RegionKey, number>>;
+}
+
+/** Lightroom's eight HSL bands, placed where Lightroom actually puts them.
+ *  These are the bands the app exposes, so advice must be expressed in them —
+ *  not in arbitrary bins of our own.
+ *
+ *  Measured, round 6: each band's Saturation −100 swept round the OKLCH hue
+ *  circle through Lightroom's measured Colour Mixer tables (lr-model.ts). `H`
+ *  is where a band acts hardest, `from` is the hue where it takes over from the
+ *  band before. The earlier centres were estimates and put skin tones (28–45°)
+ *  in Red and sky blues (200–225°) in Aqua — Lightroom moves those with Orange
+ *  and Blue. Blue is genuinely about four times as wide as Red. */
 export interface HslBand {
   key: 'red' | 'orange' | 'yellow' | 'green' | 'aqua' | 'blue' | 'purple' | 'magenta';
   label: string;
-  /** Centre of the band in OKLCH hue degrees. */
+  /** Where the band acts hardest, in OKLCH hue degrees. */
   H: number;
+  /** OKLCH hue at which this band takes over from the previous one. */
+  from: number;
 }
 
 export const HSL_BANDS: HslBand[] = [
-  { key: 'red', label: 'Red', H: 28 },
-  { key: 'orange', label: 'Orange', H: 62 },
-  { key: 'yellow', label: 'Yellow', H: 100 },
-  { key: 'green', label: 'Green', H: 145 },
-  { key: 'aqua', label: 'Aqua', H: 195 },
-  { key: 'blue', label: 'Blue', H: 255 },
-  { key: 'purple', label: 'Purple', H: 305 },
-  { key: 'magenta', label: 'Magenta', H: 350 },
+  { key: 'red', label: 'Red', H: 14, from: 2 },
+  { key: 'orange', label: 'Orange', H: 55, from: 28 },
+  { key: 'yellow', label: 'Yellow', H: 96, from: 77 },
+  { key: 'green', label: 'Green', H: 138, from: 117 },
+  { key: 'aqua', label: 'Aqua', H: 180, from: 160 },
+  { key: 'blue', label: 'Blue', H: 245, from: 200 },
+  { key: 'purple', label: 'Purple', H: 316, from: 292 },
+  { key: 'magenta', label: 'Magenta', H: 349, from: 337 },
 ];
+
+/** Which band Lightroom moves a colour of this OKLCH hue with (index into
+ *  HSL_BANDS). */
+export function bandOfHue(hue: number): number {
+  const h = ((hue % 360) + 360) % 360;
+  for (let i = HSL_BANDS.length - 1; i >= 0; i--) if (h >= HSL_BANDS[i].from) return i;
+  return HSL_BANDS.length - 1; // 0–2° wraps round to Magenta
+}
 
 /** Segmentation output. Lives here rather than in regions.ts so the pure
  *  measurement core can reference it without pulling in sharp or the model

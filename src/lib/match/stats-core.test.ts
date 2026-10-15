@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { measureRegionsFromPixels, measureVignetteFromPixels, zoneWeights } from './stats-core.ts';
 import {
   HSL_BANDS,
+  bandOfHue,
   NO_MASKS,
   VIGNETTE_MIN_SYMMETRY,
   type RegionKey,
@@ -123,18 +124,9 @@ function masksOf(w: number, h: number, entries: Partial<Record<RegionKey, Uint8A
 /** Mirrors the internal nearest-hue-band lookup so a test picking a colour
  *  near a band's centre can predict which band it MUST land in, without
  *  duplicating any of the code under test's own logic for the answer. */
+/** The band Lightroom moves a colour of this hue with (its measured edges). */
 function nearestBandKey(H: number): (typeof HSL_BANDS)[number]['key'] {
-  const circDist = (a: number, b: number) => {
-    const d = Math.abs(((a - b) % 360 + 360) % 360);
-    return d > 180 ? 360 - d : d;
-  };
-  let best = HSL_BANDS[0];
-  let bd = Infinity;
-  for (const band of HSL_BANDS) {
-    const d = circDist(H, band.H);
-    if (d < bd) { bd = d; best = band; }
-  }
-  return best.key;
+  return HSL_BANDS[bandOfHue(H)].key;
 }
 
 /* ── zoneWeights ───────────────────────────────────────────────────────────── */
@@ -261,7 +253,7 @@ describe('measureRegionsFromPixels', () => {
     assert.equal('subject' in regions, false, 'subject should be entirely absent, not present-but-empty');
   });
 
-  it('concentrates hslBands weight in the one band nearest a saturated colour', () => {
+  it('concentrates hslBands weight in the one band Lightroom moves a saturated colour with', () => {
     const rgb: Rgb = [225, 70, 45]; // saturated, warm
     const { H } = srgb255ToOklch(...rgb);
     const expectedKey = nearestBandKey(H);
