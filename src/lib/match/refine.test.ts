@@ -184,3 +184,52 @@ describe('several references', () => {
     assert.ok(share('alike') > share('unlike'), note!.text);
   });
 });
+
+describe('Point Color', () => {
+  /** A scene: warm ground with a green foliage block, the block masked. */
+  function foliageCard(): { img: RgbImage; masks: RegionMasks } {
+    const img = card(0);
+    const fol = new Uint8Array(W * H);
+    for (let y = 8; y < 40; y++) {
+      for (let x = 10; x < 60; x++) {
+        const o = (y * W + x) * 3;
+        const t = (x - 10) / 50;
+        img.data.set([Math.round(40 + 30 * t), Math.round(110 + 50 * t), Math.round(35 + 20 * t)], o);
+        fol[y * W + x] = 255;
+      }
+    }
+    // Other greens that aren't foliage — dim and muted, like a painted door —
+    // which the reference leaves alone. The mixer's Green band can't tell them
+    // apart from the leaves; Point Color's ranges can.
+    for (let y = 44; y < 60; y++) {
+      for (let x = 10; x < 86; x++) img.data.set([24 + (x % 5), 42 + (x % 7), 26], (y * W + x) * 3);
+    }
+    const share = (32 * 50) / (W * H);
+    return {
+      img,
+      masks: { width: W, height: H, masks: { 'scene.foliage': fol }, full: { 'scene.foliage': fol }, coverage: { 'scene.foliage': share }, warnings: [], timings: {} },
+    };
+  }
+
+  it('carries a foliage-only change in the preset, where neither a drawn mask nor a band could', () => {
+    const { img, masks } = foliageCard();
+    // The reference: the same photo with only its greens turned and muted.
+    const out = new Uint8Array(img.data);
+    for (let i = 0; i < W * H; i++) {
+      if (!masks.masks['scene.foliage']![i]) continue;
+      const [r, g, b] = [img.data[i * 3], img.data[i * 3 + 1], img.data[i * 3 + 2]];
+      out.set([Math.round(r * 0.9 + 25), Math.round(g * 0.82), Math.round(b * 0.9 + 18)], i * 3);
+    }
+    const ref = analyse({ ...img, data: out }, 'ref', masks);
+    const mine = analyse(img, 'mine', masks);
+    const sol = solveAndRefine(ref, mine, { tables: T });
+    const swatch = sol.faithful.pointColors.find((p) => p.region === 'scene.foliage');
+    assert.ok(swatch, `a foliage swatch: ${JSON.stringify(sol.faithful.pointColors)}`);
+    assert.ok(!sol.faithful.masks.some((m) => m.region === 'scene.foliage'), 'no mask to draw for it');
+    const p = sol.predicted!;
+    assert.ok((p.faithful.regions['scene.foliage'] ?? 99) < (p.untouched.regions['scene.foliage'] ?? 0) * 0.5, JSON.stringify(p.faithful.regions));
+    // And the restrained solution holds the same swatch back.
+    const r = sol.restrained.pointColors.find((q) => q.region === 'scene.foliage')!;
+    assert.ok(Math.abs(r.sat) < Math.abs(swatch.sat) || Math.abs(r.hue) < Math.abs(swatch.hue));
+  });
+});

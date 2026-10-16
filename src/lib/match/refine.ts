@@ -1,7 +1,7 @@
-import { clampAdjustments, identityAdjustments, type Adjustments } from './adjustments';
+import { clampAdjustments, identityAdjustments, type Adjustments, type PointColorSwatch } from './adjustments';
 import type { Calibration } from './calibration';
 import { keepMonotone } from './curve';
-import type { LrTables } from './lr-model';
+import { atPointStage, POINT_NEUTRAL, prepareLr, proHsv, srgbEncode, type LrTables } from './lr-model';
 import { closeness, encodedLevel, simulate, targetFromAnalysis, type Closeness, type Measured, type SimTarget } from './simulate';
 import type { MatchSolution } from './solve';
 import { decodeSample, type DecodedSample } from './stats-core';
@@ -212,7 +212,9 @@ function groupsFor(adj: Adjustments, target: SimTarget, restrained: boolean): Gr
   // ── Masks, region by region ──────────────────────────────────────────────
   for (const m of adj.masks) {
     const t = target.regions[m.region];
-    if (!t) continue;
+    // Manual masks aren't in the preset (and not in the simulation), so
+    // there is nothing to refine.
+    if (!t || m.kind === 'manual') continue;
     const idx = adj.masks.indexOf(m);
     const knobs: Knob[] = [
       { get: (a) => a.masks[idx].exposure, set: (a, v) => { a.masks[idx].exposure = Math.min(4, Math.max(-4, v)); }, lo: -4, hi: 4, delta: 0.15, scale: 1.5 },
@@ -229,6 +231,26 @@ function groupsFor(adj: Adjustments, target: SimTarget, restrained: boolean): Gr
       },
     });
   }
+  // ── Point Color, swatch by swatch ────────────────────────────────────────
+  (adj.pointColors ?? []).forEach((pc, idx) => {
+    const t = target.regions[pc.region];
+    if (!t) return;
+    const knob = (key: 'hue' | 'sat' | 'lum'): Knob => ({
+      get: (a) => a.pointColors[idx][key],
+      set: (a, v) => { a.pointColors[idx][key] = Math.min(100, Math.max(-100, v)); },
+      lo: -100, hi: 100, delta: 8,
+    });
+    const tHue = (Math.atan2(t.b, t.a) * 180) / Math.PI;
+    groups.push({
+      knobs: [knob('hue'), knob('sat'), knob('lum')],
+      residual: (sim) => {
+        const s = sim.regions[pc.region];
+        if (!s) return [0, 0, 0];
+        const sHue = (Math.atan2(s.ab.b, s.ab.a) * 180) / Math.PI;
+        return [circDelta(sHue, tHue) / 50, s.C.mean > 1e-6 ? t.C / s.C.mean - 1 : 0, (t.L - s.L.mean) * 5];
+      },
+    });
+  });
   return groups;
 }
 
@@ -418,6 +440,101 @@ export function refine(
   return { adj: finalAdj, before, after, iterations, total: t1 };
 }
 
+// ─── Point Color: carrying what a drawn mask can't ────────────────────────
+
+/** Regions defined by their colour, which no automatic Lightroom mask finds. */
+const POINT_REGIONS: Array<[RegionKey, string]> = [
+  ['people.skin', 'Skin'],
+  ['scene.foliage', 'Foliage'],
+  ['scene.water', 'Water'],
+];
+/** Below this ΔE a region already matches; a swatch would be noise. */
+const POINT_MIN_GAP = 2;
+/** A region needs this share of the sample to sample a colour from. */
+const POINT_MIN_SHARE = 0.01;
+
+const quantile = (xs: number[], q: number) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.max(0, Math.round(q * (s.length - 1))))] ?? 0;
+};
+
+/**
+ * Swatches for the colour-defined regions still off after the global grade,
+ * sampled where Lightroom's Point Color will look for them: each region's
+ * colour after the curve and mixer of `adj`, in ProPhoto HSV. The ranges hug
+ * the region's own spread of saturation and brightness rather than
+ * Lightroom's default ±0.18, so a skin swatch doesn't take the sand with it.
+ */
+export function pointSwatches(adj: Adjustments, target: SimTarget, sample: DecodedSample, tables: LrTables, cal?: Calibration): PointColorSwatch[] {
+  const prep = prepareLr({ ...adj, pointColors: [] }, tables, [], cal);
+  const sim = simulate(adj, sample, tables, cal);
+  const now = closeness(sim, target).regions;
+  const out: PointColorSwatch[] = [];
+  const px = new Float64Array(3);
+  for (const [region, label] of POINT_REGIONS) {
+    const bit = sample.regions.indexOf(region);
+    if (bit < 0 || !target.regions[region] || (now[region] ?? 0) < POINT_MIN_GAP) continue;
+    const sats: number[] = [];
+    const vals: number[] = [];
+    const sum = [0, 0, 0];
+    for (let i = 0; i < sample.n; i++) {
+      if (!(sample.bits[i] & (1 << bit))) continue;
+      atPointStage(prep, sample.linear[i * 3], sample.linear[i * 3 + 1], sample.linear[i * 3 + 2], px);
+      const [, s, v] = proHsv(Math.max(0, px[0]), Math.max(0, px[1]), Math.max(0, px[2]));
+      sats.push(s);
+      vals.push(srgbEncode(Math.min(1, v)));
+      sum[0] += px[0]; sum[1] += px[1]; sum[2] += px[2];
+    }
+    if (sats.length < sample.n * POINT_MIN_SHARE) continue;
+    const [h, s, v] = proHsv(...(sum.map((x) => Math.max(0, x / sats.length)) as [number, number, number]));
+    const ev = srgbEncode(Math.min(1, v));
+    // Lightroom refuses to sample near-neutral or near-black colours.
+    if (s < POINT_NEUTRAL * 1.5 || ev < 0.06) continue;
+    const span = (xs: number[], c: number): [number, number, number, number] => {
+      const lo = Math.min(c, quantile(xs, 0.15));
+      const hi = Math.max(c, quantile(xs, 0.85));
+      const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+      return [clamp01(lo - 0.25), clamp01(lo), clamp01(hi), clamp01(hi + 0.25)];
+    };
+    out.push({
+      region, label,
+      source: [Math.min(5.9999, ((h / (2 * Math.PI)) * 6 + 6) % 6), s, v],
+      hue: 0, sat: 0, lum: 0, range: 50,
+      hueRange: [0, 1 / 3, 2 / 3, 1],
+      satRange: span(sats, s),
+      lumRange: span(vals, ev),
+      rationale: `${label} is still ${(now[region] ?? 0).toFixed(1)} from the reference after the global grade. Point Color picks it out by its colour, so it travels in the preset — no mask to draw.`,
+    });
+  }
+  return out;
+}
+
+/** Add Point Color swatches where they help, refined; keep them only if the
+ *  result improves and they actually move something. */
+function withPointColors(
+  base: RefineResult,
+  target: SimTarget,
+  mine: PhotoAnalysis,
+  sample: DecodedSample,
+  tables: LrTables,
+  cal?: Calibration,
+): RefineResult {
+  const swatches = pointSwatches(base.adj, target, sample, tables, cal);
+  if (!swatches.length) return base;
+  const covered = new Set(swatches.map((p) => p.region));
+  const start: Adjustments = {
+    ...base.adj,
+    pointColors: swatches,
+    // The swatch now carries what a drawn mask would have.
+    masks: base.adj.masks.filter((m) => !(m.kind === 'manual' && covered.has(m.region))),
+  };
+  const r = refine(start, target, mine, sample, tables, { cal });
+  r.adj.pointColors = r.adj.pointColors.filter((p) => Math.max(Math.abs(p.hue), Math.abs(p.sat), Math.abs(p.lum)) >= 3);
+  if (!r.adj.pointColors.length) return base;
+  const after = closeness(simulate(r.adj, sample, tables, cal), target);
+  return score(after) < score(base.after) ? { ...r, before: base.before, after } : base;
+}
+
 /**
  * Refine both solutions of a match and record how close each lands, all
  * simulated on `mine`'s own pixels. A photo without a pixel sample (an
@@ -440,11 +557,23 @@ export function refineSolution(
   // otherwise "Full" could land further from the reference than the middle.
   const fromFull = refine(solution.faithful, target, mine, sample, tables, { cal });
   const fromRestrained = refine(solution.restrained, target, mine, sample, tables, { cal });
-  const faithful = fromRestrained.total < fromFull.total ? { ...fromRestrained, before: fromFull.before } : fromFull;
+  const best = fromRestrained.total < fromFull.total ? { ...fromRestrained, before: fromFull.before } : fromFull;
+  const faithful = withPointColors(best, target, mine, sample, tables, cal);
   const restrained = solution.restrainedIntent
     ? refine(solution.restrained, solution.restrainedIntent, mine, sample, tables, { restrained: true, cal })
     : null;
-  const restrainedAdj = restrained?.adj ?? solution.restrained;
+  // The restrained solution takes the same swatches, held back as everything
+  // else in it is — skin furthest of all.
+  const swatched = new Set(faithful.adj.pointColors.map((p) => p.region));
+  const restrainedBase = restrained?.adj ?? solution.restrained;
+  const restrainedAdj = {
+    ...restrainedBase,
+    masks: restrainedBase.masks.filter((m) => !(m.kind === 'manual' && swatched.has(m.region))),
+    pointColors: faithful.adj.pointColors.map((p) => {
+      const k = p.region === 'people.skin' ? 0.62 * 0.35 : 0.62;
+      return { ...p, hue: p.hue * k, sat: p.sat * k, lum: p.lum * k };
+    }),
+  };
   const measure = (a: Adjustments) => closeness(simulate(a, sample, tables, cal), target);
   const untouched = measure(identityAdjustments(solution.curveX));
 

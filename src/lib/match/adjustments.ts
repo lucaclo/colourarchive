@@ -46,6 +46,35 @@ export interface MaskAdjustment {
   rationale: string;
 }
 
+/**
+ * One Point Color swatch (Colour Mixer › Point Color), in the units Lightroom
+ * stores in `crs:PointColors` — see xmp.ts and lr-model.ts.
+ *
+ * Point Color selects by COLOUR, so it carries corrections a preset otherwise
+ * can't: skin, foliage and water have no automatic mask, and a mask you have
+ * to draw can't travel in a preset.
+ */
+export interface PointColorSwatch {
+  /** The measured region the swatch was sampled from. */
+  region: RegionKey;
+  label: string;
+  /** Sampled colour: HSV of linear ProPhoto — hue in sixths of a turn (0–6),
+   *  saturation 0–1, value (linear) 0–1. */
+  source: [number, number, number];
+  /** Hue, Saturation, Luminance shifts, -100..100 as Lightroom shows them. */
+  hue: number;
+  sat: number;
+  lum: number;
+  /** Range, 0..100 (Lightroom's default 50). */
+  range: number;
+  /** Outer and inner points, 0–1: hue across the swatch's window (swatch at
+   *  0.5), saturation on HSV saturation, luminance on sRGB-encoded value. */
+  hueRange: [number, number, number, number];
+  satRange: [number, number, number, number];
+  lumRange: [number, number, number, number];
+  rationale: string;
+}
+
 export interface Adjustments {
   // --- Light ---
   exposure: number; // stops, -5..5
@@ -96,6 +125,9 @@ export interface Adjustments {
 
   // --- Masks ---
   masks: MaskAdjustment[];
+
+  // --- Point Color ---
+  pointColors: PointColorSwatch[];
 }
 
 const HSL_KEYS: HslBand['key'][] = [
@@ -146,6 +178,7 @@ export function identityAdjustments(curveX: number[] = [0, 255]): Adjustments {
     noiseReduction: 0,
     colorNoiseReduction: 0,
     masks: [],
+    pointColors: [],
   };
 }
 
@@ -211,6 +244,13 @@ export function clampAdjustments(a: Adjustments): Adjustments {
       saturation: clamp(m.saturation, -100, 100),
       contrast: clamp(m.contrast, -100, 100),
     })),
+    pointColors: (a.pointColors ?? []).slice(0, 8).map((p) => ({
+      ...p,
+      hue: clamp(p.hue, -100, 100),
+      sat: clamp(p.sat, -100, 100),
+      lum: clamp(p.lum, -100, 100),
+      range: clamp(p.range, 0, 100),
+    })),
   };
 }
 
@@ -262,6 +302,23 @@ export function lerpAdjustments(a: Adjustments, b: Adjustments, t: number): Adju
     });
   }
 
+  // Point Color swatches pair by region, like masks; one present on a single
+  // side fades its shifts in from zero. Its sampled colour and ranges don't
+  // blend — they describe which colour, not how much.
+  const swatchRegions = new Set<RegionKey>([
+    ...(a.pointColors ?? []).map((p) => p.region),
+    ...(b.pointColors ?? []).map((p) => p.region),
+  ]);
+  const pointColors: PointColorSwatch[] = [];
+  for (const region of swatchRegions) {
+    const pa = a.pointColors?.find((p) => p.region === region);
+    const pb = b.pointColors?.find((p) => p.region === region);
+    const base = pb ?? pa!;
+    const from = pa ?? { ...base, hue: 0, sat: 0, lum: 0 };
+    const to = pb ?? { ...base, hue: 0, sat: 0, lum: 0 };
+    pointColors.push({ ...base, hue: lerp(from.hue, to.hue, t), sat: lerp(from.sat, to.sat, t), lum: lerp(from.lum, to.lum, t) });
+  }
+
   return clampAdjustments({
     exposure: lerp(a.exposure, b.exposure, t),
     contrast: lerp(a.contrast, b.contrast, t),
@@ -305,6 +362,7 @@ export function lerpAdjustments(a: Adjustments, b: Adjustments, t: number): Adju
     noiseReduction: lerp(a.noiseReduction, b.noiseReduction, t),
     colorNoiseReduction: lerp(a.colorNoiseReduction, b.colorNoiseReduction, t),
     masks,
+    pointColors,
   });
 }
 
@@ -410,5 +468,7 @@ export function atGroupStrength(
     noiseReduction: effects.noiseReduction,
     colorNoiseReduction: effects.colorNoiseReduction,
     masks,
+    // Point Color is a Colour Mixer control.
+    pointColors: colour.pointColors,
   };
 }

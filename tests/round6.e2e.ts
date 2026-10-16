@@ -130,3 +130,50 @@ test('R6-H3 the strength slider still blends: nothing at None', async () => {
   assert.ok(adj.curve.every((p) => p.x === p.y));
   await done(o);
 });
+
+test('R6-H4 the preview draws Point Color as the model does', async () => {
+  const o = await matchResult();
+  const result = await o.page.evaluate(`(async () => {
+    const m = await import('/src/lib/match/lr-model.ts');
+    const A = await import('/src/lib/match/adjustments.ts');
+    const tables = await (await import('/src/lib/match/lr-tables-browser.ts')).lrTablesInBrowser();
+    const img = new Image(); img.src = window.__match.photo(); await img.decode();
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const src = document.createElement('canvas'); src.width = W; src.height = H;
+    const sc = src.getContext('2d', { willReadFrequently: true }); sc.drawImage(img, 0, 0);
+    const dec = (v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+    // A swatch sampled from the most colourful of a grid of the photo's pixels.
+    let best = null;
+    for (let gy = 1; gy < 10; gy++) for (let gx = 1; gx < 10; gx++) {
+      const d = sc.getImageData(Math.floor(W * gx / 10), Math.floor(H * gy / 10), 1, 1).data;
+      const lin = [dec(d[0]), dec(d[1]), dec(d[2])];
+      const pro = m.atPointStage(m.prepareLr(A.identityAdjustments(), tables), lin[0], lin[1], lin[2]);
+      const hsv = m.proHsv(pro[0], pro[1], pro[2]);
+      if (!best || hsv[1] > best[1]) best = hsv;
+    }
+    const around = (c) => [c - 0.73, c - 0.18, c + 0.18, c + 0.73].map((v) => Math.min(1, Math.max(0, v)));
+    const adj = A.identityAdjustments();
+    adj.pointColors = [{ region: 'scene.foliage', label: 'Test', source: [best[0] / (2 * Math.PI) * 6, best[1], best[2]],
+      hue: 40, sat: -60, lum: 30, range: 50, hueRange: [0, 1 / 3, 2 / 3, 1], satRange: around(best[1]),
+      lumRange: around(m.srgbEncode(Math.min(1, best[2]))), rationale: '' }];
+    window.__match.draw(adj);
+    const dst = document.createElement('canvas'); dst.width = W; dst.height = H;
+    const dc = dst.getContext('2d', { willReadFrequently: true }); dc.drawImage(document.getElementById('mx-canvas'), 0, 0, W, H);
+    const prep = m.prepareLr(adj, tables);
+    let sum = 0, n = 0, moved = 0;
+    for (let gy = 1; gy < 16; gy++) for (let gx = 1; gx < 16; gx++) {
+      const x = Math.floor(W * gx / 16), y = Math.floor(H * gy / 16);
+      const s = sc.getImageData(x, y, 1, 1).data, g = dc.getImageData(x, y, 1, 1).data;
+      const c = m.renderLinear(prep, dec(s[0]), dec(s[1]), dec(s[2]));
+      for (let k = 0; k < 3; k++) {
+        const cpu = m.srgbEncode(c[k]) * 255;
+        sum += Math.abs(cpu - g[k]); n++;
+        if (Math.abs(cpu - s[k]) > 3) moved++;
+      }
+    }
+    return { mean: sum / n, moved };
+  })()`) as { mean: number; moved: number };
+  assert.ok(result.moved > 0, 'the swatch changed some pixels');
+  assert.ok(result.mean < 1.5, `mean ${result.mean.toFixed(2)} levels`);
+  await done(o);
+});

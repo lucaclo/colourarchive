@@ -1,7 +1,7 @@
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
 import type { Adjustments } from './adjustments';
 import { splineOf } from './curve';
-import { gradeGains, mixerModel, type LrTables } from './lr-model';
+import { gradeGains, mixerModel, prepareSwatch, type LrTables } from './lr-model';
 
 // Live preview: the Lightroom model (lr-model.ts), in a fragment shader.
 //
@@ -40,6 +40,9 @@ export interface RenderSpec {
   gray: number;
   /** Grading gains, 64 × 3 sample-major; null = no grading. */
   grade: Float32Array | null;
+  /** Point Color swatches, 6 vec4s each (see the shader's pointColor), up to 4. */
+  points: Float32Array;
+  pointCount: number;
   maskGain: [number, number, number, number];
   maskA: [number, number, number, number];
   maskB: [number, number, number, number];
@@ -60,6 +63,20 @@ const pad4 = (xs: number[]): [number, number, number, number] => [
   xs[0] ?? 0, xs[1] ?? 0, xs[2] ?? 0, xs[3] ?? 0,
 ];
 
+/** Up to four active swatches, packed six vec4s each for the shader. Point
+ *  Color holds eight; a match writes at most three (skin, foliage, water). */
+function packSwatches(adj: Adjustments): { points: Float32Array; pointCount: number } {
+  const active = (adj.pointColors ?? []).filter((p) => p.hue || p.sat || p.lum).slice(0, 4).map(prepareSwatch);
+  const points = new Float32Array(4 * 6 * 4);
+  active.forEach((w, i) => {
+    points.set(
+      [w.hue, w.sat, w.lum, w.turn, ...w.scale, w.logS, ...w.huePts, ...w.satPts, ...w.lumPts, w.logV, 0, 0, 0],
+      i * 24,
+    );
+  });
+  return { points, pointCount: active.length };
+}
+
 /** Resolve slider values into shader parameters. Without `tables` (they
  *  couldn't be fetched) the mixer and grading stages are left out, and the
  *  caller says the preview shows tone only. */
@@ -78,6 +95,7 @@ export function deriveRenderSpec(
     mixer: mixer?.delta ?? null,
     gray: mixer?.gray ?? 0,
     grade: tables ? gradeGains(tables, adj.grading) : null,
+    ...packSwatches(adj),
     maskGain: pad4(chans.map((r) => Math.pow(2, byRegion.get(r)?.exposure ?? 0))),
     maskA: pad4(chans.map((r) => ((byRegion.get(r)?.tint ?? 0) / 100) * cal.localTintUnit)),
     maskB: pad4(chans.map((r) => ((byRegion.get(r)?.temp ?? 0) / 100) * cal.localTempUnit)),
@@ -118,6 +136,8 @@ uniform vec3  u_gradeMul;
 uniform vec3  u_gradeAdd;
 uniform vec2  u_texel;
 
+uniform vec4  u_pc[24];      // 4 swatches x 6 vec4s
+uniform int   u_pcCount;
 uniform float u_gain;
 uniform float u_gray;
 uniform vec4  u_maskGain;
@@ -235,6 +255,48 @@ float gradeChannel(float v, int c) {
   return v * mix(ga, gb, f);
 }
 
+// Point Color — lr-model's fitted swatch operator, constants and all.
+float trapezoid(float x, vec4 p, float up, float down) {
+  float rise = x >= p.y ? 1.0 : x <= p.x ? 0.0 : pow(smoothstep(0.0, 1.0, (x - p.x) / (p.y - p.x)), up);
+  float fall = x <= p.z ? 1.0 : x >= p.w ? 0.0 : pow(smoothstep(0.0, 1.0, (p.w - x) / (p.w - p.z)), down);
+  return min(rise, fall);
+}
+vec3 proHsv(vec3 q) {
+  float mx = max(max(q.r, q.g), q.b);
+  float mn = min(min(q.r, q.g), q.b);
+  float d = mx - mn;
+  float h = 0.0;
+  if (d >= 1e-9) {
+    if (mx == q.r) h = mod((q.g - q.b) / d, 6.0);
+    else if (mx == q.g) h = (q.b - q.r) / d + 2.0;
+    else h = (q.r - q.g) / d + 4.0;
+  }
+  return vec3(h / 6.0 * 6.28318530718, mx > 0.0 ? d / mx : 0.0, mx);
+}
+vec3 hsvRgb(float h, float s, float v) {
+  float hh = fract(h / 6.28318530718) * 6.0;
+  float c = v * s;
+  float x = c * (1.0 - abs(mod(hh, 2.0) - 1.0));
+  vec3 rgb =
+    hh < 1.0 ? vec3(c, x, 0.0) : hh < 2.0 ? vec3(x, c, 0.0) : hh < 3.0 ? vec3(0.0, c, x) :
+    hh < 4.0 ? vec3(0.0, x, c) : hh < 5.0 ? vec3(x, 0.0, c) : vec3(c, 0.0, x);
+  return rgb + (v - c);
+}
+vec3 pointColor(vec3 p, vec4 a, vec4 b, vec4 hp, vec4 sp, vec4 lp, vec4 e) {
+  vec3 q = max(p, 0.0);
+  if (max(max(q.r, q.g), q.b) <= 1e-6) return p;
+  vec3 hsv = proHsv(q);
+  float ev = srgbEncode(min(hsv.z, 1.0));
+  float d = mod(hsv.x - a.x + 3.14159265359, 6.28318530718) - 3.14159265359;
+  float w = trapezoid(d * b.x, hp, 1.0282, 1.0282)
+    * trapezoid(a.y + (hsv.y - a.y) * b.y, sp, 1.8348, 0.9897)
+    * trapezoid(a.z + (ev - a.z) * b.z, lp, 2.7765, 1.1354)
+    * min(1.0, hsv.y / 0.0578);
+  if (w <= 0.0) return p;
+  vec3 o = hsvRgb(hsv.x + w * a.w, clamp(hsv.y * exp2(w * b.w), 0.0, 1.0), hsv.z * exp2(w * e.x));
+  return min(o, max(q, vec3(1.0))) + (p - q);
+}
+
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
@@ -262,6 +324,11 @@ vec3 grade(vec3 srgb, vec2 uv) {
       float y = dot(PRO_TO_RGB * before, vec3(0.2126, 0.7152, 0.0722));
       p += u_gray * (vec3(y) - p);
     }
+  }
+
+  for (int i = 0; i < 4; i++) {
+    if (i >= u_pcCount) break;
+    p = pointColor(p, u_pc[i * 6], u_pc[i * 6 + 1], u_pc[i * 6 + 2], u_pc[i * 6 + 3], u_pc[i * 6 + 4], u_pc[i * 6 + 5]);
   }
 
   if (u_hasGrade) p = vec3(gradeChannel(p.r, 0), gradeChannel(p.g, 1), gradeChannel(p.b, 2));
@@ -512,6 +579,8 @@ export class MatchPreview {
 
     gl.uniform2f(this.u('u_texel'), 1 / this.size[0], 1 / this.size[1]);
     gl.uniform1f(this.u('u_gain'), spec.gain);
+    gl.uniform4fv(this.u('u_pc'), spec.points);
+    gl.uniform1i(this.u('u_pcCount'), spec.pointCount);
     gl.uniform1f(this.u('u_gray'), spec.gray);
     gl.uniform4fv(this.u('u_maskGain'), new Float32Array(spec.maskGain));
     gl.uniform4fv(this.u('u_maskA'), new Float32Array(spec.maskA));

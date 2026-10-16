@@ -1,4 +1,4 @@
-import type { Adjustments } from './adjustments';
+import type { Adjustments, PointColorSwatch } from './adjustments';
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
 import { curveLut, readLut } from './curve';
 import { HSL_BANDS } from './types';
@@ -441,6 +441,126 @@ function applyGrade(gains: Float32Array, p: Float64Array): void {
   }
 }
 
+// ─── Point Color ───────────────────────────────────────────────────────────
+//
+// Fitted to Camera Raw 18.7 on synthetic charts by RAWmakase (MIT,
+// develop/point_color.rs): a swatch selects by a smoothed trapezoid in each of
+// hue, saturation and encoded value — scaled by Range — and within the
+// selection turns hue, scales saturation and value. Swatches apply in turn.
+
+const PC = {
+  HUE_WINDOW: 0.7236,
+  RANGE_BELOW: [0.767, 1.7637, 0.5482],
+  RANGE_ABOVE: [0.1186, 0.3886, 0.0598],
+  HUE_RAMP: 1.0282,
+  SATURATION_RAMP: [1.8348, 0.9897],
+  LUMINANCE_RAMP: [2.7765, 1.1354],
+  /** Saturation below which pixels fade out of every selection. */
+  NEUTRAL: 0.0578,
+  HUE_SHIFT: 0.6109,
+  SATURATION_SHIFT: 0.9,
+  LUMINANCE_SHIFT: [1.3932, -0.2366],
+} as const;
+export const POINT_NEUTRAL = PC.NEUTRAL;
+const TAU = Math.PI * 2;
+
+export interface PreparedSwatch {
+  hue: number;
+  sat: number;
+  lum: number;
+  scale: [number, number, number];
+  huePts: number[];
+  satPts: number[];
+  lumPts: number[];
+  turn: number;
+  logS: number;
+  logV: number;
+}
+
+export function prepareSwatch(p: PointColorSwatch): PreparedSwatch {
+  const range = p.range / 100;
+  const scale = [0, 1, 2].map((d) =>
+    Math.pow(2, (range < 0.5 ? PC.RANGE_BELOW[d] : PC.RANGE_ABOVE[d]) * (0.5 - range)),
+  ) as [number, number, number];
+  const dh = p.hue / 100;
+  const ds = p.sat / 100;
+  const dl = p.lum / 100;
+  const l = Math.abs(dl);
+  return {
+    hue: (p.source[0] / 6) * TAU,
+    sat: p.source[1],
+    lum: srgbEncode(p.source[2]),
+    scale,
+    huePts: p.hueRange.map((x) => (x - 0.5) * 2 * PC.HUE_WINDOW),
+    satPts: [...p.satRange],
+    lumPts: [...p.lumRange],
+    turn: dh * PC.HUE_SHIFT,
+    logS: Math.log2(1 + PC.SATURATION_SHIFT * Math.abs(ds)) * Math.sign(ds),
+    logV: (PC.LUMINANCE_SHIFT[0] * l + PC.LUMINANCE_SHIFT[1] * l * l) * Math.sign(dl),
+  };
+}
+
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+function trapezoid(x: number, p: number[], rampUp: number, rampDown: number): number {
+  const rise = x >= p[1] ? 1 : x <= p[0] ? 0 : Math.pow(smoothstep((x - p[0]) / (p[1] - p[0])), rampUp);
+  const fall = x <= p[2] ? 1 : x >= p[3] ? 0 : Math.pow(smoothstep((p[3] - x) / (p[3] - p[2])), rampDown);
+  return Math.min(rise, fall);
+}
+const wrapAngle = (d: number) => ((((d + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
+
+/** HSV of linear ProPhoto, hue in radians. */
+export function proHsv(r: number, g: number, b: number): [number, number, number] {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d >= 1e-9) {
+    if (max === r) h = ((((g - b) / d) % 6) + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  return [(h / 6) * TAU, max > 0 ? d / max : 0, max];
+}
+
+function hsvToRgb(h: number, s: number, v: number, out: Float64Array): void {
+  const hh = ((((h / TAU) % 1) + 1) % 1) * 6;
+  const c = v * s;
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+  const m = v - c;
+  const k = Math.min(5, Math.floor(hh));
+  const [r, g, b] =
+    k === 0 ? [c, x, 0] : k === 1 ? [x, c, 0] : k === 2 ? [0, c, x] : k === 3 ? [0, x, c] : k === 4 ? [x, 0, c] : [c, 0, x];
+  out[0] = r + m;
+  out[1] = g + m;
+  out[2] = b + m;
+}
+
+/** How much a swatch selects a ProPhoto-linear colour, 0..1. */
+export function swatchWeight(w: PreparedSwatch, r: number, g: number, b: number): number {
+  const q0 = Math.max(0, r), q1 = Math.max(0, g), q2 = Math.max(0, b);
+  if (Math.max(q0, q1, q2) <= 1e-6) return 0;
+  const [h, s, v] = proHsv(q0, q1, q2);
+  const ev = srgbEncode(Math.min(v, 1));
+  return (
+    trapezoid(wrapAngle(h - w.hue) * w.scale[0], w.huePts, PC.HUE_RAMP, PC.HUE_RAMP) *
+    trapezoid(w.sat + (s - w.sat) * w.scale[1], w.satPts, PC.SATURATION_RAMP[0], PC.SATURATION_RAMP[1]) *
+    trapezoid(w.lum + (ev - w.lum) * w.scale[2], w.lumPts, PC.LUMINANCE_RAMP[0], PC.LUMINANCE_RAMP[1]) *
+    Math.min(1, s / PC.NEUTRAL)
+  );
+}
+
+const pcOut = new Float64Array(3);
+function applySwatch(w: PreparedSwatch, p: Float64Array): void {
+  const q0 = Math.max(0, p[0]), q1 = Math.max(0, p[1]), q2 = Math.max(0, p[2]);
+  const weight = swatchWeight(w, q0, q1, q2);
+  if (weight <= 0) return;
+  const [h, s, v] = proHsv(q0, q1, q2);
+  hsvToRgb(h + weight * w.turn, Math.min(1, Math.max(0, s * Math.pow(2, weight * w.logS))), v * Math.pow(2, weight * w.logV), pcOut);
+  // Channels clip at white; what HSV can't carry stays as an offset.
+  const q = [q0, q1, q2];
+  for (let c = 0; c < 3; c++) p[c] = Math.min(pcOut[c], Math.max(q[c], 1)) + (p[c] - q[c]);
+}
+
 // ─── Point curve as RGB tone ───────────────────────────────────────────────
 
 /** Hue-preserving tone: the largest and smallest channel go through the curve,
@@ -474,6 +594,8 @@ export interface LrPrepared {
   curve: Float32Array | null;
   mixer: MixerModel | null;
   grade: Float32Array | null;
+  /** Point Color swatches, applied in turn. */
+  points: PreparedSwatch[];
   /** Per mask channel: linear exposure gain, OKLab a/b offset, chroma factor. */
   masks: Array<{ gain: number; a: number; b: number; chroma: number }>;
 }
@@ -493,6 +615,7 @@ export function prepareLr(
     curve: identity ? null : curveLut(adj.curve),
     mixer: mixerModel(t, adj),
     grade: gradeGains(t, adj.grading),
+    points: (adj.pointColors ?? []).filter((p) => p.hue || p.sat || p.lum).map(prepareSwatch),
     masks: maskChannels.map((r) => {
       const m = byRegion.get(r);
       return {
@@ -534,8 +657,9 @@ export function renderLinear(
     for (let c = 0; c < 3; c++) p[c] = srgbDecode(p[c]);
   }
 
-  // 3–4. Mixer stage, then Colour Grading.
+  // 3–4. Mixer stage, Point Color, then Colour Grading.
   if (m.mixer) applyMixer(m.mixer, p);
+  for (const w of m.points) applySwatch(w, p);
   if (m.grade) applyGrade(m.grade, p);
 
   let lr = PRO_TO_RGB[0] * p[0] + PRO_TO_RGB[1] * p[1] + PRO_TO_RGB[2] * p[2];
@@ -589,3 +713,32 @@ export function oklabToLinear(L: number, a: number, b: number): [number, number,
 }
 
 export { srgbDecode, srgbEncode };
+
+/** A pixel as Point Color sees it: linear ProPhoto after the curve and the
+ *  mixer. What a swatch should be sampled from. */
+export function atPointStage(m: LrPrepared, r: number, g: number, b: number, out: Float64Array = new Float64Array(3)): Float64Array {
+  const R = r * m.gain, G = g * m.gain, B = b * m.gain;
+  out[0] = RGB_TO_PRO[0] * R + RGB_TO_PRO[1] * G + RGB_TO_PRO[2] * B;
+  out[1] = RGB_TO_PRO[3] * R + RGB_TO_PRO[4] * G + RGB_TO_PRO[5] * B;
+  out[2] = RGB_TO_PRO[6] * R + RGB_TO_PRO[7] * G + RGB_TO_PRO[8] * B;
+  if (m.curve) {
+    for (let c = 0; c < 3; c++) out[c] = srgbEncode(Math.min(1, Math.max(0, out[c])));
+    rgbTone(m.curve, out);
+    for (let c = 0; c < 3; c++) out[c] = srgbDecode(out[c]);
+  }
+  if (m.mixer) applyMixer(m.mixer, out);
+  return out;
+}
+
+/** A swatch's sampled colour as a CSS colour, for showing which colour it picks. */
+export function swatchCss(source: [number, number, number]): string {
+  const rgb = new Float64Array(3);
+  hsvToRgb((source[0] / 6) * TAU, source[1], Math.min(1, source[2]), rgb);
+  const lin = [
+    PRO_TO_RGB[0] * rgb[0] + PRO_TO_RGB[1] * rgb[1] + PRO_TO_RGB[2] * rgb[2],
+    PRO_TO_RGB[3] * rgb[0] + PRO_TO_RGB[4] * rgb[1] + PRO_TO_RGB[5] * rgb[2],
+    PRO_TO_RGB[6] * rgb[0] + PRO_TO_RGB[7] * rgb[1] + PRO_TO_RGB[8] * rgb[2],
+  ];
+  const [r, g, b] = lin.map((v) => Math.round(srgbEncode(Math.min(1, Math.max(0, v))) * 255));
+  return `rgb(${r} ${g} ${b})`;
+}

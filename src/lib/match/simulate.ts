@@ -51,7 +51,10 @@ export function simulate(
   cal?: Calibration,
   stride = 1,
 ): Measured {
-  const prep = prepareLr(adj, tables, sample.regions, cal);
+  // Only what the preset carries: a mask you have to draw yourself is advice,
+  // not part of the .xmp, so it isn't part of the prediction either.
+  const carried = { ...adj, masks: adj.masks.filter((m) => m.kind !== 'manual') };
+  const prep = prepareLr(carried, tables, sample.regions, cal);
   const n = Math.ceil(sample.n / stride);
   const out = new Float32Array(n * 3);
   const bits = new Uint16Array(n);

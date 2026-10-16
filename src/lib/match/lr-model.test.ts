@@ -6,6 +6,7 @@ import { lrTables } from './lr-tables-node';
 import {
   linearToOklab,
   prepareLr,
+  proHsv,
   renderLinear,
   srgbDecode,
   srgbEncode,
@@ -160,5 +161,56 @@ describe('lr-model: measured Colour Grading', () => {
     assert.ok(r[0] > r[1] && r[0] > r[2]);
     assert.ok(g[1] > g[0] && g[1] > g[2]);
     assert.ok(b[2] > b[0] && b[2] > b[1]);
+  });
+});
+
+describe('lr-model: Point Color', () => {
+  // Lightroom's default ranges around a sampled colour (checked against Adobe's
+  // own Film 07 preset): saturation and encoded value ±0.18 inner, ±0.73 outer.
+  const around = (c: number) => [c - 0.73, c - 0.18, c + 0.18, c + 0.73].map((v) => Math.min(1, Math.max(0, v))) as [number, number, number, number];
+  const swatchAt = (rgb: [number, number, number], shift: { hue?: number; sat?: number; lum?: number }) => {
+    const pro = [
+      0.529345 * rgb[0] + 0.330072 * rgb[1] + 0.140583 * rgb[2],
+      0.098374 * rgb[0] + 0.873462 * rgb[1] + 0.028164 * rgb[2],
+      0.016883 * rgb[0] + 0.117673 * rgb[1] + 0.865444 * rgb[2],
+    ];
+    const [h, s, v] = proHsv(pro[0], pro[1], pro[2]);
+    const a = adj();
+    a.pointColors = [{
+      region: 'people.skin', label: 'Skin', source: [(h / (2 * Math.PI)) * 6, s, v],
+      hue: shift.hue ?? 0, sat: shift.sat ?? 0, lum: shift.lum ?? 0, range: 50,
+      hueRange: [0, 1 / 3, 2 / 3, 1], satRange: around(s), lumRange: around(srgbEncode(v)), rationale: '',
+    }];
+    return a;
+  };
+  const skin: [number, number, number] = [0.5, 0.28, 0.18];
+
+  it('moves the sampled colour and leaves a distant one alone', () => {
+    const a = swatchAt(skin, { sat: -60 });
+    assert.ok(chromaOf(render(a, skin)) < chromaOf(skin) * 0.8);
+    const blue: [number, number, number] = [0.05, 0.12, 0.5];
+    const out = render(a, blue);
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(out[i] - blue[i]) < 1e-4);
+  });
+
+  it('Hue +100 turns the sampled colour by about 35 degrees of ProPhoto hue', () => {
+    const out = render(swatchAt(skin, { hue: 100 }), skin);
+    const pro = (c: number[]) => proHsv(
+      0.529345 * c[0] + 0.330072 * c[1] + 0.140583 * c[2],
+      0.098374 * c[0] + 0.873462 * c[1] + 0.028164 * c[2],
+      0.016883 * c[0] + 0.117673 * c[1] + 0.865444 * c[2],
+    )[0];
+    const turned = ((pro(out) - pro(skin)) * 180) / Math.PI;
+    assert.ok(Math.abs(turned - 35) < 1.5, `${turned.toFixed(1)}°`);
+  });
+
+  it('Luminance −100 darkens the sampled colour', () => {
+    const Y = (c: number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    assert.ok(Y(render(swatchAt(skin, { lum: -100 }), skin)) < Y(skin) * 0.6);
+  });
+
+  it('a swatch with no shift changes nothing', () => {
+    const out = render(swatchAt(skin, {}), skin);
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(out[i] - skin[i]) < 1e-5);
   });
 });

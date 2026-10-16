@@ -2196,13 +2196,13 @@ const accent = manifest.chapters[0]
   import { mergeReferences } from '../lib/match/solve';
   import { solveAndRefine } from '../lib/match/engine';
   import { lrTablesInBrowser } from '../lib/match/lr-tables-browser';
-  import type { LrTables } from '../lib/match/lr-model';
+  import { swatchCss, type LrTables } from '../lib/match/lr-model';
   import { buildPresetFiles } from '../lib/match/xmp';
   import { photoName, matchTitle } from '../lib/match/names';
   import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
   import { DEFAULT_CALIBRATION } from '../lib/match/calibration';
   import { CAL_TARGETS } from '../lib/match/roundtrip';
-  import type { Adjustments } from '../lib/match/adjustments';
+  import type { Adjustments, PointColorSwatch } from '../lib/match/adjustments';
   import type { PhotoAnalysis, RegionKey } from '../lib/match/types';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -3452,6 +3452,24 @@ const accent = manifest.chapters[0]
         ])
       : '';
 
+    // Point Color: one row per swatch, in the mixer's columns, with the colour
+    // it picks out. These travel in the preset — no mask to draw.
+    const swatches = ((a.pointColors ?? []) as PointColorSwatch[]).filter((p) => Math.abs(p.hue) >= 0.5 || Math.abs(p.sat) >= 0.5 || Math.abs(p.lum) >= 0.5);
+    const pointColor = swatches.length
+      ? group(
+          'Point Color',
+          [
+            `<div class="mx-mixer">
+               <span class="hdr"></span><span class="hdr n">Hue</span><span class="hdr n">Sat</span><span class="hdr n">Lum</span>
+               ${swatches
+                 .map((p) => `<span class="band"><span class="chip" style="background:${swatchCss(p.source)}"></span>${esc(p.label)}</span>${cell(p.hue)}${cell(p.sat)}${cell(p.lum)}`)
+                 .join('')}
+             </div>`,
+          ],
+          'In the preset. Each picks out its colour by itself, so there’s no mask to draw.',
+        )
+      : '';
+
     // Lightroom shows Shadows/Midtones/Highlights as a 3-way cluster — one
     // large "active" wheel plus two small ones — and reaches Global through a
     // separate toggle rather than a fourth wheel in the row. The active range
@@ -3503,7 +3521,8 @@ const accent = manifest.chapters[0]
            'either / or',
          )}</div>
        </div>` +
-      mixer;
+      mixer +
+      pointColor;
 
     // ── Details ──────────────────────────────────────────────────────────
     const effects = group('Effects & Detail', [

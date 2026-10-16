@@ -412,3 +412,31 @@ describe('buildPresetFiles', () => {
     }
   });
 });
+
+describe('toXmp: Point Color', () => {
+  // The first swatch of Lightroom 9.6's own Premium › Style - Film › Film 07
+  // preset, verbatim. Rebuilt through the writer, it must come out identical.
+  const ADOBE = '0.093404, 0.844673, 0.518713, 0.150000, -0.130000, 0.000000, 0.500000, 0.000000, 0.333333, 0.666667, 1.000000, 0.114673, 0.664673, 1.000000, 1.000000, 0.017550, 0.567550, 0.927550, 1.000000';
+
+  it('writes a swatch exactly as Lightroom does', () => {
+    const a = identityAdjustments();
+    a.pointColors = [{
+      region: 'people.skin', label: 'Skin', source: [0.093404, 0.844673, 0.518713],
+      hue: 15, sat: -13, lum: 0, range: 50,
+      hueRange: [0, 0.333333, 0.666667, 1], satRange: [0.114673, 0.664673, 1, 1], lumRange: [0.01755, 0.56755, 0.92755, 1],
+      rationale: '',
+    }];
+    const xml = toXmp(a, { name: 'pc' });
+    assert.ok(xml.includes(`<rdf:li>${ADOBE}</rdf:li>`), xml);
+    assert.match(xml, /<crs:ColorVariance>\s*<rdf:Seq>\s*<rdf:li>0\.000000<\/rdf:li>\s*<\/rdf:Seq>\s*<\/crs:ColorVariance>/);
+  });
+
+  it('leaves out swatches that change nothing', () => {
+    const a = identityAdjustments();
+    a.pointColors = [{
+      region: 'scene.foliage', label: 'Foliage', source: [2, 0.5, 0.3], hue: 0, sat: 0, lum: 0, range: 50,
+      hueRange: [0, 1 / 3, 2 / 3, 1], satRange: [0, 0.32, 0.68, 1], lumRange: [0, 0.4, 0.76, 1], rationale: '',
+    }];
+    assert.ok(!toXmp(a, { name: 'pc' }).includes('PointColors'));
+  });
+});
