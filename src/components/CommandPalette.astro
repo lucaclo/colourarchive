@@ -23,6 +23,7 @@ const pages: (Command & { server?: boolean })[] = [
   { id: 'go:scout', title: 'Scout', group: 'Go to', href: '/scout', keywords: ['map', 'sun', 'light', 'plan'] },
   { id: 'go:book', title: 'Book', group: 'Go to', href: '/book', keywords: ['sequence', 'print', 'spreads'], server: true },
   { id: 'go:zine', title: 'Magazine', group: 'Go to', href: '/book/zine', keywords: ['zine'], server: true },
+  { id: 'go:get', title: 'Get the app', group: 'Go to', href: '/get', keywords: ['install', 'download', 'home screen', 'dock'] },
   { id: 'go:upload', title: 'Add & remove', group: 'Go to', href: '/upload', keywords: ['upload', 'import', 'add photos'], server: true },
 ];
 const chapters: Command[] = manifest.chapters.map((c) => ({

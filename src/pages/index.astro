@@ -260,6 +260,10 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           <span class="tb-label">Overview</span>
         </button>
       )}
+      <a class="tb-button tb-get" id="get-app" href="/get" aria-label="Get the app" title="Get the app">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
+        <span class="tb-label">Get the app</span>
+      </a>
       <button type="button" class="tb-button" id="insights-btn" data-cmdk="Insights" data-cmdk-keywords="stats, gaps" aria-haspopup="dialog" aria-label="Insights">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
         <span class="tb-label">Insights</span>
@@ -2399,4 +2403,22 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     }
     return null;
   };
+</script>
+
+<script>
+  // Once the app is installed, the top bar's "Get the app" opens it instead:
+  // in a browser tab, a link to the archive would only reload the tab.
+  // Inside the app window there is nothing to get, so it goes.
+  import { inAppWindow, installedElsewhere, OPEN_IN_APP } from '../lib/install';
+  const getApp = document.getElementById('get-app') as HTMLAnchorElement | null;
+  if (getApp && inAppWindow()) getApp.remove();
+  else if (getApp) {
+    installedElsewhere().then((yes) => {
+      if (!yes) return;
+      getApp.href = OPEN_IN_APP;
+      getApp.setAttribute('aria-label', 'Open in app');
+      getApp.title = 'Open in app';
+      getApp.querySelector('.tb-label')!.textContent = 'Open in app';
+    });
+  }
 </script>
