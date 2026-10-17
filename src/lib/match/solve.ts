@@ -6,10 +6,12 @@ import {
   type CurvePoint,
   type MaskAdjustment,
 } from './adjustments';
+import { keepMonotone, splineOf } from './curve';
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
 // From texture-core, not texture: the solver runs in the browser on the offline
 // fallback path, and texture.ts pulls in sharp.
 import { textureComparable } from './texture-core';
+import type { Closeness, SimTarget } from './simulate';
 import {
   BASELINE_FIDELITY,
   HSL_BANDS,
@@ -168,6 +170,22 @@ export interface MatchSolution {
   /** RMS OKLab error across zones after solving — how well the colour grading
    *  replication actually landed. Lower is better; below ~0.01 is a close match. */
   colourResidual: number;
+  /** Where the restrained solution means to land — its own predicted result,
+   *  which refinement (refine.ts) then makes Lightroom actually reach. */
+  restrainedIntent?: SimTarget;
+  /** How close Lightroom should get, simulated on your photo's pixels through
+   *  the Lightroom model and measured against the reference. Absent when the
+   *  photo has no pixel sample (old analyses). */
+  predicted?: Prediction;
+}
+
+export interface Prediction {
+  untouched: Closeness;
+  restrained: Closeness;
+  faithful: Closeness;
+  /** The faithful solution as the solver first wrote it, before refinement —
+   *  kept so the gain refinement made can be shown, not just claimed. */
+  unrefined: Closeness;
 }
 
 // --- Colour helpers -----------------------------------------------------------
@@ -287,17 +305,12 @@ function applyExposure(s: State, stops: number): void {
 }
 
 /** Apply a curve expressed in Lightroom's 0..255 space to the state's OKLab L
- *  values, matching what the preview shader will do. */
+ *  values — drawn as Lightroom draws it, a natural spline (see curve.ts). */
 function applyCurve(s: State, curve: CurvePoint[]): void {
+  const f = splineOf(curve);
   const map = (L: number): number => {
     const x = srgbEncode(Math.max(0, Math.min(1, L)) ** 3) * 255;
-    // Piecewise-linear through the control points.
-    let i = 0;
-    while (i < curve.length - 2 && curve[i + 1].x < x) i++;
-    const p0 = curve[i];
-    const p1 = curve[i + 1] ?? curve[i];
-    const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-    const y = (p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t))) / 255;
+    const y = f(x) / 255;
     // Back to OKLab L: invert the sRGB encode, then cube-root.
     const lin = y <= 0.04045 ? y / 12.92 : Math.pow((y + 0.055) / 1.055, 2.4);
     return Math.cbrt(Math.max(0, lin));
@@ -447,28 +460,25 @@ function fitCurve(from: number[], to: number[]): { points: CurvePoint[]; x: numb
     if (mono[i].y > maxY) mono[i].y = Math.round(maxY);
   }
 
-  return { points: mono, x: mono.map((p) => p.x) };
+  // Lightroom joins these points with a spline, which can fall back between
+  // monotone points where the slope changes sharply. Relax until it doesn't.
+  const smooth = keepMonotone(mono).map((p) => ({ x: p.x, y: Math.round(p.y) }));
+  return { points: smooth, x: smooth.map((p) => p.x) };
 }
 
 /** Pull a curve toward identity — the restrained solution's tone move. */
 const softenCurve = (c: CurvePoint[], pull: number): CurvePoint[] =>
   c.map((p) => ({ x: p.x, y: p.y + (p.x - p.y) * pull }));
 
-/** A fitted curve's y at an arbitrary x, by linear interpolation between the
- *  two control points bracketing it — the curve's own shape evaluated at a
- *  point that may not be one of its own taps. Used both to describe a curve
- *  with the Basic sliders below, and to resample one curve onto another's
- *  shared x-grid (see solveOne's blending note on `sharedCurveX`) — the two
- *  passes fit against different tone gaps, so their own taps land at
- *  different x positions and reading `curve[i].y` at a shared index is not
- *  the same value as reading the curve's shape at that shared x. */
+/** A fitted curve's y at an arbitrary x, read off the spline Lightroom draws
+ *  through its points. Used both to describe a curve with the Basic sliders
+ *  below, and to resample one curve onto another's shared x-grid (see
+ *  solveOne's blending note on `sharedCurveX`) — the two passes fit against
+ *  different tone gaps, so their own taps land at different x positions and
+ *  reading `curve[i].y` at a shared index is not the same value as reading the
+ *  curve's shape at that shared x. */
 function sampleCurve(curve: CurvePoint[], x: number): number {
-  let i = 0;
-  while (i < curve.length - 2 && curve[i + 1].x < x) i++;
-  const p0 = curve[i];
-  const p1 = curve[i + 1] ?? curve[i];
-  const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-  return p0.y + (p1.y - p0.y) * Math.max(0, Math.min(1, t));
+  return splineOf(curve)(x);
 }
 
 /**
@@ -507,6 +517,32 @@ interface Build {
   reachability: number;
   /** RMS OKLab a/b error across the luminance zones after the full solve. */
   colourResidual: number;
+}
+
+/**
+ * What a pass means to achieve, as a simulation target.
+ *
+ * Two things the running state does not carry are folded in here, because a
+ * target that left them out would tell refinement to undo them: the Colour
+ * Mixer's move on each band's own statistics (the state applies the mixer to
+ * regions, not to `bands`), and masks — the state never applies them, so
+ * masked regions are left out and the restrained masks stay as solved.
+ */
+function intentOf(state: State, ref: PhotoAnalysis, adj: Adjustments, cal: Calibration): SimTarget {
+  const zones: SimTarget['zones'] = {};
+  for (const [key, v] of state.regions) {
+    if (key.startsWith('zone.')) zones[key] = { L: v.L, a: v.a, b: v.b, C: v.C, coverage: ref.regions[key]?.coverage ?? 0 };
+  }
+  const bands = state.bands.map((b, i) => {
+    const m = adj.hsl[HSL_BANDS[i].key];
+    return {
+      ...b,
+      chroma: b.chroma * Math.max(0, 1 + m.sat / (100 * cal.hslSaturationGain)),
+      L: Math.max(0, Math.min(1, b.L + m.lum / cal.hslLuminanceGain)),
+      hue: (((b.hue + (m.hue / 100) * cal.hslHueDegreesAt100) % 360) + 360) % 360,
+    };
+  });
+  return { percentiles: [...state.percentiles], zones, bands, regions: {} };
 }
 
 function solveOne(
@@ -1283,5 +1319,6 @@ export function solveMatch(
     // whereas the restrained pass deliberately stops short of it.
     reachability: faithful.reachability,
     colourResidual: faithful.colourResidual,
+    restrainedIntent: intentOf(restrained.state, mergedRef, restrained.adj, cal),
   };
 }

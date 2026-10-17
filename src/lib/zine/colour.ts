@@ -4,44 +4,11 @@
  */
 import { WADA_COLOURS, WADA_COMBINATIONS } from './wada';
 
-export type RGB = [number, number, number];
+import { hexToRgb, rgbHueToRyb, rgbToHex, rgbToHsv, type RGB } from '../ryb';
+export { hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, rgbHueToRyb, rybHueToRgb, type RGB } from '../ryb';
 export type Lab = [number, number, number];
 
 export const isHex = (s: unknown): s is `#${string}` => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s);
-
-export function hexToRgb(hex: string): RGB {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function rgbToHex([r, g, b]: RGB): string {
-  const c = (v: number) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
-  return `#${c(r)}${c(g)}${c(b)}`;
-}
-
-/** h 0–360, s and v 0–1. */
-export function hsvToRgb(h: number, s: number, v: number): RGB {
-  const f = (n: number) => {
-    const k = (n + h / 60) % 6;
-    return 255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)));
-  };
-  return [f(5), f(3), f(1)];
-}
-
-export function rgbToHsv([r, g, b]: RGB): [number, number, number] {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b);
-  const d = max - Math.min(r, g, b);
-  let h = 0;
-  if (d) {
-    if (max === r) h = ((g - b) / d) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60;
-    if (h < 0) h += 360;
-  }
-  return [h, max ? d / max : 0, max];
-}
 
 const lin = (c: number) => {
   c /= 255;
@@ -185,23 +152,7 @@ export function roles(colours: string[]): { paper: string; ink: string; accent: 
 }
 
 // ── Colour theory ─────────────────────────────────────────────────────────
-// Harmonies are worked out on the painter's wheel (red, yellow, blue
-// primaries), where blue's opposite is orange and red's is green, rather
-// than on the screen's RGB wheel, where blue's opposite is yellow. Screen
-// hues are mapped onto it piecewise, through Itten's primaries and
-// secondaries.
-const RGB_STOPS = [0, 30, 60, 120, 240, 285, 360];
-const RYB_STOPS = [0, 60, 120, 180, 240, 300, 360];
-const remap = (h: number, from: number[], to: number[]) => {
-  h = ((h % 360) + 360) % 360;
-  for (let i = 1; i < from.length; i++) {
-    if (h <= from[i]) return to[i - 1] + ((h - from[i - 1]) / (from[i] - from[i - 1])) * (to[i] - to[i - 1]);
-  }
-  return h;
-};
-/** A screen hue (HSV, 0–360) placed on the painter's wheel. */
-export const rgbHueToRyb = (h: number) => remap(h, RGB_STOPS, RYB_STOPS);
-export const rybHueToRgb = (h: number) => remap(h, RYB_STOPS, RGB_STOPS);
+// The painter's wheel itself lives in ../ryb.ts.
 const hueGap = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
 const chroma = (lab: Lab) => Math.hypot(lab[1], lab[2]);
 const rybOf = (hex: string) => rgbHueToRyb(rgbToHsv(hexToRgb(hex))[0]);

@@ -22,7 +22,7 @@ const { items, suggest = [] } = Astro.props;
 ---
 
 <div class="cf" data-cf data-items={items}>
-  <button type="button" class="cf-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Search by colour" title="Search by colour">
+  <button type="button" class="cf-btn" data-cmdk="Search by colour" data-cmdk-keywords="hex, palette, hue" aria-haspopup="dialog" aria-expanded="false" aria-label="Search by colour" title="Search by colour">
     <span class="cf-dot" aria-hidden="true"></span>
   </button>
   <div class="cf-pop" role="dialog" aria-label="Search by colour" hidden>
@@ -34,6 +34,10 @@ const { items, suggest = [] } = Astro.props;
       <input type="color" class="cf-wheel" value="#b0473a" aria-label="Pick a colour" />
       <input type="text" class="cf-hex" inputmode="text" spellcheck="false" autocomplete="off" maxlength="7" placeholder="#b0473a" aria-label="Hex colour" />
       <span class="cf-count" aria-live="polite"></span>
+    </div>
+    <div class="cf-goes" role="group" aria-label="Colours that go with it" hidden>
+      <span class="cf-goes-h">Goes with</span>
+      <div class="cf-goes-list"></div>
     </div>
     {suggest.length > 0 && (
       <div class="cf-suggest" role="group" aria-label="Chapter colours">
@@ -68,6 +72,7 @@ const { items, suggest = [] } = Astro.props;
     decodePalette, hexToOklch, MAX_QUERY_COLOURS, oklchToHex, searchByColour,
     type QueryColour, type Swatch,
   } from '../lib/colour-search';
+  import { PARTNERS, turnOnWheel } from '../lib/ryb';
 
   /** Share of the frame a colour should cover; a tap on its caption cycles. */
   const SHARES: (number | undefined)[] = [undefined, 0.1, 0.25, 0.5];
@@ -110,6 +115,8 @@ const { items, suggest = [] } = Astro.props;
     const lmin = $<HTMLInputElement>('.cf-lmin'), lmax = $<HTMLInputElement>('.cf-lmax');
     const use = $<HTMLButtonElement>('.cf-use');
     const clear = $<HTMLButtonElement>('.cf-clear');
+    const goes = $<HTMLElement>('.cf-goes');
+    const goesList = $<HTMLElement>('.cf-goes-list');
 
     // Colour is opt-in: opening the popover and moving a tone slider filters by
     // tone alone; picking a colour (wheel, hex, a chapter or "Use colour") adds it.
@@ -216,6 +223,7 @@ const { items, suggest = [] } = Astro.props;
         const ids = ranked ? new Set(ranked.map((p) => p.id)) : null;
         const hexes = picks.map((p) => p.hex);
         count.textContent = ranked ? String(ranked.length) : '';
+        renderGoes();
         root.classList.toggle('on', active);
         root.style.setProperty('--cf-colour', hexes[0] ?? 'transparent');
         root.style.setProperty('--cf-ring', hexes.length > 1
@@ -233,6 +241,39 @@ const { items, suggest = [] } = Astro.props;
           },
         }));
       }, 60);
+    }
+
+    // Adobe Color's harmony rules, turned into searches: with one colour
+    // picked, each partner round the wheel is a tap that adds it, and its
+    // count says how many photos hold both before you tap.
+    function renderGoes() {
+      const base = picks.length === 1 ? picks[0] : null;
+      const rows = base ? PARTNERS.map((p) => ({ p, hex: turnOnWheel(base.hex, p.turn) })).filter((r): r is { p: (typeof PARTNERS)[number]; hex: string } => !!r.hex) : [];
+      goes.hidden = rows.length === 0;
+      if (!rows.length || !base) { goesList.replaceChildren(); return; }
+      const tone = { chroma: pair(cmin, cmax), lightness: pair(lmin, lmax) };
+      const baseQ: QueryColour = { ...hexToOklch(base.hex)!, share: base.share };
+      goesList.replaceChildren(...rows.map(({ p, hex: partner }) => {
+        const n = searchByColour(items(), [baseQ, hexToOklch(partner)!], tone).length;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cf-goes-btn';
+        b.dataset.partner = p.key;
+        b.style.setProperty('--sw', partner);
+        b.disabled = n === 0;
+        b.title = `${p.rule} · ${n}`;
+        b.setAttribute('aria-label', `${p.rule}, ${partner}: ${n} photo${n === 1 ? '' : 's'}`);
+        const c = document.createElement('span');
+        c.className = 'cf-goes-n';
+        c.textContent = String(n);
+        b.append(c);
+        b.addEventListener('click', () => {
+          picks = [{ hex: base.hex, share: base.share }, { hex: oklchToHex(hexToOklch(partner)!) }];
+          select(0);
+          run();
+        });
+        return b;
+      }));
     }
 
     /** Set the selected colour, adding the first one if there is none. */
@@ -417,6 +458,25 @@ const { items, suggest = [] } = Astro.props;
   }
   .cf-sug::after { content: ''; position: absolute; inset: -7px; }
 
+  .cf-goes { margin-top: var(--sp-3); }
+  .cf-goes[hidden] { display: none; }
+  .cf-goes-h { display: block; margin-bottom: var(--sp-1); font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .cf-goes-list { display: flex; justify-content: space-between; gap: var(--sp-1); }
+  /* A partner colour with how many photos hold both under it: 18px to look
+     at, the whole column to hit, like the chapter swatches. */
+  .cf-goes-btn {
+    appearance: none; cursor: pointer; display: grid; justify-items: center; gap: 2px;
+    min-width: 28px; min-height: 36px; padding: 2px 0; border: 0; border-radius: var(--r-xs);
+    background: none; color: var(--secondary); font: inherit;
+  }
+  .cf-goes-btn::before {
+    content: ''; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--sw); border: 1px solid var(--glass-edge);
+  }
+  .cf-goes-btn:hover:not(:disabled) { color: var(--fg); background: var(--fill); }
+  .cf-goes-btn:disabled { cursor: default; opacity: 0.35; }
+  .cf-goes-btn:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  .cf-goes-n { font-family: var(--font-data); font-size: var(--t-caption); line-height: 1; }
   .cf-range { border: 0; margin: var(--sp-3) 0 0; padding: 0; }
   .cf-range legend { padding: 0; margin-bottom: var(--sp-1); font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
   .cf-range.narrowed legend { color: var(--fg); }

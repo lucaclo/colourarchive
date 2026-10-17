@@ -108,7 +108,7 @@ const accent = '#f0b866';
         <span class="sr" id="dock-detent-say">Collapsed</span>
         <div class="sheet" id="sheet">
           <div class="sheet-row">
-            <button class="round" id="search-button" type="button" aria-expanded="false" aria-controls="searchbox" title="Search for a place">
+            <button class="round" id="search-button" type="button" data-cmdk="Search for a place" data-cmdk-keywords="find, city" aria-expanded="false" aria-controls="searchbox" title="Search for a place">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
               <span class="sr">Search for a place</span>
             </button>
@@ -116,7 +116,7 @@ const accent = '#f0b866';
               <p class="sheet-name" id="sheet-name">Nowhere yet</p>
               <p class="sheet-zone" id="sheet-zone"></p>
             </div>
-            <button class="round" id="star" type="button" aria-pressed="false" title="Keep this spot" hidden>
+            <button class="round" id="star" type="button" data-cmdk="Keep this spot" data-cmdk-keywords="save, star" aria-pressed="false" title="Keep this spot" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" id="star-mark">
                 <path d="m12 3.6 2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 10l6-.8Z"/>
               </svg>
@@ -166,6 +166,8 @@ const accent = '#f0b866';
           <button
             class="chip chip-strong"
             id="chip-play"
+            data-cmdk="Play the day"
+            data-cmdk-keywords="run, animate"
             type="button"
             aria-pressed="false"
             title="Run the day (space)"
@@ -175,6 +177,8 @@ const accent = '#f0b866';
           <button
             class="chip chip-strong"
             id="chip-now"
+            data-cmdk="Now"
+            data-cmdk-keywords="follow the clock"
             type="button"
             aria-pressed="false"
             title="Follow the clock (n)"
@@ -207,10 +211,10 @@ const accent = '#f0b866';
 
         <!-- ── Date, left edge ─────────────────────────────────────────────── -->
         <div class="edge edge-left" id="edge-date" hidden>
-          <button class="chip chip-strong" id="chip-today" type="button">Today</button>
+          <button class="chip chip-strong" id="chip-today" type="button" data-cmdk="Today">Today</button>
           <div class="stepper">
             <button class="chip chip-step" id="day-back" type="button" aria-label="A day earlier">−</button>
-            <button class="chip chip-date" id="chip-date" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="datesheet">—</button>
+            <button class="chip chip-date" id="chip-date" type="button" data-cmdk="Choose a date" data-cmdk-keywords="calendar, day, forecast" aria-haspopup="dialog" aria-expanded="false" aria-controls="datesheet">—</button>
             <button class="chip chip-step" id="day-forward" type="button" aria-label="A day later">+</button>
           </div>
         </div>
@@ -1027,6 +1031,7 @@ const accent = '#f0b866';
           <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
+        <p class="cal-sky" id="cal-sky" hidden><span id="cal-sky-what">Sunset</span> <i class="sky-lit" aria-hidden="true"></i> may colour <i class="sky-bare" aria-hidden="true"></i> clear</p>
         <p class="cal-sub">Jump to</p>
         <div class="seasons" id="seasons"></div>
       </div>
@@ -3393,6 +3398,22 @@ const accent = '#f0b866';
   .cal-grid :global(.cal-day:focus-visible) { outline: 2px solid #ece9e3; outline-offset: 1px; }
   .cal-grid :global(.cal-day[aria-current='date']) { box-shadow: inset 0 0 0 1px color-mix(in oklab, #c1863c 80%, #ece9e3); color: #f0b866; }
   .cal-grid :global(.cal-day[aria-pressed='true']) { background: #ece9e3; color: #0b0b0b; box-shadow: none; }
+  /* The week's sky: a mark under the day's number. */
+  .cal-grid :global(.cal-day[data-sky]) { position: relative; }
+  .cal-grid :global(.cal-day[data-sky])::after,
+  .cal-sky i {
+    content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  }
+  .cal-grid :global(.cal-day[data-sky])::after { position: absolute; left: 50%; bottom: 4px; translate: -50% 0; }
+  .cal-grid :global(.cal-day[data-sky='lit'])::after, .cal-sky .sky-lit { background: #f0a24a; }
+  .cal-grid :global(.cal-day[data-sky='bare'])::after, .cal-sky .sky-bare { box-shadow: inset 0 0 0 1px var(--cal-muted); }
+  .cal-grid :global(.cal-day[aria-pressed='true'][data-sky='bare'])::after { box-shadow: inset 0 0 0 1px #0b0b0b; }
+  .cal-sky {
+    margin: 0.35rem 0 0; display: flex; align-items: center; gap: 0.35rem;
+    font-family: var(--font-ui); font-size: var(--t-caption); color: var(--cal-muted);
+  }
+  .cal-sky[hidden] { display: none; }
+  .cal-sky i:last-of-type { margin-left: 0.4rem; }
   .cal-sub {
     margin: 0.6rem 0 0.2rem; padding-top: 0.55rem; border-top: 1px solid var(--cal-sep);
     font-family: var(--font-ui); font-size: var(--t-caption); color: var(--cal-muted);

@@ -2,7 +2,10 @@
  * The zine as data: paper, typeface, the eight pages and the two covers' text.
  * Pure, so the edits (swap, merge, reorder) are testable without a browser.
  */
-import { SPREADS, COVER_PANEL, BACK_PANEL, type PaperId, type Spread } from './imposition';
+import {
+  COVER_PANEL, BACK_PANEL, SHEET_PANELS, SPREAD_IDS, canMerge, readingOrder, spreadsFor,
+  type PaperId, type Spread, type SpreadId, type ZineFormat,
+} from './imposition';
 import { isHex, luminance, roles, combination } from './colour';
 import { WADA_COMBINATIONS } from './wada';
 
@@ -121,15 +124,25 @@ export interface MergeDoc extends TextStyle, FrameStyle {
 
 export interface ZineDoc {
   v: 1;
+  /** Eight pages on one sheet, or sixteen on two. */
+  format: ZineFormat;
   paper: PaperId;
   font: FontId;
   /** The Wada combination the zine is coloured from (1–348), or none. */
   palette: number | null;
+  /**
+   * Always sixteen, by slot (sheet × 8 + panel). An eight-page zine uses the
+   * first eight; the rest wait unused, so going to sixteen and back loses
+   * nothing.
+   */
   pages: PageDoc[];
   cover: CoverDoc;
   back: CoverDoc;
-  merged: Record<Spread['id'], MergeDoc>;
+  merged: Record<SpreadId, MergeDoc>;
 }
+
+/** Every slot either format can use. */
+export const MAX_SLOTS = SHEET_PANELS * 2;
 
 const PLAIN_TEXT = { plate: 'none', case: 'normal' } as const;
 const BLEED: FrameStyle = { border: 'none', frame: 'even', tone: 'white', rule: 'none' };
@@ -158,18 +171,19 @@ export function setFit(page: PageDoc, fit: Fit): void {
   else if (fit === 'fit' && page.border === 'none') page.border = 'm';
 }
 
-export function freshDoc(paper: PaperId = 'a4'): ZineDoc {
-  const pages = Array.from({ length: 8 }, freshPage);
+export function freshDoc(paper: PaperId = 'a4', format: ZineFormat = 8): ZineDoc {
+  const pages = Array.from({ length: MAX_SLOTS }, freshPage);
   for (const p of [pages[COVER_PANEL], pages[BACK_PANEL]]) Object.assign(p, { fit: 'fill', border: 'none' });
   return {
     v: 1,
+    format,
     paper,
     font: 'serif-italic',
     palette: null,
     pages,
     cover: freshCover(),
     back: { ...freshCover(), valign: 'bottom', size: 's' },
-    merged: { p23: freshMerge(), p45: freshMerge(), p67: freshMerge() },
+    merged: Object.fromEntries(SPREAD_IDS.map((id) => [id, freshMerge()])) as Record<SpreadId, MergeDoc>,
   };
 }
 
@@ -195,6 +209,7 @@ export function reviveDoc(raw: unknown): ZineDoc {
 function reviveFields(r: Partial<ZineDoc>, base: ZineDoc): ZineDoc {
   return {
     v: 1,
+    format: r.format === 16 ? 16 : 8,
     paper: r.paper === 'letter' || r.paper === 'a4' || r.paper === 'a3' ? r.paper : base.paper,
     font: FONTS.some((f) => f.id === r.font) ? (r.font as FontId) : base.font,
     palette: typeof r.palette === 'number' && r.palette >= 1 && r.palette <= WADA_COMBINATIONS.length ? r.palette : null,
@@ -207,11 +222,7 @@ function reviveFields(r: Partial<ZineDoc>, base: ZineDoc): ZineDoc {
     }),
     cover: { ...base.cover, ...r.cover },
     back: { ...base.back, ...r.back },
-    merged: {
-      p23: { ...base.merged.p23, ...r.merged?.p23 },
-      p45: { ...base.merged.p45, ...r.merged?.p45 },
-      p67: { ...base.merged.p67, ...r.merged?.p67 },
-    },
+    merged: Object.fromEntries(SPREAD_IDS.map((id) => [id, { ...base.merged[id], ...r.merged?.[id] }])) as Record<SpreadId, MergeDoc>,
   };
 }
 
@@ -220,17 +231,30 @@ export function swapPages(doc: ZineDoc, spread: Spread): void {
   [doc.pages[spread.left], doc.pages[spread.right]] = [doc.pages[spread.right], doc.pages[spread.left]];
 }
 
-/** Move one spread's contents to another slot, everything else shifting along. */
+/**
+ * Move one spread's contents to another place, everything else shifting
+ * along. A joined spread that lands on two sheets (4–5 or 12–13 of sixteen)
+ * comes apart there, since one photo can't run across both.
+ */
 export function moveSpread(doc: ZineDoc, from: number, to: number): void {
   if (from === to) return;
-  const contents = SPREADS.map((s) => ({ left: doc.pages[s.left], right: doc.pages[s.right], merged: doc.merged[s.id] }));
+  const spreads = spreadsFor(doc.format);
+  const contents = spreads.map((s) => ({ left: doc.pages[s.left], right: doc.pages[s.right], merged: doc.merged[s.id] }));
   const [moved] = contents.splice(from, 1);
   contents.splice(to, 0, moved);
-  SPREADS.forEach((s, i) => {
+  spreads.forEach((s, i) => {
     doc.pages[s.left] = contents[i].left;
     doc.pages[s.right] = contents[i].right;
     doc.merged[s.id] = contents[i].merged;
+    if (!canMerge(s)) doc.merged[s.id].on = false;
   });
+}
+
+/** Eight pages or sixteen. Nothing is lost either way; see `pages`. */
+export function setFormat(doc: ZineDoc, format: ZineFormat): void {
+  doc.format = format;
+  // A spread that was joined in one format may span two sheets in the other.
+  for (const s of spreadsFor(format)) if (!canMerge(s)) doc.merged[s.id].on = false;
 }
 
 /**
@@ -239,6 +263,7 @@ export function moveSpread(doc: ZineDoc, from: number, to: number): void {
  * were before the merge.
  */
 export function mergeSpread(doc: ZineDoc, spread: Spread): void {
+  if (!canMerge(spread)) return;
   const m = doc.merged[spread.id];
   const l = doc.pages[spread.left];
   const r = doc.pages[spread.right];
@@ -256,8 +281,8 @@ export function photosInDoc(doc: ZineDoc): PhotoRef[] {
   const out: PhotoRef[] = [];
   const add = (p: PhotoRef | null) => p && out.push(p);
   add(doc.pages[COVER_PANEL].photo);
-  for (const s of SPREADS) {
-    if (doc.merged[s.id].on) add(doc.merged[s.id].photo);
+  for (const s of spreadsFor(doc.format)) {
+    if (canMerge(s) && doc.merged[s.id].on) add(doc.merged[s.id].photo);
     else {
       add(doc.pages[s.left].photo);
       add(doc.pages[s.right].photo);
@@ -268,13 +293,13 @@ export function photosInDoc(doc: ZineDoc): PhotoRef[] {
 }
 
 /** Pages in reading order, cover first: where "fill from the book" puts photos. */
-export const READING_ORDER: readonly number[] = [COVER_PANEL, 6, 7, 3, 2, 1, 0, BACK_PANEL];
+export const READING_ORDER: readonly number[] = readingOrder(8);
 
 export function isEmpty(doc: ZineDoc): boolean {
   return (
     photosInDoc(doc).length === 0 &&
     !doc.cover.title && !doc.cover.subtitle && !doc.cover.author &&
-    doc.pages.every((p) => !p.caption)
+    readingOrder(doc.format).every((slot) => !doc.pages[slot].caption)
   );
 }
 

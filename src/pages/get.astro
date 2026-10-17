@@ -1,0 +1,331 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+// Getting the app, modelled on Chrome's download page: one button that already
+// knows which device it is on. Where the browser lets a page install itself
+// (Chromium's `beforeinstallprompt`) the button does it in one tap. Everywhere
+// else it shows the three steps for this browser and points at where the
+// first one is. See `lib/install.ts` for the detection.
+export const prerender = true;
+
+// Platform glyphs, drawn to read like the buttons they stand for. Rendered
+// once here and cloned into the steps by the script below.
+const glyphs: Record<string, string> = {
+  share: '<path d="M12 3v12M8 7l4-4 4 4"/><path d="M8 10H6.5A1.5 1.5 0 0 0 5 11.5v8A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-8a1.5 1.5 0 0 0-1.5-1.5H16"/>',
+  more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+  kebab: '<circle cx="12" cy="5.5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="18.5" r="1.3"/>',
+  addHome: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/>',
+  dock: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 20.5h10M9 14.5h6"/>',
+  install: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 7.5v6M9.5 11l2.5 2.5 2.5-2.5M8 20.5h8"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+};
+---
+
+<Layout title="Get the app — Colour Archive" description="Install Colour Archive on your iPad, iPhone, Mac or Android." cursor={false}>
+  <main class="get" id="get" data-state="ready">
+    <a class="get-home" href="/">Colour Archive</a>
+
+    <section class="get-hero">
+      <img class="get-icon" src="/icon-512.png" width="112" height="112" alt="" />
+      <h1>Colour Archive</h1>
+      <button type="button" class="get-btn" id="get-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" /></svg>
+        <span id="get-btn-label">Install</span>
+      </button>
+      <p class="get-for" id="get-for" aria-live="polite"></p>
+    </section>
+
+    <ol class="get-steps" id="get-steps" hidden></ol>
+
+    <nav class="get-other" aria-label="Another device">
+      <span class="get-other-label">Another device</span>
+      <div class="get-other-list">
+        <button type="button" data-path="iphone">iPhone</button>
+        <button type="button" data-path="ipad">iPad</button>
+        <button type="button" data-path="mac-safari">Safari on Mac</button>
+        <button type="button" data-path="android">Android</button>
+        <button type="button" data-path="desktop-chromium">Chrome or Edge</button>
+      </div>
+    </nav>
+
+    <div class="get-arrow" id="get-arrow" hidden aria-hidden="true">
+      <svg viewBox="0 0 24 40"><path d="M12 2v34M4 28l8 8 8-8" /></svg>
+    </div>
+
+    <template id="get-glyphs">
+      {Object.entries(glyphs).map(([name, d]) => (
+        <svg data-g={name} viewBox="0 0 24 24" aria-hidden="true" set:html={d} />
+      ))}
+    </template>
+  </main>
+</Layout>
+
+<script>
+  import { inAppWindow, installPath, installedElsewhere, OPEN_IN_APP, type InstallPath } from '../lib/install';
+
+  // A step is a glyph and a line where **this** is the name of the button.
+  type Step = [glyph: string, text: string];
+
+  // Safari 26 on iPhone moved Share into the ⋯ menu at the foot of the screen.
+  const safariMajor = Number(navigator.userAgent.match(/Version\/(\d+)/)?.[1] ?? 0);
+  const iphoneMenu = safariMajor >= 26;
+
+  const STEPS: Partial<Record<InstallPath, Step[]>> = {
+    iphone: [
+      iphoneMenu ? ['more', 'Tap **⋯**, then **Share**'] : ['share', 'Tap **Share**'],
+      ['addHome', 'Choose **Add to Home Screen**'],
+      ['check', 'Tap **Add**'],
+    ],
+    ipad: [
+      ['share', 'Tap **Share**'],
+      ['addHome', 'Choose **Add to Home Screen**'],
+      ['check', 'Tap **Add**'],
+    ],
+    'ios-other': [
+      ['share', 'Tap **Share** in the toolbar'],
+      ['addHome', 'Choose **Add to Home Screen**'],
+      ['check', 'Tap **Add**'],
+    ],
+    'mac-safari': [
+      ['menu', 'In Safari, open the **File** menu'],
+      ['dock', 'Choose **Add to Dock**'],
+      ['check', 'Click **Add**'],
+    ],
+    android: [
+      ['kebab', 'Tap **⋮**'],
+      ['addHome', 'Choose **Install app** or **Add to Home screen**'],
+      ['check', 'Tap **Install**'],
+    ],
+    'desktop-chromium': [
+      // Chrome swaps the install icon for "Open in app" once it is installed.
+      ['install', 'Click the **install** icon in the address bar, or **Open in app** if it’s there'],
+      ['kebab', 'Or **⋮** › **Cast, save and share** › **Install**'],
+      ['check', 'Click **Install**'],
+    ],
+  };
+
+  const FOR: Record<InstallPath, string> = {
+    installed: 'Installed',
+    iphone: 'For iPhone',
+    ipad: 'For iPad',
+    'ios-other': 'For iPhone and iPad',
+    'mac-safari': 'For Mac',
+    android: 'For Android',
+    'desktop-chromium': 'For this computer',
+    unsupported: 'Open this page in Safari, Chrome or Edge to install',
+  };
+
+  // Where the first step's button is on screen, for the arrow.
+  const ARROW: Partial<Record<InstallPath, string>> = {
+    iphone: iphoneMenu ? 'bottom-right' : 'bottom',
+    ipad: 'top-right',
+    android: 'top-right',
+  };
+
+  interface PromptEvent extends Event {
+    prompt(): Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  }
+
+  const root = document.getElementById('get')!;
+  const btn = document.getElementById('get-btn') as HTMLButtonElement;
+  const label = document.getElementById('get-btn-label')!;
+  const forLine = document.getElementById('get-for')!;
+  const steps = document.getElementById('get-steps') as HTMLOListElement;
+  const arrow = document.getElementById('get-arrow')!;
+  const glyphs = (document.getElementById('get-glyphs') as HTMLTemplateElement).content;
+
+  const standalone = inAppWindow();
+  let path = installPath({ ua: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints, standalone });
+  let deferred: PromptEvent | null = null;
+
+  addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferred = e as PromptEvent;
+  });
+  addEventListener('appinstalled', () => setInstalled());
+
+  function stepItem([glyph, text]: Step, i: number): HTMLLIElement {
+    const li = document.createElement('li');
+    li.style.setProperty('--i', String(i));
+    const n = document.createElement('span');
+    n.className = 'get-n';
+    n.textContent = String(i + 1);
+    const words = document.createElement('span');
+    text.split('**').forEach((part, k) => {
+      if (k % 2) {
+        const b = document.createElement('b');
+        b.textContent = part;
+        words.append(b);
+      } else words.append(part);
+    });
+    li.append(n, glyphs.querySelector(`[data-g="${glyph}"]`)!.cloneNode(true), words);
+    return li;
+  }
+
+  function showSteps(p: InstallPath, point: boolean) {
+    const list = STEPS[p];
+    if (!list) return;
+    steps.replaceChildren(...list.map(stepItem));
+    steps.hidden = false;
+    // Restart the entrance each time the list changes.
+    steps.classList.remove('in');
+    void steps.offsetWidth;
+    steps.classList.add('in');
+    const at = point ? ARROW[p] : undefined;
+    arrow.hidden = !at;
+    if (at) arrow.dataset.at = at;
+    root.dataset.state = 'steps';
+  }
+
+  // In the app window the button just goes to the archive. In a browser tab
+  // it opens the installed app, which is the whole point of having it.
+  let openInApp = false;
+  function setInstalled() {
+    path = 'installed';
+    openInApp = !standalone;
+    root.dataset.state = 'installed';
+    label.textContent = openInApp ? 'Open in app' : 'Open the archive';
+    forLine.textContent = FOR.installed;
+    steps.hidden = true;
+    arrow.hidden = true;
+  }
+
+  if (path === 'installed') setInstalled();
+  else {
+    forLine.textContent = FOR[path];
+    if (path === 'unsupported') label.textContent = 'Copy link';
+    installedElsewhere().then((yes) => { if (yes) setInstalled(); });
+  }
+
+  btn.addEventListener('click', async () => {
+    if (path === 'installed') { location.href = openInApp ? OPEN_IN_APP : '/'; return; }
+    if (deferred) {
+      const e = deferred;
+      deferred = null;
+      await e.prompt();
+      const { outcome } = await e.userChoice;
+      if (outcome === 'accepted') setInstalled();
+      return;
+    }
+    if (path === 'unsupported') {
+      // Only claim the copy if it happened; otherwise show the address to copy.
+      const copied = await navigator.clipboard?.writeText(location.href).then(() => true, () => false);
+      if (copied) label.textContent = 'Link copied';
+      else forLine.textContent = location.href;
+      return;
+    }
+    showSteps(path, true);
+  });
+
+  for (const b of document.querySelectorAll<HTMLButtonElement>('.get-other-list button')) {
+    b.addEventListener('click', () => {
+      for (const o of document.querySelectorAll('.get-other-list button')) o.removeAttribute('aria-pressed');
+      b.setAttribute('aria-pressed', 'true');
+      showSteps(b.dataset.path as InstallPath, false);
+    });
+  }
+</script>
+
+<style>
+  .get {
+    min-height: 100svh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: calc(env(safe-area-inset-top) + var(--sp-5)) var(--sp-5) calc(env(safe-area-inset-bottom) + var(--sp-7));
+    font-family: var(--font-ui);
+  }
+  .get-home {
+    align-self: flex-start;
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-headline);
+    color: var(--muted); text-decoration: none;
+    min-height: var(--hit); display: inline-flex; align-items: center;
+  }
+  .get-home:hover { color: var(--fg); }
+
+  .get-hero {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    margin-top: clamp(var(--sp-6), 12vh, 8rem);
+  }
+  .get-icon {
+    width: 112px; height: 112px; border-radius: 25px;
+    box-shadow: 0 10px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px var(--hair);
+  }
+  .get h1 {
+    margin: var(--sp-5) 0 var(--sp-6);
+    font-family: var(--font-display); font-style: italic; font-weight: 500;
+    font-size: clamp(2.25rem, 7vw, 3.5rem); line-height: 1.05; letter-spacing: -0.01em;
+  }
+  .get-btn {
+    appearance: none; border: 0; cursor: pointer; font: inherit;
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+    min-height: 56px; min-width: 15rem; padding: 0 2rem; border-radius: var(--r-pill);
+    font-size: var(--t-headline); font-weight: 600;
+    background: var(--fg); color: var(--bg);
+    transition: transform 120ms ease-out, background var(--dur-fast) var(--ease);
+  }
+  .get-btn:hover { background: color-mix(in oklab, var(--fg) 88%, var(--bg)); }
+  .get-btn:active { transform: scale(0.97); }
+  .get-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+  .get-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .get[data-state='installed'] .get-btn svg { display: none; }
+  .get-for {
+    margin: var(--sp-3) 0 0; min-height: 1.2em;
+    font-size: var(--t-footnote); color: var(--muted);
+  }
+
+  .get-steps {
+    list-style: none; margin: var(--sp-7) 0 0; padding: 0;
+    width: min(26rem, 100%);
+    border-top: 1px solid var(--hair);
+  }
+  .get-steps :global(li) {
+    display: grid; grid-template-columns: 1.5rem 28px 1fr; align-items: center; gap: var(--sp-3);
+    padding: var(--sp-4) 0; border-bottom: 1px solid var(--hair);
+    font-size: var(--t-body); color: var(--muted);
+  }
+  .get-steps :global(b) { color: var(--fg); font-weight: 600; }
+  .get-steps :global(.get-n) {
+    font-family: var(--font-display); font-style: italic; font-size: var(--t-headline); color: var(--fg);
+  }
+  .get-steps :global(svg) {
+    width: 24px; height: 24px; fill: none; stroke: var(--fg); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .get-steps.in :global(li) {
+    animation: get-step-in var(--dur-slow) var(--ease) both;
+    animation-delay: calc(var(--i) * 70ms);
+  }
+  @keyframes get-step-in { from { opacity: 0; transform: translateY(6px); } }
+
+  .get-other {
+    margin-top: auto; padding-top: var(--sp-7);
+    display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  }
+  .get-other-label { font-family: var(--font-display); font-style: italic; color: var(--muted); font-size: var(--t-body); }
+  .get-other-list { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); }
+  .get-other-list button {
+    appearance: none; border: 1px solid transparent; background: none; cursor: pointer; font: inherit;
+    min-height: var(--hit); padding: 0 var(--sp-3); border-radius: var(--r-pill);
+    font-size: var(--t-footnote); color: var(--muted);
+  }
+  .get-other-list button:hover { color: var(--fg); }
+  .get-other-list button[aria-pressed='true'] { color: var(--fg); border-color: var(--hair); }
+
+  /* Chrome's arrow at the downloads tray: here, at the button the first step
+     names. Safari's toolbar is outside the page, so the edge of the viewport
+     is as close as the page can get. */
+  .get-arrow { position: fixed; z-index: 10; pointer-events: none; color: var(--fg); }
+  .get-arrow svg { width: 24px; height: 40px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+  .get-arrow[data-at='bottom'] { bottom: calc(env(safe-area-inset-bottom) + var(--sp-2)); left: 50%; translate: -50% 0; }
+  .get-arrow[data-at='bottom-right'] { bottom: calc(env(safe-area-inset-bottom) + var(--sp-2)); right: var(--sp-4); }
+  .get-arrow[data-at^='top'] { top: calc(env(safe-area-inset-top) + var(--sp-2)); right: var(--sp-5); }
+  .get-arrow[data-at^='top'] svg { rotate: 180deg; }
+  .get-arrow:not([hidden]) { animation: get-bob 1.1s var(--ease-io) infinite alternate; }
+  @keyframes get-bob { to { transform: translateY(8px); } }
+  .get-arrow[data-at^='top']:not([hidden]) { animation-name: get-bob-up; }
+  @keyframes get-bob-up { to { transform: translateY(-8px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .get-arrow:not([hidden]), .get-steps.in :global(li) { animation: none; }
+  }
+</style>

@@ -78,7 +78,7 @@ const accent = manifest.chapters[0]
       <div class="book-titlerow">
         <h1>The book</h1>
         <nav class="book-links" aria-label="The book elsewhere">
-          <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-link">Share<span aria-hidden="true"> ↗</span></a>
+          <a href="/book/view" target="_blank" rel="noopener noreferrer" class="book-link" data-cmdk="Share the book" data-cmdk-keywords="view, link">Share<span aria-hidden="true"> ↗</span></a>
           <a href="/book/zine" class="book-link">Magazine</a>
         </nav>
       </div>
@@ -86,14 +86,14 @@ const accent = manifest.chapters[0]
       {chapters.length > 0 && (
         <div class="book-tools">
           <div class="book-viewtoggle" role="group" aria-label="View">
-            <button type="button" data-bookview="list" aria-pressed="true">List</button>
-            <button type="button" data-bookview="spreads" aria-pressed="false">Spreads</button>
+            <button type="button" data-bookview="list" aria-pressed="true" data-cmdk="List view">List</button>
+            <button type="button" data-bookview="spreads" aria-pressed="false" data-cmdk="Spreads" data-cmdk-keywords="pages, layout">Spreads</button>
           </div>
           {/* Size, page count and bleed are only needed when printing, so they
               live behind Print rather than in the header all the time. */}
           <span class="book-printwrap">
             <span class="book-pdf-status" id="book-pdf-status" role="status" aria-live="polite"></span>
-            <button type="button" class="book-printbtn" id="book-print-open" aria-expanded="false" aria-controls="book-printpop" data-warn={pageCheck.ok ? '' : '1'}>Print</button>
+            <button type="button" class="book-printbtn" id="book-print-open" data-cmdk="Print" data-cmdk-keywords="pdf, export, trim, bleed" aria-expanded="false" aria-controls="book-printpop" data-warn={pageCheck.ok ? '' : '1'}>Print</button>
             <div class="book-printpop" id="book-printpop" hidden role="dialog" aria-label="Print">
               <label class="book-poprow">
                 <span>Size</span>
@@ -163,6 +163,7 @@ const accent = manifest.chapters[0]
                       data-note={notes[p.id] ?? ''}
                       data-w={p.width}
                       data-h={p.height}
+                      data-large={(p.derivatives[1] ?? p.derivatives[p.derivatives.length - 1]).avif}
                       style={`aspect-ratio:${p.width}/${p.height}`}
                       aria-label={`${p.filename} — drag the handle or use arrow keys to move within this chapter`}
                     >
@@ -189,7 +190,8 @@ const accent = manifest.chapters[0]
                               class="book-dup"
                               data-dup-keep={p.id}
                               data-dup-group={dup.key}
-                              title={`${dup.size} similar shots in this chapter, probably the same moment — click to keep this one and leave the others out`}
+                              title={`${dup.size} similar shots, probably the same moment: compare them and keep one`}
+                              aria-label={`Compare ${dup.size} similar shots`}
                             >
                               ⧉{dup.size}
                             </button>
@@ -216,6 +218,18 @@ const accent = manifest.chapters[0]
     <span id="book-undo-text"></span>
     <button type="button" id="book-undo-btn">Undo</button>
   </div>
+
+  <!-- Survey: a burst side by side before keeping one (Narrative's Survey
+       Mode, Lightroom's Survey view). Hold a photo to look closer: every
+       photo zooms to the same spot together. -->
+  <dialog class="survey" id="book-survey" aria-labelledby="survey-title">
+    <header class="survey-head">
+      <h2 id="survey-title" class="survey-title">Similar shots</h2>
+      <span class="survey-hint">Hold to look closer</span>
+      <button type="button" class="survey-close" id="survey-close" aria-label="Close">×</button>
+    </header>
+    <div class="survey-row" id="survey-row"></div>
+  </dialog>
 
   <div class="book-savebar" id="book-savebar" hidden>
     <span id="book-savebar-text">Unsaved changes</span>
@@ -554,19 +568,7 @@ const accent = manifest.chapters[0]
 
   document.getElementById('book-chapters')?.addEventListener('click', (e) => {
     const dupBtn = e.target.closest('.book-dup');
-    if (dupBtn) {
-      const keepId = dupBtn.dataset.dupKeep;
-      const groupKey = dupBtn.dataset.dupGroup;
-      const cells = [...document.querySelectorAll(`.book-cell[data-dup-group="${CSS.escape(groupKey)}"]`)];
-      const toExclude = cells.filter((c) => c.dataset.id !== keepId && c.dataset.excluded !== '1');
-      if (!toExclude.length) return;
-      const entries = toExclude.map((cell) => ({ cell, previous: false }));
-      for (const { cell } of entries) setExcluded(cell, true);
-      const keepCell = cells.find((c) => c.dataset.id === keepId);
-      showUndo(entries, `Left out ${entries.length} similar to ${keepCell?.dataset.stem || keepId}`);
-      markDirty();
-      return;
-    }
+    if (dupBtn) { openSurvey(dupBtn.dataset.dupGroup, e.detail === 0 ? dupBtn.dataset.dupKeep : null); return; }
     const btn = e.target.closest('.book-exclude');
     if (!btn) return;
     const cell = btn.closest('.book-cell');
@@ -575,6 +577,92 @@ const accent = manifest.chapters[0]
     showUndo([{ cell, previous: !nowExcluded }], `${nowExcluded ? 'Left out' : 'Included'}: ${cell.dataset.stem || cell.dataset.id}`);
     markDirty();
   });
+
+  // --- Survey a burst --------------------------------------------------------
+  // The ⧉ badge used to keep its photo and drop the rest in one tap, without
+  // a look at them together. Now it lays the group side by side at one height,
+  // and "Keep" on any of them does what the badge did, with the same Undo.
+  const survey = document.getElementById('book-survey');
+  const surveyRow = document.getElementById('survey-row');
+  document.getElementById('survey-close')?.addEventListener('click', () => survey.close());
+  survey?.addEventListener('click', (e) => { if (e.target === survey) survey.close(); });
+
+  function openSurvey(groupKey, focusId) {
+    const cells = [...document.querySelectorAll(`.book-cell[data-dup-group="${CSS.escape(groupKey)}"]`)];
+    if (!cells.length || !survey) return;
+    surveyRow.replaceChildren(...cells.map((cell) => {
+      const fig = document.createElement('figure');
+      fig.className = 'survey-item';
+      fig.dataset.id = cell.dataset.id;
+      if (cell.dataset.excluded === '1') fig.classList.add('out');
+      const frame = document.createElement('div');
+      frame.className = 'survey-frame';
+      const img = document.createElement('img');
+      img.src = cell.dataset.large || cell.querySelector('img')?.src || '';
+      img.alt = cell.dataset.stem || '';
+      img.style.aspectRatio = `${cell.dataset.w}/${cell.dataset.h}`;
+      frame.append(img);
+      const cap = document.createElement('figcaption');
+      const name = document.createElement('span');
+      name.className = 'survey-name';
+      name.textContent = cell.dataset.stem || cell.dataset.id;
+      const keep = document.createElement('button');
+      keep.type = 'button';
+      keep.className = 'survey-keep';
+      keep.textContent = 'Keep';
+      keep.setAttribute('aria-label', `Keep ${cell.dataset.stem || cell.dataset.id}, leave the others out`);
+      keep.addEventListener('click', () => keepFromSurvey(cells, cell));
+      cap.append(name, keep);
+      fig.append(frame, cap);
+      return fig;
+    }));
+    survey.style.setProperty('--n', String(cells.length));
+    survey.showModal();
+    // From the keyboard, focus lands on the badge's own photo; from a tap the
+    // dialog keeps its default (the close button) so no ring shows.
+    if (focusId) surveyRow.querySelector(`.survey-item[data-id="${CSS.escape(focusId)}"] .survey-keep`)?.focus();
+  }
+
+  function keepFromSurvey(cells, keepCell) {
+    const entries = [];
+    for (const cell of cells) {
+      const was = cell.dataset.excluded === '1';
+      const now = cell !== keepCell;
+      if (was === now) continue;
+      entries.push({ cell, previous: was });
+      setExcluded(cell, now);
+    }
+    survey.close();
+    if (!entries.length) return;
+    const left = entries.filter((x) => x.cell !== keepCell).length;
+    showUndo(entries, `Kept ${keepCell.dataset.stem || keepCell.dataset.id}${left ? `, left out ${left}` : ''}`);
+    markDirty();
+  }
+
+  // Hold to look closer: every photo zooms to the same point, so focus and
+  // eyes can be compared across the burst (Narrative's survey zoom).
+  let zoomFrame = null;
+  function zoomAt(e) {
+    const r = zoomFrame.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100));
+    const y = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
+    surveyRow.style.setProperty('--zx', `${x}%`);
+    surveyRow.style.setProperty('--zy', `${y}%`);
+  }
+  surveyRow?.addEventListener('pointerdown', (e) => {
+    const frame = e.target.closest('.survey-frame');
+    if (!frame) return;
+    e.preventDefault();
+    zoomFrame = frame;
+    frame.setPointerCapture?.(e.pointerId);
+    zoomAt(e);
+    surveyRow.classList.add('zooming');
+  });
+  surveyRow?.addEventListener('pointermove', (e) => { if (zoomFrame) zoomAt(e); });
+  const endZoom = () => { zoomFrame = null; surveyRow?.classList.remove('zooming'); };
+  surveyRow?.addEventListener('pointerup', endZoom);
+  surveyRow?.addEventListener('pointercancel', endZoom);
+  survey?.addEventListener('close', endZoom);
 
   function updateChapterCount(section) {
     const key = section.dataset.chapter;
@@ -1146,6 +1234,45 @@ const accent = manifest.chapters[0]
 </script>
 
 <style is:global>
+  /* Survey (runtime-built children, so global). */
+  .survey {
+    width: min(96vw, 1400px); max-width: none; max-height: 92svh; padding: 0;
+    border: 1px solid var(--glass-edge); border-radius: var(--r-lg);
+    background: var(--bg); color: var(--fg);
+  }
+  .survey::backdrop { background: rgb(0 0 0 / 0.72); }
+  .survey-head { display: flex; align-items: baseline; gap: 1rem; padding: 1rem 1rem 0 1.4rem; }
+  .survey-title { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.4rem; }
+  .survey-hint { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
+  .survey-close {
+    margin-left: auto; appearance: none; cursor: pointer; border: 0; border-radius: 50%;
+    width: var(--hit); height: var(--hit); background: var(--fill); color: var(--fg); font-size: 1.2rem;
+  }
+  .survey-row { display: flex; gap: 0.75rem; padding: 1rem 1.4rem 1.6rem; align-items: flex-end; }
+  .survey-item { flex: 1 1 0; min-width: 0; margin: 0; display: grid; gap: 0.5rem; }
+  .survey-frame { overflow: hidden; border-radius: var(--r-xs); touch-action: none; cursor: zoom-in; background: #000; }
+  .survey-frame img {
+    display: block; width: 100%; height: auto; max-height: 68svh; object-fit: contain;
+    transform-origin: var(--zx, 50%) var(--zy, 50%); transition: transform var(--dur-fast) var(--ease);
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; pointer-events: none;
+  }
+  .survey-row.zooming .survey-frame img { transform: scale(2.5); }
+  .survey-item.out .survey-frame { opacity: 0.55; }
+  .survey-item figcaption { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .survey-name { font-family: var(--font-label); font-size: var(--t-caption); color: var(--muted); }
+  .survey-item.out .survey-name::after { content: ' · left out'; font-family: var(--font-ui); }
+  .survey-keep {
+    appearance: none; cursor: pointer; border: 0; border-radius: var(--r-pill); min-height: 2.25rem; padding: 0 1rem;
+    background: var(--fill-hover); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
+  }
+  .survey-keep:hover, .survey-keep:focus-visible { background: var(--fg); color: var(--bg); }
+  .survey-close:focus-visible, .survey-keep:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+  @media (max-width: 640px) {
+    .survey-row { flex-direction: column; align-items: stretch; overflow-y: auto; max-height: calc(92svh - 4rem); }
+    .survey-frame img { max-height: 40svh; }
+  }
+  @media (prefers-reduced-motion: reduce) { .survey-frame img { transition: none; } }
+
   /* One row of controls on a hairline, all one height, so the groups read
      as groups: the view, the size with what it means for the page count, and
      printing, with Print PDF as the one filled button at the trailing end. */

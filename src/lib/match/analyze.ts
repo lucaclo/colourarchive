@@ -6,7 +6,7 @@ import { toWorkingImage } from './decode';
 import { segmentRegions, type RegionMasks } from './regions';
 import { measureRegions, measureVignette } from './stats';
 import { measureTexture } from './texture';
-import type { BaselineMode, PhotoAnalysis } from './types';
+import { ANALYSIS_VERSION, type BaselineMode, type PhotoAnalysis } from './types';
 
 // Orchestrates one photo's full analysis. Nothing here decides anything — it
 // only measures, so the same function serves the reference photo and the user's
@@ -146,6 +146,8 @@ export async function analysePhotoDetailed(
       hslBands: measured.hslBands,
       timings,
       warnings,
+      version: ANALYSIS_VERSION,
+      sample: measured.sample,
     };
 
     remember(key, analysis);
@@ -168,10 +170,12 @@ export async function analysePhoto(
   const requested = opts.baseline ?? 'macos';
   if (!opts.fresh) {
     const key = analysisCacheKey(buf, requested);
+    // An analysis measured the old way can't be compared with a new one, so it
+    // is measured again rather than reused (see ANALYSIS_VERSION).
     const hit = cache.get(key);
-    if (hit) return hit;
+    if (hit?.version === ANALYSIS_VERSION) return hit;
     const persisted = await readPersisted(key);
-    if (persisted) {
+    if (persisted?.version === ANALYSIS_VERSION) {
       remember(key, persisted);
       return persisted;
     }

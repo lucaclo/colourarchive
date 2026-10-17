@@ -4,7 +4,9 @@ import path from 'node:path';
 import { analysePhoto, analysePhotoDetailed } from './analyze';
 import { analysisOutliers } from './group';
 import { writePreviewAssets, writeReferencePreview, type PreviewAssets } from './preview';
-import { mergeReferences, solveMatch, type MatchSolution } from './solve';
+import { solveAndRefine } from './engine';
+import { lrTables } from './lr-tables-node';
+import { mergeReferences, type MatchSolution } from './solve';
 import { activeCalibration, calibrationFingerprint, readApproved } from './roundtrip-store';
 import { MATCH_CACHE_DIR, MATCH_KEPT_DIR } from '../paths';
 import type { BaselineMode, PhotoAnalysis, RegionKey } from './types';
@@ -63,6 +65,19 @@ export interface MatchRecord {
 }
 
 const records = new Map<string, MatchRecord>();
+
+/** A photo analysis without its pixel sample — the sample is for the server's
+ *  simulation and is ~110KB of base64 the page never reads. */
+export const lean = <T extends PhotoAnalysis>(a: T): T => ({ ...a, sample: undefined });
+
+/** The record's analyses, lean, for sending to the browser. */
+export function leanAnalyses(r: MatchRecord): Pick<MatchRecord, 'references' | 'reference' | 'mine'> {
+  return {
+    references: r.references.map((x) => ({ ...x, analysis: lean(x.analysis) })),
+    reference: lean(r.reference),
+    mine: lean(r.mine),
+  };
+}
 
 /** Bounded: preview assets live on disk under public/, so an unbounded map
  *  would also mean unbounded disk use. Kept reports are exempt. */
@@ -193,7 +208,14 @@ export async function runMatch(input: RunMatchInput, onStage: OnStage = () => {}
   try {
     onStage('solve');
     // Approved round-trip calibration, when there is any — see roundtrip.ts.
-    const solution = solveMatch(reference, detailed.analysis, { calibration: await activeCalibration() });
+    // Solved in the photo's own proportions, then checked and corrected
+    // through the Lightroom model (engine.ts). Without the measured tables the
+    // solver's own answer stands rather than the match failing.
+    const solution = solveAndRefine(
+      references.map((r) => ({ analysis: r.analysis, weight: r.weight })),
+      detailed.analysis,
+      { calibration: await activeCalibration(), tables: await lrTables().catch(() => null) },
+    );
     const calibrated = Object.keys((await readApproved()).values);
 
     // Only regions the solver actually adjusted are worth packing into the

@@ -234,3 +234,28 @@ describe('withApproved', () => {
     assert.equal('bogus' in cal, false);
   });
 });
+
+describe('Point Color in the follow-up', () => {
+  const swatch = (region: 'people.skin' | 'scene.foliage', sat: number) => ({
+    region, label: region === 'people.skin' ? 'Skin' : 'Foliage', source: [0.3, 0.5, 0.4] as [number, number, number],
+    hue: 0, sat, lum: 0, range: 50,
+    hueRange: [0, 1 / 3, 2 / 3, 1] as [number, number, number, number],
+    satRange: [0, 0.32, 0.68, 1] as [number, number, number, number],
+    lumRange: [0, 0.4, 0.76, 1] as [number, number, number, number], rationale: '',
+  });
+
+  it('adds swatches for the same region and keeps the first one’s colour', () => {
+    const applied = { ...identityAdjustments(), pointColors: [swatch('people.skin', -20)] };
+    const corrective = { ...identityAdjustments(), pointColors: [{ ...swatch('people.skin', -10), source: [0.5, 0.6, 0.5] as [number, number, number] }, swatch('scene.foliage', 15)] };
+    const out = followUpAdjustments(applied, corrective);
+    const skin = out.pointColors.find((p) => p.region === 'people.skin')!;
+    assert.equal(skin.sat, -30);
+    assert.deepEqual(skin.source, [0.3, 0.5, 0.4]);
+    assert.equal(out.pointColors.find((p) => p.region === 'scene.foliage')!.sat, 15);
+  });
+
+  it('lists a swatch as a move to make by hand', () => {
+    const moves = handMoves({ ...identityAdjustments(), pointColors: [swatch('people.skin', -12)] });
+    assert.ok(moves.some((m) => m.control === 'Point Color › Skin' && m.delta === 'Sat -12'), JSON.stringify(moves));
+  });
+});

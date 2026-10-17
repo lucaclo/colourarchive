@@ -1,5 +1,5 @@
 import { HSL_BANDS } from './types';
-import type { Adjustments, MaskAdjustment } from './adjustments';
+import type { Adjustments, MaskAdjustment, PointColorSwatch } from './adjustments';
 
 // Lightroom preset writer.
 //
@@ -146,6 +146,40 @@ ${entries}
    </crs:MaskGroupBasedCorrections>`;
 }
 
+/** Point Color numbers are written as Lightroom writes them: six decimals. */
+const f6 = (v: number): string => v.toFixed(6);
+
+/**
+ * Point Color swatches, in the exact form of Lightroom's own presets (checked
+ * against `Premium/Style - Film/Profiles/Film 07.xmp` in Lightroom 9.6): one
+ * `rdf:li` of 19 comma-separated numbers per swatch — sampled hue (sixths of
+ * a turn), saturation, linear value; Hue, Saturation, Luminance shifts (-1..1);
+ * Range (0..1); then the hue, saturation and luminance ranges, four points
+ * each — and a matching `crs:ColorVariance` entry per swatch.
+ */
+function pointColorBlock(swatches: PointColorSwatch[]): string {
+  const active = swatches.filter((p) => Math.round(p.hue) || Math.round(p.sat) || Math.round(p.lum)).slice(0, 8);
+  if (!active.length) return '';
+  const line = (p: PointColorSwatch) =>
+    [
+      Math.min(5.999999, Math.max(0, p.source[0])), p.source[1], p.source[2],
+      Math.round(p.hue) / 100, Math.round(p.sat) / 100, Math.round(p.lum) / 100,
+      p.range / 100,
+      ...p.hueRange, ...p.satRange, ...p.lumRange,
+    ].map(f6).join(', ');
+  return `
+   <crs:PointColors>
+    <rdf:Seq>
+${active.map((p) => `     <rdf:li>${line(p)}</rdf:li>`).join('\n')}
+    </rdf:Seq>
+   </crs:PointColors>
+   <crs:ColorVariance>
+    <rdf:Seq>
+${active.map(() => '     <rdf:li>0.000000</rdf:li>').join('\n')}
+    </rdf:Seq>
+   </crs:ColorVariance>`;
+}
+
 /**
  * Render an Adjustments as a Lightroom-importable .xmp preset.
  *
@@ -258,6 +292,7 @@ ${adj.curve.map((p) => `     <rdf:li>${p.x}, ${p.y}</rdf:li>`).join('\n')}
     </rdf:Seq>
    </crs:ToneCurvePV2012>`;
   const masks = includeMasks ? maskBlock(adj.masks) : '';
+  const points = pointColorBlock(adj.pointColors ?? []);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Colour Archive">
@@ -301,7 +336,7 @@ ${a.join('\n')}>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">${group}</rdf:li>
     </rdf:Alt>
-   </crs:Group>${curve}${masks}
+   </crs:Group>${curve}${points}${masks}
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>

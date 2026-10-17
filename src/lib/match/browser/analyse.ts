@@ -7,7 +7,7 @@ import {
   type CropSampler,
   type TextureSource,
 } from '../texture-core';
-import { NO_MASKS, type BaselineMode, type PhotoAnalysis } from '../types';
+import { ANALYSIS_VERSION, NO_MASKS, type BaselineMode, type PhotoAnalysis } from '../types';
 
 // The offline fallback: measure a photo on this device, with no server and no
 // models.
@@ -161,6 +161,8 @@ export async function analyseInBrowser(
       texture,
       vignette,
       hslBands: measured.hslBands,
+      version: ANALYSIS_VERSION,
+      sample: measured.sample,
       timings,
       warnings,
     };

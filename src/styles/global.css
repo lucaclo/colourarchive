@@ -720,6 +720,11 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
   transition: background var(--dur-fast) var(--ease), transform 120ms ease-out;
 }
 .tb-button:hover { background: var(--glass-bg-strong); }
+.tb-get { text-decoration: none; }
+/* Already the app: nothing left to get. */
+@media (display-mode: standalone), (display-mode: minimal-ui), (display-mode: window-controls-overlay) {
+  .tb-get { display: none; }
+}
 .tb-button svg, .genre-btn svg.tb-icon {
   width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }

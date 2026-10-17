@@ -33,9 +33,10 @@
 
 import {
   clampAdjustments,
-  type Adjustments, type CurvePoint, type GradeWheel, type MaskAdjustment,
+  type Adjustments, type CurvePoint, type GradeWheel, type MaskAdjustment, type PointColorSwatch,
 } from './adjustments';
 import { DEFAULT_CALIBRATION, type Calibration } from './calibration';
+import { evalSpline } from './curve';
 import { HSL_BANDS, type PhotoAnalysis } from './types';
 
 // ─── 1. How close did the edit get ──────────────────────────────────────────
@@ -136,19 +137,11 @@ function castRow(mine: PhotoAnalysis, edited: PhotoAnalysis, reference: PhotoAna
 
 // ─── 2. The follow-up ───────────────────────────────────────────────────────
 
-/** Piecewise-linear read of a point curve. Lightroom draws a spline through
- *  the same points, so this is close between points and exact on them. */
+/** Read a point curve the way Lightroom draws it: a natural spline through
+ *  the points (see curve.ts). */
 export function evalCurve(curve: CurvePoint[], x: number): number {
-  const pts = [...curve].sort((a, b) => a.x - b.x);
-  if (pts.length === 0) return x;
-  if (x <= pts[0].x) return pts[0].y;
-  for (let i = 1; i < pts.length; i++) {
-    if (x <= pts[i].x) {
-      const t = (x - pts[i - 1].x) / Math.max(1e-9, pts[i].x - pts[i - 1].x);
-      return pts[i - 1].y + t * (pts[i].y - pts[i - 1].y);
-    }
-  }
-  return pts[pts.length - 1].y;
+  if (curve.length === 0) return x;
+  return evalSpline(curve, x);
 }
 
 /** An exposure move expressed on the curve's gamma-encoded 0..255 scale. The
@@ -195,6 +188,15 @@ export function followUpAdjustments(applied: Adjustments, corrective: Adjustment
     same.exposure += c.exposure; same.temp += c.temp; same.tint += c.tint;
     same.saturation += c.saturation; same.contrast += c.contrast;
   }
+  // Point Color swatches add by region, like masks. The first preset's swatch
+  // keeps its sampled colour: that is the colour Lightroom picked out of the
+  // untouched photo, which the follow-up is applied to.
+  const pointColors: PointColorSwatch[] = (applied.pointColors ?? []).map((p) => ({ ...p }));
+  for (const c of corrective.pointColors ?? []) {
+    const same = pointColors.find((p) => p.region === c.region);
+    if (!same) { pointColors.push({ ...c }); continue; }
+    same.hue += c.hue; same.sat += c.sat; same.lum += c.lum;
+  }
   const hsl = Object.fromEntries(
     HSL_BANDS.map(({ key }) => [key, {
       hue: applied.hsl[key].hue + corrective.hsl[key].hue,
@@ -228,6 +230,7 @@ export function followUpAdjustments(applied: Adjustments, corrective: Adjustment
     grainRoughness: corrective.grainAmount > 0 && applied.grainAmount === 0 ? corrective.grainRoughness : applied.grainRoughness,
     noiseReduction: sum('noiseReduction'),
     masks,
+    pointColors,
   });
 }
 
@@ -263,6 +266,12 @@ export function handMoves(c: Adjustments): HandMove[] {
   if (Math.abs(c.texture) >= 6) out.push({ panel: 'Effects', control: 'Texture', delta: signed(c.texture) });
   if (Math.abs(c.vignette) >= 6) out.push({ panel: 'Effects', control: 'Vignette', delta: signed(c.vignette) });
   if (c.grainAmount >= 5) out.push({ panel: 'Effects', control: 'Grain', delta: signed(c.grainAmount) });
+  for (const p of c.pointColors ?? []) {
+    const parts = ([['Hue', p.hue], ['Sat', p.sat], ['Lum', p.lum]] as const)
+      .filter(([, v]) => Math.abs(v) >= 4)
+      .map(([k, v]) => `${k} ${signed(v)}`);
+    if (parts.length) out.push({ panel: 'Colour', control: `Point Color › ${p.label}`, delta: parts.join(' · ') });
+  }
   return out;
 }
 

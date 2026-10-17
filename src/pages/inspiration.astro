@@ -85,7 +85,7 @@ const accent = manifest.chapters[0]
          Dragging files over the page or pasting anywhere also adds. -->
     <header class="insp-head">
       <h1>Reference</h1>
-      <button class="insp-addbtn" id="add-toggle" type="button" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add">Add</button>
+      <button class="insp-addbtn" id="add-toggle" type="button" data-cmdk="Add a reference" data-cmdk-keywords="upload, paste, link" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add">Add</button>
     </header>
 
     <section class="insp-add" id="insp-add" hidden={hasItems}>
@@ -328,10 +328,11 @@ const accent = manifest.chapters[0]
           <div class="mx-frames">
             <figure class="mx-fig">
               <canvas id="mx-canvas"></canvas>
-              <figcaption><span id="mx-wipehint">Yours, graded</span></figcaption>
+              <span class="mx-divider" id="mx-divider" aria-hidden="true" hidden></span>
+              <figcaption><span id="mx-wipehint">Yours, graded</span><span id="mx-preview-partial" hidden> · tone only: Lightroom’s colour tables didn’t load</span></figcaption>
               <span class="mx-holdhint" aria-hidden="true">Hold for the original</span>
             </figure>
-            <figure class="mx-fig">
+            <figure class="mx-fig mx-reffig" id="mx-reffig">
               <img id="mx-refside" alt="" />
               <figcaption><span id="mx-refside-caption">The reference</span></figcaption>
             </figure>
@@ -979,7 +980,18 @@ const accent = manifest.chapters[0]
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.45);
     opacity: calc(var(--s) * 0.75); transition: opacity 160ms;
   }
-  .mx-holding .mx-holdhint { opacity: 0; }
+  .mx-holding .mx-holdhint, .mx-wiping .mx-holdhint { opacity: 0; }
+  .mx-divider {
+    position: absolute; width: 2px; translate: -1px 0; pointer-events: none;
+    background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  }
+  .mx-divider[hidden] { display: none; }
+  .mx-divider::after {
+    content: ''; position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; translate: -50% -50%;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  }
+  .mx-wiping #mx-canvas { cursor: ew-resize; }
+
   @media (hover: hover) and (pointer: fine) {
     .mx-holdhint { opacity: 0; }
     .mx-fig:hover .mx-holdhint { opacity: calc(var(--s) * 0.75); }
@@ -1403,6 +1415,27 @@ const accent = manifest.chapters[0]
     .mx-bar { gap: 0.5rem 1rem; }
     .mx-strengthlabel { flex-basis: 100%; }
     :global(.mx-noterow) { grid-template-columns: 1fr; }
+  }
+
+  /* Phone: one picture, full width. The reference is a thumbnail on it that
+     a tap brings up in its place; the hold hint moves to the other corner so
+     the two never sit on each other. */
+  @media (max-width: 640px) {
+    .mx-frames { grid-template-columns: 1fr; position: relative; }
+    .mx-fig canvas { max-height: calc(12vh + 28vh * var(--s)); }
+    .mx-reffig {
+      position: absolute; top: 8px; right: 8px; z-index: 2; cursor: pointer;
+      width: auto; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.55);
+      box-shadow: 0 2px 10px rgb(0 0 0 / 0.45);
+      opacity: max(0.0001, var(--s)); transition: opacity 120ms linear;
+    }
+    .mx-reffig img { max-height: 84px; max-width: 72px; }
+    .mx-reffig figcaption { display: none; }
+    .mx-reffig.big { inset: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--bg); }
+    .mx-reffig.big img { max-height: calc(12vh + 28vh * var(--s)); max-width: 100%; }
+    .mx-reffig.big figcaption { display: block; }
+    .mx-reffig:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+    .mx-holdhint { top: auto; bottom: 8px; right: 10px; }
   }
 
   /* ── Phone ───────────────────────────────────────────────────────────────
@@ -2160,13 +2193,16 @@ const accent = manifest.chapters[0]
   import { atGroupStrength, type GroupStrength } from '../lib/match/adjustments';
   import { MatchPreview, deriveRenderSpec } from '../lib/match/preview-render';
   import { HSL_BANDS, REGION_LABEL, REGION_ORDER, BASELINE_LABEL } from '../lib/match/types';
-  import { mergeReferences, solveMatch } from '../lib/match/solve';
+  import { mergeReferences } from '../lib/match/solve';
+  import { solveAndRefine } from '../lib/match/engine';
+  import { lrTablesInBrowser } from '../lib/match/lr-tables-browser';
+  import { swatchCss, type LrTables } from '../lib/match/lr-model';
   import { buildPresetFiles } from '../lib/match/xmp';
   import { photoName, matchTitle } from '../lib/match/names';
   import { analyseInBrowser, analyseReferenceInBrowser } from '../lib/match/browser/analyse';
   import { DEFAULT_CALIBRATION } from '../lib/match/calibration';
   import { CAL_TARGETS } from '../lib/match/roundtrip';
-  import type { Adjustments } from '../lib/match/adjustments';
+  import type { Adjustments, PointColorSwatch } from '../lib/match/adjustments';
   import type { PhotoAnalysis, RegionKey } from '../lib/match/types';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -2268,7 +2304,21 @@ const accent = manifest.chapters[0]
   interface RefPick { id: string; url: string; name: string; weight: number }
   let refs: RefPick[] = [];
   let current: any = null;
+  // Dev only: lets the e2e check the preview against the CPU model of
+  // Lightroom (tests/round6.e2e.ts). Absent from production builds.
+  if (import.meta.env.DEV) {
+    Object.assign(window as unknown as Record<string, unknown>, { __match: {
+      adjustments: () => current && atGroupStrength(current.solution.restrained, current.solution.faithful, currentGroupStrength()),
+      maskChannels: () => current?.maskChannels ?? [],
+      photo: () => current?.preview?.photo,
+      maskTexture: () => current?.preview?.maskTexture ?? null,
+      draw: (adj: Adjustments) => preview?.render(deriveRenderSpec(adj, current?.maskChannels ?? [], DEFAULT_CALIBRATION, previewTables), -1),
+    } });
+  }
   let preview: MatchPreview | null = null;
+  /** Lightroom's measured tables for the preview's colour stages; null when
+   *  they couldn't be fetched, and the preview then shows tone only. */
+  let previewTables: LrTables | null = null;
 
   /** Which Colour Grading wheel is drawn large, and whether Global — reached
    *  by a separate toggle, as in Lightroom — is showing instead of the
@@ -2953,7 +3003,7 @@ const accent = manifest.chapters[0]
   /** Measure every reference and the photo here, with no server and no
    *  models — masks are unavailable offline, but the blend across several
    *  references works exactly as it does server-side, since mergeReferences
-   *  and solveMatch are the same isomorphic code either way. */
+   *  and solveAndRefine are the same isomorphic code either way. */
   async function analyseLocally(file: File) {
     const [analyses, mine] = await Promise.all([
       Promise.all(refs.map((r) => analyseReferenceInBrowser(r.url, r.name))),
@@ -2961,7 +3011,10 @@ const accent = manifest.chapters[0]
     ]);
     const weighted = refs.map((r, i) => ({ analysis: analyses[i], weight: r.weight }));
     const reference = mergeReferences(weighted);
-    const solution = solveMatch(reference, mine);
+    // Checked through the Lightroom model when its tables can be fetched;
+    // fully offline, the solver's own answer stands.
+    const tables = await lrTablesInBrowser().catch(() => null);
+    const solution = solveAndRefine(weighted, mine, { tables });
     return {
       id: `local-${Date.now()}`,
       references: refs.map((r, i) => ({ analysis: analyses[i], weight: r.weight, name: r.name, previewUrl: r.url })),
@@ -3003,7 +3056,11 @@ const accent = manifest.chapters[0]
 
     try {
       preview = new MatchPreview(canvas);
-      await preview.setImages(data.preview.photo, data.preview.maskTexture);
+      [previewTables] = await Promise.all([
+        lrTablesInBrowser().catch(() => null),
+        preview.setImages(data.preview.photo, data.preview.maskTexture),
+      ]);
+      $('mx-preview-partial').hidden = previewTables !== null;
       draw();
     } catch (err) {
       // A failed preview must not take the numbers down with it — they are the
@@ -3037,18 +3094,39 @@ const accent = manifest.chapters[0]
       ? `${base} · ${overridden.map((g) => GROUP_LABEL[g]).join('/')} set independently`
       : base;
     if (preview) {
-      const spec = deriveRenderSpec(adj, current.maskChannels ?? []);
-      preview.render(spec, holding ? 1.01 : wipeEl.checked ? 0.5 : -1);
+      const spec = deriveRenderSpec(adj, current.maskChannels ?? [], DEFAULT_CALIBRATION, previewTables);
+      preview.render(spec, holding ? 1.01 : wipeEl.checked ? splitAt : -1);
     }
+    placeDivider();
     renderValues(adj);
   }
 
   strengthEl.addEventListener('input', draw);
   const wipeCaption = () => (holding ? 'The original' : wipeEl.checked ? 'Left: original · Right: graded' : 'Yours, graded');
   wipeEl.addEventListener('change', () => {
+    splitAt = 0.5;
+    resultEl.classList.toggle('mx-wiping', wipeEl.checked);
     wipeHint.textContent = wipeCaption();
     draw();
   });
+
+  // With Before / after on, the split is a line on the photo you drag
+  // (Photomator's comparison slider) rather than a fixed half.
+  let splitAt = 0.5;
+  let dragging = false;
+  const divider = $<HTMLElement>('mx-divider');
+  function placeDivider() {
+    divider.hidden = !wipeEl.checked || holding;
+    if (divider.hidden) return;
+    divider.style.left = `${canvasEl.offsetLeft + splitAt * canvasEl.offsetWidth}px`;
+    divider.style.top = `${canvasEl.offsetTop}px`;
+    divider.style.height = `${canvasEl.offsetHeight}px`;
+  }
+  const splitFrom = (e: PointerEvent) => {
+    const r = canvasEl.getBoundingClientRect();
+    splitAt = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    draw();
+  };
 
   // Press and hold the picture for the original, let go for the grade: the
   // gesture Lightroom and Photos both use, so it needs no button. `\` does
@@ -3065,9 +3143,37 @@ const accent = manifest.chapters[0]
   canvasEl.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     canvasEl.setPointerCapture(e.pointerId);
+    if (wipeEl.checked) { dragging = true; splitFrom(e); return; }
     setHolding(true);
   });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvasEl.addEventListener(ev, () => setHolding(false));
+  canvasEl.addEventListener('pointermove', (e) => { if (dragging) splitFrom(e); });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) canvasEl.addEventListener(ev, () => { dragging = false; setHolding(false); });
+  addEventListener('resize', placeDivider);
+
+  // On a phone the reference is a thumbnail on your photo; a tap shows it
+  // in its place, another puts your photo back.
+  const refFig = $<HTMLElement>('mx-reffig');
+  const narrow = matchMedia('(max-width: 640px)');
+  const syncRefFig = () => {
+    if (narrow.matches) {
+      refFig.setAttribute('role', 'button');
+      refFig.tabIndex = 0;
+      refFig.setAttribute('aria-pressed', String(refFig.classList.contains('big')));
+      refFig.setAttribute('aria-label', 'Show the reference');
+    } else {
+      refFig.classList.remove('big');
+      for (const a of ['role', 'tabindex', 'aria-pressed', 'aria-label']) refFig.removeAttribute(a);
+    }
+  };
+  const toggleRef = () => {
+    if (!narrow.matches) return;
+    refFig.classList.toggle('big');
+    refFig.setAttribute('aria-pressed', String(refFig.classList.contains('big')));
+  };
+  refFig.addEventListener('click', toggleRef);
+  refFig.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRef(); } });
+  narrow.addEventListener('change', syncRefFig);
+  syncRefFig();
   canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
   addEventListener('keydown', (e) => {
     if (e.key !== '\\' || resultEl.hidden || (e.target as HTMLElement).closest('input, textarea, select')) return;
@@ -3164,18 +3270,32 @@ const accent = manifest.chapters[0]
   // only — every caveat/refusal string below is unchanged from before.
   function renderBadges(data: any) {
     const s = data.solution;
+    // Simulated on your photo through Lightroom's model when there is a
+    // prediction (refine.ts); the older frame-average reading otherwise.
+    const p = s.predicted;
+    const closed = p && p.untouched.distance > 0.05 ? Math.max(0, 1 - p.faithful.distance / p.untouched.distance) : null;
     const stats: Array<[string, number, boolean]> = [
       ['sure of the measurements', Math.round(s.confidence * 100), s.confidence < 0.7],
-      ['of the gap can close', Math.round(s.reachability * 100), s.reachability < 0.55],
+      closed !== null
+        ? ['of the difference closed in Lightroom', Math.round(closed * 100), closed < 0.5]
+        : ['of the gap can close', Math.round(s.reachability * 100), s.reachability < 0.55],
     ];
-    const caveats: Array<[string, boolean]> = [
+    const caveats: Array<[string, boolean]> = [];
+    if (p) {
+      const d = (x: number) => x.toFixed(x < 10 ? 1 : 0);
+      caveats.push([
+        `Checked on your photo through Lightroom’s own model, counting colour and contrast: about ${d(p.faithful.distance)} from the reference at Full, ${d(p.restrained.distance)} at the middle, ${d(p.untouched.distance)} apart now. Under 2 is hard to tell apart side by side.`,
+        false,
+      ]);
+    }
+    caveats.push(
       [`Your photo was read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL].toLowerCase()}`, data.mine.baseline === 'preview'],
       // Which constants were measured, as of when THIS match was solved — a
       // kept report from before any were approved stays "estimated".
       (data.calibrated || []).length
         ? [`Slider calibration: ${data.calibrated.length} of ${CAL_TARGETS.length} measured from your round trips, the rest estimated`, false]
         : ['Slider calibration is estimated for now', true],
-    ];
+    );
     // Only known once the group's own references have actually been
     // analysed — the start screen (see `openWorkbench`) shows what's about
     // to be measured, not this, because this can't exist yet at that point.
@@ -3332,6 +3452,24 @@ const accent = manifest.chapters[0]
         ])
       : '';
 
+    // Point Color: one row per swatch, in the mixer's columns, with the colour
+    // it picks out. These travel in the preset — no mask to draw.
+    const swatches = ((a.pointColors ?? []) as PointColorSwatch[]).filter((p) => Math.abs(p.hue) >= 0.5 || Math.abs(p.sat) >= 0.5 || Math.abs(p.lum) >= 0.5);
+    const pointColor = swatches.length
+      ? group(
+          'Point Color',
+          [
+            `<div class="mx-mixer">
+               <span class="hdr"></span><span class="hdr n">Hue</span><span class="hdr n">Sat</span><span class="hdr n">Lum</span>
+               ${swatches
+                 .map((p) => `<span class="band"><span class="chip" style="background:${swatchCss(p.source)}"></span>${esc(p.label)}</span>${cell(p.hue)}${cell(p.sat)}${cell(p.lum)}`)
+                 .join('')}
+             </div>`,
+          ],
+          'In the preset. Each picks out its colour by itself, so there’s no mask to draw.',
+        )
+      : '';
+
     // Lightroom shows Shadows/Midtones/Highlights as a 3-way cluster — one
     // large "active" wheel plus two small ones — and reaches Global through a
     // separate toggle rather than a fourth wheel in the row. The active range
@@ -3383,7 +3521,8 @@ const accent = manifest.chapters[0]
            'either / or',
          )}</div>
        </div>` +
-      mixer;
+      mixer +
+      pointColor;
 
     // ── Details ──────────────────────────────────────────────────────────
     const effects = group('Effects & Detail', [

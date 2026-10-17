@@ -1,7 +1,9 @@
 import {
   HSL_BANDS,
+  bandOfHue,
   VIGNETTE_MIN_SYMMETRY,
   type HslBandStats,
+  type PixelSample,
   type RegionKey,
   type RegionMasks,
   type RegionStats,
@@ -114,22 +116,10 @@ function finish(key: RegionKey, acc: Acc, coverage: number): RegionStats | null 
   };
 }
 
-const circDist = (a: number, b: number): number => {
-  const d = Math.abs(((a - b) % 360 + 360) % 360);
-  return d > 180 ? 360 - d : d;
-};
-
-/** Precomputed nearest-HSL-band lookup, 1 degree resolution. */
+/** Precomputed HSL-band lookup, 1 degree resolution — Lightroom's own band
+ *  edges (see HSL_BANDS). */
 const BAND_OF_HUE = new Uint8Array(360);
-for (let h = 0; h < 360; h++) {
-  let best = 0;
-  let bd = Infinity;
-  for (let i = 0; i < HSL_BANDS.length; i++) {
-    const d = circDist(h, HSL_BANDS[i].H);
-    if (d < bd) { bd = d; best = i; }
-  }
-  BAND_OF_HUE[h] = best;
-}
+for (let h = 0; h < 360; h++) BAND_OF_HUE[h] = bandOfHue(h + 0.5);
 
 export interface MeasureResult {
   regions: Partial<Record<RegionKey, RegionStats>>;
@@ -137,7 +127,117 @@ export interface MeasureResult {
   sampledAt: number;
   width: number;
   height: number;
+  /** A small, even sample of the pixels and their regions, for simulating a
+   *  grade on this photo (see simulate.ts). */
+  sample: PixelSample;
 }
+
+/**
+ * The accumulation behind every measurement, one pixel at a time.
+ *
+ * Shared by the real photo (measureRegionsFromPixels) and the simulated one
+ * (simulate.ts), so a predicted result is measured by exactly the code that
+ * measured the reference. Two copies of this loop would be two chances to
+ * disagree, and the disagreement would read as a grading error.
+ */
+export class Measurer {
+  private readonly accs: Acc[];
+  private readonly globalAcc = newAcc();
+  private readonly zoneAccs = [newAcc(), newAcc(), newAcc()];
+  private readonly bandAcc = HSL_BANDS.map(() => ({ n: 0, sumC: 0, sumL: 0, sumA: 0, sumB: 0 }));
+  private chromaticN = 0;
+
+  /** `maskKeys[k]` is the region whose membership is bit k of `add`'s bits. */
+  constructor(readonly maskKeys: RegionKey[]) {
+    this.accs = maskKeys.map(() => newAcc());
+  }
+
+  /** One pixel, linear sRGB, with its region bits and an optional weight
+   *  (how many pixels it stands for — see composition.ts). */
+  add(r: number, g: number, b: number, bits: number, weight = 1): void {
+    // Linear sRGB -> OKLab (Ottosson).
+    const l_ = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m_ = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s_ = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+
+    const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
+    const A = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
+    const B = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
+    const C = Math.sqrt(A * A + B * B);
+
+    const bin = L <= 0 ? 0 : L >= 1 ? HIST_BINS - 1 : (L * (HIST_BINS - 1)) | 0;
+    const push = (acc: Acc, w: number) => {
+      acc.n += w;
+      acc.sumL += w * L;
+      acc.sumL2 += w * L * L;
+      acc.sumC += w * C;
+      acc.sumC2 += w * C * C;
+      acc.sumA += w * A;
+      acc.sumB += w * B;
+      acc.hist[bin] += w;
+    };
+
+    push(this.globalAcc, weight);
+    // Every pixel contributes to all three zones, weighted — see zoneWeights.
+    const zw = zoneWeights(L);
+    if (zw[0] > 0) push(this.zoneAccs[0], zw[0] * weight);
+    if (zw[1] > 0) push(this.zoneAccs[1], zw[1] * weight);
+    if (zw[2] > 0) push(this.zoneAccs[2], zw[2] * weight);
+
+    if (bits) for (let k = 0; k < this.accs.length; k++) if (bits & (1 << k)) push(this.accs[k], weight);
+
+    if (C >= CHROMA_FLOOR) {
+      let hue = (Math.atan2(B, A) * 180) / Math.PI;
+      if (hue < 0) hue += 360;
+      const band = this.bandAcc[BAND_OF_HUE[hue | 0]];
+      band.n += weight;
+      band.sumC += weight * C;
+      band.sumL += weight * L;
+      band.sumA += weight * A;
+      band.sumB += weight * B;
+      this.chromaticN += weight;
+    }
+  }
+
+  /** Finish into region and band statistics. `coverage` is each mask region's
+   *  share of the frame before erosion, which the pixels alone can't tell. */
+  result(coverage: Partial<Record<RegionKey, number>>): Pick<MeasureResult, 'regions' | 'hslBands'> {
+    const regions: Partial<Record<RegionKey, RegionStats>> = {};
+    const g = finish('global', this.globalAcc, 1);
+    if (g) regions.global = g;
+    const zoneKeys: RegionKey[] = ['zone.shadow', 'zone.midtone', 'zone.highlight'];
+    this.zoneAccs.forEach((acc, i) => {
+      const s = finish(zoneKeys[i], acc, acc.n / Math.max(1, this.globalAcc.n));
+      if (s) regions[zoneKeys[i]] = s;
+    });
+    this.maskKeys.forEach((key, k) => {
+      const s = finish(key, this.accs[k], coverage[key] ?? 0);
+      if (s) regions[key] = s;
+    });
+
+    const hslBands: HslBandStats[] = HSL_BANDS.map((band, i) => {
+      const a = this.bandAcc[i];
+      if (a.n === 0) return { key: band.key, weight: 0, chroma: 0, L: 0, hue: band.H };
+      const mA = a.sumA / a.n;
+      const mB = a.sumB / a.n;
+      let hue = (Math.atan2(mB, mA) * 180) / Math.PI;
+      if (hue < 0) hue += 360;
+      return {
+        key: band.key,
+        weight: this.chromaticN > 0 ? a.n / this.chromaticN : 0,
+        chroma: a.sumC / a.n,
+        L: a.sumL / a.n,
+        hue,
+      };
+    });
+    return { regions, hslBands };
+  }
+}
+
+/** About this many pixels go into the sample: enough that every zone and any
+ *  region bigger than a sliver holds hundreds, few enough that a full
+ *  simulation of a grade takes a few milliseconds. */
+const SAMPLE_TARGET = 16384;
 
 /**
  * Measure every region present in `masks`, plus the global frame and the three
@@ -147,19 +247,9 @@ export interface MeasureResult {
 export function measureRegionsFromPixels(img: RgbImage, masks: RegionMasks): MeasureResult {
   const { data, width: W, height: H, channels: ch } = img;
 
-  const maskKeys = Object.keys(masks.masks) as RegionKey[];
+  const maskKeys = (Object.keys(masks.masks) as RegionKey[]).slice(0, 16);
   const maskArrays = maskKeys.map((k) => masks.masks[k]!);
-  const accs = new Map<RegionKey, Acc>();
-  for (const k of maskKeys) accs.set(k, newAcc());
-  const globalAcc = newAcc();
-  const zoneAccs: [RegionKey, Acc][] = [
-    ['zone.shadow', newAcc()],
-    ['zone.midtone', newAcc()],
-    ['zone.highlight', newAcc()],
-  ];
-
-  const bandAcc = HSL_BANDS.map(() => ({ n: 0, sumC: 0, sumL: 0, sumA: 0, sumB: 0 }));
-  let chromaticN = 0;
+  const measurer = new Measurer(maskKeys);
 
   // Masks live on their own grid; map between the two by integer index rather
   // than resizing, which would reintroduce the soft boundary pixels erosion
@@ -172,95 +262,119 @@ export function measureRegionsFromPixels(img: RgbImage, masks: RegionMasks): Mea
   const rowToMask = new Int32Array(hasMasks ? H : 0);
   if (hasMasks) for (let y = 0; y < H; y++) rowToMask[y] = Math.min(mh - 1, Math.floor((y * mh) / H));
 
+  // The sample is an even grid, so it keeps the photo's composition.
+  const step = Math.max(1, Math.sqrt((W * H) / SAMPLE_TARGET));
+  const sw = Math.max(1, Math.floor(W / step));
+  const sh = Math.max(1, Math.floor(H / step));
+  const sRgb = new Uint8Array(sw * sh * 3);
+  const sBits = new Uint16Array(sw * sh);
+  const sampleCol = new Int32Array(W).fill(-1);
+  for (let i = 0; i < sw; i++) sampleCol[Math.min(W - 1, Math.floor((i + 0.5) * step))] = i;
+  const sampleRow = new Int32Array(H).fill(-1);
+  for (let j = 0; j < sh; j++) sampleRow[Math.min(H - 1, Math.floor((j + 0.5) * step))] = j;
+
   for (let y = 0; y < H; y++) {
     const maskRow = hasMasks ? rowToMask[y] * mw : 0;
     const rowOff = y * W * ch;
+    const sj = sampleRow[y];
     for (let x = 0; x < W; x++) {
       const p = rowOff + x * ch;
-      const r = LINEAR_LUT[data[p]];
-      const g = LINEAR_LUT[data[p + 1]];
-      const b = LINEAR_LUT[data[p + 2]];
-
-      // Linear sRGB -> OKLab (Ottosson).
-      const l_ = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-      const m_ = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-      const s_ = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-
-      const L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
-      const A = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
-      const B = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
-      const C = Math.sqrt(A * A + B * B);
-
-      const bin = L <= 0 ? 0 : L >= 1 ? HIST_BINS - 1 : (L * (HIST_BINS - 1)) | 0;
-
-      const push = (acc: Acc, w = 1) => {
-        acc.n += w;
-        acc.sumL += w * L;
-        acc.sumL2 += w * L * L;
-        acc.sumC += w * C;
-        acc.sumC2 += w * C * C;
-        acc.sumA += w * A;
-        acc.sumB += w * B;
-        acc.hist[bin] += w;
-      };
-
-      push(globalAcc);
-      // Every pixel contributes to all three zones, weighted — see zoneWeights.
-      const zw = zoneWeights(L);
-      if (zw[0] > 0) push(zoneAccs[0][1], zw[0]);
-      if (zw[1] > 0) push(zoneAccs[1][1], zw[1]);
-      if (zw[2] > 0) push(zoneAccs[2][1], zw[2]);
-
+      let bits = 0;
       if (hasMasks) {
         const mi = maskRow + colToMask[x];
-        for (let k = 0; k < maskArrays.length; k++) {
-          if (maskArrays[k][mi] >= MASK_IN) push(accs.get(maskKeys[k])!);
-        }
+        for (let k = 0; k < maskArrays.length; k++) if (maskArrays[k][mi] >= MASK_IN) bits |= 1 << k;
       }
-
-      if (C >= CHROMA_FLOOR) {
-        let hue = (Math.atan2(B, A) * 180) / Math.PI;
-        if (hue < 0) hue += 360;
-        const band = bandAcc[BAND_OF_HUE[hue | 0]];
-        band.n++;
-        band.sumC += C;
-        band.sumL += L;
-        band.sumA += A;
-        band.sumB += B;
-        chromaticN++;
+      measurer.add(LINEAR_LUT[data[p]], LINEAR_LUT[data[p + 1]], LINEAR_LUT[data[p + 2]], bits);
+      if (sj >= 0) {
+        const si = sampleCol[x];
+        if (si >= 0) {
+          const o = sj * sw + si;
+          sRgb[o * 3] = data[p];
+          sRgb[o * 3 + 1] = data[p + 1];
+          sRgb[o * 3 + 2] = data[p + 2];
+          sBits[o] = bits;
+        }
       }
     }
   }
 
-  const regions: Partial<Record<RegionKey, RegionStats>> = {};
-  const g = finish('global', globalAcc, 1);
-  if (g) regions.global = g;
-  for (const [key, acc] of zoneAccs) {
-    const s = finish(key, acc, acc.n / Math.max(1, globalAcc.n));
-    if (s) regions[key] = s;
-  }
-  for (const key of maskKeys) {
-    const s = finish(key, accs.get(key)!, masks.coverage[key] ?? 0);
-    if (s) regions[key] = s;
-  }
+  const { regions, hslBands } = measurer.result(masks.coverage);
+  return {
+    regions,
+    hslBands,
+    sampledAt: Math.max(W, H),
+    width: W,
+    height: H,
+    sample: encodeSample(sw, sh, sRgb, sBits, maskKeys, masks.coverage),
+  };
+}
 
-  const hslBands: HslBandStats[] = HSL_BANDS.map((band, i) => {
-    const a = bandAcc[i];
-    if (a.n === 0) return { key: band.key, weight: 0, chroma: 0, L: 0, hue: band.H };
-    const mA = a.sumA / a.n;
-    const mB = a.sumB / a.n;
-    let hue = (Math.atan2(mB, mA) * 180) / Math.PI;
-    if (hue < 0) hue += 360;
-    return {
-      key: band.key,
-      weight: chromaticN > 0 ? a.n / chromaticN : 0,
-      chroma: a.sumC / a.n,
-      L: a.sumL / a.n,
-      hue,
-    };
-  });
+// ─── Pixel sample ─────────────────────────────────────────────────────────
 
-  return { regions, hslBands, sampledAt: Math.max(W, H), width: W, height: H };
+function toBase64(bytes: Uint8Array): string {
+  const B = (globalThis as { Buffer?: { from(b: Uint8Array): { toString(enc: string): string } } }).Buffer;
+  if (B) return B.from(bytes).toString('base64');
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function fromBase64(s: string): Uint8Array {
+  const B = (globalThis as { Buffer?: { from(s: string, enc: string): Uint8Array } }).Buffer;
+  if (B) return new Uint8Array(B.from(s, 'base64'));
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export function encodeSample(
+  width: number,
+  height: number,
+  rgb: Uint8Array,
+  bits: Uint16Array,
+  regions: RegionKey[],
+  coverage: Partial<Record<RegionKey, number>>,
+): PixelSample {
+  return {
+    width,
+    height,
+    rgb: toBase64(rgb),
+    bits: toBase64(new Uint8Array(bits.buffer, bits.byteOffset, bits.byteLength)),
+    regions,
+    coverage: Object.fromEntries(regions.map((k) => [k, coverage[k] ?? 0])),
+  };
+}
+
+export interface DecodedSample {
+  n: number;
+  /** Linear sRGB, 3 per pixel. */
+  linear: Float32Array;
+  bits: Uint16Array;
+  regions: RegionKey[];
+  coverage: Partial<Record<RegionKey, number>>;
+}
+
+export function decodeSample(s: PixelSample): DecodedSample {
+  const rgb = fromBase64(s.rgb);
+  const raw = fromBase64(s.bits);
+  const bits = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+  const n = Math.min(bits.length, Math.floor(rgb.length / 3));
+  const linear = new Float32Array(n * 3);
+  for (let i = 0; i < n * 3; i++) linear[i] = LINEAR_LUT[rgb[i]];
+  return { n, linear, bits, regions: s.regions, coverage: s.coverage };
+}
+
+/** Measure a decoded sample exactly as a photo is measured, optionally with a
+ *  weight per pixel. */
+export function measureSample(
+  s: DecodedSample,
+  linear: Float32Array = s.linear,
+  weights?: Float32Array,
+): Pick<MeasureResult, 'regions' | 'hslBands'> {
+  const m = new Measurer(s.regions);
+  for (let i = 0; i < s.n; i++) m.add(linear[i * 3], linear[i * 3 + 1], linear[i * 3 + 2], s.bits[i], weights ? weights[i] : 1);
+  return m.result(s.coverage);
 }
 
 /**

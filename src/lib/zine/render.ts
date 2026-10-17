@@ -6,7 +6,7 @@
  * Sizes are in units of one-hundredth of a page's width, so a page reads the
  * same at 120px on screen as at 870px in print.
  */
-import { panelRect, isFlipped, SPREADS, COVER_PANEL, BACK_PANEL, type Spread } from './imposition';
+import { panelRect, isFlipped, spreadsFor, canMerge, sheetOf, panelOf, SHEET_PANELS, COVER_PANEL, BACK_PANEL, type Spread } from './imposition';
 import { fontOf, inkOf, toneOf, type ZineDoc, type PageDoc, type CoverDoc, type MergeDoc, type PhotoRef, type TextStyle, type FrameStyle, type Tone } from './doc';
 
 type Ctx = CanvasRenderingContext2D;
@@ -298,7 +298,7 @@ function drawCoverPage(ctx: Ctx, doc: ZineDoc, page: PageDoc, text: CoverDoc, fr
   ctx.restore();
 }
 
-/** One page, by sheet panel, drawn upright into the given box. */
+/** One page, by slot, drawn upright into the given box. */
 export function drawPage(ctx: Ctx, doc: ZineDoc, panel: number, x: number, y: number, w: number, h: number, o: RenderOpts) {
   const page = doc.pages[panel];
   if (panel === COVER_PANEL) drawCoverPage(ctx, doc, page, doc.cover, true, x, y, w, h, o);
@@ -309,7 +309,7 @@ export function drawPage(ctx: Ctx, doc: ZineDoc, panel: number, x: number, y: nu
 /** A spread as the reader sees it: left page, right page, side by side. */
 export function drawSpread(ctx: Ctx, doc: ZineDoc, spread: Spread, x: number, y: number, pageW: number, h: number, o: RenderOpts) {
   const merged: MergeDoc = doc.merged[spread.id];
-  if (!merged.on) {
+  if (!merged.on || !canMerge(spread)) {
     drawPage(ctx, doc, spread.left, x, y, pageW, h, o);
     drawPage(ctx, doc, spread.right, x + pageW, y, pageW, h, o);
     return;
@@ -345,11 +345,12 @@ export function drawGutter(ctx: Ctx, x: number, y: number, h: number) {
 }
 
 /**
- * The printed sheet. Each spread is drawn whole and then cut into its two
- * pages, so a merged photo runs across the fold correctly. The top row is
- * turned upside down.
+ * A printed sheet: the only one for eight pages, the outside (0) or the
+ * inside (1) for sixteen. Each spread that sits on this sheet is drawn whole
+ * and then cut into its two pages, so a merged photo runs across the fold
+ * correctly; every other panel is one page. The top row is turned upside down.
  */
-export function drawSheet(ctx: Ctx, doc: ZineDoc, W: number, H: number, o: RenderOpts, guides = false) {
+export function drawSheet(ctx: Ctx, doc: ZineDoc, W: number, H: number, o: RenderOpts, guides = false, sheet = 0) {
   const pw = W / 4;
   const ph = H / 2;
   ctx.fillStyle = PAPER_TONE;
@@ -371,11 +372,16 @@ export function drawSheet(ctx: Ctx, doc: ZineDoc, W: number, H: number, o: Rende
     ctx.restore();
   };
 
-  place(COVER_PANEL, (c) => drawPage(c, doc, COVER_PANEL, 0, 0, pw, ph, o));
-  place(BACK_PANEL, (c) => drawPage(c, doc, BACK_PANEL, 0, 0, pw, ph, o));
-  for (const s of SPREADS) {
-    place(s.left, (c) => drawSpread(c, doc, s, 0, 0, pw, ph, o));
-    place(s.right, (c) => drawSpread(c, doc, s, -pw, 0, pw, ph, o));
+  const base = sheet * SHEET_PANELS;
+  const done = new Set<number>();
+  for (const s of spreadsFor(doc.format)) {
+    if (!canMerge(s) || sheetOf(s.left) !== sheet || sheetOf(s.right) !== sheet) continue;
+    place(panelOf(s.left), (c) => drawSpread(c, doc, s, 0, 0, pw, ph, o));
+    place(panelOf(s.right), (c) => drawSpread(c, doc, s, -pw, 0, pw, ph, o));
+    done.add(panelOf(s.left)).add(panelOf(s.right));
+  }
+  for (let panel = 0; panel < SHEET_PANELS; panel++) {
+    if (!done.has(panel)) place(panel, (c) => drawPage(c, doc, base + panel, 0, 0, pw, ph, o));
   }
 
   if (guides) {

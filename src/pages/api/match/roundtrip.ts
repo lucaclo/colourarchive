@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { analysePhoto } from '../../../lib/match/analyze';
 import { atGroupStrength } from '../../../lib/match/adjustments';
-import { solveMatch } from '../../../lib/match/solve';
+import { solveAndRefine } from '../../../lib/match/engine';
+import { lrTables } from '../../../lib/match/lr-tables-node';
 import { buildPresetFiles } from '../../../lib/match/xmp';
 import {
   calibrationRows, compareEdit, fitCalibration, followUpAdjustments, handMoves, roundTripEligibility,
@@ -54,7 +55,7 @@ export const POST: APIRoute = async ({ request }) => {
     // What would close the rest, at the strengths that were downloaded: a
     // lower strength was a choice, and the follow-up respects it.
     const calibration = await activeCalibration();
-    const correction = solveMatch(download.reference, edited, { calibration });
+    const correction = solveAndRefine(download.reference, edited, { calibration, tables: await lrTables().catch(() => null) });
     const corrective = atGroupStrength(correction.restrained, correction.faithful, download.strength);
     if (!download.hadMasks) corrective.masks = [];
 

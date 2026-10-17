@@ -93,6 +93,7 @@ function fixtureA(): Adjustments {
     noiseReduction: 10,
     colorNoiseReduction: 5,
     masks: [],
+    pointColors: [],
   };
 }
 
@@ -145,6 +146,7 @@ function fixtureB(): Adjustments {
     noiseReduction: 30,
     colorNoiseReduction: 15,
     masks: [],
+    pointColors: [],
   };
 }
 
@@ -629,7 +631,7 @@ describe('atGroupStrength', () => {
     const colour = atStrength(restrained, faithful, s.colour);
     const effects = atStrength(restrained, faithful, s.effects);
     const lightKeys = ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'curve'] as const;
-    const colourKeys = ['temp', 'tint', 'vibrance', 'saturation', 'hsl', 'grading'] as const;
+    const colourKeys = ['temp', 'tint', 'vibrance', 'saturation', 'hsl', 'grading', 'pointColors'] as const;
     const effectsKeys = [
       'texture', 'clarity', 'dehaze', 'vignette', 'grainAmount', 'grainSize', 'grainRoughness',
       'sharpenAmount', 'sharpenRadius', 'sharpenDetail', 'noiseReduction', 'colorNoiseReduction',
