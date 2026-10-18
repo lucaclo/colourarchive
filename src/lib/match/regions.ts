@@ -1,4 +1,5 @@
 import { pipeline, AutoModel, AutoProcessor, RawImage, env } from '@xenova/transformers';
+import { MODELS_DIR } from '../paths';
 import sharp from 'sharp';
 import { erode } from './morphology';
 import type { RegionKey, RegionMasks } from './types';
@@ -27,6 +28,7 @@ export type { RegionMasks };
 // buys large-model accuracy from mid-size models.
 
 env.allowLocalModels = false;
+if (MODELS_DIR) env.cacheDir = MODELS_DIR;
 
 /** Long edge the models see. 1536 measured at ~2.9s (scene) + ~1.2s (people) on
  *  an M-series Air, with clean mask shape. Masks return at THIS resolution, not

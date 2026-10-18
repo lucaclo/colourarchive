@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import { ROOT } from './paths';
+import { ROOT, IS_DESKTOP } from './paths';
 
 // Auto-publish: after a photo change, push the updated static site to Netlify.
 //
@@ -26,6 +26,7 @@ let pending = false;
 /** Request a publish. Coalesces rapid calls; re-runs once if changes land mid-deploy. */
 export function scheduleDeploy(): void {
   if (process.env.PUBLIC_STATIC === 'true') return; // never from within a static build
+  if (IS_DESKTOP) return; // the Mac app is someone's own archive; it has no site to publish
   if (running) { pending = true; return; }
   if (timer) clearTimeout(timer);
   timer = setTimeout(runDeploy, DEBOUNCE_MS);

@@ -7,35 +7,53 @@ import path from 'node:path';
 // made the static export read an empty manifest.
 export const ROOT = process.cwd();
 
-export const PHOTOS_DIR = path.join(ROOT, 'photos');
-export const IMG_DIR = path.join(ROOT, 'public', 'img');
+// Where the archive's own data lives — the photographs and everything the app
+// writes about them. In development that is this repository, as it always was.
+// The Mac app (desktop/main.cjs) sets COLOUR_ARCHIVE_DATA to the folder the
+// person chose on first launch, so their photographs live outside the app and
+// survive reinstalling or updating it. The originals and reference images sit
+// at the top of that folder where Finder shows them; everything derived from
+// them goes in a hidden `.archive` beside them, laid out as it is here.
+export const DATA_ROOT = process.env.COLOUR_ARCHIVE_DATA || null;
+/** True inside the Mac app, which keeps its data outside the code. */
+export const IS_DESKTOP = DATA_ROOT !== null;
+const kept = (...rel: string[]): string =>
+  DATA_ROOT ? path.join(DATA_ROOT, '.archive', ...rel) : path.join(ROOT, ...rel);
+
+// Where the Match and search models are cached once downloaded. Left to the
+// library's default (inside node_modules) in development; the Mac app points it
+// at its Application Support folder, since the app's own files are read-only.
+export const MODELS_DIR = process.env.COLOUR_ARCHIVE_MODELS || null;
+
+export const PHOTOS_DIR = DATA_ROOT ? path.join(DATA_ROOT, 'Photos') : path.join(ROOT, 'photos');
+export const IMG_DIR = kept('public', 'img');
 // The flat, append-only list of every photograph — the source of truth.
 // manifest.json is derived from it (ordered, grouped, overrides applied).
-export const STORE_PATH = path.join(ROOT, 'src', 'data', 'photos.json');
-export const MANIFEST_PATH = path.join(ROOT, 'src', 'data', 'manifest.json');
+export const STORE_PATH = kept('src', 'data', 'photos.json');
+export const MANIFEST_PATH = kept('src', 'data', 'manifest.json');
 // Inspiration board — a separate collection of reference images.
-export const INSPIRATION_DIR = path.join(ROOT, 'inspiration');
-export const INSPIRATION_STORE = path.join(ROOT, 'src', 'data', 'inspiration.json');
-export const INSPIRATION_MANIFEST = path.join(ROOT, 'src', 'data', 'inspiration.manifest.json');
-export const OVERRIDES_PATH = path.join(ROOT, 'photos.overrides.json');
+export const INSPIRATION_DIR = DATA_ROOT ? path.join(DATA_ROOT, 'Inspiration') : path.join(ROOT, 'inspiration');
+export const INSPIRATION_STORE = kept('src', 'data', 'inspiration.json');
+export const INSPIRATION_MANIFEST = kept('src', 'data', 'inspiration.manifest.json');
+export const OVERRIDES_PATH = kept('photos.overrides.json');
 // Where each photograph was taken, placed by hand in Scout. Deliberately NOT
 // in OVERRIDES_PATH and git-ignored: the repository is public, and a push
 // must never publish where someone shoots. See `scout/mine.ts`.
-export const LOCATIONS_PATH = path.join(ROOT, 'photos.locations.json');
-export const EXPORT_PATH = path.join(ROOT, 'sequence.json');
+export const LOCATIONS_PATH = kept('photos.locations.json');
+export const EXPORT_PATH = kept('sequence.json');
 // The book's own curation — issue #82. Deliberately separate from
 // OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
 // medium, genre) for the whole archive, while this changes only whether and
 // where a photo sits in one particular curated object, the printed book.
-export const BOOK_PATH = path.join(ROOT, 'src', 'data', 'book.json');
+export const BOOK_PATH = kept('src', 'data', 'book.json');
 // The archive's own notebook — why a photo matters, kept by id. Deliberately
 // its own file, not folded into overrides or the book curation: this is
 // never derived and never affects rendering, chapter, or export — the only
 // thing that ever reads it is a human.
 // Print PDFs built from the book (api/book/pdf). Regenerated on demand,
 // large, and full of originals, so git-ignored.
-export const BOOK_PRINT_DIR = path.join(ROOT, '.book-print');
-export const NOTES_PATH = path.join(ROOT, 'src', 'data', 'notes.json');
+export const BOOK_PRINT_DIR = kept('.book-print');
+export const NOTES_PATH = kept('src', 'data', 'notes.json');
 // Scout's curated list of named photographers to look for near a spot — see
 // `scout/sources/notable.ts`'s header. Hand-edited, like NOTES_PATH, so it is
 // read fresh rather than cached at module load.
@@ -49,22 +67,22 @@ export const NOTABLE_PHOTOGRAPHERS_PATH = path.join(ROOT, 'src', 'data', 'notabl
 // 404'd when requested 1ms after being written), and anything under public/ is
 // copied into dist/client at build time — which would bake ephemeral session
 // artefacts into the published archive.
-export const MATCH_CACHE_DIR = path.join(ROOT, '.match-cache');
-export const MATCH_KEPT_DIR = path.join(ROOT, 'src', 'data', 'match');
+export const MATCH_CACHE_DIR = kept('.match-cache');
+export const MATCH_KEPT_DIR = kept('src', 'data', 'match');
 // A separate top-level directory, not a subfolder of MATCH_CACHE_DIR: the
 // startup sweep in session.ts deletes anything under MATCH_CACHE_DIR that
 // isn't a kept match's id, and a subfolder here would look exactly like one
 // of those to it.
-export const MATCH_ANALYSIS_CACHE_DIR = path.join(ROOT, '.match-analysis-cache');
+export const MATCH_ANALYSIS_CACHE_DIR = kept('.match-analysis-cache');
 // Round trips (an applied preset's export, measured back) and the calibration
 // fitted from them. Git-ignored like the rest: it describes one person's
 // Lightroom, and the snapshots inside hold full measurements of their photos.
-export const MATCH_CALIBRATION_DIR = path.join(ROOT, '.match-calibration');
+export const MATCH_CALIBRATION_DIR = kept('.match-calibration');
 
 // Scout. Geocoding answers are cached to disk and never expire on their own:
 // places do not move, Nominatim asks to be used sparingly, and a scouted area
 // should keep working when the Wi-Fi does not.
-export const SCOUT_CACHE_DIR = path.join(ROOT, '.scout-cache');
+export const SCOUT_CACHE_DIR = kept('.scout-cache');
 export const SCOUT_GEOCODE_DIR = path.join(SCOUT_CACHE_DIR, 'geocode');
 // Forecasts, unlike places, go off. Cached only long enough to survive a session
 // of scrubbing the slider back and forth — see WEATHER_TTL_MS.
