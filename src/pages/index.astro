@@ -1223,7 +1223,10 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       update();
       for (const f of nameNearby()) { f.classList.add('reveal'); named.push(f); }
     });
-    vt.finished.finally(() => {
+    // A second morph before this one draws skips it; `ready` then rejects,
+    // which is expected, not an error worth reporting.
+    vt.ready.catch(() => {});
+    vt.finished.catch(() => {}).finally(() => {
       archive.classList.remove('morphing');
       for (const f of named) { f.style.removeProperty('view-transition-name'); f.style.removeProperty('view-transition-class'); }
     });
