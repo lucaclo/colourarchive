@@ -79,6 +79,7 @@ const accent = manifest.chapters[0]
         <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
       </div>
+      <p class="manage-none" id="manage-none" role="status" hidden></p>
       {/* Issue #106: the photos standing on a chapter edge are the ones worth
           checking by eye, so they can be pulled out of the grid on their own. */}
       <button type="button" class="edge-filter" id="edge-filter" aria-pressed="false" hidden={onEdge === 0}>
@@ -220,13 +221,18 @@ const accent = manifest.chapters[0]
     min-height: 2rem; padding: 0 0.85rem; background: transparent; color: var(--secondary);
     font-family: var(--font-ui); font-size: var(--t-caption);
   }
-  .manage-order button[aria-pressed='true'] { background: var(--surface-3); color: var(--fg); }
+  /* The same pressed state as Book's List / Spreads: surface-3 on a fill
+     track was 3% apart, so which order was on could hardly be seen. */
+  .manage-order button[aria-pressed='true'] { background: var(--fill-active); color: var(--fg); font-weight: 600; }
   .manage-order button:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
   .manage-head { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.7rem; margin: 0 0 0.3rem; display: flex; align-items: baseline; gap: 0.6rem; }
   .manage-count { font-family: var(--font-label); font-size: 0.9rem; color: var(--muted); }
   .manage-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.4rem; }
   .manage-note code { font-size: 0.92em; }
-  .manage-search { margin: -0.6rem 0 1rem; }
+  /* A field you can see: bare text and a glass read as a label, not a box. */
+  .manage-search { margin: 0.4rem 0 1rem; width: fit-content; border: 1px solid var(--separator); background: var(--surface-1); }
+  .manage-none { margin: 0 0 1rem; color: var(--secondary); font-size: var(--t-footnote); }
+  .manage-search:focus-within { border-color: color-mix(in oklab, var(--fg) 30%, transparent); }
   .manage-search input { width: 14rem; }
 
   .bulk-bar {
@@ -910,10 +916,16 @@ const accent = manifest.chapters[0]
   const manageSearchInput = document.getElementById('manage-search-input');
   let manageSearchTimer = 0;
   let manageSearchToken = 0;
-  function applyManageSearch(ids) {
+  const manageNone = document.getElementById('manage-none');
+  function applyManageSearch(ids, q = '') {
     if (!grid) return;
     for (const cell of grid.children) {
       cell.hidden = ids !== null && !ids.has(cell.dataset.id);
+    }
+    // An empty grid under a query reads as a broken page; say what happened.
+    if (manageNone) {
+      manageNone.hidden = !(ids && ids.size === 0);
+      manageNone.textContent = manageNone.hidden ? '' : `Nothing in the archive looks like “${q}”.`;
     }
   }
   async function runManageSearch(q) {
@@ -926,7 +938,7 @@ const accent = manifest.chapters[0]
     } catch (err) { return; } // offline / server-only route missing — leave unfiltered
     if (token !== manageSearchToken) return; // a newer query has since started; this response is stale
     if (!data.ok || !data.ready) return;
-    applyManageSearch(new Set(data.matches.map((m) => m.id)));
+    applyManageSearch(new Set(data.matches.map((m) => m.id)), q);
   }
   manageSearchInput?.addEventListener('input', (e) => {
     clearTimeout(manageSearchTimer);
