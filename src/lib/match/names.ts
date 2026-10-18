@@ -12,6 +12,11 @@ export function photoName(file: string): string {
   s = s.replace(/-(320|480|640|960|1024|1280|1600|2000|2048|2560)$/, '');
   s = s.replace(/[.\-_][0-9a-f]{8,}$/i, '');
   if (/^[0-9a-f]{12,}$/i.test(s)) return '';
+  // Names a machine gave it, which nobody would say aloud either: a saved
+  // Instagram image (`734846020_18006134951936155_…_n`) or an app's
+  // `temp_image_<UUID>`.
+  if (/^temp[_-]?image[_-]?[0-9a-f-]{20,}$/i.test(s)) return '';
+  if ((s.match(/\d/g)?.length ?? 0) >= 12 && !/[a-z]{3,}/i.test(s)) return '';
   return s;
 }
 

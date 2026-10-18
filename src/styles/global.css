@@ -1569,6 +1569,11 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   }
   /* The hover flourish scaled the whole 44px box, which reads as a jump. */
   .cover-spectrum .cs-seg:hover { transform: none; }
+  /* A pill radius on a 44px box curved the visible 4px away across the
+     first and last 22px, so the band looked cut off at both ends. Round
+     only what shows. */
+  .cover-spectrum .cs-seg:first-child { border-radius: 2px 0 0 0; }
+  .cover-spectrum .cs-seg:last-child { border-radius: 0 2px 0 0; }
 
   /* Text fields and pickers, everywhere. Two separate problems, one rule: a
      38px field is under the target floor, and iOS zooms the whole page in when
