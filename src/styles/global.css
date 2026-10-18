@@ -342,6 +342,9 @@ body {
 .collage.balanced { columns: initial; column-gap: initial; display: flex; gap: var(--gutter); align-items: flex-start; }
 .collage.balanced .mcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--gutter); }
 .collage.balanced .frame { margin: 0; }
+/* Reached by Tab: a ring inside the edge, since neighbours touch. */
+.frame:focus { outline: none; }
+.frame:focus-visible { outline: 2px solid var(--fg); outline-offset: -4px; }
 .frame img {
   display: block;
   width: 100%;
@@ -887,6 +890,10 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .insights .stat li { display: flex; align-items: center; gap: 0.7rem; font-family: var(--font-ui); font-size: var(--t-body); min-height: 1.9rem; }
 .insights .sw { width: 0.9rem; height: 0.9rem; border-radius: 50%; flex: 0 0 auto; }
 .insights .lbl { flex: 1 1 auto; min-width: 6rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Rows with a bar line their bars up on one start and one scale: as flex
+   items each bar began wherever its own label ended, so Camel's full bar sat
+   shorter than Blue's and the comparison the chart exists for was lost. */
+.insights .stat li:has(> .barwrap) { display: grid; grid-template-columns: 0.9rem minmax(4.5rem, 9rem) 1fr 2rem; }
 .insights .barwrap { flex: 2 1 auto; height: 6px; background: color-mix(in oklab, var(--fg) 8%, transparent); border-radius: 999px; overflow: hidden; }
 .insights .bar {
   display: block; height: 100%; width: 0; background: var(--fg); border-radius: 999px;
@@ -1678,6 +1685,13 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
 .cf-tray-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; }
 .cf-tray-item:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; border-radius: var(--r-xs); }
 .cf-tray-item:hover img { filter: brightness(1.08); }
+.cf-tray-glass { width: 14px; height: 14px; fill: none; stroke: var(--secondary); stroke-width: 1.6; stroke-linecap: round; }
+.cf-tray-none { flex: 1 1 auto; min-width: 0; margin: 0; align-self: center; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary); white-space: normal; }
+/* No answer: the sentence says it, so the 0 above it goes, Clear sits beside
+   the glass, and the fade meant for a scrolling row of photos comes off. */
+.cf-tray:has(.cf-tray-none) .cf-tray-head { display: flex; align-items: center; gap: var(--sp-2); }
+.cf-tray:has(.cf-tray-none) .cf-tray-count { display: none; }
+.cf-tray-list:has(.cf-tray-none) { -webkit-mask: none; mask: none; }
 @media (max-width: 600px) {
   .cf-tray { padding: var(--sp-1) var(--sp-2); gap: var(--sp-2); }
   .cf-tray-item img { height: 56px; }
