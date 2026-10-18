@@ -154,11 +154,16 @@ test('R5-3-H1 the ⧉ badge opens the group side by side, and Keep leaves the ot
   const o = await open('/book');
   const { page } = o;
   const outBefore = await page.locator('.book-cell[data-excluded="1"]').count();
-  const group = await page.locator('.book-dup').first().getAttribute('data-dup-group');
-  const groupOut = await page.locator(`.book-cell[data-dup-group="${group}"][data-excluded="1"]`).count();
-  assert.equal(groupOut, 0, 'the first group starts all in the book');
+  // The first group whose photos are all still in the book (book.json
+  // already leaves a few out, and which group comes first depends on the
+  // detector).
+  const group = await page.locator('.book-dup').evaluateAll((els) => {
+    const keys = [...new Set(els.map((e) => (e as HTMLElement).dataset.dupGroup))];
+    return keys.find((k) => !document.querySelector(`.book-cell[data-dup-group="${k}"][data-excluded="1"]`)) ?? null;
+  });
+  assert.ok(group, 'a group with every photo still in the book');
   const size = await page.locator(`.book-cell[data-dup-group="${group}"]`).count();
-  await page.locator('.book-dup').first().evaluate((e) => (e as HTMLElement).click());
+  await page.locator(`.book-dup[data-dup-group="${group}"]`).first().evaluate((e) => (e as HTMLElement).click());
   const dialog = page.getByRole('dialog', { name: 'Similar shots' });
   assert.ok(await dialog.isVisible());
   assert.equal(await dialog.locator('.survey-item').count(), size);
