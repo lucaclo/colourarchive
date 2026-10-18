@@ -29,6 +29,10 @@ export default tseslint.config(
       // Vendored tooling, not this project's source: 144 of the 198 errors the
       // first run reported were in these, and none of them are ours to fix.
       '.claude/',
+      // The Mac app's build output and packaged app (npm run app:dist).
+      'desktop/build/',
+      'desktop/dist/',
+      'desktop/.public/',
     ],
   },
 
@@ -47,8 +51,16 @@ export default tseslint.config(
   // Everything that runs under Node: build scripts, Netlify functions, the
   // test and profiling harnesses.
   {
-    files: ['scripts/**/*.ts', 'netlify/**/*.{ts,js}', 'tests/**/*.{ts,mts}', '*.{js,mjs}'],
+    files: ['scripts/**/*.ts', 'netlify/**/*.{ts,js}', 'tests/**/*.{ts,mts}', '*.{js,mjs}', 'desktop/**/*.{mjs,cjs}'],
     languageOptions: { globals: globals.node },
+  },
+
+  // The Mac app's main process and preload are CommonJS, which is what
+  // Electron loads them as; require() is how they are meant to import.
+  {
+    files: ['desktop/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
 
   // Unit tests reach for Node's built-in runner, which brings its own globals.

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>Colour Archive</title>
+<style>
+  @font-face {
+    font-family: 'Fraunces';
+    src: url('../public/fonts/fraunces-normal-500-latin.woff2') format('woff2');
+    font-weight: 500;
+  }
+  :root {
+    --bg: #100f0e;
+    --fg: #ece9e3;
+    --muted: #8f8b85;
+    --secondary: #a8a49d;
+    --line: #2a2826;
+    --accent: #ece9e3;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.45 var(--font-ui);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px 48px;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .band {
+    height: 8px; width: 132px; border-radius: 4px; margin-bottom: 28px;
+    /* The app icon's spectrum (public/favicon.svg). */
+    background: linear-gradient(to right, #c0453a, #c98a4e 17%, #d8b24a 34%, #7fa05a 50%, #4f9a94 66%, #4a76b0 83%, #7a5fa6);
+  }
+  h1 {
+    font: 500 28px/1.15 'Fraunces', Georgia, serif;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  p { margin: 0 0 8px; color: var(--secondary); }
+  .folder {
+    font: 13px/1.4 ui-monospace, 'SF Mono', monospace;
+    color: var(--fg);
+    background: #1a1917;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin: 14px 0 22px;
+    overflow-wrap: anywhere;
+  }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  button {
+    font: 500 14px/1 var(--font-ui);
+    border-radius: 8px;
+    padding: 11px 16px;
+    min-height: 38px;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--fg);
+  }
+  button.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  button:focus-visible { outline: 2px solid #8fb4ff; outline-offset: 2px; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 18px; }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--fg);
+    animation: spin 0.9s linear infinite;
+    display: inline-block; vertical-align: -3px; margin-right: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+  pre {
+    font: 11.5px/1.45 ui-monospace, 'SF Mono', monospace;
+    color: var(--muted);
+    background: #1a1917;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-height: 110px;
+    overflow: auto;
+    white-space: pre-wrap;
+    margin: 12px 0 0;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="band" aria-hidden="true"></div>
+  <main id="view" aria-live="polite"></main>
+
+<script>
+  const view = document.getElementById('view');
+
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'onclick') node.addEventListener('click', v);
+      else if (k === 'class') node.className = v;
+      else node.setAttribute(k, v);
+    }
+    for (const c of children) if (c != null) node.append(c);
+    return node;
+  }
+
+  // Buttons stay disabled once pressed, so a second click can't start twice.
+  function action(label, fn, primary = false) {
+    const b = el('button', { type: 'button', class: primary ? 'primary' : '' }, label);
+    b.addEventListener('click', async () => {
+      for (const other of view.querySelectorAll('button')) other.disabled = true;
+      const went = await fn();
+      if (went === false) for (const other of view.querySelectorAll('button')) other.disabled = false;
+    });
+    return b;
+  }
+
+  const choose = (kind) => window.archive.choose(kind);
+
+  function render(state) {
+    view.replaceChildren();
+    if (state.kind === 'choose') {
+      view.append(
+        el('h1', {}, 'Where should your photos live?'),
+        el('p', {}, 'Colour Archive keeps your photographs in one folder on this Mac. Your originals are never changed or uploaded anywhere.'),
+        el('div', { class: 'folder' }, state.suggested),
+        el('div', { class: 'actions' },
+          action('Use This Folder', () => choose('default'), true),
+          action('Choose Another Folder…', () => choose('other')),
+        ),
+        el('p', { class: 'hint' }, 'Already have an archive? Choose its folder and it opens as it was.'),
+      );
+    } else if (state.kind === 'opening') {
+      view.append(
+        el('h1', {}, el('span', { class: 'spinner', 'aria-hidden': 'true' }), 'Opening your archive…'),
+        el('div', { class: 'folder' }, state.folder),
+        el('p', { class: 'hint' }, 'The first time takes a few seconds.'),
+      );
+    } else if (state.kind === 'missing') {
+      view.append(
+        el('h1', {}, 'Your archive folder isn’t there'),
+        el('p', {}, 'It may be on a drive that isn’t connected, or it was moved or renamed in Finder.'),
+        el('div', { class: 'folder' }, state.folder),
+        el('div', { class: 'actions' },
+          action('Try Again', () => window.archive.retry(), true),
+          action('Choose Folder…', () => choose('other')),
+        ),
+      );
+    } else if (state.kind === 'error') {
+      const buttons = [];
+      if (state.canRetry) buttons.push(action('Try Again', () => window.archive.retry(), true));
+      if (state.canChoose) buttons.push(action('Choose Another Folder…', () => choose('other')));
+      const logBtn = el('button', { type: 'button', onclick: () => window.archive.showLog() }, 'Show Log');
+      view.append(
+        el('h1', {}, state.title),
+        el('p', {}, state.detail),
+        state.log ? el('pre', {}, state.log) : null,
+        el('div', { class: 'actions' }, ...buttons, logBtn),
+      );
+    }
+    view.querySelector('button.primary')?.focus();
+  }
+
+  window.archive.onState(render);
+</script>
+</body>
+</html>
