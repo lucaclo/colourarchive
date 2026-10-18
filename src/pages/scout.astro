@@ -3597,6 +3597,10 @@ const accent = '#f0b866';
   }
   .scout-map :global(.maplibregl-ctrl-attrib a) { color: var(--muted); }
   .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: calc(5.2rem + var(--tabbar-space)); }
+  /* The box's width is the distance it measures, so zoomed out to the globe
+     "3000 km" outgrew it and was cut. It only does that where a scale bar is
+     a rough figure anyway, so there the box grows to fit its words. */
+  .scout-map :global(.maplibregl-ctrl-scale) { min-width: max-content; white-space: nowrap; }
 
   @media (max-width: 820px) {
     .panel { width: calc(100vw - 1.8rem); }

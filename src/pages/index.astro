@@ -1313,14 +1313,20 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
   };
 
   const captionHtml = (f) => {
-    const bits = [];
-    const add = (label, key) => { const v = f.dataset[key]; if (v) bits.push(`<span class="k">${label}</span> ${key === 'captured' ? new Date(v).toLocaleDateString() : v}`); };
-    add('', 'chapter'); add('·', 'captured'); add('·', 'camera'); add('·', 'lens');
-    add('·', 'focal'); add('·', 'aperture'); add('·', 'shutter'); add('·', 'iso');
-    const loc = f.dataset.location;
+    // One quiet dot between facts, none before the first. The date is
+    // written the British way like the rest of the app (16 Aug 2026, not
+    // 8/16/2026), and a bare ISO number gets its name.
+    const d = f.dataset;
+    const bits = [
+      d.chapter,
+      d.captured && new Date(d.captured).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      d.camera, d.lens, d.focal, d.aperture, d.shutter,
+      d.iso && `ISO ${d.iso}`,
+    ].filter(Boolean);
+    const loc = d.location;
     if (loc) {
       const [lat, lon] = loc.split(',').map((s) => s.trim());
-      bits.push(`<span class="k">·</span> <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}" target="_blank" rel="noopener noreferrer">${loc} ↗</a>`);
+      bits.push(`<a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}" target="_blank" rel="noopener noreferrer">${loc} ↗</a>`);
     }
     // The photo's main colours, widths by area. A tap searches the archive
     // for that colour; Copy copies the one last pointed at, or all of them.
@@ -1331,7 +1337,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       ? `<span class="lb-palette-row"><span class="lb-palette" role="group" aria-label="Colours">${sw.map(([hex, share]) =>
           `<button type="button" class="lb-swatch" data-hex="${hex}" style="background:${hex};flex-grow:${Number(share)}" aria-label="Search ${hex}" title="${hex}"></button>`).join('')}</span><button type="button" class="lb-copy">Copy</button></span><span class="lb-hex" aria-live="polite"></span>`
       : '';
-    return bits.join(' &nbsp; ') + strip;
+    return bits.join(' <span class="k">·</span> ') + strip;
   };
   let lbPointedHex = '';
   lbCap?.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.lb-swatch'); if (b) lbPointedHex = b.dataset.hex; });
