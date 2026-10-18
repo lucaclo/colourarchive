@@ -100,6 +100,15 @@ describe('duplicateGroups', () => {
     assert.deepEqual(groups[0].ids.sort(), ['first', 'last', 'middle']);
   });
 
+  it('without capture times, needs CLIP to agree it is the same picture', () => {
+    const withClip = (id: string, embedding: number[], clip: number[]): Photo =>
+      ({ id, embedding, clipEmbedding: clip, exif: {} } as unknown as Photo);
+    const sameShot = duplicateGroups([{ key: 'k', photos: [withClip('a', [1], [1, 0]), withClip('b', [0.95], [0.95, Math.sqrt(1 - 0.95 ** 2)])] }]);
+    assert.equal(sameShot.length, 1);
+    const samePlace = duplicateGroups([{ key: 'k', photos: [withClip('a', [1], [1, 0]), withClip('b', [0.95], [0.84, Math.sqrt(1 - 0.84 ** 2)])] }]);
+    assert.equal(samePlace.length, 0);
+  });
+
   it('is empty over no chapters', () => {
     assert.deepEqual(duplicateGroups([]), []);
   });
