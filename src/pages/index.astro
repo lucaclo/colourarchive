@@ -264,10 +264,12 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
         <span class="tb-label">Get the app</span>
       </a>
-      <button type="button" class="tb-button" id="insights-btn" data-cmdk="Insights" data-cmdk-keywords="stats, gaps" aria-haspopup="dialog" aria-label="Insights">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-        <span class="tb-label">Insights</span>
-      </button>
+      {hasPhotos && (
+        <button type="button" class="tb-button" id="insights-btn" data-cmdk="Insights" data-cmdk-keywords="stats, gaps" aria-haspopup="dialog" aria-label="Insights">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          <span class="tb-label">Insights</span>
+        </button>
+      )}
     </span>
     {hasPhotos && (
       <div class="cf-tray" id="cf-tray" hidden>
@@ -283,7 +285,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
 
   <section class="cover">
     <p class="cover-kicker">
-      {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapters` : 'In colour'}
+      {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapter${manifest.chapters.length === 1 ? '' : 's'}` : 'In colour'}
     </p>
     <h1>{SITE_TITLE}</h1>
     {hasPhotos && (
@@ -300,6 +302,16 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       </nav>
     )}
     {hasPhotos && <span class="scroll-hint" aria-hidden="true">↓</span>}
+    {/* A new archive's first screen. It used to say "Nothing here yet" below
+        a full-height cover, where nobody starting out would scroll to find
+        it; the first thing to do belongs where the eye already is. */}
+    {!hasPhotos && !STATIC && (
+      <div class="cover-start">
+        <p class="cover-start-lead">Add your photographs and the archive sorts them into chapters by colour.</p>
+        <a class="cover-start-cta" href="/upload">Add your first photos</a>
+        <p class="cover-start-note">JPEG, PNG or TIFF. Your originals stay exactly as they are, on this Mac.</p>
+      </div>
+    )}
   </section>
 
   {
@@ -629,23 +641,25 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           )}
         </div>
       </div>
-    ) : (
-      <section class="empty">
-        <p class="empty-lead">Nothing here yet.</p>
-        <a class="empty-cta" href="/upload">Begin →</a>
-      </section>
-    )
+    ) : null
   }
 </Layout>
 
 <style>
-  .empty {
-    min-height: 60svh;
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    text-align: center; padding: 6vh 8vw; gap: 1rem;
+  .cover-start {
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    max-width: 30rem; margin-top: 0.5rem;
   }
-  .empty-lead { color: var(--muted); font-size: 1.05rem; line-height: 1.6; margin: 0; max-width: 34rem; }
-  .empty-cta { color: var(--fg); text-decoration: none; border-bottom: 1px solid currentColor; padding-bottom: 2px; }
+  .cover-start-lead { margin: 0; color: var(--secondary); font-size: var(--t-body); line-height: 1.55; }
+  .cover-start-cta {
+    display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 1.4rem;
+    border-radius: var(--r-pill); background: var(--fg); color: var(--bg);
+    font-family: var(--font-ui); font-size: var(--t-body); font-weight: 600; text-decoration: none;
+    transition: transform 110ms ease-out;
+  }
+  .cover-start-cta:active { transform: scale(0.96); }
+  .cover-start-cta:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+  .cover-start-note { margin: 0; color: var(--muted); font-size: var(--t-caption); }
 
   /* The end of the scroll. Quiet enough that arriving at it still feels like
      the last photograph, loud enough to answer "is this current?". The deep
@@ -1270,6 +1284,14 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     e.preventDefault();
     target.click();
   });
+
+  // Everything below works on the photographs, and an empty archive renders
+  // none of their markup (lightbox, chapters, spectrum), so it is skipped
+  // whole rather than failing on the first missing element. Not re-indented,
+  // to keep history readable. The functions the code above calls later
+  // (openLightbox, savePos) still reach it: this is a classic sloppy-mode
+  // script, where a function declared in a block is also bound globally.
+  if (document.getElementById('lightbox')) {
 
   // ======================================================================
   //  Immersive single-photo view (lightbox)
@@ -2455,6 +2477,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     if (opener) requestAnimationFrame(() => opener.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
   }
   addEventListener('hashchange', goToChapterFromHash);
+  }
 </script>
 
 <script>
