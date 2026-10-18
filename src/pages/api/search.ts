@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { readStore } from '../../lib/manifest';
 import { clipEmbedText } from '../../lib/clip';
-import { rankByTextQuery } from '../../lib/textSearch';
+import { relevantByLift, queryPrompt, BASELINE_PROMPT } from '../../lib/textSearch';
 import { oklchCss } from '../../lib/color';
 
 export const prerender = false;
@@ -26,19 +26,21 @@ export const GET: APIRoute = async ({ url }) => {
       return json({ ok: true, ready: false, matches: [] });
     }
 
-    const queryEmbedding = await clipEmbedText(q).catch((e) => {
+    const [queryEmbedding, baseline] = await Promise.all([clipEmbedText(queryPrompt(q)), baselineEmbedding()]).catch((e) => {
       console.error('[search] query embedding failed', e);
-      return undefined;
+      return [undefined, undefined];
     });
-    if (!queryEmbedding) return json({ ok: false, error: 'Could not embed query.' }, 500);
+    if (!queryEmbedding || !baseline) return json({ ok: false, error: 'Could not embed query.' }, 500);
 
-    const rows = rankByTextQuery(queryEmbedding, archive).map((r) => ({
+    // Only the photos that answer the query — possibly none, which the
+    // archive shows as "Nothing matches" rather than every photo reordered.
+    const rows = relevantByLift(queryEmbedding, baseline, archive).map((r) => ({
       id: r.photo.id,
       avif: r.photo.derivatives[0]?.avif,
       w: r.photo.width,
       h: r.photo.height,
       swatch: oklchCss(r.photo.oklch),
-      score: Math.round(r.score * 1000) / 1000,
+      score: Math.round(r.lift * 1000) / 1000,
     }));
 
     return json({ ok: true, ready: true, candidateCount: embeddedCount, matches: rows });
@@ -47,6 +49,13 @@ export const GET: APIRoute = async ({ url }) => {
     return json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
   }
 };
+
+// The same for every query, so worked out once per server.
+let baselinePromise: Promise<number[]> | undefined;
+function baselineEmbedding(): Promise<number[]> {
+  baselinePromise ??= clipEmbedText(BASELINE_PROMPT).catch((e) => { baselinePromise = undefined; throw e; });
+  return baselinePromise;
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
