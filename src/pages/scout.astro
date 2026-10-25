@@ -1182,6 +1182,7 @@ const accent = '#f0b866';
      read as floating chrome rather than as flat labels stuck to the glass. */
   .panel,
   .layers,
+  .photos,
   .sheet,
   .chip,
   .round,
@@ -3262,7 +3263,9 @@ const accent = '#f0b866';
     font-weight: 600;
   }
   .photos-sub { margin: 0.15rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
-  .photos-light { margin: 0.2rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.45; color: #f0b866; }
+  /* Amber pulled toward the text colour, so it stays amber and stays legible
+     on the pale panel as well as the dark one. */
+  .photos-light { margin: 0.2rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.45; color: color-mix(in oklab, #e0a040 60%, var(--fg)); }
   .photos-light:empty { display: none; }
   .photo-grid {
     flex: 1 1 auto;
@@ -3272,6 +3275,12 @@ const accent = '#f0b866';
     list-style: none;
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    /* Rows as tall as their tiles. A tile clips its corners (overflow:
+       hidden), which drops its minimum height to zero, so in a sheet shorter
+       than its photographs the default rows shrank every tile to a sliver —
+       the picture cut off and the credit and licence never shown. The grid
+       scrolls instead. */
+    grid-auto-rows: max-content;
     gap: 0.5rem;
   }
   .photo-grid :global(li) {
@@ -3337,6 +3346,18 @@ const accent = '#f0b866';
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* How it was made — the settings a photographer would copy. Below the
+     licence, which outranks it, and in the figures face so the numbers line up. */
+  .photo-grid :global(.exif) {
+    display: block;
+    margin-top: -0.2rem;
+    padding: 0 0.4rem 0.35rem;
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    color: var(--muted);
   }
   .photos-note {
     margin: 0.6rem 0 0;

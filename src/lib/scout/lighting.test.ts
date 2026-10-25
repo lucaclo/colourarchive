@@ -236,6 +236,7 @@ describe('ordering spots for "best right now"', () => {
     lit: true,
     buildingsKnown: true,
     litMinutesAhead: 60,
+    photographers: 2,
     count: 5,
     distanceM: 500,
     ...over,
@@ -269,7 +270,9 @@ describe('ordering spots for "best right now"', () => {
     assert.ok(compareSpots(spot({ litMinutesAhead: 200 }), spot({ litMinutesAhead: 30 })) < 0);
   });
 
-  it('then prefers the more photographed, then the nearer', () => {
+  it('then prefers more photographers, then more photographs, then the nearer', () => {
+    // Four people who chose the same corner beat one person's forty-frame burst.
+    assert.ok(compareSpots(spot({ photographers: 4, count: 4 }), spot({ photographers: 1, count: 40 })) < 0);
     assert.ok(compareSpots(spot({ count: 20 }), spot({ count: 3 })) < 0);
     assert.ok(compareSpots(spot({ distanceM: 100 }), spot({ distanceM: 900 })) < 0);
   });

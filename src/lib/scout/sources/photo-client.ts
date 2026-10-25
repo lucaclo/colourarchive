@@ -231,6 +231,17 @@ export interface Hotspot {
   photos: RawPhoto[];
 }
 
+/**
+ * How many different people took these.
+ *
+ * By source and name, case and spacing ignored: the same person on Commons and
+ * on Flickr is not provably the same person, so they count twice rather than
+ * being merged on a guess, while "Jane Doe" and "jane doe" on one site are one.
+ */
+export function photographerCount(photos: Array<Pick<RawPhoto, 'source' | 'author'>>): number {
+  return new Set(photos.map((p) => `${p.source}:${p.author.trim().replace(/\s+/g, ' ').toLowerCase()}`)).size;
+}
+
 /** Photographs, grouped into the places people actually stand. */
 export function toHotspots(photos: RawPhoto[]): Hotspot[] {
   return clusterByProximity(photos.map((photo) => ({ ...photo, ...photo.at }))).map(

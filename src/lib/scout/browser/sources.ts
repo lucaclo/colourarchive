@@ -30,6 +30,8 @@ import { parseForecast, type WeatherReport } from '../weather';
 import { airQualityUrl, parseAirQuality, type AirReport } from '../air';
 import { collectCommonsPhotos, toHotspots, type Hotspot, type TierStatus } from '../sources/photo-client';
 import { MAX_PHOTOS, PHOTO_SEARCH_RADIUS_M, type SpotSearch } from '../sources/types';
+import { collectExposure, type ExifRequest } from '../sources/spot-exif';
+import type { ExposureSettings } from '../sources/exif';
 import { parseKpIndex, parseRealtimeReading, type SpaceWeather } from '../aurora';
 
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
@@ -278,4 +280,9 @@ export async function fetchPhotosDirect(
   };
   const { photos, tiers } = await collectCommonsPhotos(query, getJson, { cors: true });
   return { hotspots: toHotspots(photos), photoCount: photos.length, tiers };
+}
+
+/** Camera settings for an opened spot sheet — Commons only, since Flickr needs a key. */
+export function fetchExposureDirect(requests: ExifRequest[]): Promise<Record<string, ExposureSettings>> {
+  return collectExposure(requests, getJson, { cors: true });
 }

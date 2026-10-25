@@ -12,7 +12,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { collectCommonsPhotos, toHotspots, type JsonTransport } from './photo-client.ts';
+import { collectCommonsPhotos, photographerCount, toHotspots, type JsonTransport } from './photo-client.ts';
 import { ACCOLADES } from './wikimedia.ts';
 import type { SpotSearch } from './types.ts';
 
@@ -231,5 +231,22 @@ describe('toHotspots', () => {
 
   it('is empty for nothing, rather than one empty spot', () => {
     assert.deepEqual(toHotspots([]), []);
+  });
+});
+
+describe('photographerCount', () => {
+  const p = (source: string, author: string) => ({ source, author });
+  it('counts people, not frames', () => {
+    assert.equal(photographerCount([p('flickr', 'Ana'), p('flickr', 'Ana'), p('flickr', 'Ana')]), 1);
+    assert.equal(photographerCount([p('flickr', 'Ana'), p('flickr', 'Ben')]), 2);
+  });
+  it('treats case and spacing as the same name on one site', () => {
+    assert.equal(photographerCount([p('commons', 'Jane  Doe'), p('commons', 'jane doe ')]), 1);
+  });
+  it('does not merge a name across sites on a guess', () => {
+    assert.equal(photographerCount([p('commons', 'Jane Doe'), p('flickr', 'Jane Doe')]), 2);
+  });
+  it('is zero for nothing', () => {
+    assert.equal(photographerCount([]), 0);
   });
 });

@@ -219,6 +219,15 @@ export interface RankableSpot {
    * same offer, and for a photographer walking there the difference decides it.
    */
   litMinutesAhead: number;
+  /**
+   * How many different people found the place worth a photograph.
+   *
+   * Ranked above the photograph count because the count is easily one
+   * person's burst: forty frames of one bench by one photographer is one
+   * opinion, while four people who never met choosing the same corner is the
+   * finding a photo spot is supposed to be.
+   */
+  photographers: number;
   /** How many photographs found the place worth it. A weak signal, but a real one. */
   count: number;
   /** Metres from the pin, the tie-break: nearer is easier to reach. */
@@ -229,7 +238,8 @@ export interface RankableSpot {
  * Order spots for the "best right now" list.
  *
  * Lit beats shaded; a spot whose surroundings are known beats one whose are
- * not; then more remaining light, then more photographs, then nearer. Each
+ * not; then more remaining light, then more photographers, then more
+ * photographs, then nearer. Each
  * comparison is total and none is weighted against another, so the order is
  * reproducible by hand from the facts printed on each row.
  */
@@ -237,6 +247,7 @@ export function compareSpots(a: RankableSpot, b: RankableSpot): number {
   if (a.lit !== b.lit) return a.lit ? -1 : 1;
   if (a.buildingsKnown !== b.buildingsKnown) return a.buildingsKnown ? -1 : 1;
   if (a.litMinutesAhead !== b.litMinutesAhead) return b.litMinutesAhead - a.litMinutesAhead;
+  if (a.photographers !== b.photographers) return b.photographers - a.photographers;
   if (a.count !== b.count) return b.count - a.count;
   return a.distanceM - b.distanceM;
 }

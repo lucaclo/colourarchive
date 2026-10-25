@@ -98,6 +98,8 @@ import {
 } from '../spots';
 import { crossCheckProof } from '../proof-check';
 import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
+import { photographerCount } from '../sources/photo-client';
+import { isLandmark, placeNameFor, type NamedPlace } from '../place-names';
 import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-upload';
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
 import { shootPlan } from '../report';
@@ -287,9 +289,11 @@ import {
   fetchForecastDirect,
   fetchHistoricalWeatherDirect,
   fetchHorizonPairDirect,
+  fetchExposureDirect,
   fetchPhotosDirect,
   fetchSpaceWeatherDirect,
 } from '../browser/sources';
+import { formatSettings, type ExposureSettings } from '../sources/exif';
 import { $, markerElement, on } from './dom';
 import {
   LAYER_TOGGLES,
@@ -1941,6 +1945,7 @@ export async function startScout(): Promise<void> {
       gatherQueued = 0;
       collectBuildings();
       collectTrees();
+      nameSpots();
     });
   });
   // The dome stands on the ground under the pin, and that height is unknown
@@ -5687,6 +5692,7 @@ export async function startScout(): Promise<void> {
     spanM: number;
     photos: Array<{
       id: string;
+      source: string;
       title: string;
       author: string;
       licence: { name: string; url?: string };
@@ -5898,6 +5904,8 @@ export async function startScout(): Promise<void> {
       photoKey = '';
     }
     photoSearching = false;
+    spotNames.clear();
+    nameSpots(false);
     // The light before the pins, so they are painted from it rather than
     // painted neutral and corrected a frame later.
     rebuildHotspotLight();
@@ -6004,9 +6012,69 @@ export async function startScout(): Promise<void> {
   }
 
   /** A Commons filename, made readable enough to identify a place by. */
+  /** "3 photographers, 12 photos", or "12 photos by one person" — the count that matters first. */
+  function whoShot(spot: Hotspot): string {
+    const people = photographerCount(spot.photos);
+    const photos = `${spot.count} photo${spot.count === 1 ? '' : 's'}`;
+    if (people <= 1) return spot.count === 1 ? '1 photo' : `${photos} by one person`;
+    return `${people} photographers, ${photos}`;
+  }
+
+  /**
+   * Place names for the hotspots, from the landmarks and parks in the loaded
+   * tiles — see `place-names.ts`. Only the unnamed are looked up, and only
+   * when tiles arrive or the set changes, never on a slider minute: the
+   * list is rebuilt every minute and a tile walk per rebuild is not cheap.
+   */
+  const spotNames = new Map<string, string>();
+
+  function nameSpots(redraw = true) {
+    if (!map || !styleReady || !hotspots.length) return;
+    const unnamed = hotspots.filter((spot) => !spotNames.has(spot.id));
+    if (!unnamed.length) return;
+
+    const places: NamedPlace[] = [];
+    const nameOf = (p: Record<string, unknown> | null) => String(p?.name_en || p?.name || '');
+    try {
+      for (const f of map.querySourceFeatures('openmaptiles', { sourceLayer: 'poi' })) {
+        const p = f.properties;
+        if (f.geometry.type !== 'Point' || !isLandmark(String(p?.class ?? ''), p?.subclass as string | undefined)) continue;
+        const [lon, lat] = f.geometry.coordinates;
+        places.push({ kind: 'poi', name: nameOf(p), at: { lat, lon }, class: String(p?.class), subclass: p?.subclass as string | undefined });
+      }
+      for (const f of map.querySourceFeatures('openmaptiles', { sourceLayer: 'park' })) {
+        const name = nameOf(f.properties);
+        if (!name) continue;
+        const polygons =
+          f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : [];
+        for (const rings of polygons) places.push({ kind: 'park', name, rings: rings as Ring[] });
+      }
+    } catch {
+      return;
+    }
+
+    let found = false;
+    for (const spot of unnamed) {
+      const name = placeNameFor(spot.at, places);
+      if (name) {
+        spotNames.set(spot.id, name);
+        found = true;
+      }
+    }
+    if (found && redraw) {
+      renderBest();
+      if (openSpotIndex !== null && hotspots[openSpotIndex]) {
+        $('photos-title').textContent = spotLabel(hotspots[openSpotIndex]);
+      }
+    }
+  }
+
   function spotLabel(spot: Hotspot): string {
-    // The first photo with a real title names the spot; camera and upload
-    // file names ("IMG_4021", "13-08-hongkong-Ralf-10") are not names.
+    // The landmark or park it is at, when the map knows one.
+    const place = spotNames.get(spot.id);
+    if (place) return place;
+    // Then the first photo with a real title; camera and upload file names
+    // ("IMG_4021", "13-08-hongkong-Ralf-10") are not names.
     for (const photo of spot.photos) {
       const title = readableTitle(photo.title);
       if (title) return title;
@@ -6049,6 +6117,7 @@ export async function startScout(): Promise<void> {
             lit: Boolean(sunUp && lit),
             buildingsKnown: light?.buildingsKnown ?? false,
             litMinutesAhead: light ? litMinutesAhead(light.windows, at) : 0,
+            photographers: photographerCount(spot.photos),
             count: spot.count,
             distanceM: distance(from, spot.at),
           },
@@ -6074,7 +6143,7 @@ export async function startScout(): Promise<void> {
         where.className = 'best-where';
         // The bearing here is from the pin to the spot — where to walk. It is
         // not the direction anyone pointed a camera, and does not pretend to be.
-        where.textContent = `${compassPoint(initialBearing(from, row.spot.at))} ${formatDistance(row.distanceM)} · ${row.spot.count} photo${row.spot.count === 1 ? '' : 's'}${row.buildingsKnown ? '' : ' · terrain only'}`;
+        where.textContent = `${compassPoint(initialBearing(from, row.spot.at))} ${formatDistance(row.distanceM)} · ${whoShot(row.spot)}${row.buildingsKnown ? '' : ' · terrain only'}`;
         name.append(where);
 
         const phrase = spotLightPhrase(row.index);
@@ -6099,7 +6168,7 @@ export async function startScout(): Promise<void> {
     // Say what the order is, once and briefly, rather than implying a score
     // by hiding it. Rows outside the loaded buildings already say "terrain
     // only" on themselves.
-    $('best-note').textContent = 'By light now, light left, photos, then distance.';
+    $('best-note').textContent = 'By light now, light left, photographers, photos, then distance.';
     const more = $<HTMLButtonElement>('best-more');
     more.hidden = hotspots.length <= 3;
     more.textContent = bestAll ? 'Fewer' : `All ${Math.min(hotspots.length, 8)}`;
@@ -6125,11 +6194,11 @@ export async function startScout(): Promise<void> {
     const spot = hotspots[index];
     if (!spot) return;
     openSpotIndex = index;
-    $('photos-title').textContent = `${spot.count} photograph${spot.count === 1 ? '' : 's'} here`;
+    $('photos-title').textContent = spotLabel(spot);
     // The span is the honest part: a spot 8 m across is a doorway, one 200 m
     // across is a stretch of riverbank, and they are not the same claim.
     $('photos-sub').textContent =
-      `${formatDistance(distance(centre!, spot.at))} away · about ${spot.spanM} m across`;
+      `${whoShot(spot)} · ${formatDistance(distance(centre!, spot.at))} away · about ${spot.spanM} m across`;
 
     $('photo-grid').replaceChildren(
       ...spot.photos.slice(0, 60).map((photo, index) => {
@@ -6193,11 +6262,45 @@ export async function startScout(): Promise<void> {
         link.append(licence);
 
         li.append(link);
+        li.dataset.photo = `${photo.source}:${photo.id}`;
         return li;
       }),
     );
+    void loadExposure(spot);
     renderSheetLight();
     $<HTMLElement>('photos').hidden = false;
+  }
+
+  /**
+   * How each photograph on the open sheet was made, under its credit — see
+   * `sources/exif.ts`. Asked for once the sheet is up, and dropped if the
+   * sheet has moved on to another spot by the time it answers.
+   */
+  let exposureToken = 0;
+  async function loadExposure(spot: Hotspot) {
+    const token = ++exposureToken;
+    const requests = spot.photos.slice(0, 24).map((p) => ({ source: p.source, id: p.id }));
+    let settings: Record<string, ExposureSettings> = {};
+    try {
+      settings = STATIC
+        ? await fetchExposureDirect(requests)
+        : await fetch(`/api/scout/exif?ids=${encodeURIComponent(requests.map((r) => `${r.source}:${r.id}`).join(','))}`)
+            .then((response) => response.json())
+            .then((data) => (data.ok ? (data.settings as Record<string, ExposureSettings>) : {}));
+    } catch {
+      return; // Settings are an extra; a sheet without them is still the sheet.
+    }
+    if (token !== exposureToken) return;
+    for (const li of $('photo-grid').querySelectorAll<HTMLElement>('li[data-photo]')) {
+      const s = settings[li.dataset.photo ?? ''];
+      const line = s ? formatSettings(s) : '';
+      if (!line || li.querySelector('.exif')) continue;
+      const exif = document.createElement('span');
+      exif.className = 'exif';
+      exif.textContent = line;
+      if (s.camera) exif.title = s.camera;
+      li.querySelector('a')?.append(exif);
+    }
   }
 
   /** Closing the sheet takes its spot with it — a closed sheet has no light. */
