@@ -1,8 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createExpression } from '@maplibre/maplibre-gl-style-spec';
+
 import { shadowOpacity } from '../basemap.ts';
-import { buildingRamp, shadowDarkness, shadowFade } from './shading.ts';
+import { buildingFill, buildingRamp, DRAWN_IN_3D, shadowDarkness, shadowFade } from './shading.ts';
 
 /**
  * Evaluate the interpolation MapLibre would evaluate.
@@ -126,5 +128,54 @@ describe('the building ramp', () => {
     for (let i = 4; i < ramp.length; i += 2) {
       assert.match(String(ramp[i]), /^(#|rgb)/, `stop ${i} is not a colour`);
     }
+  });
+});
+
+/** Run an expression through MapLibre's own evaluator, for one feature. */
+function evaluate(expression: unknown, properties: Record<string, unknown>): unknown {
+  const parsed = createExpression(expression);
+  if (parsed.result !== 'success') throw new Error(JSON.stringify(parsed.value));
+  return parsed.value.evaluate({ zoom: 16 }, { type: 'Polygon', properties } as never);
+}
+
+const rgbOf = (colour: unknown): [number, number, number] => {
+  // `to-rgba` hands back 0–255 channels; a colour expression hands back a Color.
+  if (Array.isArray(colour)) return [colour[0], colour[1], colour[2]];
+  const c = colour as { r: number; g: number; b: number; a: number };
+  // MapLibre colours are premultiplied 0–1; every fill here is opaque.
+  return [c.r * 255, c.g * 255, c.b * 255];
+};
+const luma = ([r, g, b]: [number, number, number]) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+describe('the building fill', () => {
+  for (const theme of ['light', 'dark'] as const) {
+    it(`leaves an uncoloured or grey building exactly as the ramp drew it (${theme})`, () => {
+      const plain = rgbOf(evaluate(['to-rgba', buildingRamp(20, theme)], { render_height: 60 }));
+      for (const colour of [undefined, 'black', 'white', '#808080', 'not a colour']) {
+        const filled = rgbOf(evaluate(buildingFill(20, theme), { render_height: 60, colour }));
+        filled.forEach((v, i) => assert.ok(Math.abs(v - plain[i]) < 0.6, `${colour}: ${filled} vs ${plain}`));
+      }
+    });
+
+    it(`takes a hue from the mapped colour but keeps the ramp's lightness (${theme})`, () => {
+      const plain = rgbOf(evaluate(['to-rgba', buildingRamp(20, theme)], { render_height: 60 }));
+      const glass = rgbOf(evaluate(buildingFill(20, theme), { render_height: 60, colour: '#5a81a0' }));
+      assert.ok(glass[2] > glass[0] + 4, `glass should lean blue: ${glass}`);
+      assert.ok(Math.abs(luma(glass) - luma(plain)) < 3, `lightness moved: ${luma(glass)} vs ${luma(plain)}`);
+    });
+  }
+
+  it('stays a pale tint on the paper map, not the literal colour', () => {
+    const brick = rgbOf(evaluate(buildingFill(30, 'light'), { render_height: 20, colour: 'red' }));
+    const spread = Math.max(...brick) - Math.min(...brick);
+    assert.ok(spread > 10 && spread < 60, `red brick tint spread ${spread}: ${brick}`);
+  });
+});
+
+describe('which buildings are drawn in 3D', () => {
+  it('drops the outline of a building mapped in parts, and keeps everything else', () => {
+    assert.equal(evaluate(DRAWN_IN_3D, { hide_3d: true, render_height: 444 }), false);
+    assert.equal(evaluate(DRAWN_IN_3D, { render_height: 444, render_min_height: 330 }), true);
+    assert.equal(evaluate(DRAWN_IN_3D, { hide_3d: false, render_height: 12 }), true);
   });
 });

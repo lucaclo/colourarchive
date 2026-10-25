@@ -306,7 +306,7 @@ import {
   type ViewMode,
 } from './state';
 import { WIDTH, inkColour, liftColour, rgbOf } from './palette';
-import { buildingRamp, shadowDarkness, shadowFade } from './shading';
+import { buildingFill, DRAWN_IN_3D, shadowDarkness, shadowFade } from './shading';
 import { mappedTreesIn } from './tree-client';
 import { scatterTrees, treeParts, type ScatterArea, type Tree } from '../trees';
 import { bearingLabel, formatCoords, moonDiscPath, shadowCaveat } from './format';
@@ -1757,8 +1757,9 @@ export async function startScout(): Promise<void> {
         source: 'openmaptiles',
         'source-layer': 'building',
         minzoom: BUILDING_MIN_ZOOM,
+        filter: DRAWN_IN_3D as never,
         paint: {
-          'fill-extrusion-color': buildingRamp(-90, themeOf(basemap)) as never,
+          'fill-extrusion-color': buildingFill(-90, themeOf(basemap)) as never,
           'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 0],
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
           'fill-extrusion-opacity': 0.94,
@@ -3239,7 +3240,7 @@ export async function startScout(): Promise<void> {
     shadowLayer.tint = rgbOf(shadowColour(altitude));
     shadowLayer.opacity = cloudScale();
     set('scout-slab-shadow', 'fill-opacity', 0.55 * cloudScale());
-    set('scout-buildings', 'fill-extrusion-color', buildingRamp(altitude, themeOf(basemap)));
+    set('scout-buildings', 'fill-extrusion-color', buildingFill(altitude, themeOf(basemap)));
     const leaves = treeColours(altitude);
     set('scout-tree-crowns', 'fill-extrusion-color', leaves.crown);
     set('scout-tree-trunks', 'fill-extrusion-color', leaves.trunk);
@@ -3588,6 +3589,8 @@ export async function startScout(): Promise<void> {
     let estimated = 0;
 
     for (const feature of features) {
+      // A building mapped in parts casts from its parts, as it is drawn (see DRAWN_IN_3D).
+      if (feature.properties?.hide_3d === true) continue;
       const height = buildingHeight(feature.properties as Record<string, unknown>);
       if (!(height > 0)) continue;
       const geometry = feature.geometry;
