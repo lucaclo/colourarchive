@@ -19,6 +19,10 @@ const glyphs: Record<string, string> = {
   install: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 7.5v6M9.5 11l2.5 2.5 2.5-2.5M8 20.5h8"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
+  drag: '<rect x="3" y="5" width="7" height="7" rx="1.8"/><path d="M13 8.5h6M16.5 6l2.5 2.5-2.5 2.5"/><path d="M4 15.5v3A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-3"/>',
+  open: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M10 9.5h4.5V14M14.5 9.5 9 15"/>',
+  shield: '<path d="M12 3.5 5 6v5.5c0 4.2 3 7.6 7 9 4-1.4 7-4.8 7-9V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>',
 };
 ---
 
@@ -41,6 +45,7 @@ const glyphs: Record<string, string> = {
     <nav class="get-other" aria-label="Another device">
       <span class="get-other-label">Another device</span>
       <div class="get-other-list">
+        <button type="button" data-path="mac-app">Mac app</button>
         <button type="button" data-path="iphone">iPhone</button>
         <button type="button" data-path="ipad">iPad</button>
         <button type="button" data-path="mac-safari">Safari on Mac</button>
@@ -62,7 +67,7 @@ const glyphs: Record<string, string> = {
 </Layout>
 
 <script>
-  import { inAppWindow, installPath, installedElsewhere, OPEN_IN_APP, type InstallPath } from '../lib/install';
+  import { inAppWindow, installPath, installedElsewhere, MAC_DOWNLOAD_URL, OPEN_IN_APP, type InstallPath } from '../lib/install';
 
   // A step is a glyph and a line where **this** is the name of the button.
   type Step = [glyph: string, text: string];
@@ -72,6 +77,15 @@ const glyphs: Record<string, string> = {
   const iphoneMenu = safariMajor >= 26;
 
   const STEPS: Partial<Record<InstallPath, Step[]>> = {
+    // The app isn't signed with an Apple Developer ID yet, so macOS stops the
+    // first open. Since macOS 15 the old right-click › Open no longer gets
+    // past that; Open Anyway in Privacy & Security is the way, once.
+    'mac-app': [
+      ['download', 'Open **Colour-Archive-arm64.dmg** from your Downloads'],
+      ['drag', 'Drag **Colour Archive** into **Applications**'],
+      ['open', 'Open it from **Applications**. If your Mac says it can’t check it, click **Done**'],
+      ['shield', 'In **System Settings** › **Privacy & Security**, scroll down and click **Open Anyway**. Only the first time'],
+    ],
     iphone: [
       iphoneMenu ? ['more', 'Tap **⋯**, then **Share**'] : ['share', 'Tap **Share**'],
       ['addHome', 'Choose **Add to Home Screen**'],
@@ -110,6 +124,7 @@ const glyphs: Record<string, string> = {
     iphone: 'For iPhone',
     ipad: 'For iPad',
     'ios-other': 'For iPhone and iPad',
+    'mac-app': 'For Macs with Apple silicon (M1 or later) · 200 MB',
     'mac-safari': 'For Mac',
     android: 'For Android',
     'desktop-chromium': 'For this computer',
@@ -196,11 +211,27 @@ const glyphs: Record<string, string> = {
   else {
     forLine.textContent = FOR[path];
     if (path === 'unsupported') label.textContent = 'Copy link';
+    if (path === 'mac-app') {
+      label.textContent = 'Download for Mac';
+      // Chromium can say which chip this is; every Mac browser's user agent
+      // says "Intel" regardless. An Intel Mac can't run this build yet.
+      const uad = (navigator as Navigator & { userAgentData?: { getHighEntropyValues(h: string[]): Promise<{ architecture?: string }> } }).userAgentData;
+      uad?.getHighEntropyValues(['architecture']).then(({ architecture }) => {
+        if (architecture === 'x86') forLine.textContent = 'This Mac has an Intel chip, and the app needs Apple silicon for now. Chrome or Edge, below, can install the web version.';
+      }).catch(() => {});
+    }
     installedElsewhere().then((yes) => { if (yes) setInstalled(); });
   }
 
   btn.addEventListener('click', async () => {
     if (path === 'installed') { location.href = openInApp ? OPEN_IN_APP : '/'; return; }
+    // Before the browser's own install prompt: on a Mac, Chrome offers that
+    // too, but it would install the web version, not an archive of your own.
+    if (path === 'mac-app') {
+      location.href = MAC_DOWNLOAD_URL;
+      showSteps('mac-app', false);
+      return;
+    }
     if (deferred) {
       const e = deferred;
       deferred = null;

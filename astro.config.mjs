@@ -18,6 +18,22 @@ try {
   https = undefined;
 }
 
+// The Mac app's build (npm run app:build). Its pages describe whichever archive
+// the app is pointed at, which changes with every upload, so nothing may be
+// rendered ahead of time: a prerendered home page would show the build
+// machine's photographs forever.
+const DESKTOP = process.env.COLOUR_ARCHIVE_BUILD === 'desktop';
+function renderOnRequest() {
+  return {
+    name: 'colour-archive:render-on-request',
+    hooks: {
+      'astro:route:setup': ({ route }) => {
+        route.prerender = false;
+      },
+    },
+  };
+}
+
 // Local-first app: server output so the upload endpoint can run the pipeline
 // on this machine. Originals never leave disk; sharp runs locally = zero
 // network round-trip = zero quality/colour risk.
@@ -27,10 +43,19 @@ export default defineConfig({
   // absolute URLs instead of resolving against a build-time placeholder.
   site: process.env.SITE_URL ?? 'https://colourarchive.netlify.app',
   output: 'server',
+  // The app build reads public/ from a copy without img/ (desktop/build.mjs):
+  // Astro lists every public file in the server's manifest, and those names
+  // are this Mac's photo ids.
+  ...(DESKTOP ? { publicDir: './desktop/.public' } : {}),
+  // The app's server is reached at http://127.0.0.1:<port>. Astro ignores the
+  // Host header unless its domain is listed here, and then takes every request
+  // to be for "localhost" — so the browser's correct Origin looks cross-site
+  // and every upload, relabel and removal is refused with a 403.
+  ...(DESKTOP ? { security: { allowedDomains: [{ protocol: 'http', hostname: '127.0.0.1' }] } } : {}),
   adapter: node({ mode: 'standalone' }),
   // Stamps the build with what it contains, and refuses to finish if a
   // photograph it lists has no file behind it. See src/lib/publish.ts.
-  integrations: [publishStamp()],
+  integrations: [publishStamp(), ...(DESKTOP ? [renderOnRequest()] : [])],
   // host: true binds all interfaces so a phone on the same Wi-Fi can reach it
   // at https://<your-mac-ip>:4321 (home network only).
   server: { port: 4321, host: true },

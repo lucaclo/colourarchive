@@ -235,7 +235,10 @@ const accent = manifest.chapters[0]
         <p class="sim-hint" id="sim-hint"></p>
       </div>
     </div>
-    <div class="sim-right" id="sim-right"></div>
+    <div class="sim-right">
+      <h2 class="sim-title">Closest in your archive</h2>
+      <div id="sim-right"></div>
+    </div>
   </div>
 
   <!-- Style match: reference + your photo -> measured evidence, Lightroom
@@ -748,6 +751,9 @@ const accent = manifest.chapters[0]
   .sim-slider input { flex: 1; accent-color: var(--fg); }
   .sim-hint { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); text-align: center; margin: 0.8rem 0 0; }
   .sim-right { overflow: auto; padding: calc(var(--edge) + 1.5rem) var(--edge); }
+  /* The split view never said what its right half was: these are your own
+     photographs, ranked, not more references. */
+  .sim-title { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.25rem; margin: 0 4rem 1rem 0; }
   /* The ranked grid is rendered by the script — :global() throughout. */
   :global(.sim-grid) { columns: 3; column-gap: 8px; }
   :global(.sim-cell) { position: relative; margin: 0 0 8px; break-inside: avoid; background: var(--border); cursor: zoom-in; }

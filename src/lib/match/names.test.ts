@@ -28,3 +28,10 @@ test('photoName keeps a year, drops only derivative widths', () => {
   assert.equal(photoName('trip-2024.jpg'), 'trip-2024');
   assert.equal(photoName('rome-640.avif'), 'rome');
 });
+
+test('photoName drops names a machine gave the file', () => {
+  assert.equal(photoName('734846020_18006134951936155_7311644261873608517_n.7150c54bfe25f2e0.jpg'), '');
+  assert.equal(photoName('temp_image_D6CA033F-9923-4044-B01C-5C3F65A0C16D.8bf353c70b064fd0.webp'), '');
+  assert.equal(photoName('Screenshot-2026-08-13-at-12-16-18.5fb880c287a47b42.png'), 'Screenshot-2026-08-13-at-12-16-18');
+  assert.equal(photoName('IMG_20240512_183012.jpg'), 'IMG_20240512_183012');
+});

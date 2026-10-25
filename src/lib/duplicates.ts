@@ -36,6 +36,28 @@ const MAX_DUPLICATE_DISTANCE = 0.2;
 const TIME_WINDOW_MS = 30 * 60 * 1000;
 
 /**
+ * With no capture time to confirm a session (film, or EXIF stripped), the
+ * colour-and-layout embedding is the only witness, and on its own it pairs
+ * places rather than shots: two different beaches (IMG_4797, IMG_4801) and
+ * two different temple frames passed it. CLIP, which reads what is in the
+ * picture, puts those at 0.84–0.85 and every confirmed burst at 0.81–0.95 —
+ * so it can't decide a burst alone either, but where time is silent a
+ * demand for 0.9 keeps the near-identical frames and drops the revisits.
+ */
+const MIN_CLIP_WITHOUT_TIME = 0.9;
+
+const hasTime = (p: Photo): boolean => Boolean(p.exif?.capturedAt) && !Number.isNaN(Date.parse(p.exif!.capturedAt!));
+
+function clipAgrees(a: Photo, b: Photo): boolean {
+  if (hasTime(a) && hasTime(b)) return true;   // time already decided it
+  const va = a.clipEmbedding, vb = b.clipEmbedding;
+  if (!va || !vb || va.length !== vb.length) return true;  // no second witness: as before
+  let dot = 0;
+  for (let i = 0; i < va.length; i++) dot += va[i] * vb[i];
+  return dot >= MIN_CLIP_WITHOUT_TIME;
+}
+
+/**
  * Whether two photos' capture times are consistent with the same session —
  * or silently uninformative, which is not the same as consistent, but is
  * treated the same way here because there is no evidence to act on either
@@ -105,7 +127,7 @@ export function duplicateGroups(chapters: Array<{ key: string; photos: Photo[] }
     };
     for (let i = 0; i < ps.length; i++) {
       for (let j = i + 1; j < ps.length; j++) {
-        if (embeddingDistance(ps[i].embedding, ps[j].embedding) <= MAX_DUPLICATE_DISTANCE && timeCompatible(ps[i], ps[j])) {
+        if (embeddingDistance(ps[i].embedding, ps[j].embedding) <= MAX_DUPLICATE_DISTANCE && timeCompatible(ps[i], ps[j]) && clipAgrees(ps[i], ps[j])) {
           union(ps[i].id, ps[j].id);
         }
       }

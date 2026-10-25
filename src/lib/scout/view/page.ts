@@ -121,6 +121,7 @@ import {
   type Ring,
 } from '../shadows';
 import { ShadowGeometry, createShadowLayer, type ShadowLayer } from './shadow-layer';
+import { WindowGeometry, createWindowLayer, footprintSeed } from './window-layer';
 import { nightCameraConstraintsFor } from './night-camera';
 import { isAfterDark, lightWord, morningRows, nextLight, phaseRows, readableTitle } from '../glance';
 import { monthGrid, monthTitle, shiftMonth } from '../calendar';
@@ -306,7 +307,7 @@ import {
   type ViewMode,
 } from './state';
 import { WIDTH, inkColour, liftColour, rgbOf } from './palette';
-import { buildingRamp, shadowDarkness, shadowFade } from './shading';
+import { buildingFill, DRAWN_IN_3D, shadowDarkness, shadowFade, windowStyle } from './shading';
 import { mappedTreesIn } from './tree-client';
 import { scatterTrees, treeParts, type ScatterArea, type Tree } from '../trees';
 import { bearingLabel, formatCoords, moonDiscPath, shadowCaveat } from './format';
@@ -998,6 +999,9 @@ export async function startScout(): Promise<void> {
    * over whatever they land on. Worse, but not nothing, and the decision is
    * made in `onAdd`, before a frame is drawn, so the two are never both up.
    */
+  /** Windows on the 3D buildings — see `window-layer.ts`. */
+  const windowLayer = createWindowLayer('scout-windows');
+
   let glShadows = false;
   const shadowLayer: ShadowLayer = createShadowLayer('scout-shadows-gl', (ready) => {
     glShadows = ready;
@@ -1757,8 +1761,9 @@ export async function startScout(): Promise<void> {
         source: 'openmaptiles',
         'source-layer': 'building',
         minzoom: BUILDING_MIN_ZOOM,
+        filter: DRAWN_IN_3D as never,
         paint: {
-          'fill-extrusion-color': buildingRamp(-90, themeOf(basemap)) as never,
+          'fill-extrusion-color': buildingFill(-90, themeOf(basemap)) as never,
           'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 0],
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
           'fill-extrusion-opacity': 0.94,
@@ -1816,6 +1821,9 @@ export async function startScout(): Promise<void> {
         BELOW_LABELS,
       );
     }
+
+    // Straight over the buildings it draws on.
+    addCustomLayer(map, windowLayer, BELOW_LABELS);
 
     map.addLayer({
       id: 'scout-slab',
@@ -3239,7 +3247,8 @@ export async function startScout(): Promise<void> {
     shadowLayer.tint = rgbOf(shadowColour(altitude));
     shadowLayer.opacity = cloudScale();
     set('scout-slab-shadow', 'fill-opacity', 0.55 * cloudScale());
-    set('scout-buildings', 'fill-extrusion-color', buildingRamp(altitude, themeOf(basemap)));
+    set('scout-buildings', 'fill-extrusion-color', buildingFill(altitude, themeOf(basemap)));
+    windowLayer.style = windowStyle(altitude, themeOf(basemap));
     const leaves = treeColours(altitude);
     set('scout-tree-crowns', 'fill-extrusion-color', leaves.crown);
     set('scout-tree-trunks', 'fill-extrusion-color', leaves.trunk);
@@ -3333,7 +3342,7 @@ export async function startScout(): Promise<void> {
    * the blocker depth map — because both used to derive it per building per
    * frame. See `ShadowOptions.hull`.
    */
-  let castable: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
+  let castable: Array<{ ring: Ring; height: number; base?: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
   /**
    * The box `castable` was collected from.
    *
@@ -3525,6 +3534,7 @@ export async function startScout(): Promise<void> {
     if (!map || !styleReady || !centre) return;
 
     if (map.getZoom() < BUILDING_MIN_ZOOM || !shown.buildings) {
+      if (castable.length) windowLayer.setGeometry(EMPTY_GEOMETRY);
       castable = [];
       castableSignature = '';
       castableBox = null;
@@ -3583,11 +3593,13 @@ export async function startScout(): Promise<void> {
     // The same building appears once per tile it touches, so dedupe before
     // casting — otherwise a block on a tile seam gets a doubly dark shadow.
     const seen = new Set<string>();
-    const buildings: Array<{ ring: Ring; height: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
+    const buildings: Array<{ ring: Ring; height: number; base?: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
     const close: typeof buildings = [];
     let estimated = 0;
 
     for (const feature of features) {
+      // A building mapped in parts casts from its parts, as it is drawn (see DRAWN_IN_3D).
+      if (feature.properties?.hide_3d === true) continue;
       const height = buildingHeight(feature.properties as Record<string, unknown>);
       if (!(height > 0)) continue;
       const geometry = feature.geometry;
@@ -3598,6 +3610,8 @@ export async function startScout(): Promise<void> {
             ? geometry.coordinates
             : [];
       const isEstimated = heightIsEstimated(feature.properties as Record<string, unknown>);
+      // Where a building:part starts — the setback that stands on another part.
+      const base = Number(feature.properties?.render_min_height) || 0;
       for (const polygon of polygons) {
         const ring = polygon[0] as Ring;
         if (!ring || ring.length < 4) continue;
@@ -3606,7 +3620,7 @@ export async function startScout(): Promise<void> {
         if (seen.has(key)) continue;
         seen.add(key);
         if (isEstimated) estimated++;
-        const entry = { ring, height, estimated: isEstimated };
+        const entry = { ring, height, base, estimated: isEstimated };
         buildings.push(entry);
         // Within reach of the pin: the ones that can put it in shade.
         if (distance(centre, { lat: ring[0][1], lon: ring[0][0] }) < SKYLINE_RADIUS_M) {
@@ -3655,6 +3669,7 @@ export async function startScout(): Promise<void> {
     }
 
     castable = buildings;
+    rebuildWindows();
     // Indexed once here, against the pin — every hotspot's own skyline query
     // (`dayLightAt`) reuses this rather than re-scanning `castable` itself.
     buildingGrid = buildBuildingGrid(castable, centre);
@@ -3942,6 +3957,23 @@ export async function startScout(): Promise<void> {
     }
 
     shadowLayer.setBlockers(geometry.blockerVertices());
+  }
+
+  /**
+   * The window layer's walls and roofs, from the same gathered set the
+   * shadows cast from — rebuilt when that set changes, never with the sun.
+   */
+  function rebuildWindows() {
+    if (!map) return;
+    const geometry = new WindowGeometry(projectFlat);
+    for (const building of castable) {
+      const groundM = groundElevationAt(building.ring[0][0], building.ring[0][1]);
+      geometry.addBuilding(building.ring, groundM, building.base ?? 0, building.height, footprintSeed(building.ring));
+    }
+    const at = map.getCenter();
+    windowLayer.mercPerMetre = maplibregl.MercatorCoordinate.fromLngLat(at, 0).meterInMercatorCoordinateUnits();
+    windowLayer.setGeometry(geometry.vertices());
+    map.triggerRepaint();
   }
 
   /** The monolith's footprint, wherever it currently stands. */
@@ -6365,6 +6397,9 @@ export async function startScout(): Promise<void> {
     invalidate({ dome: true });
     try {
       map.setLayoutProperty('scout-buildings', 'visibility', three ? 'visible' : 'none');
+      if (map.getLayer('scout-windows')) {
+        map.setLayoutProperty('scout-windows', 'visibility', three ? 'visible' : 'none');
+      }
       if (map.getLayer('scout-building-edges')) {
         map.setLayoutProperty('scout-building-edges', 'visibility', three ? 'visible' : 'none');
       }

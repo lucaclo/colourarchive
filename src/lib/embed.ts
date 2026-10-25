@@ -1,9 +1,11 @@
 import { pipeline, env, RawImage } from '@xenova/transformers';
+import { MODELS_DIR } from './paths';
 
 // Local vision-embedding model (DINOv2-small): a 384-d visual fingerprint that
 // captures subject + composition. Loaded once, lazily. Fully offline after the
 // first download. Used for the "find similar" feature.
 env.allowLocalModels = false;
+if (MODELS_DIR) env.cacheDir = MODELS_DIR;
 
 let extractorP: Promise<any> | null = null;
 const getExtractor = () => (extractorP ??= pipeline('image-feature-extraction', 'Xenova/dinov2-small'));

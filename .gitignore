@@ -30,3 +30,6 @@ inspiration/
 .env
 .env.*
 !.env.example
+desktop/build/
+desktop/dist/
+desktop/.public/

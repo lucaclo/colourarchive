@@ -264,10 +264,12 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
         <span class="tb-label">Get the app</span>
       </a>
-      <button type="button" class="tb-button" id="insights-btn" data-cmdk="Insights" data-cmdk-keywords="stats, gaps" aria-haspopup="dialog" aria-label="Insights">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-        <span class="tb-label">Insights</span>
-      </button>
+      {hasPhotos && (
+        <button type="button" class="tb-button" id="insights-btn" data-cmdk="Insights" data-cmdk-keywords="stats, gaps" aria-haspopup="dialog" aria-label="Insights">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          <span class="tb-label">Insights</span>
+        </button>
+      )}
     </span>
     {hasPhotos && (
       <div class="cf-tray" id="cf-tray" hidden>
@@ -283,7 +285,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
 
   <section class="cover">
     <p class="cover-kicker">
-      {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapters` : 'In colour'}
+      {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapter${manifest.chapters.length === 1 ? '' : 's'}` : 'In colour'}
     </p>
     <h1>{SITE_TITLE}</h1>
     {hasPhotos && (
@@ -300,6 +302,16 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       </nav>
     )}
     {hasPhotos && <span class="scroll-hint" aria-hidden="true">↓</span>}
+    {/* A new archive's first screen. It used to say "Nothing here yet" below
+        a full-height cover, where nobody starting out would scroll to find
+        it; the first thing to do belongs where the eye already is. */}
+    {!hasPhotos && !STATIC && (
+      <div class="cover-start">
+        <p class="cover-start-lead">Add your photographs and the archive sorts them into chapters by colour.</p>
+        <a class="cover-start-cta" href="/upload">Add your first photos</a>
+        <p class="cover-start-note">JPEG, PNG or TIFF. Your originals stay exactly as they are, on this Mac.</p>
+      </div>
+    )}
   </section>
 
   {
@@ -374,9 +386,19 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
                     'data-base': p.chapter,
                     'data-edge': borderlineOf(p.oklch)?.alternative ?? '',
                   };
+                  // What a screen reader says for the photograph, and what
+                  // the result row reads out: kind, chapter, and when.
+                  const when = p.medium === 'digital' && p.exif.capturedAt
+                    ? new Date(p.exif.capturedAt).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+                    : '';
+                  const kind = p.genre ? `${p.genre[0].toUpperCase()}${p.genre.slice(1)} photograph` : 'Photograph';
+                  const name = [p.medium === 'film' ? `${kind} on film` : kind, ch.name, when].filter(Boolean).join(', ');
                   return (
                     <figure
                       class="frame"
+                      tabindex="0"
+                      role="button"
+                      aria-label={name}
                       style={`--frame-bg:${oklchCss(p.oklch)};aspect-ratio:${p.width}/${p.height}`}
                       data-id={p.id}
                       data-chapter={ch.name}
@@ -619,23 +641,25 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           )}
         </div>
       </div>
-    ) : (
-      <section class="empty">
-        <p class="empty-lead">Nothing here yet.</p>
-        <a class="empty-cta" href="/upload">Begin →</a>
-      </section>
-    )
+    ) : null
   }
 </Layout>
 
 <style>
-  .empty {
-    min-height: 60svh;
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    text-align: center; padding: 6vh 8vw; gap: 1rem;
+  .cover-start {
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    max-width: 30rem; margin-top: 0.5rem;
   }
-  .empty-lead { color: var(--muted); font-size: 1.05rem; line-height: 1.6; margin: 0; max-width: 34rem; }
-  .empty-cta { color: var(--fg); text-decoration: none; border-bottom: 1px solid currentColor; padding-bottom: 2px; }
+  .cover-start-lead { margin: 0; color: var(--secondary); font-size: var(--t-body); line-height: 1.55; }
+  .cover-start-cta {
+    display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 1.4rem;
+    border-radius: var(--r-pill); background: var(--fg); color: var(--bg);
+    font-family: var(--font-ui); font-size: var(--t-body); font-weight: 600; text-decoration: none;
+    transition: transform 110ms ease-out;
+  }
+  .cover-start-cta:active { transform: scale(0.96); }
+  .cover-start-cta:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+  .cover-start-note { margin: 0; color: var(--muted); font-size: var(--t-caption); }
 
   /* The end of the scroll. Quiet enough that arriving at it still feels like
      the last photograph, loud enough to answer "is this current?". The deep
@@ -1213,14 +1237,25 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       update();
       for (const f of nameNearby()) { f.classList.add('reveal'); named.push(f); }
     });
-    vt.finished.finally(() => {
+    // A second morph before this one draws skips it; `ready` then rejects,
+    // which is expected, not an error worth reporting.
+    vt.ready.catch(() => {});
+    vt.finished.catch(() => {}).finally(() => {
       archive.classList.remove('morphing');
       for (const f of named) { f.style.removeProperty('view-transition-name'); f.style.removeProperty('view-transition-class'); }
     });
   };
 
   overviewBtn?.addEventListener('click', () => {
-    morph(() => setZoomPersist(levelOf(z) === 'read' ? STRIPS_Z : 1));
+    // From the cover nothing of the archive is on screen, so the zoom used to
+    // happen a screen below, out of sight, and the button looked dead. Going
+    // out to the overview from there lands on it.
+    const fromCover = archive && archive.getBoundingClientRect().top > innerHeight * 0.4;
+    const out = levelOf(z) === 'read';
+    morph(() => {
+      setZoomPersist(out ? STRIPS_Z : 1);
+      if (out && fromCover) window.scrollTo({ top: archive.getBoundingClientRect().top + scrollY });
+    });
   });
 
   // Click a tile: in the overview, fall back into reading on it; otherwise
@@ -1240,10 +1275,29 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     }
   });
 
+  // A photograph is a button to the keyboard too: Tab reaches it, Return or
+  // Space opens it, exactly as a click would.
+  archive?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target.closest?.('.frame, .chapter-gap');
+    if (!target || target !== e.target) return;
+    e.preventDefault();
+    target.click();
+  });
+
+  // Everything below works on the photographs, and an empty archive renders
+  // none of their markup (lightbox, chapters, spectrum), so it is skipped
+  // whole rather than failing on the first missing element. Not re-indented,
+  // to keep history readable. The functions the code above calls later
+  // (openLightbox, savePos) still reach it: this is a classic sloppy-mode
+  // script, where a function declared in a block is also bound globally.
+  if (document.getElementById('lightbox')) {
+
   // ======================================================================
   //  Immersive single-photo view (lightbox)
   // ======================================================================
   const frames = Array.from(document.querySelectorAll('.frame'));
+  const frameName = (f) => f.getAttribute('aria-label') || 'Photograph';
   const lb = document.getElementById('lightbox');
   const lbImg = document.getElementById('lb-img');
   const lbCap = document.getElementById('lb-caption');
@@ -1284,14 +1338,20 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
   };
 
   const captionHtml = (f) => {
-    const bits = [];
-    const add = (label, key) => { const v = f.dataset[key]; if (v) bits.push(`<span class="k">${label}</span> ${key === 'captured' ? new Date(v).toLocaleDateString() : v}`); };
-    add('', 'chapter'); add('·', 'captured'); add('·', 'camera'); add('·', 'lens');
-    add('·', 'focal'); add('·', 'aperture'); add('·', 'shutter'); add('·', 'iso');
-    const loc = f.dataset.location;
+    // One quiet dot between facts, none before the first. The date is
+    // written the British way like the rest of the app (16 Aug 2026, not
+    // 8/16/2026), and a bare ISO number gets its name.
+    const d = f.dataset;
+    const bits = [
+      d.chapter,
+      d.captured && new Date(d.captured).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      d.camera, d.lens, d.focal, d.aperture, d.shutter,
+      d.iso && `ISO ${d.iso}`,
+    ].filter(Boolean);
+    const loc = d.location;
     if (loc) {
       const [lat, lon] = loc.split(',').map((s) => s.trim());
-      bits.push(`<span class="k">·</span> <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}" target="_blank" rel="noopener noreferrer">${loc} ↗</a>`);
+      bits.push(`<a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}" target="_blank" rel="noopener noreferrer">${loc} ↗</a>`);
     }
     // The photo's main colours, widths by area. A tap searches the archive
     // for that colour; Copy copies the one last pointed at, or all of them.
@@ -1302,7 +1362,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       ? `<span class="lb-palette-row"><span class="lb-palette" role="group" aria-label="Colours">${sw.map(([hex, share]) =>
           `<button type="button" class="lb-swatch" data-hex="${hex}" style="background:${hex};flex-grow:${Number(share)}" aria-label="Search ${hex}" title="${hex}"></button>`).join('')}</span><button type="button" class="lb-copy">Copy</button></span><span class="lb-hex" aria-live="polite"></span>`
       : '';
-    return bits.join(' &nbsp; ') + strip;
+    return bits.join(' <span class="k">·</span> ') + strip;
   };
   let lbPointedHex = '';
   lbCap?.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.lb-swatch'); if (b) lbPointedHex = b.dataset.hex; });
@@ -1504,6 +1564,9 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     unlockScroll();
     // After the unlock, so the thumbnail is measured where it will really be.
     flyOut(frames[lbIndex]);
+    // Opened from a photo: come back to the one you were last looking at,
+    // which may be several arrow presses on from where you started.
+    if (returnFocus?.classList?.contains('frame') && frames[lbIndex]) returnFocus = frames[lbIndex];
     lb.style.opacity = '';   // a swipe's partial fade carries on down from where it was
     lb.classList.remove('show');
     releaseFocus();
@@ -2055,7 +2118,8 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
   // inline, so the ids arrive as an event rather than a function call.
   window.addEventListener('colourfilter', (e) => {
     const { ids, label, ranked, colours } = e.detail;
-    renderTray(ranked, colours);
+    colourTray = Array.isArray(ranked) ? { ranked, colours } : null;
+    paintTray();
     if (ids === null && colourIds === null) return;
     colourLabel = label;
     relayout(() => { colourIds = ids; layoutAll(); refreshEmpties(); });
@@ -2097,7 +2161,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       b.className = 'cf-tray-item';
       b.setAttribute('role', 'listitem');
       const covered = hit.parts.reduce((a, p) => a + p.covered, 0);
-      b.setAttribute('aria-label', `${f.dataset.file || 'Photograph'}, ${Math.round(Math.min(1, covered) * 100)}% of the frame`);
+      b.setAttribute('aria-label', `${frameName(f)}, ${Math.round(Math.min(1, covered) * 100)}% of the frame`);
       const img = document.createElement('img');
       // The smallest derivative: these are 56–72 px tall.
       img.src = (f.dataset.set || '').split(',')[0].trim().split(' ')[0] || f.dataset.full;
@@ -2125,6 +2189,61 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     trayList.replaceChildren(...items);
     trayList.scrollLeft = 0;
   }
+  // A search by description answers in the same row, best match first, so
+  // typing on the cover shows what it found instead of quietly re-filtering a
+  // grid a screen below. While a search is open it owns the row; clearing it
+  // brings a colour search's row back.
+  let colourTray = null;   // { ranked, colours } from the colour filter
+  let textTray = null;     // { q, matches } from /api/search
+  function paintTray() {
+    if (textTray) renderTextTray(textTray);
+    else if (colourTray) renderTray(colourTray.ranked, colourTray.colours);
+    else renderTray(null);
+  }
+  function renderTextTray({ q, matches }) {
+    if (!tray) return;
+    tray.hidden = false;
+    const glass = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    glass.setAttribute('viewBox', '0 0 16 16');
+    glass.setAttribute('class', 'cf-tray-glass');
+    const ring = document.createElementNS(glass.namespaceURI, 'circle');
+    ring.setAttribute('cx', '6.5'); ring.setAttribute('cy', '6.5'); ring.setAttribute('r', '5');
+    const handle = document.createElementNS(glass.namespaceURI, 'path');
+    handle.setAttribute('d', 'M10.5 10.5L14 14');
+    glass.append(ring, handle);
+    trayDots.replaceChildren(glass);
+    trayCount.textContent = String(matches.length);
+    trayClear.hidden = matches.length > 0;
+    trayList.setAttribute('aria-label', `Best matches for ${q}`);
+    if (!matches.length) {
+      const none = document.createElement('p');
+      none.className = 'cf-tray-none';
+      none.textContent = `Nothing in the archive looks like “${q}”.`;
+      trayList.replaceChildren(none);
+      return;
+    }
+    const items = [];
+    for (const hit of matches.slice(0, TRAY_MAX)) {
+      const f = trayFrame(hit.id);
+      if (!f) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cf-tray-item';
+      b.setAttribute('role', 'listitem');
+      b.setAttribute('aria-label', frameName(f));
+      const img = document.createElement('img');
+      img.src = (f.dataset.set || '').split(',')[0].trim().split(' ')[0] || f.dataset.full;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.style.aspectRatio = String(1 / (parseFloat(f.dataset.ratio) || 1));
+      b.append(img);
+      b.addEventListener('click', () => openLightbox(f, false));
+      items.push(b);
+    }
+    trayList.replaceChildren(...items);
+    trayList.scrollLeft = 0;
+  }
   trayList?.addEventListener('keydown', (e) => {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
     if (!step) return;
@@ -2134,7 +2253,10 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     e.preventDefault();
     all[Math.max(0, Math.min(all.length - 1, i + step))].focus();
   });
-  trayClear?.addEventListener('click', () => window.dispatchEvent(new Event('colourfilter:reset')));
+  trayClear?.addEventListener('click', () => {
+    if (textTray && searchInput) { searchInput.value = ''; relayout(() => runSearch('')); searchInput.focus(); }
+    else window.dispatchEvent(new Event('colourfilter:reset'));
+  });
 
   // A filter or search used to repack the whole wall in one cut: every photo
   // jumped at once, and the page kept its scroll offset rather than its
@@ -2273,7 +2395,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
   }
   async function runSearch(q) {
     const token = ++searchToken;
-    if (!q) { searchBusy(false); applySearchIds(null); return; }
+    if (!q) { searchBusy(false); textTray = null; paintTray(); applySearchIds(null); return; }
     searchBusy(true);
     let data;
     try {
@@ -2286,6 +2408,8 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     // than filter the archive down to a meaningless ranking — leave it as-is.
     if (!data.ok || !data.ready) return;
     const ids = new Set(data.matches.map((m) => m.id));
+    textTray = { q, matches: data.matches };
+    paintTray();
     relayout(() => applySearchIds(ids));
   }
   searchInput?.addEventListener('input', (e) => {
@@ -2353,6 +2477,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     if (opener) requestAnimationFrame(() => opener.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
   }
   addEventListener('hashchange', goToChapterFromHash);
+  }
 </script>
 
 <script>

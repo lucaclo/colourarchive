@@ -379,7 +379,7 @@ function finishBuild(gl: WebGLRenderingContext, pending: PendingProgram | null):
   };
 }
 
-function build(
+export function build(
   gl: WebGLRenderingContext,
   vertex: string,
   fragment: string,

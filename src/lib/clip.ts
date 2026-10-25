@@ -1,4 +1,5 @@
 import { AutoTokenizer, AutoProcessor, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, RawImage, env } from '@xenova/transformers';
+import { MODELS_DIR } from './paths';
 
 // Local CLIP dual encoder — the same Xenova/clip-vit-base-patch32 weights
 // genre.ts already downloads for zero-shot genre classification, used here
@@ -14,6 +15,7 @@ import { AutoTokenizer, AutoProcessor, CLIPTextModelWithProjection, CLIPVisionMo
 // directly instead of through `pipeline()`. Verified against real photos and
 // plausible/implausible captions before trusting this file — see the issue.
 env.allowLocalModels = false;
+if (MODELS_DIR) env.cacheDir = MODELS_DIR;
 
 const MODEL_ID = 'Xenova/clip-vit-base-patch32';
 

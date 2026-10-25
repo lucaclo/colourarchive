@@ -51,11 +51,11 @@ const notes = await readNotes();
 // store. Read that separately and match back up by id, purely to compute
 // the groups below; only each match's key and size (never the vectors
 // themselves) make it into the template.
-const embeddingById = new Map((await readStore()).map((p) => [p.id, p.embedding] as const));
+const vectorsById = new Map((await readStore()).map((p) => [p.id, { embedding: p.embedding, clipEmbedding: p.clipEmbedding }] as const));
 const dupGroups = duplicateGroups(
   chapters.map((ch) => ({
     key: ch.key,
-    photos: ch.photos.map((p) => ({ ...p, embedding: embeddingById.get(p.id) })),
+    photos: ch.photos.map((p) => ({ ...p, ...vectorsById.get(p.id) })),
   })),
 );
 const dupByPhoto = new Map(dupGroups.flatMap((g) => g.ids.map((id) => [id, { key: g.key, size: g.ids.length }] as const)));
@@ -142,9 +142,9 @@ const accent = manifest.chapters[0]
                 </span>
                 {
                   (dupCountByChapter.get(ch.key) ?? 0) > 0 && (
-                    <span class="book-dup-summary">
+                    <button type="button" class="book-dup-summary" title="Compare them side by side">
                       {dupCountByChapter.get(ch.key)} possible duplicate{dupCountByChapter.get(ch.key) === 1 ? '' : 's'}
-                    </span>
+                    </button>
                   )
                 }
               </h2>
@@ -199,7 +199,7 @@ const accent = manifest.chapters[0]
                         }
                         {/* Only the current chapter until it's touched; the rest come
                             from #book-chapter-options then (see the script). */}
-                        <select class="book-move" data-move={p.id} title="Move to a different chapter">
+                        <select class="book-move" data-move={p.id} title="Move to a different chapter" aria-label={`Chapter for ${p.filename.split(".")[0]}`}>
                           <option value={ch.key} selected>{ch.name}</option>
                         </select>
                       </div>
@@ -290,7 +290,11 @@ const accent = manifest.chapters[0]
   .book-dup-summary {
     font-family: var(--font-ui); font-size: var(--t-caption);
     color: #c9973a; padding: 0.15rem 0.5rem; border-radius: 999px; background: color-mix(in oklab, #c9973a 14%, transparent);
+    appearance: none; border: 0; cursor: pointer; align-self: center;
+    transition: background var(--dur-fast) var(--ease);
   }
+  .book-dup-summary:hover { background: color-mix(in oklab, #c9973a 24%, transparent); }
+  .book-dup-summary:focus-visible { outline: 2px solid #c9973a; outline-offset: 2px; }
 
   .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); align-items: start; gap: 8px; list-style: none; margin: 0; padding: 0; }
   .book-cell {
@@ -567,6 +571,13 @@ const accent = manifest.chapters[0]
   });
 
   document.getElementById('book-chapters')?.addEventListener('click', (e) => {
+    // The chapter's count is a way in too: it opens the first group it counts.
+    const summary = e.target.closest('.book-dup-summary');
+    if (summary) {
+      const first = summary.closest('.book-chapter')?.querySelector('.book-dup');
+      if (first) openSurvey(first.dataset.dupGroup, null);
+      return;
+    }
     const dupBtn = e.target.closest('.book-dup');
     if (dupBtn) { openSurvey(dupBtn.dataset.dupGroup, e.detail === 0 ? dupBtn.dataset.dupKeep : null); return; }
     const btn = e.target.closest('.book-exclude');

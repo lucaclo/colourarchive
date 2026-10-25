@@ -10,6 +10,7 @@ export type InstallPath =
   | 'iphone'        // Safari on iPhone: Share sits at the foot of the screen
   | 'ipad'          // Safari on iPad: Share sits top right
   | 'ios-other'     // Chrome/Firefox/Edge on iOS: Share in their own toolbar
+  | 'mac-app'       // any browser on a Mac: download the Mac app (desktop/)
   | 'mac-safari'    // Safari 17+ on the Mac: Add to Dock
   | 'android'       // any Android browser
   | 'desktop-chromium'
@@ -32,6 +33,11 @@ export function installPath({ ua, maxTouchPoints, standalone }: InstallEnv): Ins
     return iPad ? 'ipad' : 'iphone';
   }
   if (/Android/.test(ua)) return 'android';
+  // Every Mac browser, Firefox included, is offered the Mac app first: it is
+  // the only way to keep an archive of your own. The web install below it only
+  // ever opens the archive this page was served from. `mac-safari` and
+  // `desktop-chromium` stay as the "Another device" choices.
+  if (/Macintosh/.test(ua)) return 'mac-app';
   if (/Firefox\//.test(ua)) return 'unsupported';
   if (/Chrome\/|Chromium\/|Edg\//.test(ua)) return 'desktop-chromium';
   if (/Macintosh/.test(ua) && /Safari\//.test(ua)) {
@@ -48,9 +54,21 @@ export function installPath({ ua, maxTouchPoints, standalone }: InstallEnv): Ins
 // no help: it stays true in Chrome's app window.
 export function inAppWindow(): boolean {
   return (
+    inMacApp() ||
     ['standalone', 'minimal-ui', 'window-controls-overlay'].some((m) => matchMedia(`(display-mode: ${m})`).matches) ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true
   );
+}
+
+// Where the Mac app is downloaded from: the newest GitHub release's asset,
+// under the stable name desktop/ builds it with (package.json, dmg.artifactName).
+export const MAC_DOWNLOAD_URL = 'https://github.com/lucaclo/colourarchive/releases/latest/download/Colour-Archive-arm64.dmg';
+
+// The Mac app (desktop/main.cjs) adds this to its user agent. Its window is
+// an ordinary Electron one, so it matches none of the display modes above.
+export const MAC_APP_UA = 'ColourArchiveMac/';
+export function inMacApp(ua: string = navigator.userAgent): boolean {
+  return ua.includes(MAC_APP_UA);
 }
 
 // The manifest registers this protocol, so navigating to it from a browser tab
