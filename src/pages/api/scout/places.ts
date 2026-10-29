@@ -1,11 +1,8 @@
 import type { APIRoute } from 'astro';
-import path from 'node:path';
-import sharp from 'sharp';
-import exifReader from 'exif-reader';
 import { readManifest } from '../../../lib/manifest';
-import { PHOTOS_DIR } from '../../../lib/paths';
+import { cameraOffset } from '../../../lib/photo-time';
 import { dismissPlace, readDismissedPlaces, readGpsLocations, readPlacedLocations, setPlacedLocation } from '../../../lib/photo-locations';
-import { LibraryProblem, WINDOW_MIN, describeGap, parseOffset, readPhoneShots, suggestPlaces, type ArchiveShot } from '../../../lib/phone-places';
+import { LibraryProblem, WINDOW_MIN, describeGap, readPhoneShots, suggestPlaces, type ArchiveShot } from '../../../lib/phone-places';
 import { isLatLon } from '../../../lib/scout/mine';
 
 export const prerender = false;
@@ -15,22 +12,6 @@ export const prerender = false;
 // GET lists them; POST { id, action: 'accept', location } places one,
 // { id, action: 'dismiss' } turns it down for good. Mac-only, like the rest of
 // Scout's "Your photos": the answers are where someone has been.
-
-// The camera's UTC offset is read from the original, since photos ingested
-// before #139 never stored it. Cached: an original never changes.
-const offsets = new Map<string, number | null>();
-async function cameraOffset(filename: string, stored?: string): Promise<number | undefined> {
-  if (stored) return parseOffset(stored);
-  if (!offsets.has(filename)) {
-    try {
-      const meta = await sharp(path.join(PHOTOS_DIR, filename), { failOn: 'none' }).metadata();
-      offsets.set(filename, (meta.exif && parseOffset(exifReader(meta.exif).Photo?.OffsetTimeOriginal)) ?? null);
-    } catch {
-      offsets.set(filename, null);
-    }
-  }
-  return offsets.get(filename) ?? undefined;
-}
 
 export const GET: APIRoute = async () => {
   try {

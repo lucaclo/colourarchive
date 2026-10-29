@@ -22,6 +22,7 @@ import { horizonReading, horizonSampleDistanceM, hourAt } from './scout/weather'
 import { skyDays } from './scout/sky-week';
 import { isoDateIn } from './scout/daylight';
 import { pushMessage, pushPlans, type PushPlan, type PushSpot } from './scout/push-plan';
+import { recordReadings } from './sky-readings';
 
 export interface PushSubscriptionJSON { endpoint: string; keys: { p256dh: string; auth: string } }
 interface Device { subscription: PushSubscriptionJSON; spots: PushSpot[]; addedAt: string }
@@ -128,7 +129,12 @@ export async function checkPush(now = new Date()): Promise<number> {
           if (s.sent[sentKey] === isoDateIn(now, spot.timeZone)) continue;
           for (const plan of pushPlans(spot, now)) {
             const rk = `${spot.key}|${plan.event}|${plan.iso}`;
-            if (!readings.has(rk)) readings.set(rk, await readingFor(spot, plan).catch(() => null));
+            if (!readings.has(rk)) {
+              const got = await readingFor(spot, plan).catch(() => null);
+              readings.set(rk, got);
+              // Issue #143: what was said, to check against the photos later.
+              if (got && got.verdict !== 'unknown') await recordReadings(spot, [{ iso: plan.iso, event: plan.event, when: +plan.when, verdict: got.verdict, note: got.note }]).catch(() => {});
+            }
             const reading = readings.get(rk);
             if (reading?.verdict !== 'lit' || reading.canvasCover == null) continue;
             const { title, body } = pushMessage(spot, plan, { canvasCover: reading.canvasCover, bearing: reading.bearing }, now);

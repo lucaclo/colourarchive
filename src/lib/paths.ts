@@ -45,6 +45,10 @@ export const LOCATIONS_PATH = kept('photos.locations.json');
 export const GPS_PATH = kept('photos.gps.json');
 // Place suggestions turned down with "Not here", so they aren't offered again.
 export const PLACE_DISMISSED_PATH = kept('photos.places-dismissed.json');
+// Every sky reading Scout gave for a kept spot, to check later (issue #143).
+export const SKY_READINGS_PATH = kept('photos.sky-readings.json');
+// Each checked photo's measured sky colour (sky-measure.ts): derived, cached.
+export const SKY_CACHE_PATH = kept('.sky-cache.json');
 export const EXPORT_PATH = kept('sequence.json');
 // What the iCloud inbox (inbox.ts) brought in and what it left there. Local to
 // this Mac and git-ignored: file names say when and how often someone shoots.

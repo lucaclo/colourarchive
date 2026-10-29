@@ -269,6 +269,14 @@ three ways, none of them typed:
   the fold says so when it doesn't have it.
 - **By hand**, folded away under *Place by hand*, and **Move** on a pin.
 
+**Was Scout right?** Every sky reading Scout gives a kept spot (in the panel,
+the calendar's week, or a notification) is kept in `photos.sky-readings.json`.
+A kept spot's Notebook then sets each past one against the archive's photos
+from within a kilometre, taken within 45 minutes of that sunrise or sunset:
+"Scout said lit 9 times; 7 were", with each evening's photo beside what was
+said. The sky is measured from the pixels Style Match's segmentation labels
+sky, and only warm or magenta colour counts (a clean blue sky is *bare*).
+
 All three stay in git-ignored files (`photos.gps.json`, `photos.locations.json`,
 `photos.places-dismissed.json`). GPS never goes into `photos.json`, the
 manifest or the static build: the repository is public.

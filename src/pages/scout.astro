@@ -609,6 +609,11 @@ const accent = '#f0b866';
                       aria-label="Note about this spot"
                     ></textarea>
                     <p class="note-kept" id="note-kept"></p>
+                    <!-- Issue #143: what Scout said here, against the photos. -->
+                    <div class="note-check" id="note-check" hidden>
+                      <p class="note-check-lines" id="note-check-lines"></p>
+                      <ul class="note-check-list" id="note-check-list"></ul>
+                    </div>
                     <ul class="note-photos" id="note-photos"></ul>
                     <div class="note-add">
                       <input
@@ -2471,6 +2476,15 @@ const accent = '#f0b866';
     padding: 0.45rem 0.55rem;
   }
   .note-kept, .note-say { font-size: var(--t-caption); color: var(--muted); margin: 0; }
+  .note-check { display: grid; gap: 0.4rem; padding: 0.5rem 0; border-top: 1px solid var(--separator); border-bottom: 1px solid var(--separator); }
+  .note-check[hidden] { display: none; }
+  .note-check-lines { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--fg); white-space: pre-line; }
+  .note-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; max-height: 14rem; overflow-y: auto; }
+  .note-check-list :global(li) { display: grid; grid-template-columns: 52px 1fr; gap: 0.6rem; align-items: start; }
+  .note-check-list :global(img) { width: 52px; height: 40px; object-fit: cover; border-radius: 3px; background: var(--border); }
+  .note-check-list :global(.nc-said) { font-size: 0.6875rem; line-height: 1.4; color: var(--secondary); }
+  .note-check-list :global(.nc-said b) { color: var(--fg); font-weight: 600; }
+  .note-check-list :global(.nc-miss b) { color: #e0a060; }
   /* Every row in here is built by the script, and Astro's scoping only reaches
      elements that were in the markup — without `:global()` these fall back to
      the browser's own stylesheet, which is how the credits came out as default

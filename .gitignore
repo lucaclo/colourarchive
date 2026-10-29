@@ -12,6 +12,7 @@ push.json
 photos.locations.json
 photos.gps.json
 photos.places-dismissed.json
+photos.sky-readings.json
 
 # Local Netlify folder
 .netlify
@@ -21,6 +22,7 @@ photos.places-dismissed.json
 src/data/match/
 .scout-cache/
 .book-print/
+.sky-cache.json
 
 # Local dev TLS certs — contains private keys, never commit
 certs/

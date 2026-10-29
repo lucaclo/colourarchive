@@ -4914,6 +4914,7 @@ export async function startScout(): Promise<void> {
    * this evening do", and a reading that blanked out between the two events
    * would be useless exactly when it is wanted.
    */
+  let lastRecorded = '';
   function renderHorizon() {
     const box = $<HTMLElement>('wx-horizon');
     const event = chosenSkyEvent();
@@ -4935,6 +4936,10 @@ export async function startScout(): Promise<void> {
       horizonSampleDistanceM(),
     );
     box.dataset.verdict = reading.verdict;
+    if (lastRecorded !== `${isoDate} ${event} ${reading.verdict}`) {
+      lastRecorded = `${isoDate} ${event} ${reading.verdict}`;
+      recordSkyReadings([{ iso: isoDate, event, when: +when, verdict: reading.verdict, note: reading.note }]);
+    }
     // "Can't say" is not worth a line of its own.
     box.textContent = reading.verdict === 'unknown' ? '' : `${event === 'sunrise' ? 'Sunrise' : 'Sunset'}: ${reading.note}`;
   }
@@ -5354,7 +5359,10 @@ export async function startScout(): Promise<void> {
     if (skyWeekLoading !== key) return;
     skyWeekLoading = '';
     if (centre?.lat !== at.lat || centre?.lon !== at.lon) return;
-    skyWeek = { key, event, marks: new Map(skyMarks(days, pin, gates, distanceM).map((m) => [m.iso, m])) };
+    const marks = skyMarks(days, pin, gates, distanceM);
+    skyWeek = { key, event, marks: new Map(marks.map((m) => [m.iso, m])) };
+    const whenOf = new Map(days.map((d) => [d.iso, +d.when]));
+    recordSkyReadings(marks.map((m) => ({ iso: m.iso, event, when: whenOf.get(m.iso) ?? 0, verdict: m.verdict, note: m.note })));
     if (!$<HTMLElement>('datesheet').hidden) renderCalendar();
   }
 
@@ -8759,6 +8767,56 @@ export async function startScout(): Promise<void> {
     renderProofs(spot);
     renderVisits(spot);
     renderDemUploads();
+    void renderSkyCheck(spot);
+  }
+
+  /* Issue #143: was Scout right here? Readings it gave for this kept spot,
+     checked against the archive's photos from within a kilometre, near that
+     sunrise or sunset. Mac-only: the photos' places are private. */
+  let skyCheckFor = '';
+  async function renderSkyCheck(spot: SavedSpot) {
+    if (STATIC) return;
+    const key = `${spot.lat},${spot.lon}`;
+    if (skyCheckFor === key) return;
+    skyCheckFor = key;
+    const box = $<HTMLElement>('note-check');
+    try {
+      const data = await fetch(`/api/scout/sky-check?lat=${spot.lat}&lon=${spot.lon}`).then((r) => r.json());
+      if (skyCheckFor !== key) return;
+      box.hidden = !data.ok || !data.evenings?.length;
+      if (box.hidden) return;
+      $('note-check-lines').textContent = (data.lines as string[]).join('\n');
+      $('note-check-list').replaceChildren(...(data.evenings as { reading: { iso: string; event: string; verdict: string; note: string }; sky: string; right: boolean; thumbs: string[] }[]).map((e) => {
+        const li = document.createElement('li');
+        const img = document.createElement('img');
+        img.src = e.thumbs[0] ?? '';
+        img.alt = '';
+        img.loading = 'lazy';
+        const said = document.createElement('span');
+        said.className = e.right ? 'nc-said' : 'nc-said nc-miss';
+        const day = new Date(`${e.reading.iso}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        const b = document.createElement('b');
+        b.textContent = `${day} ${e.reading.event}: said ${e.reading.verdict}, ${e.sky === 'colour' ? 'the sky had colour' : 'the sky was plain'}.`;
+        said.append(b, ` ${e.reading.note}`);
+        li.append(img, said);
+        return li;
+      }));
+    } catch {
+      box.hidden = true;
+    }
+  }
+
+  /** Issue #143: keep what Scout says about a kept spot's coming sky. */
+  function recordSkyReadings(readings: { iso: string; event: SkyEvent; when: number; verdict: string; note: string }[]) {
+    const spot = keptHere();
+    if (STATIC || !spot) return;
+    const coming = readings.filter((r) => r.verdict !== 'unknown' && r.when > Date.now());
+    if (!coming.length) return;
+    void fetch('/api/scout/sky-check', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lat: spot.lat, lon: spot.lon, readings: coming }),
+    }).catch(() => {});
   }
 
   /**
