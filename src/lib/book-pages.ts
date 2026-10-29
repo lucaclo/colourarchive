@@ -61,7 +61,9 @@ export interface PageChapter {
 export type Page =
   | { kind: 'opener'; chapterKey: string; name: string; colour: string; index: number }
   | { kind: 'photo'; chapterKey: string; photos: PagePhoto[]; treatment: 'border' | 'bleed' | 'two-up'; note?: string }
-  | { kind: 'blank'; reason: 'asked' | 'even' };
+  | { kind: 'blank'; reason: 'asked' | 'even' }
+  /** The last page: what the book was made with (colophon.ts). */
+  | { kind: 'colophon' };
 
 export interface Layout {
   treatment?: Record<string, Treatment>;
@@ -91,6 +93,20 @@ export function paginate(chapters: readonly PageChapter[], layout: Layout = {}):
     }
   });
   return pages;
+}
+
+/** Close the book with its colophon. */
+export function withColophon(pages: Page[]): Page[] {
+  return pages.length ? [...pages, { kind: 'colophon' }] : pages;
+}
+
+/**
+ * The spine's width, roughly: about 0.06 mm a page on standard photobook
+ * paper, plus the cover's own boards. Every service publishes its own table
+ * and the number to use is theirs, so this only fills the field in.
+ */
+export function estimateSpineMM(pages: number, hardcover = true): number {
+  return Math.round((pages * 0.06 + (hardcover ? 6 : 1)) * 10) / 10;
 }
 
 /** Pad to an even count, which every bound book needs. */
@@ -182,4 +198,64 @@ export function placements(page: Extract<Page, { kind: 'photo' }>, trim: Trim): 
   const p = page.photos[0];
   const r = fit(ar(p), inner);
   return [{ id: p.id, box: r, clip: r }];
+}
+
+// --- Print check (issue #140) ---------------------------------------------
+
+/** Below this a photograph starts to print soft. 300 is the target; 240 is
+ *  where photobook services start warning. */
+export const PRINT_PPI = 240;
+
+/** Pixels per inch a photo prints at in a box (cover-fit: the tighter side). */
+export function ppiOf(photo: PagePhoto, box: Rect): number {
+  if (!(photo.width > 0 && photo.height > 0 && box.w > 0 && box.h > 0)) return Infinity;
+  return Math.min(photo.width / (box.w / 25.4), photo.height / (box.h / 25.4));
+}
+
+export type PrintTreatment = 'border' | 'bleed' | 'two-up';
+
+export interface PrintFlag {
+  /** Index into the pages it was checked against. */
+  page: number;
+  id: string;
+  ppi: number;
+  treatment: PrintTreatment;
+  /** The first other treatment that clears the threshold, if one does. */
+  fix?: { treatment: Treatment; ppi: number };
+}
+
+const ppiAs = (p: PagePhoto, treatment: PrintTreatment, trim: Trim): number => {
+  // As a pair the partner is unknown; one of the same shape stands in for it.
+  const photos = treatment === 'two-up' ? [p, p] : [p];
+  return Math.round(ppiOf(p, placements({ kind: 'photo', chapterKey: '', photos, treatment }, trim)[0].box));
+};
+
+/** Every photo on these pages that prints under `threshold` ppi. */
+export function printCheck(pages: readonly Page[], trim: Trim, threshold = PRINT_PPI): PrintFlag[] {
+  const flags: PrintFlag[] = [];
+  pages.forEach((page, index) => {
+    if (page.kind !== 'photo') return;
+    for (const pl of placements(page, trim)) {
+      const photo = page.photos.find((p) => p.id === pl.id)!;
+      const ppi = Math.round(ppiOf(photo, pl.box));
+      if (ppi >= threshold) continue;
+      const tries: [Treatment, PrintTreatment][] =
+        page.treatment === 'bleed' ? [['border', 'border'], ['pair', 'two-up']] : page.treatment === 'border' ? [['pair', 'two-up']] : [];
+      let fix: PrintFlag['fix'];
+      for (const [t, as] of tries) {
+        const better = ppiAs(photo, as, trim);
+        if (better >= threshold) { fix = { treatment: t, ppi: better }; break; }
+      }
+      flags.push({ page: index, id: photo.id, ppi, treatment: page.treatment, ...(fix ? { fix } : {}) });
+    }
+  });
+  return flags;
+}
+
+const AS: Record<PrintTreatment | Treatment, string> = { bleed: 'full-bleed', border: 'with a border', 'two-up': 'as a pair', pair: 'as a pair' };
+
+/** "Prints at 190 ppi full-bleed; as a pair it's 300." */
+export function printFlagMessage(flag: PrintFlag): string {
+  const now = `Prints at ${flag.ppi} ppi ${AS[flag.treatment]}`;
+  return flag.fix ? `${now}; ${AS[flag.fix.treatment]} it’s ${flag.fix.ppi}.` : `${now}, which may print soft whatever its layout.`;
 }

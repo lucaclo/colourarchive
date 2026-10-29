@@ -233,7 +233,9 @@ export async function searchPlaces(query: string, limit = 6): Promise<Place[]> {
  * back to the coordinate written out rather than throwing, and the sun geometry
  * never waits on Nominatim.
  */
-export async function reverseGeocode(latitude: number, longitude: number): Promise<Place> {
+/** `zoom` is Nominatim's grain: 16 (the default) names the street or building
+ *  a dragged pin means; 10 names the town, for "taken near …" and a colophon. */
+export async function reverseGeocode(latitude: number, longitude: number, zoom = 16): Promise<Place> {
   const lat = clampLatitude(latitude);
   const lon = wrapLongitude(longitude);
 
@@ -250,7 +252,7 @@ export async function reverseGeocode(latitude: number, longitude: number): Promi
 
   // Five decimal places is about a metre — finer than the pin can be placed,
   // and enough that dragging back to the same spot is a cache hit.
-  const key = cacheKey(`reverse ${lat.toFixed(5)} ${lon.toFixed(5)}`, 1);
+  const key = cacheKey(`reverse ${lat.toFixed(5)} ${lon.toFixed(5)}${zoom === 16 ? '' : ` z${zoom} en`}`, 1);
   const cached = await readCache(key);
   if (cached?.length) return cached[0];
 
@@ -260,12 +262,12 @@ export async function reverseGeocode(latitude: number, longitude: number): Promi
   url.searchParams.set('format', 'jsonv2');
   // Zoom 16 is roughly "this street or this building" — the grain a person
   // dragging a pin across a city means.
-  url.searchParams.set('zoom', '16');
+  url.searchParams.set('zoom', String(zoom));
 
   try {
     const place = await serialise(async () => {
       const response = await fetch(url, {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', ...(zoom === 16 ? {} : { 'Accept-Language': 'en' }) },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (!response.ok) throw new GeocodeError(`Nominatim answered ${response.status}.`);

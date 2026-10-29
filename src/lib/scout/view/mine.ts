@@ -123,7 +123,7 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     gap.className = 'ms-gap';
     gap.textContent = s.gap;
     words.append(place, gap);
-    void fetch(`/api/scout/reverse?lat=${s.lat}&lon=${s.lon}`)
+    void fetch(`/api/scout/reverse?lat=${s.lat}&lon=${s.lon}&zoom=10`)
       .then((r) => r.json())
       .then((d) => { if (d.ok && d.place?.name) place.textContent = `Taken near ${d.place.name}?`; })
       .catch(() => {});

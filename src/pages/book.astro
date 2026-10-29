@@ -6,7 +6,7 @@ import { duplicateGroups } from '../lib/duplicates';
 import { readNotes } from '../lib/notes';
 import { oklchCss, readableInk } from '../lib/color';
 import { oklchToHex } from '../lib/colour-search';
-import { DEFAULT_TRIM, TRIMS, checkPages, padToEven, paginate } from '../lib/book-pages';
+import { DEFAULT_TRIM, TRIMS, checkPages, padToEven, paginate, withColophon } from '../lib/book-pages';
 
 export const prerender = false;
 
@@ -17,14 +17,14 @@ const includedCount = chapters.reduce((n, ch) => n + ch.photos.filter((p) => !p.
 // One divider page per chapter that survives exclusion, plus one plate page
 // per included photo — the same count `export:print` actually produces.
 const trimId = curation.trim ?? DEFAULT_TRIM;
-const pageCount = padToEven(
+const pageCount = padToEven(withColophon(
   paginate(
     curatedChapters(manifest.chapters, curation).map((ch) => ({
       key: ch.key, name: ch.name, colour: '', photos: ch.photos.map((p) => ({ id: p.id, width: p.width, height: p.height })),
     })),
     { treatment: curation.layout, blankBefore: curation.blankBefore },
   ),
-).length;
+)).length;
 const pageCheck = checkPages(pageCount, TRIMS[trimId]);
 const layoutInit = { layout: curation.layout ?? {}, blankBefore: curation.blankBefore ?? [], trim: trimId };
 const chapterColour = new Map(manifest.chapters.map((ch) => [ch.key, oklchToHex(ch.oklch)] as const));
@@ -103,7 +103,17 @@ const accent = manifest.chapters[0]
               </label>
               <span class="book-check" id="book-check" data-ok={pageCheck.ok ? '1' : ''}>{pageCheck.message}</span>
               <label class="book-bleed"><input type="checkbox" id="book-bleed" checked /> Bleed</label>
+              {/* Issue #140: the pages that will print soft, before the PDF is made. */}
+              <details class="book-soft" id="book-soft" hidden>
+                <summary id="book-soft-head"></summary>
+                <ul id="book-soft-list"></ul>
+              </details>
               <button type="button" class="book-pdf" id="book-pdf">Make PDF</button>
+              <div class="book-cover">
+                <label class="book-poprow"><span>Spine</span><span><input type="number" id="book-spine" min="0" max="100" step="0.1" inputmode="decimal" aria-label="Spine width in millimetres" /> mm</span></label>
+                <button type="button" class="book-cover-btn" id="book-cover">Cover spread PDF</button>
+                <span class="book-cover-hint">Back, spine and front in one file. Use your printer’s spine width.</span>
+              </div>
             </div>
           </span>
         </div>
@@ -121,6 +131,10 @@ const accent = manifest.chapters[0]
         </div>
         <button type="button" class="book-blank" id="book-blank" aria-pressed="false">Blank before</button>
         <span class="book-pagectl-note" id="book-pagectl-note"></span>
+        <span class="book-ppi" id="book-ppi" hidden>
+          <span id="book-ppi-text"></span>
+          <button type="button" id="book-ppi-fix" hidden></button>
+        </span>
       </div>
       <div class="book-spread-list" id="book-spread-list"></div>
     </section>
@@ -988,7 +1002,7 @@ const accent = manifest.chapters[0]
   // The spread view and the print PDF. Pages come from book-pages.ts, the
   // same pagination /api/book/pdf prints from, read off the list view's DOM
   // so an unsaved reorder or exclusion shows up here straight away.
-  import { TRIMS, checkPages, isTrimId, padToEven, paginate, placements, spreads, type Page, type PageChapter, type Treatment, type TrimId } from '../lib/book-pages';
+  import { TRIMS, checkPages, isTrimId, padToEven, paginate, placements, spreads, type Page, type PageChapter, type Treatment, type TrimId, withColophon, printCheck, printFlagMessage, estimateSpineMM, type PrintFlag } from '../lib/book-pages';
   import { holdToSpeak } from '../lib/voice-note';
 
   // Voice notes (issue #149): the words land in the note for a look, then Save.
@@ -1060,7 +1074,10 @@ const accent = manifest.chapters[0]
     }
     return out;
   }
-  const pages = () => padToEven(paginate(readChapters(), { treatment: state.layout, blankBefore: [...state.blankBefore] }));
+  const pages = () => padToEven(withColophon(paginate(readChapters(), { treatment: state.layout, blankBefore: [...state.blankBefore] })));
+  // Issue #140: photos that print under 240 ppi, by the first photo id of their page.
+  let flags: PrintFlag[] = [];
+  const flagsOn = (page: Page) => (page.kind === 'photo' ? flags.filter((f) => page.photos.some((p) => p.id === f.id)) : []);
 
   const list = document.getElementById('book-chapters');
   const spreadsEl = document.getElementById('book-spreads')!;
@@ -1071,15 +1088,39 @@ const accent = manifest.chapters[0]
   const ctlName = document.getElementById('book-pagectl-name')!;
   const ctlNote = document.getElementById('book-pagectl-note')!;
   const blankBtn = document.getElementById('book-blank')!;
+  const ppiBox = document.getElementById('book-ppi')!;
+  const ppiText = document.getElementById('book-ppi-text')!;
+  const ppiFix = document.getElementById('book-ppi-fix') as HTMLButtonElement;
   let selected: string | null = null; // the first photo id on the selected page
   let current: Page[] = [];
 
+  const softEl = document.getElementById('book-soft');
+  const softHead = document.getElementById('book-soft-head');
+  const softList = document.getElementById('book-soft-list');
+  const spineIn = document.getElementById('book-spine') as HTMLInputElement | null;
   function updateCheck() {
+    const all = pages();
+    flags = printCheck(all, TRIMS[state.trim]);
+    if (spineIn && !spineIn.dataset.touched) spineIn.value = String(estimateSpineMM(all.length));
+    if (softEl && softHead && softList) {
+      softEl.hidden = flags.length === 0;
+      softHead.textContent = `${flags.length} ${flags.length === 1 ? 'photo' : 'photos'} may print soft`;
+      softList.replaceChildren(...flags.map((f) => {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.softPage = String(f.page);
+        b.textContent = `p. ${f.page + 1} · ${names.get(f.id) ?? f.id} · ${f.ppi} ppi${f.fix ? ` → ${f.fix.treatment === 'pair' ? 'two-up' : f.fix.treatment}` : ''}`;
+        li.append(b);
+        return li;
+      }));
+    }
     if (!check) return;
-    const c = checkPages(pages().length, TRIMS[state.trim]);
+    const c = checkPages(all.length, TRIMS[state.trim]);
     check.textContent = c.message;
     check.dataset.ok = c.ok ? '1' : '';
   }
+  spineIn?.addEventListener('input', () => { spineIn.dataset.touched = '1'; });
 
   const pct = (v: number, of: number) => `${(v / of) * 100}%`;
   function pageEl(page: Page | null, number: number | null): HTMLElement {
@@ -1095,6 +1136,12 @@ const accent = manifest.chapters[0]
       t.textContent = page.name;
       t.style.color = inks.get(page.chapterKey) || '#0a0a0a';
       el.append(t);
+    } else if (page.kind === 'colophon') {
+      el.classList.add('bs-blank', 'bs-colophon');
+      const t = document.createElement('span');
+      t.textContent = 'Colophon';
+      el.append(t);
+      el.title = 'Cameras, lenses, dates and places, from the photographs';
     } else if (page.kind === 'blank') {
       el.classList.add('bs-blank');
       if (page.reason === 'even') el.title = 'Added to make an even page count';
@@ -1106,6 +1153,15 @@ const accent = manifest.chapters[0]
       btn.setAttribute('aria-pressed', String(first === selected));
       btn.setAttribute('aria-label', `Page ${number}: ${page.photos.map((p) => names.get(p.id)).join(' and ')}`);
       if (page.note) btn.classList.add('bs-fallback');
+      const soft = flagsOn(page);
+      if (soft.length) {
+        // A quiet mark; the reason is in the page controls once tapped.
+        const mark = document.createElement('span');
+        mark.className = 'bs-soft';
+        mark.textContent = `${Math.min(...soft.map((f) => f.ppi))} ppi`;
+        btn.append(mark);
+        btn.setAttribute('aria-label', `${btn.getAttribute('aria-label')}, may print soft`);
+      }
       for (const pl of placements(page, trim)) {
         const img = document.createElement('img');
         img.src = thumbs.get(pl.id) || '';
@@ -1157,6 +1213,16 @@ const accent = manifest.chapters[0]
     for (const r of ctl.querySelectorAll<HTMLInputElement>('input[name="book-treatment"]')) r.checked = r.value === t;
     blankBtn.setAttribute('aria-pressed', String(state.blankBefore.has(selected)));
     ctlNote.textContent = page.note ?? '';
+    const soft = flagsOn(page)[0];
+    ppiBox.hidden = !soft;
+    if (soft) {
+      ppiText.textContent = printFlagMessage(soft);
+      ppiFix.hidden = !soft.fix;
+      if (soft.fix) {
+        ppiFix.textContent = `Use ${soft.fix.treatment === 'pair' ? 'two-up' : soft.fix.treatment === 'border' ? 'a border' : soft.fix.treatment}`;
+        ppiFix.dataset.treatment = soft.fix.treatment;
+      }
+    }
     for (const b of spreadList.querySelectorAll<HTMLElement>('[data-first]')) b.setAttribute('aria-pressed', String(b.dataset.first === selected));
   }
 
@@ -1188,6 +1254,24 @@ const accent = manifest.chapters[0]
     if (r.value === 'border') delete state.layout[selected];
     else state.layout[selected] = r.value as Treatment;
     change();
+  });
+  ppiFix.addEventListener('click', () => {
+    const t = ppiFix.dataset.treatment as Treatment | undefined;
+    if (!selected || !t) return;
+    if (t === 'border') delete state.layout[selected];
+    else state.layout[selected] = t;
+    change();
+  });
+  // A flagged page in the Print panel: show it in Spreads.
+  softList?.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-soft-page]');
+    if (!b) return;
+    const page = current[Number(b.dataset.softPage)];
+    if (!page || page.kind !== 'photo') return;
+    selected = page.photos[0].id;
+    (document.querySelector('[data-bookview="spreads"]') as HTMLElement | null)?.click();
+    setPrintOpen(false);
+    spreadList.querySelector<HTMLElement>(`[data-first="${selected}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
   blankBtn.addEventListener('click', () => {
     if (!selected) return;
@@ -1286,6 +1370,35 @@ const accent = manifest.chapters[0]
     } finally {
       pdfBtn.disabled = false;
       pdfBtn.textContent = label;
+    }
+  });
+</script>
+
+<script>
+  // The cover spread (issue #140): one page, so a plain request.
+  const coverBtn = document.getElementById('book-cover') as HTMLButtonElement | null;
+  coverBtn?.addEventListener('click', async () => {
+    const status = document.getElementById('book-pdf-status');
+    const trim = (document.getElementById('book-trim') as HTMLSelectElement | null)?.value ?? '';
+    const bleed = (document.getElementById('book-bleed') as HTMLInputElement | null)?.checked ? '1' : '0';
+    const spine = (document.getElementById('book-spine') as HTMLInputElement | null)?.value ?? '';
+    coverBtn.disabled = true;
+    const label = coverBtn.textContent;
+    coverBtn.textContent = 'Building…';
+    try {
+      const data = await fetch(`/api/book/pdf?cover=1&trim=${encodeURIComponent(trim)}&bleed=${bleed}&spine=${encodeURIComponent(spine)}`, { method: 'POST' }).then((r) => r.json());
+      if (!data.ok) throw new Error(data.error || 'The cover could not be built.');
+      const a = document.createElement('a');
+      a.href = data.href;
+      a.textContent = 'Download cover';
+      a.className = 'book-share-link';
+      status?.replaceChildren(a);
+      a.click();
+    } catch (err) {
+      if (status) status.textContent = err instanceof Error ? err.message : String(err);
+    } finally {
+      coverBtn.disabled = false;
+      coverBtn.textContent = label;
     }
   });
 </script>
@@ -1442,6 +1555,34 @@ const accent = manifest.chapters[0]
   .bs-opener > span:not(.bs-num) { font-family: var(--font-display); font-style: italic; font-size: clamp(0.8rem, 2vw, 1.1rem); }
   .bs-fallback::after { content: ''; position: absolute; left: 10%; right: 10%; bottom: 4%; border-bottom: 1.5px dotted #0a0a0a; opacity: 0.6; }
   .bs-num { position: absolute; bottom: 2%; font-family: var(--font-data); font-size: 9px; color: #0a0a0a; opacity: 0.55; }
+  /* Issue #140: quiet, in the page's top corner; the reason is in the controls. */
+  .bs-soft {
+    position: absolute; top: 4%; right: 4%; padding: 1px 5px; border-radius: 999px;
+    font-family: var(--font-data); font-size: 9px; line-height: 1.5; color: #fff; background: rgb(150 70 20 / 0.82);
+  }
+  .bs-colophon > span:not(.bs-num) { font-family: var(--font-display); font-style: italic; font-size: 0.75rem; color: #6b665e; position: absolute; left: 12%; bottom: 14%; }
+  .book-ppi { display: inline-flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--t-caption); color: #e0a060; }
+  .book-ppi[hidden] { display: none; }
+  .book-ppi button {
+    appearance: none; cursor: pointer; min-height: 2rem; padding: 0 0.8rem; border-radius: var(--r-pill);
+    border: 1px solid currentColor; background: none; color: inherit; font: 500 var(--t-caption) var(--font-ui);
+  }
+  .book-soft { font-size: var(--t-caption); color: #e0a060; }
+  .book-soft[hidden] { display: none; }
+  .book-soft summary { cursor: pointer; min-height: 2rem; display: flex; align-items: center; }
+  .book-soft ul { list-style: none; margin: 0; padding: 0; max-height: 11rem; overflow-y: auto; }
+  .book-soft li button {
+    appearance: none; border: 0; background: none; cursor: pointer; padding: 0.25rem 0; width: 100%; text-align: left;
+    font: inherit; font-family: var(--font-data); color: var(--secondary);
+  }
+  .book-soft li button:hover { color: var(--fg); }
+  .book-cover { display: grid; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--separator); }
+  .book-cover input { width: 4.5rem; }
+  .book-cover-btn {
+    appearance: none; cursor: pointer; min-height: 2.25rem; border-radius: var(--r-pill); border: 1px solid var(--rule);
+    background: none; color: var(--fg); font: 500 var(--t-footnote) var(--font-ui);
+  }
+  .book-cover-hint { font-size: var(--t-caption); color: var(--muted); }
   .bs-spread > :first-child .bs-num { left: 4%; }
   .bs-spread > :last-child .bs-num { right: 4%; }
 </style>

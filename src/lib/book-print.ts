@@ -10,7 +10,10 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { readManifest } from './manifest';
 import { readBookCuration, curatedChapters } from './book';
-import { checkPages, DEFAULT_TRIM, padToEven, paginate, placements, TRIMS, type Page, type PageChapter, type Trim, type TrimId } from './book-pages';
+import { checkPages, DEFAULT_TRIM, estimateSpineMM, padToEven, paginate, placements, TRIMS, withColophon, type Page, type PageChapter, type Trim, type TrimId } from './book-pages';
+import { colophonLines, type ColophonPhoto } from './colophon';
+import { readGpsLocations, readPlacedLocations } from './photo-locations';
+import { reverseGeocode } from './scout/geocode';
 import { oklchToHex } from './colour-search';
 import { readableInk } from './color';
 import { PdfPagesWriter } from './pdf-pages';
@@ -28,6 +31,25 @@ export interface BookPlan {
   pages: Page[];
   inkFor: Map<string, string>;
   fileFor: Map<string, string>;
+  /** The colophon's lines, and the cover's year range ("2023–2026"). */
+  colophon: string[];
+  years: string;
+}
+
+export const BOOK_TITLE = 'Colour Archive';
+
+/** Town names for the photos that have a place — the colophon's "In …".
+ *  Cached on disk by geocode.ts, so a second build asks nobody. */
+async function placeNames(ids: string[]): Promise<string[]> {
+  const [placed, gps] = await Promise.all([readPlacedLocations(), readGpsLocations()]);
+  const names: string[] = [];
+  for (const id of ids) {
+    const at = placed[id] ?? gps[id];
+    if (!at) continue;
+    const place = await reverseGeocode(at.lat, at.lon, 10);
+    if (place.kind !== 'point') names.push(place.name);
+  }
+  return names;
 }
 
 /** The book as it stands in book.json, paginated for one trim. */
@@ -47,16 +69,39 @@ export async function planBook(trimId?: TrimId): Promise<BookPlan> {
       photos: ch.photos.map((p) => ({ id: p.id, width: p.width, height: p.height })),
     };
   });
-  const pages = padToEven(paginate(pageChapters, { treatment: curation.layout, blankBefore: curation.blankBefore }));
-  return { trim: TRIMS[id], trimId: id, pages, inkFor, fileFor };
+  const pages = padToEven(withColophon(paginate(pageChapters, { treatment: curation.layout, blankBefore: curation.blankBefore })));
+  const photos = chapters.flatMap((ch) => ch.photos);
+  const colophon = colophonLines(
+    photos.map((p): ColophonPhoto => ({ medium: p.medium, camera: p.exif.camera, lens: p.exif.lens, capturedAt: p.exif.capturedAt })),
+    await placeNames(photos.map((p) => p.id)),
+  );
+  const yearsOf = photos.filter((p) => p.medium === 'digital' && p.exif.capturedAt).map((p) => p.exif.capturedAt!.slice(0, 4)).sort();
+  const years = yearsOf.length ? (yearsOf[0] === yearsOf.at(-1) ? yearsOf[0] : `${yearsOf[0]}–${yearsOf.at(-1)}`) : '';
+  return { trim: TRIMS[id], trimId: id, pages, inkFor, fileFor, colophon, years };
 }
 
 /** One page as a JPEG covering trim plus bleed (bleed 0 when not asked for). */
-export async function renderPage(page: Page, trim: Trim, plan: Pick<BookPlan, 'inkFor' | 'fileFor'>): Promise<{ jpeg: Buffer; w: number; h: number }> {
+export async function renderPage(page: Page, trim: Trim, plan: Pick<BookPlan, 'inkFor' | 'fileFor' | 'colophon'>): Promise<{ jpeg: Buffer; w: number; h: number }> {
   const b = trim.bleedMM;
   const W = px(trim.widthMM + 2 * b);
   const H = px(trim.heightMM + 2 * b);
   const toPx = (mm: number) => px(mm + b);
+
+  if (page.kind === 'colophon') {
+    // Set low on the page, small, in the openers' serif.
+    const short = Math.min(W, H);
+    const size = short * 0.018;
+    const lead = size * 1.6;
+    const x = toPx(Math.min(trim.widthMM, trim.heightMM) * 0.12);
+    const lines = plan.colophon;
+    const y0 = H - toPx(Math.min(trim.widthMM, trim.heightMM) * 0.12) - lead * (lines.length - 1);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+      <rect width="100%" height="100%" fill="${PAPER}"/>
+      <text x="${x}" y="${y0 - lead * 1.6}" fill="#1b1a18" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="${size * 1.3}">${esc(BOOK_TITLE)}</text>
+      ${lines.map((l, i) => `<text x="${x}" y="${y0 + i * lead}" fill="#4a4640" font-family="Georgia, 'Times New Roman', serif" font-size="${size}">${esc(l)}</text>`).join('')}
+    </svg>`;
+    return { jpeg: await sharp(Buffer.from(svg)).flatten({ background: PAPER }).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toBuffer(), w: W, h: H };
+  }
 
   if (page.kind === 'opener') {
     const ink = plan.inkFor.get(page.chapterKey) ?? '#0a0a0a';
@@ -133,4 +178,50 @@ export async function buildBookPdf(
     throw err;
   }
   return { file, name, check: checkPages(plan.pages.length, plan.trim) };
+}
+
+/**
+ * The cover as one spread — back, spine, front — for services that print a
+ * wrap-around cover from its own file (issue #140). The front carries the
+ * title and the years the photographs span; the spine carries them too,
+ * reading top to bottom, when it is wide enough to hold type.
+ */
+export async function buildCoverPdf(opts: { trim?: TrimId; bleed: boolean; spineMM?: number }): Promise<{ file: string; name: string; spineMM: number }> {
+  const plan = await planBook(opts.trim);
+  const t = plan.trim;
+  const b = opts.bleed ? t.bleedMM : 0;
+  const spineMM = opts.spineMM && opts.spineMM > 0 && opts.spineMM < 120 ? opts.spineMM : estimateSpineMM(plan.pages.length);
+  const fullW = t.widthMM * 2 + spineMM;
+  const W = px(fullW + 2 * b), H = px(t.heightMM + 2 * b);
+  const X = (mm: number) => px(mm + b);
+  const short = px(Math.min(t.widthMM, t.heightMM));
+  const ground = '#14120f', ink = '#efebe4';
+  const frontX = X(t.widthMM + spineMM + t.widthMM / 2);
+  const spineX = X(t.widthMM + spineMM / 2);
+  const spineText = spineMM >= 5
+    ? `<text transform="translate(${spineX} ${H / 2}) rotate(90)" text-anchor="middle" dominant-baseline="central" fill="${ink}"
+         font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="${Math.min(px(spineMM) * 0.5, short * 0.04)}">${esc(BOOK_TITLE)}${plan.years ? `  ·  ${esc(plan.years)}` : ''}</text>`
+    : '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+    <rect width="100%" height="100%" fill="${ground}"/>
+    <text x="${frontX}" y="${H / 2}" text-anchor="middle" fill="${ink}" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="${short * 0.09}">${esc(BOOK_TITLE)}</text>
+    ${plan.years ? `<text x="${frontX}" y="${H / 2 + short * 0.08}" text-anchor="middle" fill="${ink}" fill-opacity="0.65" font-family="Georgia, 'Times New Roman', serif" font-size="${short * 0.025}" letter-spacing="${short * 0.004}">${esc(plan.years)}</text>` : ''}
+    ${spineText}
+  </svg>`;
+  const jpeg = await sharp(Buffer.from(svg)).flatten({ background: ground }).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toBuffer();
+  await fs.mkdir(BOOK_PRINT_DIR, { recursive: true });
+  const name = `colour-archive-${plan.trimId}-cover${opts.bleed ? '-bleed' : ''}.pdf`;
+  const file = path.join(BOOK_PRINT_DIR, name);
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  const pdf = await PdfPagesWriter.open(tmp);
+  try {
+    await pdf.addPage(jpeg, W, H, { widthMM: fullW, heightMM: t.heightMM, bleedMM: b });
+    await pdf.close();
+    await fs.rename(tmp, file);
+  } catch (err) {
+    await pdf.abort();
+    await fs.rm(tmp, { force: true });
+    throw err;
+  }
+  return { file, name, spineMM };
 }

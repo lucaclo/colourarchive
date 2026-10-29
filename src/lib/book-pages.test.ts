@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkPages, padToEven, paginate, placements, spreads, TRIMS, type Page, type PageChapter } from './book-pages';
+import { checkPages, padToEven, paginate, placements, ppiOf, printCheck, printFlagMessage, spreads, TRIMS, type Page, type PageChapter, type PagePhoto } from './book-pages';
 
 const ph = (id: string, w = 3, h = 2) => ({ id, width: w, height: h });
 const chapters: PageChapter[] = [
@@ -81,4 +81,38 @@ test('two landscape photos stack on a portrait page and sit side by side on a la
   assert.ok(port[1].box.y > port[0].box.y + port[0].box.h - 1e-9, 'stacked');
   const land = placements({ ...page, photos: [ph('a', 2, 3), ph('b', 2, 3)] }, TRIMS['a4-land']);
   assert.ok(land[1].box.x > land[0].box.x + land[0].box.w - 1e-9, 'side by side');
+});
+
+describe('printCheck (issue #140)', () => {
+  const trim = TRIMS['blurb-land'];
+  const film = { id: 'film', width: 1400, height: 2048 };
+  const big = { id: 'big', width: 6000, height: 4000 };
+  const ch = (photos: PagePhoto[]) => [{ key: 'red', name: 'Red', colour: '#c00', photos }];
+
+  it('flags a small film scan full-bleed and offers the treatment that clears it', () => {
+    const pages = paginate(ch([film, big]), { treatment: { film: 'bleed', big: 'bleed' } });
+    const flags = printCheck(pages, trim);
+    assert.equal(flags.length, 1);
+    const [f] = flags;
+    assert.equal(f.id, 'film');
+    assert.equal(f.treatment, 'bleed');
+    assert.ok(f.ppi < 240);
+    assert.ok(f.fix && f.fix.ppi >= 240);
+    assert.match(printFlagMessage(f), /^Prints at \d+ ppi full-bleed; (with a border|as a pair) it’s \d+\.$/);
+  });
+
+  it('a 24 MP frame prints sharp full-bleed', () => {
+    assert.deepEqual(printCheck(paginate(ch([big]), { treatment: { big: 'bleed' } }), trim), []);
+  });
+
+  it('ppiOf takes the tighter side', () => {
+    assert.equal(Math.round(ppiOf({ id: 'x', width: 3000, height: 3000 }, { x: 0, y: 0, w: 254, h: 127 })), 300);
+  });
+
+  it('says so when no layout clears it', () => {
+    const tiny = { id: 'tiny', width: 500, height: 400 };
+    const [f] = printCheck(paginate(ch([tiny])), trim);
+    assert.equal(f.fix, undefined);
+    assert.match(printFlagMessage(f), /may print soft/);
+  });
 });

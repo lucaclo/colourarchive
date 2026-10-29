@@ -15,7 +15,8 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   try {
-    return json({ ok: true, place: await reverseGeocode(lat, lon) });
+    const zoom = Number(url.searchParams.get('zoom'));
+    return json({ ok: true, place: await reverseGeocode(lat, lon, Number.isInteger(zoom) && zoom >= 3 && zoom <= 18 ? zoom : 16) });
   } catch (err) {
     console.error('[scout/reverse] failed', err);
     return json({ ok: false, error: 'Could not name that point.' }, 500);

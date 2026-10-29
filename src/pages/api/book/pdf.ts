@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { buildBookPdf } from '../../../lib/book-print';
+import { buildBookPdf, buildCoverPdf } from '../../../lib/book-print';
 import { isTrimId } from '../../../lib/book-pages';
 import { BOOK_PRINT_DIR } from '../../../lib/paths';
 
@@ -20,6 +20,16 @@ export const POST: APIRoute = async ({ url }) => {
   const trimParam = url.searchParams.get('trim');
   const trim = isTrimId(trimParam) ? trimParam : undefined;
   const bleed = url.searchParams.get('bleed') === '1';
+  // The cover spread is one page: no progress to stream (issue #140).
+  if (url.searchParams.get('cover') === '1') {
+    try {
+      const { name, spineMM } = await buildCoverPdf({ trim, bleed, spineMM: Number(url.searchParams.get('spine')) || undefined });
+      return new Response(JSON.stringify({ ok: true, href: `/api/book/pdf?file=${encodeURIComponent(name)}`, spineMM }), { headers: { 'content-type': 'application/json' } });
+    } catch (err) {
+      console.error('[book/pdf] cover failed', err);
+      return new Response(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
+    }
+  }
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
