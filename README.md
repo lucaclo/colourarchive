@@ -243,6 +243,14 @@ the sky itself is doing the blocking regardless of the moon, and the core
 planner says so by name rather than leaving a reader to notice the skyglow
 on their own.
 
+### Notes, said aloud
+
+Book's note editor (tap a photo's name) has **Hold to speak**: hold, say why the
+photo matters, let go. The recording is written down on the Mac by a local
+Whisper model (`Xenova/whisper-base.en`, about 75 MB, downloaded the first time)
+and lands in the note to check before **Save**. Nothing leaves the Mac. On a
+touch screen the editor no longer opens the keyboard; tap the field to type.
+
 ### Where your photos were taken
 
 Scout's **Your photos** fold pins the archive's own photographs. Places come

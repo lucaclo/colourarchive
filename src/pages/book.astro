@@ -248,6 +248,12 @@ const accent = manifest.chapters[0]
         <textarea id="book-noteedit-text" placeholder="Note" rows="5"></textarea>
         <p class="book-noteedit-error" id="book-noteedit-error" role="alert" hidden></p>
         <div class="book-noteedit-actions">
+          {/* Issue #149: say it instead of typing it. Written down on the Mac. */}
+          <button type="button" class="ghost book-voice" id="book-noteedit-voice" aria-label="Hold to speak a note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+            <span id="book-noteedit-voice-label">Hold to speak</span>
+          </button>
+          <span class="book-noteedit-spacer"></span>
           <button type="button" class="ghost" id="book-noteedit-cancel">Cancel</button>
           <button type="button" id="book-noteedit-save">Save</button>
         </div>
@@ -431,7 +437,23 @@ const accent = manifest.chapters[0]
      on the dark ground itself. This was the one place that drifted. */
   .book-noteedit-error { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: #e0603a; }
   .book-noteedit-error[hidden] { display: none; }
-  .book-noteedit-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+  .book-noteedit-actions { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .book-noteedit-spacer { flex: 1 1 auto; }
+  .book-noteedit-actions button {
+    appearance: none; cursor: pointer; min-height: 2.25rem; padding: 0 0.95rem; border-radius: var(--r-pill);
+    font: 500 var(--t-footnote) var(--font-ui); border: 1px solid var(--rule); background: none; color: var(--fg);
+    transition: transform 120ms ease-out, border-color var(--dur-fast) var(--ease);
+  }
+  .book-noteedit-actions button:hover { border-color: var(--fg); }
+  .book-noteedit-actions button:active { transform: scale(0.97); }
+  .book-noteedit-actions button:disabled { opacity: 0.5; cursor: default; }
+  #book-noteedit-save { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
+  .book-voice { display: inline-flex; align-items: center; gap: 0.4rem; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .book-voice svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+  .book-voice[data-state='listening'] { color: #e0603a; border-color: #e0603a; }
+  .book-voice[data-state='listening'] svg { animation: book-voice-pulse 1s ease-in-out infinite; }
+  @keyframes book-voice-pulse { 50% { opacity: 0.4; } }
+  @media (prefers-reduced-motion: reduce) { .book-voice[data-state='listening'] svg { animation: none; } }
 
   @media (max-width: 620px) {
     .book-page { padding: calc(env(safe-area-inset-top, 0px) + 3rem) 5vw calc(var(--tabbar-space) + 7rem); }
@@ -896,7 +918,9 @@ const accent = manifest.chapters[0]
     noteEdit.hidden = false;
     requestAnimationFrame(() => {
       noteEdit.classList.add('show');
-      noteEditText.focus();
+      // On a touch screen the keyboard would cover the photo and the voice
+      // button; tap the field to type.
+      if (!matchMedia('(pointer: coarse)').matches) noteEditText.focus();
     });
   }
   function closeNoteEdit() {
@@ -965,6 +989,28 @@ const accent = manifest.chapters[0]
   // same pagination /api/book/pdf prints from, read off the list view's DOM
   // so an unsaved reorder or exclusion shows up here straight away.
   import { TRIMS, checkPages, isTrimId, padToEven, paginate, placements, spreads, type Page, type PageChapter, type Treatment, type TrimId } from '../lib/book-pages';
+  import { holdToSpeak } from '../lib/voice-note';
+
+  // Voice notes (issue #149): the words land in the note for a look, then Save.
+  {
+    const voice = document.getElementById('book-noteedit-voice') as HTMLButtonElement | null;
+    const label = document.getElementById('book-noteedit-voice-label');
+    const text = document.getElementById('book-noteedit-text') as HTMLTextAreaElement | null;
+    const error = document.getElementById('book-noteedit-error');
+    if (voice && label && text && error) {
+      holdToSpeak(
+        voice,
+        (words) => { if (words) text.value = text.value.trim() ? `${text.value.trim()} ${words}` : words; },
+        (state, problem) => {
+          voice.dataset.state = state;
+          label.textContent = state === 'listening' ? 'Listening… let go to stop' : state === 'writing' ? 'Writing it down…' : 'Hold to speak';
+          error.textContent = problem ?? '';
+          error.hidden = !problem;
+        },
+      );
+    }
+  }
+
 
   // Quiet tiles on touch: a first tap on a tile shows its controls, a tap
   // elsewhere hides them again. Pointers get the same through :hover.

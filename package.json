@@ -10,7 +10,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
-    "export:static": "PUBLIC_STATIC=true astro build && echo '\\nStatic archive ready in dist/client — drag that folder onto Netlify Drop (app.netlify.com/drop).'",
+    "export:static": "PUBLIC_STATIC=true astro build && echo '\\nStatic archive ready in dist/client \u2014 drag that folder onto Netlify Drop (app.netlify.com/drop).'",
     "preview": "node ./dist/server/entry.mjs",
     "manifest": "tsx scripts/build-manifest.ts",
     "reanalyze": "tsx scripts/reanalyze.ts",
@@ -117,7 +117,8 @@
       "hardenedRuntime": false,
       "darkModeSupport": true,
       "extendInfo": {
-        "NSLocationWhenInUseUsageDescription": "Scout uses your location to plan light where you are."
+        "NSLocationWhenInUseUsageDescription": "Scout uses your location to plan light where you are.",
+        "NSMicrophoneUsageDescription": "Voice notes are written down on this Mac."
       }
     },
     "dmg": {
