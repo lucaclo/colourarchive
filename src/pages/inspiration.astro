@@ -58,14 +58,18 @@ const clusterGroups: GroupBucket[] = await (async () => {
 // ?match=<archive id>) — resolved here rather than client-side because the
 // photo is not necessarily on this board's own DOM at all, the way a
 // `.cell-match` reference is.
-const matchId = Astro.url.searchParams.get('match');
-let matchArchiveRef: { id: string; full: string; name: string } | null = null;
-if (matchId) {
-  const archive = await readManifest();
-  const photo = archive.chapters.flatMap((c) => c.photos).find((p) => p.id === matchId);
-  if (photo) {
+// Several ids, comma-separated, is "Match my own best" (issue #144): a few
+// of your own photos as the references, from Insights' "Match this chapter's
+// look".
+const matchIds = (Astro.url.searchParams.get('match') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 8);
+const matchArchiveRefs: { id: string; full: string; name: string }[] = [];
+if (matchIds.length) {
+  const all = (await readManifest()).chapters.flatMap((c) => c.photos);
+  for (const id of matchIds) {
+    const photo = all.find((p) => p.id === id);
+    if (!photo) continue;
     const largest = photo.derivatives[photo.derivatives.length - 1];
-    matchArchiveRef = { id: photo.id, full: largest.avif, name: photo.filename };
+    matchArchiveRefs.push({ id: photo.id, full: largest.avif, name: photo.filename });
   }
 }
 // A static echo of the board's own palette — see Layout's `accent` prop.
@@ -203,7 +207,7 @@ const accent = manifest.chapters[0]
     }
   </main>
 
-  <script type="application/json" id="match-archive-data" is:inline set:html={JSON.stringify(matchArchiveRef)} />
+  <script type="application/json" id="match-archive-data" is:inline set:html={JSON.stringify(matchArchiveRefs)} />
 
   <!-- Floating tray: the group of similarly-edited references being built up
        across the board, one "+ group" tap at a time. Only ever visible with
@@ -921,6 +925,7 @@ const accent = manifest.chapters[0]
   }
   :global(.mx-addref-pick:hover) { border-color: var(--fg); }
   :global(.mx-addref-pick img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  :global(.mx-addref-label) { flex-basis: 100%; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); margin-top: 0.3rem; }
   .mx-startcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
   .mx-zone { margin: 0; }
   .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
@@ -2380,34 +2385,60 @@ const accent = manifest.chapters[0]
     void loadAlready(refs.map((r) => r.id));
   });
 
+  // Issue #144: your own photos can be references too ("Match my own best"),
+  // listed after the board's, loaded the first time the strip opens.
+  let archivePicks: { id: string; avif: string; filename: string }[] | null = null;
+  async function loadArchivePicks() {
+    if (archivePicks) return;
+    try {
+      const data = await fetch('/api/photos?all=1').then((r) => r.json());
+      archivePicks = data.ok ? data.photos : [];
+    } catch {
+      archivePicks = [];
+    }
+    renderAddRefStrip();
+  }
+
+  function pickItem(id: string, url: string, name: string): HTMLLIElement {
+    const li = document.createElement('li');
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'mx-addref-pick';
+    pick.dataset.pickId = id;
+    pick.dataset.pickUrl = url;
+    pick.dataset.pickName = name;
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.loading = 'lazy';
+    pick.append(img);
+    li.append(pick);
+    return li;
+  }
+
   function renderAddRefStrip() {
     const chosen = new Set(refs.map((r) => r.id));
     const candidates = [...document.querySelectorAll<HTMLElement>('#board .cell-match')].filter(
       (btn) => !chosen.has(btn.dataset.match || ''),
     );
-    addRefStrip.replaceChildren(
-      ...candidates.map((btn) => {
-        const li = document.createElement('li');
-        const pick = document.createElement('button');
-        pick.type = 'button';
-        pick.className = 'mx-addref-pick';
-        pick.dataset.pickId = btn.dataset.match || '';
-        pick.dataset.pickUrl = btn.dataset.full || '';
-        pick.dataset.pickName = btn.dataset.name || btn.dataset.match || '';
-        pick.innerHTML = `<img src="${esc(btn.dataset.full || '')}" alt="" />`;
-        li.appendChild(pick);
-        return li;
-      }),
-    );
-    addRefToggle.hidden = candidates.length === 0 && refs.length <= 1;
-    addRefToggle.disabled = candidates.length === 0;
-    addRefToggle.textContent = candidates.length
-      ? 'Add another reference'
-      : 'Every reference on the board is already in';
+    const own = (archivePicks ?? []).filter((p) => !chosen.has(p.id));
+    const items = candidates.map((btn) => pickItem(btn.dataset.match || '', btn.dataset.full || '', btn.dataset.name || btn.dataset.match || ''));
+    if (own.length) {
+      const label = document.createElement('li');
+      label.className = 'mx-addref-label';
+      label.textContent = 'Your photos';
+      items.push(label, ...own.map((p) => pickItem(p.id, p.avif, p.filename)));
+    }
+    addRefStrip.replaceChildren(...items);
+    const any = candidates.length + own.length + (archivePicks ? 0 : 1);
+    addRefToggle.hidden = false;
+    addRefToggle.disabled = any === 0;
+    addRefToggle.textContent = any ? 'Add another reference' : 'Every reference is already in';
   }
 
   addRefToggle.addEventListener('click', () => {
     const open = addRefStrip.hidden;
+    if (open) void loadArchivePicks();
     addRefStrip.hidden = !open;
     addRefToggle.setAttribute('aria-expanded', String(open));
   });
@@ -2482,8 +2513,11 @@ const accent = manifest.chapters[0]
   // #match-archive-data, since the photo is not necessarily on this board.
   {
     const raw = document.getElementById('match-archive-data')?.textContent;
-    const ref = raw ? (JSON.parse(raw) as { id: string; full: string; name: string } | null) : null;
-    if (ref) openWorkbenchWithRefs([ref]);
+    const picked = raw ? (JSON.parse(raw) as { id: string; full: string; name: string }[]) : [];
+    // After the rest of this script has run: opening the workbench touches
+    // state declared further down (the working timer), and calling it here
+    // directly threw before it existed, which stopped the whole page's script.
+    if (picked.length) queueMicrotask(() => openWorkbenchWithRefs(picked));
   }
 
   // The group tray lives in the *other* script on this page (`is:inline`,

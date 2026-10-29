@@ -947,6 +947,15 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .insights .gear-body .lbl { color: var(--fg); }
 .insights .gear-body .num { color: var(--muted); margin-left: 0.4rem; }
 .insights .gear-note { color: var(--muted); font-size: 0.85em; line-height: 1.4; }
+/* Issue #144: Your look. Built at runtime, hence here rather than scoped. */
+.ins-drift-sub { margin: -0.4rem 0 0.9rem; font-size: var(--t-caption); color: var(--muted); }
+.ins-drift-ch + .ins-drift-ch { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--separator); }
+.ins-drift-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 0 0 0.5rem; font-size: var(--t-footnote); }
+.ins-drift-head a { color: var(--secondary); font-size: var(--t-caption); text-decoration: underline; text-underline-offset: 2px; }
+.ins-drift-head a:hover { color: var(--fg); }
+.ins-drift ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.ins-drift li { display: grid; grid-template-columns: 48px 1fr; gap: 0.7rem; align-items: center; font-size: var(--t-caption); color: var(--secondary); }
+.ins-drift img { width: 48px; height: 36px; object-fit: cover; border-radius: 2px; background: var(--border); }
 .insights-close {
   position: fixed; top: var(--edge); right: var(--edge); width: var(--hit); height: var(--hit); border-radius: 50%;
   border: 1px solid var(--glass-edge); background: var(--glass-bg); box-shadow: var(--glass-shadow);

@@ -8,11 +8,14 @@ export const prerender = false;
 // reconstructing a past visit (issue #75) is the first of these. Only photos
 // carrying a captured date are offered: without one there is nothing for a
 // picker built around "fill in the date this was taken" to fill in.
-export const GET: APIRoute = async () => {
+// `?all=1` includes the undated ones too, for Style Match's reference picker
+// (issue #144), which is about the look, not the date.
+export const GET: APIRoute = async ({ url }) => {
   try {
+    const all = url.searchParams.get('all') === '1';
     const archive = await readStore();
     const photos = archive
-      .filter((p) => p.exif.capturedAt)
+      .filter((p) => all || p.exif.capturedAt)
       .map((p) => ({
         id: p.id,
         avif: p.derivatives[0]?.avif,
@@ -20,7 +23,7 @@ export const GET: APIRoute = async () => {
         capturedAt: p.exif.capturedAt,
         location: p.exif.location ?? null,
       }))
-      .sort((a, b) => (a.capturedAt! < b.capturedAt! ? 1 : a.capturedAt! > b.capturedAt! ? -1 : 0));
+      .sort((a, b) => ((a.capturedAt ?? '') < (b.capturedAt ?? '') ? 1 : (a.capturedAt ?? '') > (b.capturedAt ?? '') ? -1 : 0));
     return json({ ok: true, photos });
   } catch (err) {
     console.error('[photos] failed', err);

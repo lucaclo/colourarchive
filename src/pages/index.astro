@@ -553,6 +553,16 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
             </ul>
           </section>
 
+          {/* Issue #144: your own look. Fetched on first open (Mac only), since
+              it reads Style Match's measurements of every photo. */}
+          {!STATIC && (
+            <section class="ins-drift" id="ins-drift" hidden>
+              <h3>Your look</h3>
+              <p class="ins-drift-sub">The photos whose grade sits furthest from the rest of their chapter. A hint, not a verdict.</p>
+              <div id="ins-drift-list"></div>
+            </section>
+          )}
+
           {colourGaps.length > 0 && (
             <section>
               <h3>Missing colours</h3>
@@ -2036,7 +2046,51 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       });
     });
     captureFocus(insightsEl, document.getElementById('insights-close'));
+    loadDrift();
   };
+
+  // Issue #144: per chapter, the photos that drift from its grade, and a way
+  // to hand the chapter's own look to Style Match.
+  let driftLoaded = false;
+  async function loadDrift() {
+    const box = document.getElementById('ins-drift');
+    const list = document.getElementById('ins-drift-list');
+    if (!box || !list || driftLoaded) return;
+    driftLoaded = true;
+    try {
+      const data = await fetch('/api/drift').then((r) => r.json());
+      if (!data.ok) return;
+      const chapters = data.chapters.filter((c) => c.drifters.length);
+      list.replaceChildren(...chapters.map((c) => {
+        const block = document.createElement('div');
+        block.className = 'ins-drift-ch';
+        const head = document.createElement('p');
+        head.className = 'ins-drift-head';
+        const name = document.createElement('b');
+        name.textContent = c.name;
+        const match = document.createElement('a');
+        match.href = `/inspiration?match=${c.typical.join(',')}`;
+        match.textContent = 'Match this chapter’s look';
+        match.title = `Style Match, with the ${c.typical.length} photos that carry ${c.name}’s grade best as references`;
+        head.append(name, match);
+        const ul = document.createElement('ul');
+        for (const d of c.drifters) {
+          const li = document.createElement('li');
+          const img = document.createElement('img');
+          img.src = d.thumb || '';
+          img.alt = '';
+          img.loading = 'lazy';
+          const why = document.createElement('span');
+          why.textContent = d.reason;
+          li.append(img, why);
+          ul.append(li);
+        }
+        block.append(head, ul);
+        return block;
+      }));
+      box.hidden = chapters.length === 0;
+    } catch { /* no server: the section stays hidden */ }
+  }
   const closeInsights = () => {
     if (!insightsEl || !insightsOpen()) return;
     insightsEl.classList.remove('show');
