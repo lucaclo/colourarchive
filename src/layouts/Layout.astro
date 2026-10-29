@@ -334,6 +334,28 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
         addEventListener('online', () => showPill('Back online'));
 
         if (!navigator.onLine) showPill('Offline · showing your saved archive', true);
+
+        // Issue #138: served from a Mac on the home network, "offline" is the
+        // wrong word when the Wi-Fi is fine and the Mac isn't answering. The
+        // service worker hands back the saved page either way, so ask the Mac
+        // directly, and say which it is.
+        const fromMac = /\.local$/i.test(location.hostname) || /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(location.hostname);
+        const MAC_AWAY = 'Can’t reach the Mac · it’s asleep, or Colour Archive is closed';
+        let macAway = false;
+        async function checkMac() {
+          if (!fromMac || !navigator.onLine) return;
+          const ctl = new AbortController();
+          const t = setTimeout(() => ctl.abort(), 4000);
+          try {
+            await fetch('/api/lan', { cache: 'no-store', signal: ctl.signal });
+            if (macAway) { macAway = false; showPill('Connected to the Mac'); }
+          } catch {
+            macAway = true;
+            showPill(MAC_AWAY, true);
+          } finally { clearTimeout(t); }
+        }
+        checkMac();
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkMac(); });
       })();
     </script>
   </body>

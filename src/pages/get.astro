@@ -38,6 +38,8 @@ const glyphs: Record<string, string> = {
         <span id="get-btn-label">Install</span>
       </button>
       <p class="get-for" id="get-for" aria-live="polite"></p>
+      {/* Issue #138: inside the Mac app, where the iPad finds it. */}
+      <p class="get-ipad" id="get-ipad" hidden></p>
     </section>
 
     <ol class="get-steps" id="get-steps" hidden></ol>
@@ -67,7 +69,7 @@ const glyphs: Record<string, string> = {
 </Layout>
 
 <script>
-  import { inAppWindow, installPath, installedElsewhere, MAC_DOWNLOAD_URL, OPEN_IN_APP, type InstallPath } from '../lib/install';
+  import { inAppWindow, inMacApp, installPath, installedElsewhere, MAC_DOWNLOAD_URL, OPEN_IN_APP, type InstallPath } from '../lib/install';
 
   // A step is a glyph and a line where **this** is the name of the button.
   type Step = [glyph: string, text: string];
@@ -250,6 +252,24 @@ const glyphs: Record<string, string> = {
     showSteps(path, true);
   });
 
+  // In the Mac app: the address to open on the iPad, or how to switch it on.
+  if (inMacApp()) {
+    const ipad = document.getElementById('get-ipad')!;
+    fetch('/api/lan', { cache: 'no-store' })
+      .then((r) => r.json() as Promise<{ setup: string | null }>)
+      .then(({ setup }) => {
+        if (setup) {
+          const code = document.createElement('b');
+          code.textContent = setup.replace(/\/$/, '');
+          ipad.append('On your iPad, open ', code, ' in Safari. The Mac has to be awake with this app open.');
+        } else {
+          ipad.append('To use it on your iPad, choose ', Object.assign(document.createElement('b'), { textContent: 'Colour Archive › Let My iPad In' }), ' in the menu bar.');
+        }
+        ipad.hidden = false;
+      })
+      .catch(() => {});
+  }
+
   for (const b of document.querySelectorAll<HTMLButtonElement>('.get-other-list button')) {
     b.addEventListener('click', () => {
       for (const o of document.querySelectorAll('.get-other-list button')) o.removeAttribute('aria-pressed');
@@ -304,6 +324,12 @@ const glyphs: Record<string, string> = {
     margin: var(--sp-3) 0 0; min-height: 1.2em;
     font-size: var(--t-footnote); color: var(--muted);
   }
+
+  .get-ipad {
+    margin: var(--sp-4) 0 0; max-width: 26rem; text-align: center;
+    font-size: var(--t-footnote); color: var(--secondary); line-height: 1.5;
+  }
+  .get-ipad b { color: var(--fg); font-weight: 600; word-break: break-all; }
 
   .get-steps {
     list-style: none; margin: var(--sp-7) 0 0; padding: 0;

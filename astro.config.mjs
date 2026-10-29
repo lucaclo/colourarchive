@@ -71,7 +71,9 @@ export default defineConfig({
   // Host header unless its domain is listed here, and then takes every request
   // to be for "localhost" — so the browser's correct Origin looks cross-site
   // and every upload, relabel and removal is refused with a 403.
-  ...(DESKTOP ? { security: { allowedDomains: [{ protocol: 'http', hostname: '127.0.0.1' }] } } : {}),
+  // The second entry is the iPad's way in (issue #138): this Mac's Bonjour
+  // name over HTTPS, served by desktop/server.mjs when "Let My iPad In" is on.
+  ...(DESKTOP ? { security: { allowedDomains: [{ protocol: 'http', hostname: '127.0.0.1' }, { protocol: 'https', hostname: '*.local' }] } } : {}),
   adapter: node({ mode: 'standalone' }),
   // Stamps the build with what it contains, and refuses to finish if a
   // photograph it lists has no file behind it. See src/lib/publish.ts.

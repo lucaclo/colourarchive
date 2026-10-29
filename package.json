@@ -90,6 +90,7 @@
       "desktop/preload.cjs",
       "desktop/start.html",
       "desktop/server.mjs",
+      "desktop/certs.cjs",
       "desktop/build/**/*",
       "public/fonts/**/*",
       "public/match-lr/**/*",

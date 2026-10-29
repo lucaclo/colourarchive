@@ -7,11 +7,15 @@
 // site only serves the files that existed when it was built, so `/img/*` is
 // served from that folder here before anything else sees the request.
 //
-// Listens on 127.0.0.1 only — this is one person's archive on one Mac — and
-// tells main.cjs the port once it is ready, or why it could not start.
+// Listens on 127.0.0.1 for the Mac's own window, and tells main.cjs the port
+// once it is ready, or why it could not start. With "Let My iPad In" switched
+// on (issue #138) it also serves the home network: the archive over HTTPS on
+// LAN_PORT, and a plain-HTTP setup page on LAN_SETUP_PORT that gives the iPad
+// the certificate it needs to trust the first. Nothing else is served there.
 
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -33,6 +37,82 @@ const TYPES = {
 };
 
 const tell = (msg) => process.parentPort?.postMessage(msg);
+
+const LAN_PORT = Number(process.env.LAN_PORT) || 0;
+const LAN_SETUP_PORT = Number(process.env.LAN_SETUP_PORT) || 0;
+const LAN_HOST = process.env.LAN_HOST || '';
+const TLS_KEY = process.env.LAN_TLS_KEY;
+const TLS_CERT = process.env.LAN_TLS_CERT;
+const TLS_CA = process.env.LAN_TLS_CA;
+
+// The setup page, in the archive's plain words. Inline: it has to work before
+// the iPad trusts anything this Mac serves.
+function setupPage() {
+  const archive = `https://${LAN_HOST}:${LAN_PORT}/get`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Colour Archive on this Mac</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1b1a18; --bg: #f6f3ee; --muted: #6d675f; --rule: #d9d3ca; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #efebe4; --bg: #100f0e; --muted: #a39d94; --rule: #34302b; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 34rem; margin: 0 auto; padding: 3rem 1.25rem; }
+  h1 { font: italic 500 2rem/1.1 Georgia, serif; margin: 0 0 1.5rem; }
+  ol { padding-left: 1.3rem; } li { margin: 0 0 0.9rem; }
+  a.btn { display: inline-block; padding: 0.6rem 1.1rem; border-radius: 999px; background: var(--fg); color: var(--bg); text-decoration: none; font-weight: 600; }
+  code { font-size: 0.9em; word-break: break-all; }
+  a { color: inherit; }
+  p.small { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--rule); padding-top: 1rem; margin-top: 2rem; }
+</style></head><body><main>
+<h1>Colour Archive on this Mac</h1>
+<p>Once per iPad or iPhone, so it trusts this Mac:</p>
+<ol>
+  <li><a class="btn" href="/colour-archive.crt">Download the certificate</a><br>Tap <b>Allow</b>, then <b>Close</b>.</li>
+  <li>In <b>Settings</b>, tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
+  <li>In <b>Settings › General › About › Certificate Trust Settings</b>, turn on <b>Colour Archive on ${LAN_HOST.replace(/\.local$/, '')}</b>.</li>
+  <li>Open <a href="${archive}"><code>${archive}</code></a> and add it to your Home Screen.</li>
+</ol>
+<p class="small">The Mac has to be awake with Colour Archive open, on the same Wi-Fi.</p>
+</main></body></html>`;
+}
+
+function serveSetup(req, res) {
+  const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/colour-archive.crt' && TLS_CA) {
+    res.writeHead(200, { 'Content-Type': 'application/x-x509-ca-cert', 'Content-Disposition': 'attachment; filename="Colour Archive.crt"' });
+    return res.end(fs.readFileSync(TLS_CA));
+  }
+  if (url.pathname === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(setupPage());
+  }
+  // Anything else is the archive's, and the archive is only served over HTTPS.
+  res.writeHead(302, { Location: `https://${LAN_HOST}:${LAN_PORT}${url.pathname}${url.search}` }).end();
+}
+
+/** The home-network side. Its failure never takes the Mac's own window down. */
+function listenLan(app) {
+  if (!LAN_PORT || !TLS_KEY || !TLS_CERT) return;
+  const fail = (what) => (err) => {
+    console.warn(`[lan] ${what}:`, err.message);
+    tell({ type: 'lan', ok: false, message: err.code === 'EADDRINUSE' ? `Port ${err.port ?? ''} is in use.` : String(err.message ?? err) });
+  };
+  try {
+    const secure = https.createServer({ key: fs.readFileSync(TLS_KEY), cert: fs.readFileSync(TLS_CERT) }, app);
+    secure.requestTimeout = 0;
+    secure.on('error', fail('archive'));
+    secure.listen(LAN_PORT, '0.0.0.0', () => {
+      console.log(`Colour Archive serving the home network at https://${LAN_HOST}:${LAN_PORT}/`);
+      tell({ type: 'lan', ok: true });
+    });
+    if (LAN_SETUP_PORT) {
+      const setup = http.createServer(serveSetup);
+      setup.on('error', fail('setup page'));
+      setup.listen(LAN_SETUP_PORT, '0.0.0.0');
+    }
+  } catch (err) {
+    fail('certificate')(err);
+  }
+}
 
 function serveImage(req, res, next) {
   const url = new URL(req.url, 'http://x');
@@ -71,7 +151,8 @@ function serveImage(req, res, next) {
 try {
   process.env.ASTRO_NODE_AUTOSTART = 'disabled';
   const { handler } = await import(pathToFileURL(path.join(here, 'build', 'server', 'entry.mjs')).href);
-  const server = http.createServer((req, res) => serveImage(req, res, () => handler(req, res)));
+  const app = (req, res) => serveImage(req, res, () => handler(req, res));
+  const server = http.createServer(app);
   // Uploads of large originals take a while; never cut them off mid-request.
   server.requestTimeout = 0;
   server.on('error', (err) => {
@@ -84,6 +165,7 @@ try {
     // Issue #137: start reading the iCloud inbox now, whether or not a window
     // ever asks for a page. The loop then lives in this server's process.
     http.get(`http://127.0.0.1:${PORT}/api/inbox`, (res) => res.resume()).on('error', (err) => console.warn('[inbox] could not start', err.message));
+    listenLan(app);
   });
 } catch (err) {
   console.error(err);

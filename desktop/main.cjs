@@ -9,7 +9,8 @@
 // Run it from the repository with `npm run app` (after `npm run app:build`);
 // `npm run app:dist` packages it into a .dmg.
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell, utilityProcess } = require('electron');
+const { ensureCerts, localHostName } = require('./certs.cjs');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -27,6 +28,10 @@ if (process.env.COLOUR_ARCHIVE_PROFILE) app.setPath('userData', process.env.COLO
 const PORT = 43210;
 const SPARE_PORTS = [43211, 43212, 43213];
 const START_TIMEOUT_MS = 120_000;
+// The home network (issue #138), fixed for the same reason as PORT: the iPad's
+// home-screen app is its origin, name and port together.
+const LAN_PORT = 43443;
+const LAN_SETUP_PORT = 43280;
 
 const APP_ROOT = app.getAppPath();
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -34,12 +39,18 @@ const MODELS_DIR = path.join(app.getPath('userData'), 'models');
 const LOG_DIR = path.join(os.homedir(), 'Library', 'Logs', 'Colour Archive');
 const LOG_PATH = path.join(LOG_DIR, 'server.log');
 const DEFAULT_DATA = process.env.COLOUR_ARCHIVE_SUGGEST || path.join(app.getPath('pictures'), 'Colour Archive');
+const CERT_DIR = path.join(app.getPath('userData'), 'certs');
 
 let startWindow = null;
 let mainWindow = null;
 let server = null;
 let origin = null;
 let quitting = false;
+// Opened by macOS at login: serve the archive (inbox, iPad) without putting a
+// window in front of whatever else is opening. The Dock icon brings it up.
+let quiet = false;
+// What the home-network side last said: null (off), 'ok', or why it failed.
+let lanState = null;
 
 // --- Settings -----------------------------------------------------------
 
@@ -134,8 +145,31 @@ function logTail(lines = 12) {
   }
 }
 
+/** The iPad's addresses, when "Let My iPad In" is on. */
+function lanAddresses() {
+  const host = `${localHostName()}.local`;
+  return { host, archive: `https://${host}:${LAN_PORT}/`, setup: `http://${host}:${LAN_SETUP_PORT}/` };
+}
+
+/** Environment for the server's home-network side, or {} when it's off. */
+function lanEnv() {
+  if (!readSettings().lan) return {};
+  const { host, archive, setup } = lanAddresses();
+  try {
+    const certs = ensureCerts(CERT_DIR, host);
+    return {
+      LAN_PORT: String(LAN_PORT), LAN_SETUP_PORT: String(LAN_SETUP_PORT), LAN_HOST: host,
+      LAN_TLS_KEY: certs.key, LAN_TLS_CERT: certs.cert, LAN_TLS_CA: certs.ca,
+      COLOUR_ARCHIVE_LAN_URL: archive, COLOUR_ARCHIVE_LAN_SETUP: setup,
+    };
+  } catch (err) {
+    lanState = `The certificate couldn’t be made: ${String(err.stderr ?? err.message).trim()}`;
+    return {};
+  }
+}
+
 async function openArchive(dataDir) {
-  showStart({ kind: 'opening', folder: tidyPath(dataDir) });
+  if (!quiet) showStart({ kind: 'opening', folder: tidyPath(dataDir) });
   try {
     prepareFolder(dataDir);
   } catch (err) {
@@ -155,6 +189,8 @@ async function openArchive(dataDir) {
   log.write(`\n=== ${new Date().toISOString()} opening ${dataDir} on port ${port} ===\n`);
 
   stopServer();
+  lanState = null;
+  const lan = lanEnv();
   const child = utilityProcess.fork(path.join(__dirname, 'server.mjs'), [], {
     cwd: APP_ROOT,
     stdio: 'pipe',
@@ -165,6 +201,7 @@ async function openArchive(dataDir) {
       PORT: String(port),
       COLOUR_ARCHIVE_DATA: dataDir,
       COLOUR_ARCHIVE_MODELS: MODELS_DIR,
+      ...lan,
     },
   });
   server = child;
@@ -177,6 +214,7 @@ async function openArchive(dataDir) {
     settled = true;
     clearTimeout(timer);
     stopServer();
+    quiet = false;
     if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
     showStart({ kind: 'error', title: 'Colour Archive couldn’t start', detail, log: logTail(), canRetry: true, canChoose: true });
   };
@@ -187,9 +225,13 @@ async function openArchive(dataDir) {
       settled = true;
       clearTimeout(timer);
       origin = `http://127.0.0.1:${msg.port}`;
-      openMainWindow();
+      if (quiet) quiet = false; // served; the window waits for the Dock icon
+      else openMainWindow();
     } else if (msg?.type === 'error') {
       fail(msg.message);
+    } else if (msg?.type === 'lan') {
+      lanState = msg.ok ? 'ok' : msg.message;
+      buildMenu();
     }
   });
   child.on('exit', (code) => {
@@ -294,6 +336,7 @@ function start() {
   if (!dataDir) {
     showStart({ kind: 'choose', suggested: tidyPath(DEFAULT_DATA) });
   } else if (!fs.existsSync(dataDir)) {
+    quiet = false;
     // An external drive that isn't plugged in, or a folder moved in Finder.
     showStart({ kind: 'missing', folder: tidyPath(dataDir), canRetry: true, canChoose: true });
   } else {
@@ -307,9 +350,59 @@ ipcMain.handle('show-log', () => shell.openPath(LOG_PATH));
 
 // --- Menu ---------------------------------------------------------------
 
+function setOpenAtLogin(on) {
+  app.setLoginItemSettings({ openAtLogin: on });
+  buildMenu();
+}
+
+function setLan(on) {
+  writeSettings({ ...readSettings(), lan: on });
+  const { dataDir } = readSettings();
+  buildMenu();
+  // The server reads its addresses when it starts, so start it again.
+  if (dataDir && server) openArchive(dataDir);
+  if (on) showIpadSetup();
+}
+
+async function showIpadSetup() {
+  const { setup, archive } = lanAddresses();
+  const owner = mainWindow ?? startWindow ?? undefined;
+  const problem = lanState && lanState !== 'ok' ? `\n\nRight now it can’t: ${lanState}` : '';
+  const { response } = await dialog.showMessageBox(owner, {
+    type: 'info',
+    message: 'Open this on your iPad, in Safari',
+    detail: `${setup}\n\nIt walks through trusting this Mac once, then opens the archive at ${archive}. The Mac has to be awake with Colour Archive open, on the same Wi-Fi.${problem}`,
+    buttons: ['Copy Address', 'Done'],
+    defaultId: 1,
+  });
+  if (response === 0) clipboard.writeText(setup);
+}
+
 function buildMenu() {
+  const lanOn = Boolean(readSettings().lan);
   const template = [
-    { role: 'appMenu' },
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Open at Login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
+        { label: 'Let My iPad In', type: 'checkbox', checked: lanOn, click: (item) => setLan(item.checked) },
+        {
+          label: lanOn && lanState && lanState !== 'ok' ? 'Set Up iPad… (not reachable)' : 'Set Up iPad…',
+          enabled: lanOn,
+          click: () => showIpadSetup(),
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
     {
       label: 'File',
       submenu: [
@@ -368,6 +461,8 @@ if (!app.requestSingleInstanceLock()) {
   app.userAgentFallback = `${app.userAgentFallback} ColourArchiveMac/${app.getVersion()}`;
 
   app.whenReady().then(() => {
+    // Only quiet when there's an archive to serve; a first run still asks.
+    quiet = Boolean(app.getLoginItemSettings().wasOpenedAtLogin && readSettings().dataDir);
     buildMenu();
     start();
   });

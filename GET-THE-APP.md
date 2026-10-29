@@ -21,6 +21,24 @@ It needs a Mac with Apple silicon (M1 or later). The first photos you add downlo
 models for search and Match (about 170 MB) into
 `~/Library/Application Support/Colour Archive/models`, so you need to be online the first time.
 
+### Open at login, and your iPad
+
+Both are in the **Colour Archive** menu, and both are off until you switch them on.
+
+- **Open at Login** adds the app to System Settings › General › Login Items. Opened that
+  way, it starts without a window: the archive is served (and the iCloud inbox read) in the
+  background, and clicking the Dock icon brings the window up.
+- **Let My iPad In** serves the archive to your home network as well, at
+  `https://<your-mac>.local:43443`. The iPad needs a secure address before it will keep the
+  archive offline, so the app makes a certificate for this Mac the first time
+  (in `~/Library/Application Support/Colour Archive/certs`). **Set Up iPad…** shows the
+  address to open on the iPad, `http://<your-mac>.local:43280`, which walks through trusting
+  that certificate once and then opens the archive to add to the Home Screen.
+
+The iPad's home-screen app says **Can’t reach the Mac** when the Mac is asleep or the app is
+closed, and shows the copy it saved. Anyone on the same Wi-Fi who knows the address can open
+the archive while this is on, as they could with `npm run dev`.
+
 ### Your archive folder
 
 ```
@@ -58,9 +76,11 @@ Keychain Access isn't enough for Chrome on this Mac.
 
 ## On your iPad or iPhone
 
-The Mac has to be on, running `npm run dev`, on the same Wi-Fi.
+The Mac has to be awake and on the same Wi-Fi, running the Mac app with **Let My iPad In**
+switched on (see above), or `npm run dev`.
 
-1. In **Safari**, go to **https://&lt;your-mac&gt;.local:4321/get**.
+1. In **Safari**, go to the address **Set Up iPad…** shows on the Mac
+   (`http://<your-mac>.local:43280`), or with the dev server **https://&lt;your-mac&gt;.local:4321/get**.
 2. Tap **Install**, then follow the three steps. An arrow points at the button to tap.
 3. The archive is now on your Home Screen. It opens in its own window, and it keeps
    working offline with the last version it saw.
@@ -73,4 +93,5 @@ The Mac has to be on, running `npm run dev`, on the same Wi-Fi.
 | The Mac app says your archive folder isn't there | Connect the drive it's on, or use **Choose Folder…** to find where it moved. |
 | "localhost refused to connect" in the Chrome shortcut | The development server isn't running. Run `npm run dev`. |
 | Chrome says **Not Secure** | Import the certificate into Chrome, as above. |
-| The iPad can't reach the address | Check the Mac is awake, on the same Wi-Fi, and running `npm run dev`. |
+| The iPad can't reach the address | Check the Mac is awake, on the same Wi-Fi, and running the Mac app with **Let My iPad In** on (or `npm run dev`). |
+| The iPad says the connection isn't private | Trust the certificate: on the iPad, **Settings › General › About › Certificate Trust Settings**. |
