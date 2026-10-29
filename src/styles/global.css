@@ -1436,6 +1436,14 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .topbar { flex-wrap: wrap; row-gap: var(--sp-2); }
   .search-box input { width: 7.5rem; }
 }
+/* Tablet widths (iPad Air landscape is 1180): the three buttons on the right
+   go to icons, each with its name as a tooltip, so the bar fits one row and
+   Insights never runs into the edge. Wrapping stays allowed as the backstop. */
+@media (min-width: 641px) and (max-width: 1320px) {
+  .topbar { flex-wrap: wrap; row-gap: var(--sp-2); }
+  .tb-button .tb-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tb-button { padding: 0; width: var(--hit); justify-content: center; }
+}
 
 /* ===== Mobile ============================================================= */
 @media (max-width: 640px) {

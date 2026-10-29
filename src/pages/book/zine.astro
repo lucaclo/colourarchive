@@ -231,7 +231,9 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     grid-template-rows: auto minmax(18rem, 1fr) auto auto;
     grid-template-areas: 'top top' 'rail stage' 'rail edit' 'foot foot';
     min-height: 100dvh;
-    padding-bottom: var(--tabbar-space);
+    /* The tab bar's height and the safe area, plus room to breathe, so the
+       foot row and the editor's last fields clear the floating bar. */
+    padding-bottom: calc(var(--tabbar-space) + 2.5rem);
   }
   .zn-top {
     grid-area: top; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
