@@ -29,6 +29,9 @@ const pageCheck = checkPages(pageCount, TRIMS[trimId]);
 const layoutInit = { layout: curation.layout ?? {}, blankBefore: curation.blankBefore ?? [], trim: trimId };
 const chapterColour = new Map(manifest.chapters.map((ch) => [ch.key, oklchToHex(ch.oklch)] as const));
 const chapterInk = new Map(manifest.chapters.map((ch) => [ch.key, readableInk(ch.oklch)] as const));
+// Issue #141: the colours the rhythm strip reads, as "L C H".
+const toneOf = (o: { L: number; C: number; H: number }) => `${o.L.toFixed(3)} ${o.C.toFixed(3)} ${o.H.toFixed(1)}`;
+const chapterTone = new Map(manifest.chapters.map((ch) => [ch.key, toneOf(ch.oklch)] as const));
 // Every chapter, for the per-photo "move to chapter" control — includes
 // chapters a move has emptied, so a photo can always be moved back.
 const chapterList = manifest.chapters.map((ch) => ({ key: ch.key, name: ch.name }));
@@ -131,11 +134,22 @@ const accent = manifest.chapters[0]
         </div>
         <button type="button" class="book-blank" id="book-blank" aria-pressed="false">Blank before</button>
         <span class="book-pagectl-note" id="book-pagectl-note"></span>
+        <button type="button" class="book-rhymes-btn" id="book-rhymes-btn" aria-expanded="false" aria-controls="book-rhymes">Rhymes</button>
         <span class="book-ppi" id="book-ppi" hidden>
           <span id="book-ppi-text"></span>
           <button type="button" id="book-ppi-fix" hidden></button>
         </span>
       </div>
+      {/* Issue #141: what the photographs here echo, in shape not colour. A list
+          to place from; the order is never changed for you. */}
+      <div class="book-rhymes" id="book-rhymes" hidden>
+        <p class="book-rhymes-head" id="book-rhymes-head"></p>
+        <ul class="book-rhymes-list" id="book-rhymes-list"></ul>
+      </div>
+      {/* Issue #141: one tick per page, its height the page's lightness, its
+          colour the page's colour; a mark where neighbouring spreads jolt. */}
+      <div class="book-rhythm" id="book-rhythm" role="img" aria-label="The book's rhythm, page by page"></div>
+      <p class="book-rhythm-note" id="book-rhythm-note"></p>
       <div class="book-spread-list" id="book-spread-list"></div>
     </section>
 
@@ -148,7 +162,7 @@ const accent = manifest.chapters[0]
             {chapterList.map((c) => <option value={c.key}>{c.name}</option>)}
           </template>
           {chapters.map((ch) => (
-            <section class="book-chapter" data-chapter={ch.key} data-name={ch.name} data-colour={chapterColour.get(ch.key)} data-ink={chapterInk.get(ch.key)}>
+            <section class="book-chapter" data-chapter={ch.key} data-name={ch.name} data-colour={chapterColour.get(ch.key)} data-ink={chapterInk.get(ch.key)} data-tone={chapterTone.get(ch.key)}>
               <h2 class="book-chapter-head">
                 {ch.name}
                 <span class="book-chapter-count" data-chapter-count={ch.key}>
@@ -175,6 +189,8 @@ const accent = manifest.chapters[0]
                       data-excluded={p.excluded ? '1' : ''}
                       data-dup-group={dup?.key}
                       data-note={notes[p.id] ?? ''}
+                      data-tone={toneOf(p.oklch)}
+                      data-swatch={oklchToHex(p.oklch)}
                       data-w={p.width}
                       data-h={p.height}
                       data-large={(p.derivatives[1] ?? p.derivatives[p.derivatives.length - 1]).avif}
@@ -567,6 +583,15 @@ const accent = manifest.chapters[0]
   // The spread view (module script below) changes page layout through the
   // same dirty/autosave path, and its state rides along with every save.
   window.bookMarkDirty = markDirty;
+  // Issue #141: the spread view's "Place after" moves a cell like a drag does.
+  window.bookPlaceAfter = (cell, after) => {
+    const from = cell.closest('.book-chapter');
+    after.after(cell);
+    updateChapterCount(from);
+    updateChapterCount(cell.closest('.book-chapter'));
+    updateTotalCount();
+    markDirty();
+  };
 
   // --- Exclude toggle, with a one-step undo -------------------------------
   // A misclick during a fast curation pass used to be silent until the
@@ -1003,6 +1028,7 @@ const accent = manifest.chapters[0]
   // same pagination /api/book/pdf prints from, read off the list view's DOM
   // so an unsaved reorder or exclusion shows up here straight away.
   import { TRIMS, checkPages, isTrimId, padToEven, paginate, placements, spreads, type Page, type PageChapter, type Treatment, type TrimId, withColophon, printCheck, printFlagMessage, estimateSpineMM, type PrintFlag } from '../lib/book-pages';
+  import { meanTone, pageTone, pickRhymes, spreadJumps, type Tone } from '../lib/book-rhythm';
   import { holdToSpeak } from '../lib/voice-note';
 
   // Voice notes (issue #149): the words land in the note for a look, then Save.
@@ -1052,6 +1078,7 @@ const accent = manifest.chapters[0]
   const w = window as unknown as {
     bookMarkDirty?: () => void;
     bookLayoutState?: () => unknown;
+    bookPlaceAfter?: (cell: HTMLElement, after: HTMLElement) => void;
   };
   w.bookLayoutState = () => ({ layout: state.layout, blankBefore: [...state.blankBefore], trim: state.trim });
 
@@ -1182,13 +1209,121 @@ const accent = manifest.chapters[0]
     return el;
   }
 
+  // --- Rhythm (issue #141) -------------------------------------------------
+  const parseTone = (s?: string): Tone | undefined => {
+    const [L, C, H] = (s || '').split(' ').map(Number);
+    return Number.isFinite(L) ? { L, C, H } : undefined;
+  };
+  const cellOf = (id: string) => document.querySelector<HTMLElement>(`.book-cell[data-id="${CSS.escape(id)}"]`);
+  const photoTone = (id: string) => parseTone(cellOf(id)?.dataset.tone);
+  const chapterTone = (key: string) => parseTone(document.querySelector<HTMLElement>(`.book-chapter[data-chapter="${CSS.escape(key)}"]`)?.dataset.tone);
+  const toneCss = (t: Tone) => `oklch(${t.L} ${t.C} ${t.H})`;
+  const rhythmEl = document.getElementById('book-rhythm')!;
+  const rhythmNote = document.getElementById('book-rhythm-note')!;
+  function renderRhythm(all: [Page | null, Page | null][]) {
+    const tones = all.map(([l, r]) => [pageTone(l, photoTone, chapterTone), pageTone(r, photoTone, chapterTone)] as const);
+    const jumps = spreadJumps(
+      tones.map(([a, b]) => meanTone([a, b].filter((t): t is Tone => Boolean(t)))),
+      all.map(([l, r]) => l?.kind === 'opener' || r?.kind === 'opener'),
+    );
+    const jumpAfter = new Map(jumps.map((j) => [j.after, j.reason]));
+    rhythmEl.replaceChildren(...tones.map((pair, i) => {
+      const g = document.createElement('button');
+      g.type = 'button';
+      g.className = 'br-spread';
+      g.dataset.spread = String(i);
+      g.title = `Spread ${i + 1}${jumpAfter.has(i - 1) ? ` · ${jumpAfter.get(i - 1)}` : ''}`;
+      if (jumpAfter.has(i - 1)) g.classList.add('br-jump');
+      for (const t of pair) {
+        const tick = document.createElement('span');
+        tick.className = 'br-tick';
+        if (t) { tick.style.height = `${Math.max(6, t.L * 100)}%`; tick.style.background = toneCss(t); }
+        else tick.classList.add('br-paper');
+        g.append(tick);
+      }
+      return g;
+    }));
+    rhythmNote.textContent = jumps.length ? `${jumps.length} ${jumps.length === 1 ? 'place jolts' : 'places jolt'} between spreads, marked above. Tap one to see it.` : 'No hard jolts between spreads.';
+  }
+  rhythmEl.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-spread]');
+    if (!b) return;
+    const row = spreadList.children[Number(b.dataset.spread)] as HTMLElement | undefined;
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row?.classList.add('bs-flash');
+    setTimeout(() => row?.classList.remove('bs-flash'), 1200);
+  });
+
+  // --- Rhymes (issue #141) --------------------------------------------------
+  const rhymesBtn = document.getElementById('book-rhymes-btn') as HTMLButtonElement;
+  const rhymesBox = document.getElementById('book-rhymes')!;
+  const rhymesHead = document.getElementById('book-rhymes-head')!;
+  const rhymesList = document.getElementById('book-rhymes-list')!;
+  let rhymesFor: string | null = null;
+  async function showRhymes() {
+    const page = selectedPage();
+    if (!page) return;
+    rhymesFor = page.photos[0].id;
+    rhymesBox.hidden = false;
+    rhymesBtn.setAttribute('aria-expanded', 'true');
+    rhymesHead.textContent = 'Looking…';
+    rhymesList.replaceChildren();
+    const ask = rhymesFor;
+    try {
+      const q = page.photos.map((p) => `ref=${encodeURIComponent(p.id)}`).join('&');
+      const data = await fetch(`/api/similar?${q}`).then((r) => r.json());
+      if (ask !== rhymesFor) return;
+      if (!data.ok) throw new Error(data.error);
+      const onPage = new Set(page.photos.map((p) => p.id));
+      const inBook = (data.matches as { id: string; avif: string; comp: number; col: number }[])
+        .filter((m) => !onPage.has(m.id) && cellOf(m.id) && cellOf(m.id)!.dataset.excluded !== '1');
+      const rhymes = data.ready ? pickRhymes(inBook) : [];
+      rhymesHead.textContent = rhymes.length
+        ? 'Rhymes: the same shape in another colour. Place one after this page, or leave it.'
+        : data.ready ? 'Nothing in the book echoes this one closely.' : 'Rhymes need the photos analysed first.';
+      rhymesList.replaceChildren(...rhymes.map((m) => {
+        const li = document.createElement('li');
+        const img = document.createElement('img');
+        img.src = m.avif;
+        img.alt = '';
+        const where = document.createElement('span');
+        where.className = 'book-rhymes-where';
+        const at = current.findIndex((p) => p.kind === 'photo' && p.photos.some((x) => x.id === m.id));
+        where.textContent = at >= 0 ? `p. ${at + 1}` : '';
+        const place = document.createElement('button');
+        place.type = 'button';
+        place.textContent = 'Place after';
+        place.addEventListener('click', () => {
+          const cell = cellOf(m.id);
+          const after = cellOf(page.photos[page.photos.length - 1].id);
+          if (!cell || !after || !w.bookPlaceAfter) return;
+          w.bookPlaceAfter(cell, after);
+          render();
+          li.remove();
+        });
+        li.append(img, where, place);
+        return li;
+      }));
+    } catch (err) {
+      rhymesHead.textContent = err instanceof Error ? err.message : 'Rhymes couldn’t be found.';
+    }
+  }
+  function hideRhymes() {
+    rhymesBox.hidden = true;
+    rhymesFor = null;
+    rhymesBtn.setAttribute('aria-expanded', 'false');
+  }
+  rhymesBtn.addEventListener('click', () => { if (rhymesBox.hidden) void showRhymes(); else hideRhymes(); });
+
   function render() {
     current = pages();
     updateCheck();
     if (spreadsEl.hidden) return;
     const frag = document.createDocumentFragment();
     let n = 0;
-    for (const [l, r] of spreads(current)) {
+    const all = spreads(current);
+    renderRhythm(all);
+    for (const [l, r] of all) {
       const row = document.createElement('div');
       row.className = 'bs-spread';
       const ln = l ? ++n : null;
@@ -1207,6 +1342,7 @@ const accent = manifest.chapters[0]
   function syncControls() {
     const page = selectedPage();
     ctl.hidden = !page;
+    if (!page || page.photos[0].id !== rhymesFor) hideRhymes();
     if (!page || !selected) return;
     ctlName.textContent = page.photos.map((p) => names.get(p.id)).join(' + ');
     const t = state.layout[selected] ?? 'border';
@@ -1536,6 +1672,35 @@ const accent = manifest.chapters[0]
   .book-seg { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--fill); }
   .book-seg input { position: absolute; opacity: 0; pointer-events: none; }
   .book-pagectl-note { color: var(--secondary); font-family: var(--font-note); font-style: italic; }
+  .book-rhythm { display: flex; align-items: flex-end; gap: 3px; height: 2.6rem; margin: 0 0 var(--sp-2); overflow-x: auto; scrollbar-width: none; }
+  .br-spread {
+    appearance: none; border: 0; padding: 0; background: none; cursor: pointer; position: relative;
+    display: flex; align-items: flex-end; gap: 1px; height: 100%; flex: 1 0 6px; min-width: 6px;
+  }
+  .br-tick { flex: 1; border-radius: 1px 1px 0 0; min-width: 2px; }
+  .br-tick.br-paper { height: 6%; background: var(--rule); }
+  .br-spread.br-jump::before {
+    content: ''; position: absolute; left: -2px; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; background: #e0a060;
+  }
+  .br-spread:hover .br-tick { filter: brightness(1.15); }
+  .book-rhythm-note { margin: 0 0 var(--sp-5); font-size: var(--t-caption); color: var(--muted); }
+  .bs-flash { outline: 2px solid #e0a060; outline-offset: 6px; transition: outline-color 1s; }
+  .book-rhymes-btn {
+    appearance: none; cursor: pointer; min-height: 2.25rem; padding: 0 0.95rem; border-radius: var(--r-pill);
+    border: 1px solid var(--rule); background: none; color: var(--fg); font: 500 var(--t-footnote) var(--font-ui);
+  }
+  .book-rhymes-btn[aria-expanded='true'] { background: var(--fill-active); }
+  .book-rhymes { margin: calc(var(--sp-3) * -1) 0 var(--sp-5); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--separator); border-radius: var(--r-md); }
+  .book-rhymes[hidden] { display: none; }
+  .book-rhymes-head { margin: 0 0 var(--sp-3); font-size: var(--t-caption); color: var(--secondary); }
+  .book-rhymes-list { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--sp-3); overflow-x: auto; }
+  .book-rhymes-list li { display: grid; gap: 4px; flex: 0 0 auto; width: 7rem; }
+  .book-rhymes-list img { width: 7rem; height: 5rem; object-fit: cover; border-radius: 2px; background: var(--border); }
+  .book-rhymes-where { font-family: var(--font-data); font-size: 10px; color: var(--muted); }
+  .book-rhymes-list button {
+    appearance: none; cursor: pointer; min-height: 1.9rem; border-radius: var(--r-pill); border: 1px solid var(--rule);
+    background: none; color: var(--fg); font: 500 var(--t-caption) var(--font-ui);
+  }
   .book-spread-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: var(--sp-6) var(--sp-5); }
   .bs-spread { display: grid; grid-template-columns: 1fr 1fr; }
   .bs-spread > .bs-page:not(.bs-none) { box-shadow: 0 12px 30px -16px rgb(0 0 0 / 0.7); }
