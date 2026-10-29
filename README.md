@@ -77,6 +77,22 @@ and the CLI both use it.
 6. **Derivatives** — AVIF + WebP at several widths (ICC kept, EXIF stripped),
    plus an inline blurred placeholder. EXIF is preserved into the manifest.
 
+### The iCloud inbox
+
+Export from Lightroom on the iPad into **iCloud Drive › Colour Archive Inbox**
+(Export › Save to Files). Whatever serves the archive, the dev server or the
+Mac app, reads that folder when it starts and every few seconds while it runs.
+Each file goes through the same pipeline as Add & remove once it has stopped
+changing (iCloud downloads arrive in pieces), then leaves the inbox. A photo
+already in the archive is removed without being added twice. Camera RAW stays
+in the folder, and Add & remove says why in a note in the corner. Newest order
+says how many came from the inbox last time.
+
+`src/lib/inbox.ts` does the work; `inbox.json` (git-ignored) records what it
+brought in. `COLOUR_ARCHIVE_INBOX=/some/folder` points it somewhere else, and
+`COLOUR_ARCHIVE_INBOX=off` stops the dev server reading it. The first time,
+macOS asks to let the app or Terminal into iCloud Drive.
+
 ## Style Match
 
 On `/inspiration`, hover any reference and press **◐ match**. Drop in the photo

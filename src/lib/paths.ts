@@ -41,6 +41,9 @@ export const OVERRIDES_PATH = kept('photos.overrides.json');
 // must never publish where someone shoots. See `scout/mine.ts`.
 export const LOCATIONS_PATH = kept('photos.locations.json');
 export const EXPORT_PATH = kept('sequence.json');
+// What the iCloud inbox (inbox.ts) brought in and what it left there. Local to
+// this Mac and git-ignored: file names say when and how often someone shoots.
+export const INBOX_LOG_PATH = kept('inbox.json');
 // The book's own curation — issue #82. Deliberately separate from
 // OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
 // medium, genre) for the whole archive, while this changes only whether and

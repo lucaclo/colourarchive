@@ -81,6 +81,9 @@ try {
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`Colour Archive serving ${DATA} at http://127.0.0.1:${PORT}/`);
     tell({ type: 'ready', port: PORT });
+    // Issue #137: start reading the iCloud inbox now, whether or not a window
+    // ever asks for a page. The loop then lives in this server's process.
+    http.get(`http://127.0.0.1:${PORT}/api/inbox`, (res) => res.resume()).on('error', (err) => console.warn('[inbox] could not start', err.message));
   });
 } catch (err) {
   console.error(err);

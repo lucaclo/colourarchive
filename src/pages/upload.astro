@@ -4,6 +4,7 @@ import { readManifest, readOverrides } from '../lib/manifest';
 import { oklchCss, baseKeyOf } from '../lib/color';
 import { GENRE_LABEL } from '../lib/types';
 import { borderlineOf, chapterChoices } from '../lib/borderline';
+import { readInboxLog, latestImport, INBOX_NAME } from '../lib/inbox';
 
 export const prerender = false;
 const manifest = await readManifest();
@@ -22,6 +23,22 @@ const allPhotos = manifest.chapters.flatMap((c) =>
   }),
 );
 const choices = chapterChoices(overrides.chapters);
+// Issue #137: what the iCloud inbox last brought in (said in Newest order),
+// and anything it had to leave there (a quiet corner note).
+const inbox = await readInboxLog();
+const present = new Set(allPhotos.map((p) => p.id));
+const lastImport = latestImport(inbox.added.filter((a) => present.has(a.id)));
+const importDay = (() => {
+  if (!lastImport) return '';
+  const d = new Date(lastImport.at);
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
+  return days === 0 ? 'today' : days === 1 ? 'yesterday' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+})();
+const inboxNoteTitle = inbox.problem
+  ? 'The inbox can’t be read'
+  : inbox.held.length
+    ? `${inbox.held.length} ${inbox.held.length === 1 ? 'file' : 'files'} left in the inbox`
+    : '';
 const onEdge = allPhotos.filter((p) => p.edge && !p.moved).length;
 // Same static echo as the archive's first chapter — see Layout's `accent`
 // prop. Upload feeds this exact chapter system, so it earns the same tint.
@@ -59,6 +76,20 @@ const accent = manifest.chapters[0]
     </div>
 
     <ul id="results" class="results" aria-live="polite"></ul>
+    {inboxNoteTitle && (
+      <div class="inbox-note" id="inbox-note" role="status">
+        <button class="inbox-note-title" id="inbox-note-toggle" type="button" aria-expanded="false" aria-controls="inbox-note-body">
+          <span class="inbox-note-dot" aria-hidden="true"></span>{inboxNoteTitle}
+        </button>
+        <button class="inbox-note-close" id="inbox-note-close" type="button" aria-label="Dismiss">×</button>
+        <div class="inbox-note-body" id="inbox-note-body" hidden>
+          {inbox.problem
+            ? <p>{inbox.problem}</p>
+            : inbox.held.map((h) => <p><span class="inbox-note-name">{h.name}</span> {h.reason}</p>)}
+          <p class="inbox-note-where">iCloud Drive › {INBOX_NAME}</p>
+        </div>
+      </div>
+    )}
     <div class="drop-veil" id="drop-veil" hidden aria-hidden="true"><p>Drop to add</p></div>
 
     {/* Rendered even when empty, so photos added in this session can drop
@@ -75,6 +106,11 @@ const accent = manifest.chapters[0]
           <button type="button" data-order="newest" aria-pressed="false" data-cmdk="Newest first" data-cmdk-keywords="recent, latest">Newest</button>
         </div>
       </div>
+      {lastImport && (
+        <p class="manage-inbox" id="manage-inbox" data-ids={lastImport.ids.join(' ')} hidden>
+          {lastImport.count} added from the inbox, {importDay}
+        </p>
+      )}
       <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
         <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
@@ -215,6 +251,37 @@ const accent = manifest.chapters[0]
   .manage { margin-top: 0.8rem; }
   .drop:not([hidden]) ~ .manage { margin-top: 4rem; }
   .manage-top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .manage-inbox { margin: 0 0 0.8rem; font-size: var(--t-footnote); color: var(--secondary); }
+  .manage-inbox::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); margin-right: 0.5rem; vertical-align: 0.1em; }
+  :global(.cell.from-inbox)::after { content: ''; position: absolute; top: 6px; left: 6px; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.35); pointer-events: none; }
+
+  /* Issue #137: a note in the bottom-left corner, clear of the tab bar, not a
+     card over the grid — Scout's map note, in the same words. */
+  .inbox-note {
+    position: fixed; z-index: 40; left: 0.9rem; bottom: calc(var(--tabbar-space) + 0.6rem);
+    display: grid; grid-template-columns: auto auto; align-items: center;
+    max-width: min(22rem, calc(100% - 1.8rem)); padding: 0.2rem 0.2rem 0.2rem 0.75rem;
+    background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-edge); border-radius: var(--r-md); box-shadow: var(--glass-shadow); font-family: var(--font-ui);
+  }
+  .inbox-note[hidden] { display: none; }
+  .inbox-note-title {
+    appearance: none; border: 0; background: none; cursor: pointer; padding: 0;
+    display: inline-flex; align-items: center; gap: 0.45rem; min-height: 32px;
+    font: inherit; font-size: var(--t-footnote); color: var(--fg); text-align: left;
+  }
+  .inbox-note-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #d9873f; }
+  .inbox-note-close {
+    appearance: none; border: 0; background: none; cursor: pointer; width: 32px; height: 32px; border-radius: 50%;
+    font: 400 1rem/1 var(--font-ui); color: var(--secondary);
+  }
+  .inbox-note-close:hover, .inbox-note-title:hover { color: var(--fg); }
+  .inbox-note-body { grid-column: 1 / -1; margin: 0.1rem 0.6rem 0.55rem 0; font-size: var(--t-caption); line-height: 1.5; color: var(--secondary); }
+  .inbox-note-body[hidden] { display: none; }
+  .inbox-note-body p { margin: 0 0 0.3rem; }
+  .inbox-note-name { color: var(--fg); word-break: break-all; }
+  .inbox-note-where { color: var(--muted); }
+
   .manage-order { display: inline-flex; gap: 0.15rem; padding: 3px; border-radius: var(--r-pill); background: var(--fill); }
   .manage-order button {
     appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
@@ -853,6 +920,10 @@ const accent = manifest.chapters[0]
       : [...fresh, ...colourOrder.filter((c) => c.isConnected)];
     grid.append(...sorted);
     for (const b of orderBox.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.order === order));
+    const inboxLine = document.getElementById('manage-inbox');
+    if (inboxLine) inboxLine.hidden = order !== 'newest';
+    const fromInbox = new Set((inboxLine?.dataset.ids || '').split(' ').filter(Boolean));
+    for (const c of cells) c.classList.toggle('from-inbox', order === 'newest' && fromInbox.has(c.dataset.id));
     try { localStorage.setItem(ORDER_KEY, order); } catch {}
   }
   orderBox?.addEventListener('click', (e) => {
@@ -860,6 +931,25 @@ const accent = manifest.chapters[0]
     if (b) applyOrder(b.dataset.order);
   });
   try { if (localStorage.getItem(ORDER_KEY) === 'newest') applyOrder('newest'); } catch {}
+
+  // The inbox's corner note: title only, the reason one tap away, and a close
+  // that holds for the visit.
+  {
+    const note = document.getElementById('inbox-note');
+    const body = document.getElementById('inbox-note-body');
+    const toggle = document.getElementById('inbox-note-toggle');
+    const KEY = 'ca-inbox-note-closed';
+    try { if (note && sessionStorage.getItem(KEY) === toggle?.textContent) note.hidden = true; } catch {}
+    toggle?.addEventListener('click', () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+    });
+    document.getElementById('inbox-note-close')?.addEventListener('click', () => {
+      note.hidden = true;
+      try { sessionStorage.setItem(KEY, toggle?.textContent || ''); } catch {}
+    });
+  }
 
   const GENRE_ORDER = ['street', 'portrait', 'landscape', 'architecture'];
   const GENRE_LABELS = { street: 'Street', portrait: 'Portrait', landscape: 'Landscape', architecture: 'Architecture' };

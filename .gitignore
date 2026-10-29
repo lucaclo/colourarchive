@@ -4,6 +4,8 @@ dist
 public/img/*
 !public/img/.gitkeep
 sequence.json
+# What the iCloud inbox imported — local only
+inbox.json
 # Where photos were taken (Scout) — private, never published
 photos.locations.json
 
