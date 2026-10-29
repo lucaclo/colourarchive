@@ -128,6 +128,7 @@ import { nightCameraConstraintsFor } from './night-camera';
 import { isAfterDark, lightWord, morningRows, nextLight, phaseRows, readableTitle } from '../glance';
 import { monthGrid, monthTitle, shiftMonth } from '../calendar';
 import { bearingsFor, skyDays, skyMarks, type SkyEvent, type SkyMark } from '../sky-week';
+import { disablePush, enablePush, isMuted, pushOn, pushSupported, syncPush, testPush, toggleMuted } from './push-client';
 import {
   MINUTES_PER_DAY,
   PHASE_LABEL,
@@ -360,6 +361,11 @@ export async function startScout(): Promise<void> {
    * Mac's server was merely slow. One flag, two known arrangements.
    */
   const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
+  // Issue #142: kept-spot notifications (see renderPush). Declared up here
+  // because renderKept runs during start-up.
+  const PUSH = pushSupported(STATIC);
+  let pushReady = false;
+  let pushEnabled = false;
 
   /* ── Sources and layers ──────────────────────────────────────────────── */
 
@@ -8181,6 +8187,7 @@ export async function startScout(): Promise<void> {
   function storeSpots(): boolean {
     try {
       localStorage.setItem(SPOTS_KEY, JSON.stringify(keptSpots));
+      if (pushReady) syncPush(keptSpots);
       return true;
     } catch {
       return false; // out of quota, or private mode, where nothing is ever kept
@@ -8204,7 +8211,40 @@ export async function startScout(): Promise<void> {
     star.title = kept ? 'Kept. Press to forget' : 'Keep this spot';
   }
 
+  // Issue #142: kept-spot notifications. `pushReady` once this device has
+  // said whether it's subscribed.
+  if (PUSH) void pushOn().then((on) => { pushEnabled = on; pushReady = true; if (on) syncPush(keptSpots); renderKept(); });
+  function renderPush() {
+    const row = $<HTMLElement>('kept-push');
+    row.hidden = !PUSH || !pushReady || keptSpots.length === 0;
+    const btn = $<HTMLButtonElement>('kept-push-btn');
+    btn.textContent = pushEnabled ? 'Telling you when one reads lit' : 'Tell me when one reads lit';
+    btn.setAttribute('aria-pressed', String(pushEnabled));
+    $<HTMLElement>('kept-push-test').hidden = !pushEnabled;
+  }
+  const bellIcon = '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>';
+  on('kept-push-btn', 'click', async () => {
+    const say = $('kept-push-say');
+    say.textContent = '';
+    try {
+      if (pushEnabled) { await disablePush(); pushEnabled = false; }
+      else {
+        const problem = await enablePush(keptSpots);
+        pushEnabled = !problem;
+        say.textContent = problem ?? 'About two hours before golden hour, when the sky reads lit. Never more than once a day a spot.';
+      }
+    } catch (err) {
+      console.warn('[scout] notifications', err);
+      say.textContent = 'This browser wouldn’t turn them on.';
+    }
+    renderKept();
+  });
+  on('kept-push-test', 'click', async () => {
+    $('kept-push-say').textContent = (await testPush()) ? 'Sent. It should arrive in a moment.' : 'The Mac couldn’t send it.';
+  });
+
   function renderKept() {
+    renderPush();
     const box = $<HTMLElement>('kept');
     const list = $<HTMLElement>('kept-list');
     // Only while the field is empty: with a query typed, the results below are
@@ -8262,6 +8302,26 @@ export async function startScout(): Promise<void> {
           .join(' — ');
         body.append(detail);
         li.append(body);
+
+        if (PUSH && pushEnabled) {
+          const bell = document.createElement('button');
+          bell.type = 'button';
+          bell.className = 'bell-spot';
+          bell.dataset.bell = String(index);
+          const on = !isMuted(spot);
+          bell.setAttribute('aria-pressed', String(on));
+          bell.title = on ? `Notifications on for ${spot.name}. Press to mute` : `Muted. Press to hear about ${spot.name}`;
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('aria-hidden', 'true');
+          for (const d of bellIcon.match(/d="[^"]+"/g) ?? []) {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d.slice(3, -1));
+            svg.append(path);
+          }
+          bell.append(svg);
+          li.append(bell);
+        }
 
         const drop = document.createElement('button');
         drop.type = 'button';
@@ -9347,6 +9407,13 @@ export async function startScout(): Promise<void> {
 
   on('kept-list', 'click', (event) => {
     const target = event.target as HTMLElement;
+    const bell = target.closest<HTMLElement>('[data-bell]');
+    if (bell) {
+      const spot = keptSpots[Number(bell.dataset.bell)];
+      if (spot) toggleMuted(spot, keptSpots);
+      renderKept();
+      return;
+    }
     const dropped = target.closest<HTMLElement>('[data-drop]');
     if (dropped) {
       const spot = keptSpots[Number(dropped.dataset.drop)];

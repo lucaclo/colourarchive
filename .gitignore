@@ -6,6 +6,8 @@ public/img/*
 sequence.json
 # What the iCloud inbox imported — local only
 inbox.json
+# Push keys and subscriptions — private
+push.json
 # Where photos were taken (Scout) — private, never published
 photos.locations.json
 photos.gps.json

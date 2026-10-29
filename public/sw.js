@@ -248,3 +248,29 @@ self.addEventListener('message', (event) => {
     await say('WARM_DONE', { full, have });
   })());
 });
+
+// --- Kept-spot notifications (issue #142) ----------------------------------
+// The Mac sends { title, body, url, tag } when a kept spot reads lit
+// (src/lib/push.ts). One tag per spot, so a newer one replaces an older one.
+self.addEventListener('push', (event) => {
+  let data;
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'Colour Archive', {
+    body: data.body || '',
+    tag: data.tag || 'colour-archive',
+    data: { url: data.url || '/scout' },
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/scout', self.location.origin).href;
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const here = open.find((c) => new URL(c.url).origin === self.location.origin);
+    if (here) { await here.focus(); return here.navigate(url); }
+    return self.clients.openWindow(url);
+  })());
+});

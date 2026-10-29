@@ -49,6 +49,9 @@ export const EXPORT_PATH = kept('sequence.json');
 // What the iCloud inbox (inbox.ts) brought in and what it left there. Local to
 // this Mac and git-ignored: file names say when and how often someone shoots.
 export const INBOX_LOG_PATH = kept('inbox.json');
+// Kept-spot notifications (push.ts): this Mac's VAPID keys and each device's
+// subscription and kept spots. Private: the keys sign, the spots are places.
+export const PUSH_PATH = kept('push.json');
 // The book's own curation — issue #82. Deliberately separate from
 // OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
 // medium, genre) for the whole archive, while this changes only whether and

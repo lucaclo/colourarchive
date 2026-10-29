@@ -149,6 +149,12 @@ const accent = '#f0b866';
                  looking for somewhere you have already been. -->
             <div class="kept" id="kept" hidden>
               <p class="kept-head" id="kept-head">Kept spots</p>
+              <!-- Issue #142: a notification when a kept spot reads lit. -->
+              <div class="kept-push" id="kept-push" hidden>
+                <button type="button" class="kept-push-btn" id="kept-push-btn"></button>
+                <button type="button" class="kept-push-test" id="kept-push-test" hidden>Send a test</button>
+                <span class="kept-push-say" id="kept-push-say" role="status"></span>
+              </div>
               <ul class="results" id="kept-list" aria-label="Kept spots"></ul>
               <p class="kept-head" id="recent-head">Recent</p>
               <ul class="results" id="recent-list" aria-label="Recent places"></ul>
@@ -3230,6 +3236,20 @@ const accent = '#f0b866';
     transition: color 140ms;
   }
   .kept :global(.drop-spot:hover) { color: #e0603a; }
+  .kept-push { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; margin: 0 0 0.4rem; font-family: var(--font-ui); }
+  .kept-push[hidden] { display: none; }
+  .kept-push button {
+    appearance: none; cursor: pointer; min-height: 30px; padding: 0 0.75rem; border-radius: var(--r-pill);
+    border: 1px solid var(--rule); background: none; color: var(--fg); font: 500 0.6875rem var(--font-ui);
+  }
+  .kept-push button[aria-pressed='true'] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .kept-push-say { font-size: 0.6875rem; color: var(--muted); }
+  .kept :global(.bell-spot) {
+    flex: none; align-self: center; border: 0; background: transparent; cursor: pointer; color: var(--fg);
+    padding: 0 0.2rem; line-height: 0;
+  }
+  .kept :global(.bell-spot svg) { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+  .kept :global(.bell-spot[aria-pressed='false']) { color: var(--muted); opacity: 0.6; }
 
   /* The star fills once the spot is kept — an outline you have to read is not
      a state you can see at a glance. */

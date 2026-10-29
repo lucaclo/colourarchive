@@ -39,6 +39,16 @@ The iPad's home-screen app says **Can’t reach the Mac** when the Mac is asleep
 closed, and shows the copy it saved. Anyone on the same Wi-Fi who knows the address can open
 the archive while this is on, as they could with `npm run dev`.
 
+### Notifications on the iPad
+
+With **Let My iPad In** on and the archive on the iPad's Home Screen, open Scout, tap the
+search field, and under **Kept spots** tap **Tell me when one reads lit**. About two hours
+before a kept spot's golden hour, if its sunset reads *lit*, the iPad says so in words
+("Porto · Sunset 17:33 · Some high cloud, open to the west"); a lit sunrise is told the
+evening before. Never more than one a day for each spot, and the bell beside a spot mutes
+it. The Mac sends them itself (keys in `.archive/push.json`, no outside service), so it has
+to be awake with the app open. Web push needs iPadOS 16.4 or later.
+
 ### Your archive folder
 
 ```

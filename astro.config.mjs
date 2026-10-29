@@ -23,19 +23,19 @@ try {
 // rendered ahead of time: a prerendered home page would show the build
 // machine's photographs forever.
 const DESKTOP = process.env.COLOUR_ARCHIVE_BUILD === 'desktop';
-// Issue #137: the dev server reads the iCloud inbox from the moment it starts,
-// not from the first page someone happens to open. Loaded through Vite so it
+// Issues #137 and #142: the dev server reads the iCloud inbox and checks
+// kept-spot notifications from the moment it starts, not from the first page
+// someone happens to open. Loaded through Vite so it
 // shares the routes' modules (and their write lock on the photo store). The
 // Mac app's server does the same from desktop/server.mjs.
-function inbox() {
+function background() {
   return {
-    name: 'colour-archive:inbox',
+    name: 'colour-archive:background',
     hooks: {
       'astro:server:start': () => {
-        if (process.env.COLOUR_ARCHIVE_INBOX === 'off') return;
-        viteServer?.ssrLoadModule('/src/lib/inbox.ts')
-          .then((m) => m.startInbox())
-          .catch((err) => console.warn('[inbox] could not start', err));
+        viteServer?.ssrLoadModule('/src/lib/background.ts')
+          .then((m) => m.startBackground())
+          .catch((err) => console.warn('[background] could not start', err));
       },
       'astro:server:setup': ({ server }) => { viteServer = server; },
     },
@@ -77,7 +77,7 @@ export default defineConfig({
   adapter: node({ mode: 'standalone' }),
   // Stamps the build with what it contains, and refuses to finish if a
   // photograph it lists has no file behind it. See src/lib/publish.ts.
-  integrations: [publishStamp(), inbox(), ...(DESKTOP ? [renderOnRequest()] : [])],
+  integrations: [publishStamp(), background(), ...(DESKTOP ? [renderOnRequest()] : [])],
   // host: true binds all interfaces so a phone on the same Wi-Fi can reach it
   // at https://<your-mac-ip>:4321 (home network only).
   server: { port: 4321, host: true },
