@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { readManifest } from '../../../lib/manifest';
-import { readPlacedLocations, setPlacedLocation } from '../../../lib/photo-locations';
+import { readGpsLocations, readPlacedLocations, setPlacedLocation } from '../../../lib/photo-locations';
 import { isLatLon, resolveMinePhotos } from '../../../lib/scout/mine';
 import { oklchCss } from '../../../lib/color';
 
@@ -11,9 +11,9 @@ export const prerender = false;
 // stale on the Mac server the moment a photo was placed.
 export const GET: APIRoute = async () => {
   try {
-    const [manifest, placed] = await Promise.all([readManifest(), readPlacedLocations()]);
+    const [manifest, placed, gps] = await Promise.all([readManifest(), readPlacedLocations(), readGpsLocations()]);
     const chapters = manifest.chapters.map((c) => ({ name: c.name, colour: oklchCss(c.oklch), photos: c.photos }));
-    return json({ ok: true, photos: resolveMinePhotos(chapters, placed) });
+    return json({ ok: true, photos: resolveMinePhotos(chapters, placed, gps) });
   } catch (err) {
     console.error('[scout/mine] read failed', err);
     return json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);

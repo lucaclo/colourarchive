@@ -8,6 +8,8 @@ sequence.json
 inbox.json
 # Where photos were taken (Scout) — private, never published
 photos.locations.json
+photos.gps.json
+photos.places-dismissed.json
 
 # Local Netlify folder
 .netlify

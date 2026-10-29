@@ -40,6 +40,11 @@ export const OVERRIDES_PATH = kept('photos.overrides.json');
 // in OVERRIDES_PATH and git-ignored: the repository is public, and a push
 // must never publish where someone shoots. See `scout/mine.ts`.
 export const LOCATIONS_PATH = kept('photos.locations.json');
+// GPS read from a photo's own EXIF at ingest (issue #139) — just as private,
+// so it is moved here and never kept in photos.json or the manifest.
+export const GPS_PATH = kept('photos.gps.json');
+// Place suggestions turned down with "Not here", so they aren't offered again.
+export const PLACE_DISMISSED_PATH = kept('photos.places-dismissed.json');
 export const EXPORT_PATH = kept('sequence.json');
 // What the iCloud inbox (inbox.ts) brought in and what it left there. Local to
 // this Mac and git-ignored: file names say when and how often someone shoots.

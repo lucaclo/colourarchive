@@ -9,7 +9,11 @@ export interface Exif {
   shutter?: string;
   iso?: number;
   software?: string; // used to spot film scanners (Noritsu, Frontier, VueScan…)
-  location?: { lat: number; lon: number }; // decimal degrees, from GPS EXIF
+  // Decimal degrees, from GPS EXIF. Only ever set in memory during ingest:
+  // it is moved to the private photos.gps.json before the photo is stored,
+  // because photos.json and manifest.json are public (issue #139).
+  location?: { lat: number; lon: number };
+  offset?: string; // the camera's own UTC offset, from OffsetTimeOriginal ("+01:00")
 }
 
 export type Medium = 'film' | 'digital';

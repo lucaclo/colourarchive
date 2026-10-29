@@ -355,6 +355,9 @@ function groupChapters(photos: Photo[], overrides: Overrides): Array<{ key: stri
 
 /** Build the ordered, override-applied manifest from the flat store. */
 export function buildManifest(photos: Photo[], overrides: Overrides): Manifest {
+  // Never publish where a photo was taken (issue #139): ingest already moves
+  // GPS out, and this keeps an older store entry from carrying it through.
+  photos = photos.map((p) => (p.exif?.location ? { ...p, exif: { ...p.exif, location: undefined } } : p));
   const groups = groupChapters(photos, overrides);
 
   const chapters: Chapter[] = groups.map((g) => {

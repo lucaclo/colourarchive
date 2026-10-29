@@ -549,8 +549,19 @@ const accent = '#f0b866';
                       <button class="ghost" id="mine-show" type="button" aria-pressed="true">Shown on map</button>
                       <button class="ghost" id="mine-fit" type="button">Zoom to all</button>
                     </div>
-                    <p class="mine-hint" id="mine-hint">Pick a photo, then tap where you took it.</p>
-                    <ul class="mine-grid" id="mine-grid" aria-label="Photos without a location"></ul>
+                    <!-- Issue #139: places read off the iPhone photos taken at the
+                         same time, one tap to accept. Placing by hand (#149) is
+                         the fallback, folded away until wanted. -->
+                    <div class="mine-suggest" id="mine-suggest" hidden>
+                      <p class="mine-count" id="mine-suggest-head">From your iPhone</p>
+                      <ul class="mine-suggest-list" id="mine-suggest-list"></ul>
+                    </div>
+                    <p class="mine-hint" id="mine-suggest-note" hidden></p>
+                    <details class="mine-hand" id="mine-hand">
+                      <summary>Place by hand</summary>
+                      <p class="mine-hint" id="mine-hint">Pick a photo, then tap where you took it.</p>
+                      <ul class="mine-grid" id="mine-grid" aria-label="Photos without a location"></ul>
+                    </details>
                   </div>
                 </details>
 
@@ -1872,6 +1883,30 @@ const accent = '#f0b866';
     max-height: 13rem;
     overflow-y: auto;
   }
+  .mine-hand > summary {
+    cursor: pointer; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--secondary);
+    min-height: 32px; display: flex; align-items: center;
+  }
+  .mine-hand > summary:hover { color: var(--fg); }
+  .mine-hand[open] > summary { margin-bottom: 0.3rem; }
+  .mine-suggest { display: flex; flex-direction: column; gap: 0.35rem; }
+  .mine-suggest-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.35rem; max-height: 18rem; overflow-y: auto; }
+  .mine-suggest-list :global(li) { display: grid; grid-template-columns: 44px 1fr auto; gap: 0.6rem; align-items: center; }
+  .mine-suggest-list :global(.ms-thumb) {
+    width: 44px; height: 44px; padding: 0; border: 0; border-radius: 6px; overflow: hidden; cursor: pointer;
+    background: var(--border) center / cover no-repeat;
+  }
+  .mine-suggest-list :global(.ms-thumb img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mine-suggest-list :global(.ms-words) { min-width: 0; font-family: var(--font-ui); line-height: 1.3; }
+  .mine-suggest-list :global(.ms-place) { display: block; font-size: var(--t-caption); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mine-suggest-list :global(.ms-gap) { display: block; font-size: 0.6875rem; color: var(--muted); }
+  .mine-suggest-list :global(.ms-actions) { display: flex; gap: 0.25rem; }
+  .mine-suggest-list :global(.ms-actions button) {
+    appearance: none; cursor: pointer; font: 500 var(--t-caption) var(--font-ui); min-height: 32px; padding: 0 0.7rem;
+    border-radius: var(--r-pill); border: 1px solid var(--rule); background: none; color: var(--fg);
+  }
+  .mine-suggest-list :global(.ms-actions button.ms-yes) { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
   /* Built by view/mine.ts, so outside this component's scope. */
   .mine-grid :global(button) {
     display: block;

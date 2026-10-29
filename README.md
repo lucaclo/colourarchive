@@ -243,6 +243,28 @@ the sky itself is doing the blocking regardless of the moon, and the core
 planner says so by name rather than leaving a reader to notice the skyglow
 on their own.
 
+### Where your photos were taken
+
+Scout's **Your photos** fold pins the archive's own photographs. Places come
+three ways, none of them typed:
+
+- **Camera GPS.** Turn on location linkage in Sony's Creators' App (pair the
+  a7C II, then Cameras › Location information linkage) and the camera writes
+  the phone's position into each frame. Lightroom keeps it on export if the
+  export's metadata setting includes location. Ingest moves it into
+  `photos.gps.json`.
+- **From your iPhone.** For a dated digital photo with no place, Scout looks in
+  the Mac's Photos library (read-only) for a located photo taken within twenty
+  minutes, compared in UTC when the camera wrote its time zone, and asks
+  "Taken near Kyoto?" with the time gap. Yes places it; No stops asking. The
+  app (or Terminal, for the dev server) needs **Full Disk Access** for this;
+  the fold says so when it doesn't have it.
+- **By hand**, folded away under *Place by hand*, and **Move** on a pin.
+
+All three stay in git-ignored files (`photos.gps.json`, `photos.locations.json`,
+`photos.places-dismissed.json`). GPS never goes into `photos.json`, the
+manifest or the static build: the repository is public.
+
 ### Scout is published; Inspiration is not
 
 `/scout` prerenders, so it ships in the static build alongside the archive. It

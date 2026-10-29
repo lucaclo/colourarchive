@@ -23,10 +23,11 @@
 
 import type { LatLon } from './geo';
 
-/** Hand placements by photo id. */
-export type PlacedLocations = Record<string, LatLon>;
+/** Hand placements by photo id. `via: 'phone'` marks one accepted from an
+ *  iPhone-photo suggestion (issue #139) rather than tapped onto the map. */
+export type PlacedLocations = Record<string, LatLon & { via?: 'phone' }>;
 
-export type MineSource = 'placed' | 'gps';
+export type MineSource = 'placed' | 'phone' | 'gps';
 
 /** One archive photograph, as Scout needs it. */
 export interface MinePhoto {
@@ -65,7 +66,7 @@ export function parsePlacedLocations(value: unknown): PlacedLocations {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const placed: PlacedLocations = {};
   for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (isLatLon(entry)) placed[id] = { lat: entry.lat, lon: entry.lon };
+    if (isLatLon(entry)) placed[id] = { lat: entry.lat, lon: entry.lon, ...((entry as { via?: unknown }).via === 'phone' ? { via: 'phone' as const } : {}) };
   }
   return placed;
 }
@@ -86,7 +87,7 @@ export interface MineChapterInput {
 }
 
 /** Every archive photo, located where it can be, in manifest order. */
-export function resolveMinePhotos(chapters: MineChapterInput[], placed: PlacedLocations): MinePhoto[] {
+export function resolveMinePhotos(chapters: MineChapterInput[], placed: PlacedLocations, gpsById: PlacedLocations = {}): MinePhoto[] {
   const out: MinePhoto[] = [];
   for (const chapter of chapters) {
     for (const photo of chapter.photos) {
@@ -101,12 +102,12 @@ export function resolveMinePhotos(chapters: MineChapterInput[], placed: PlacedLo
       };
       if (photo.exif.capturedAt) mine.capturedAt = photo.exif.capturedAt;
       const hand = placed[photo.id];
-      const gps = isLatLon(photo.exif.location) ? photo.exif.location : undefined;
+      const gps = gpsById[photo.id] ?? (isLatLon(photo.exif.location) ? photo.exif.location : undefined);
       const at = hand ?? gps;
       if (at) {
         mine.lat = at.lat;
         mine.lon = at.lon;
-        mine.source = hand ? 'placed' : 'gps';
+        mine.source = hand ? (hand.via === 'phone' ? 'phone' : 'placed') : 'gps';
       }
       out.push(mine);
     }

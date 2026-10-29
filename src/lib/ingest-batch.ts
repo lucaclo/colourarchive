@@ -8,6 +8,7 @@ import { looksFor, photoLookRequest, type LookRequest } from './match/looks';
 import { MIN_CHAPTER_PHOTOS, chapterDna, scoreAgainstChapter } from './match/chapter-dna';
 import type { LookSignature } from './match/resemble';
 import { borderlineOf, type Borderline } from './borderline';
+import { addGpsLocations } from './photo-locations';
 
 // One batch of originals into the archive: save each untouched, run the
 // pipeline in parallel, append to the manifest in one write. Shared by the
@@ -86,6 +87,14 @@ export async function ingestBatch(items: IngestItem[]): Promise<IngestResult[]> 
 
   // One store write / rebuild for the whole batch (parallel-safe).
   const photos = processed.map((p) => p.photo).filter((p): p is Photo => Boolean(p));
+  // Issue #139: a photo's GPS goes to the private photos.gps.json, never into
+  // photos.json or the manifest, which are committed to a public repository.
+  const gps: Record<string, { lat: number; lon: number }> = {};
+  for (const p of photos) {
+    if (p.exif.location) gps[p.id] = p.exif.location;
+    delete p.exif.location;
+  }
+  await addGpsLocations(gps);
   if (photos.length > 0) {
     const manifest = await addPhotos(photos);
     attachPlacement(processed, manifest.chapters);

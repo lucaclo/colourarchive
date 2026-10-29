@@ -17,6 +17,7 @@ import { guessMedium, parseExif } from '../src/lib/ingest';
 import { classify, roundOklch } from '../src/lib/color';
 import { readStore, rebuild } from '../src/lib/manifest';
 import { MANIFEST_PATH } from '../src/lib/paths';
+import { addGpsLocations } from '../src/lib/photo-locations';
 
 async function main() {
   const store = await readStore();
@@ -26,6 +27,7 @@ async function main() {
   }
 
   let changed = 0;
+  const gps: Record<string, { lat: number; lon: number }> = {};
   for (const photo of store) {
     let buf: Buffer;
     try {
@@ -43,6 +45,9 @@ async function main() {
     // picked up for photos ingested before they existed.
     const meta = await sharp(buf, { failOn: 'none' }).metadata();
     photo.exif = parseExif(meta.exif);
+    // GPS is private: into photos.gps.json, never the public store (#139).
+    if (photo.exif.location) gps[photo.id] = photo.exif.location;
+    delete photo.exif.location;
     photo.autoMedium = guessMedium(photo.exif);
     photo.medium = photo.autoMedium;
     // Backfill similarity signatures (only if missing — embeddings are stable).
@@ -56,6 +61,7 @@ async function main() {
     }
   }
 
+  await addGpsLocations(gps);
   const STORE_PATH = path.join(path.dirname(MANIFEST_PATH), 'photos.json');
   await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2));
   const manifest = await rebuild();

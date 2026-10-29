@@ -90,3 +90,11 @@ describe('minePinSize', () => {
     assert.ok(minePinSize(6) > 22 && minePinSize(6) < minePinSize(9) && minePinSize(9) < 44);
   });
 });
+
+it('issue #139: private GPS, and placements accepted from the iPhone', () => {
+  const chapter = (photos: MineChapterInput['photos']) => [{ name: 'Red', colour: 'red', photos }];
+  const mk = (id: string): MineChapterInput['photos'][number] => ({ id, placeholder: '', derivatives: [{ width: 320, avif: `/img/${id}.avif` }], exif: {} });
+  const out = resolveMinePhotos(chapter([mk('g'), mk('p'), mk('h')]), { p: { lat: 1, lon: 1, via: 'phone' }, h: { lat: 2, lon: 2 } }, { g: { lat: 3, lon: 3 }, h: { lat: 9, lon: 9 } });
+  assert.deepEqual(out.map((m) => [m.id, m.source, m.lat]), [['g', 'gps', 3], ['p', 'phone', 1], ['h', 'placed', 2]]);
+  assert.deepEqual(parsePlacedLocations({ a: { lat: 1, lon: 2, via: 'phone' }, b: { lat: 1, lon: 2, via: 'x' } }), { a: { lat: 1, lon: 2, via: 'phone' }, b: { lat: 1, lon: 2 } });
+});

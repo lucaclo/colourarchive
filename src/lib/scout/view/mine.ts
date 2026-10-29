@@ -9,7 +9,10 @@
  * circle layer. The source's single layer is invisible and exists only so the
  * source loads — the markers are read off it with `querySourceFeatures`.
  *
- * Placing is two taps: a photo in the fold's grid, then the map. The page's
+ * Places mostly arrive on their own: camera GPS, or a suggestion read off the
+ * iPhone photos taken at the same time (issue #139), one tap to accept.
+ * Placing by hand is the fallback, folded away, and two taps: a photo in the
+ * fold's grid, then the map. The page's
  * click handler asks `consumeClick` first, so while a photo is waiting the tap
  * places it rather than moving the scouting pin.
  *
@@ -72,7 +75,92 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     $<HTMLElement>('fold-mine').hidden = false;
     renderFold();
     refreshSource();
+    void loadSuggestions();
   })();
+
+  /* ── Suggestions from the iPhone (issue #139) ──────────────────────── */
+
+  interface Suggestion { id: string; lat: number; lon: number; gap: string; thumb?: string; placeholder: string; chapter: string }
+  let suggestions: Suggestion[] = [];
+
+  async function loadSuggestions() {
+    const note = $('mine-suggest-note');
+    try {
+      const data = await fetch('/api/scout/places').then((r) => r.json());
+      if (!data.ok) throw new Error(data.error);
+      suggestions = data.suggestions as Suggestion[];
+      note.textContent = data.problem ?? '';
+      note.hidden = !data.problem;
+    } catch (err) {
+      console.warn('[scout] place suggestions unavailable', err);
+      suggestions = [];
+    }
+    renderSuggestions();
+  }
+
+  function renderSuggestions() {
+    const box = $<HTMLElement>('mine-suggest');
+    box.hidden = suggestions.length === 0;
+    $('mine-suggest-head').textContent = `From your iPhone · ${suggestions.length} to check`;
+    $('mine-suggest-list').replaceChildren(...suggestions.map(suggestionItem));
+  }
+
+  function suggestionItem(s: Suggestion): HTMLLIElement {
+    const li = document.createElement('li');
+    const look = document.createElement('button');
+    look.type = 'button';
+    look.className = 'ms-thumb';
+    look.style.backgroundImage = `url("${s.placeholder}")`;
+    look.setAttribute('aria-label', 'Show where on the map');
+    if (s.thumb) look.append(thumb({ thumb: s.thumb } as MinePhoto, true));
+    look.addEventListener('click', () => ports.map()?.flyTo({ center: [s.lon, s.lat], zoom: 14 }));
+    const words = document.createElement('span');
+    words.className = 'ms-words';
+    const place = document.createElement('span');
+    place.className = 'ms-place';
+    place.textContent = 'Taken near here?';
+    const gap = document.createElement('span');
+    gap.className = 'ms-gap';
+    gap.textContent = s.gap;
+    words.append(place, gap);
+    void fetch(`/api/scout/reverse?lat=${s.lat}&lon=${s.lon}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.ok && d.place?.name) place.textContent = `Taken near ${d.place.name}?`; })
+      .catch(() => {});
+    const actions = document.createElement('span');
+    actions.className = 'ms-actions';
+    const yes = action('Yes', () => void answer(s, true));
+    yes.className = 'ms-yes';
+    actions.append(yes, action('No', () => void answer(s, false)));
+    li.append(look, words, actions);
+    return li;
+  }
+
+  async function answer(s: Suggestion, accept: boolean) {
+    suggestions = suggestions.filter((x) => x.id !== s.id);
+    renderSuggestions();
+    const photo = byId(s.id);
+    if (accept && photo) {
+      Object.assign(photo, { lat: s.lat, lon: s.lon, source: 'phone' });
+      if (!shown) shown = true;
+      renderFold();
+      refreshSource();
+    }
+    try {
+      const data = await fetch('/api/scout/places', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(accept ? { id: s.id, action: 'accept', location: { lat: s.lat, lon: s.lon } } : { id: s.id, action: 'dismiss' }),
+      }).then((r) => r.json());
+      if (!data.ok) throw new Error(data.error);
+      if (accept) ports.notify('Photo placed');
+    } catch (err) {
+      suggestions = [s, ...suggestions];
+      renderSuggestions();
+      if (accept) await reload();
+      ports.notify(`Could not save that: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   /* ── The fold ──────────────────────────────────────────────────────── */
 
@@ -90,6 +178,8 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     $('mine-hint').textContent = unplaced.length
       ? 'Tap a photo below, then tap the map where you took it.'
       : 'Every photo has a place. Tap a pin to move one.';
+    // The grid is the fallback now: only shown open while placing.
+    if (placingId) $<HTMLDetailsElement>('mine-hand').open = true;
     const grid = $('mine-grid');
     grid.replaceChildren(
       ...unplaced.map((photo) => {
@@ -318,7 +408,7 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     const when = photo.capturedAt
       ? new Date(photo.capturedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
       : null;
-    caption.textContent = [photo.chapter, when, photo.source === 'gps' ? 'from GPS' : 'placed by hand']
+    caption.textContent = [photo.chapter, when, photo.source === 'gps' ? 'from GPS' : photo.source === 'phone' ? 'from your iPhone' : 'placed by hand']
       .filter(Boolean)
       .join(' · ');
     const actions = document.createElement('div');
@@ -333,7 +423,7 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     );
     // A GPS position is the file's, not a choice made here, so there is no
     // placement to take back.
-    if (photo.source === 'placed') actions.append(action('Remove', () => (popup?.remove(), void save(photo.id, null))));
+    if (photo.source === 'placed' || photo.source === 'phone') actions.append(action('Remove', () => (popup?.remove(), void save(photo.id, null))));
     card.append(caption, actions);
     popup = new ports.lib.Popup({ offset: 28, maxWidth: '260px', closeButton: true, className: 'mine-popup' })
       .setLngLat([photo.lon, photo.lat])

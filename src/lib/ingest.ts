@@ -73,6 +73,7 @@ export function parseExif(raw: Buffer | undefined): Exif {
       shutter: exposure ? formatShutter(exposure as number) : undefined,
       iso: (photo.ISOSpeedRatings as number) || (photo.PhotographicSensitivity as number) || undefined,
       software: (img.Software as string) || undefined,
+      offset: (photo.OffsetTimeOriginal as string) || undefined,
     };
   } catch {
     return {};
