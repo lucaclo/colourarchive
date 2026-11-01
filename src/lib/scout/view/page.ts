@@ -343,6 +343,7 @@ import type { MonthGridView } from './month-grid';
 import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
 import { createGlossary } from './glossary';
+import { kitFocalLengths, readKit, type KitEntry } from '../kit';
 import { distanceUnits, formatHeight, formatLength, readDistanceUnits, setDistanceUnits } from '../units';
 import { createFirstVisitOrientation } from './orientation';
 import { mountSpace, globeFillsView } from './space';
@@ -6658,14 +6659,124 @@ export async function startScout(): Promise<void> {
     for (const sensor of SENSORS) {
       sensorSelect.append(new Option(sensor.label, sensor.key));
     }
-    const focalSelect = $<HTMLSelectElement>('frame-focal');
-    for (const focal of FOCAL_LENGTHS) focalSelect.append(new Option(`${focal}mm`, String(focal)));
     const pixelSelect = $<HTMLSelectElement>('frame-mp');
     for (const mp of RESOLUTIONS) pixelSelect.append(new Option(`${mp} MP`, String(mp)));
-    const apertureSelect = $<HTMLSelectElement>('frame-aperture');
-    for (const a of APERTURES) apertureSelect.append(new Option(`ƒ/${a}`, String(a)));
   }
+
+  /* ── Your kit ─────────────────────────────────────────────────────────────
+     Issue #153. The body and lens pairings the archive was actually shot
+     with, baked into the page at build time (`kit-data`). One tap loads the
+     sensor, resolution, focal length and aperture; a zoom then offers only
+     its own range, and a lens only the apertures it opens to. */
+  const kit: KitEntry[] = (() => {
+    try {
+      return readKit(JSON.parse(document.getElementById('kit-data')?.textContent || '[]'));
+    } catch {
+      return [];
+    }
+  })();
+  const KIT_KEY = 'scout.kit';
+  const kitEntry = () => (lens.kit ? kit.find((k) => k.id === lens.kit) : undefined);
+
+  /** The focal lengths and apertures the loaded lens can do, or all of them. */
+  function fillLensOptions() {
+    const entry = kitEntry();
+    const focals = entry ? kitFocalLengths(entry) : FOCAL_LENGTHS;
+    const focalSelect = $<HTMLSelectElement>('frame-focal');
+    const withCurrent = [...new Set([...focals, ...(entry ? [] : [lens.focalLengthMm])])].sort((a, b) => a - b);
+    focalSelect.replaceChildren(...withCurrent.map((f) => new Option(`${f}mm`, String(f))));
+    focalSelect.value = String(lens.focalLengthMm);
+
+    const widest = entry?.maxAperture ?? 0;
+    const apertures = [...new Set([...(widest && !APERTURES.includes(widest) ? [widest] : []), ...APERTURES.filter((a) => a >= widest), lens.aperture])]
+      .filter((a) => a >= widest)
+      .sort((a, b) => a - b);
+    const apertureSelect = $<HTMLSelectElement>('frame-aperture');
+    apertureSelect.replaceChildren(...apertures.map((a) => new Option(`ƒ/${a}`, String(a))));
+    apertureSelect.value = String(lens.aperture);
+  }
+
+  function renderKit() {
+    const box = $<HTMLElement>('kit');
+    box.hidden = kit.length === 0;
+    box.replaceChildren(
+      ...kit.map((entry) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'kit-chip';
+        b.textContent = entry.label;
+        const sensor = sensorByKey(entry.sensor);
+        b.title = `${entry.body}, ${entry.lens} · ${sensor?.label ?? entry.sensor}, ${entry.megapixels} MP · ${entry.count} photo${entry.count === 1 ? '' : 's'}`;
+        b.setAttribute('aria-pressed', String(entry.id === lens.kit));
+        b.classList.toggle('on', entry.id === lens.kit);
+        b.addEventListener('click', () => loadKit(entry));
+        return b;
+      }),
+    );
+  }
+
+  function loadKit(entry: KitEntry) {
+    lens.kit = entry.id;
+    lens.sensor = entry.sensor;
+    lens.megapixels = entry.megapixels;
+    // A zoom keeps a focal length it can reach; anything else goes to the
+    // one this lens is usually shot at.
+    lens.focalLengthMm =
+      lens.focalLengthMm >= entry.focalMin && lens.focalLengthMm <= entry.focalMax ? lens.focalLengthMm : entry.focalUsual;
+    // Only as wide as the lens opens; a narrower setting is kept.
+    if (lens.aperture < entry.maxAperture) lens.aperture = entry.maxAperture;
+    try {
+      localStorage.setItem(KIT_KEY, entry.id);
+    } catch {
+      /* this visit only */
+    }
+    syncLensControls();
+    frameChanged();
+  }
+
+  /** Every lens control, set from `lens`. */
+  function syncLensControls() {
+    $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
+    $<HTMLSelectElement>('frame-mp').value = String(lens.megapixels);
+    fillLensOptions();
+    renderKit();
+  }
+
+  /** `loadKit` without the redraw, for the restore before anything is drawn. */
+  function loadKitQuietly(entry: KitEntry) {
+    lens.kit = entry.id;
+    lens.sensor = entry.sensor;
+    lens.megapixels = entry.megapixels;
+    lens.focalLengthMm = entry.focalUsual;
+    if (lens.aperture < entry.maxAperture) lens.aperture = entry.maxAperture;
+  }
+
+  /** Changing the body by hand means it is no longer the kit entry. */
+  function leaveKit() {
+    if (!lens.kit) return;
+    lens.kit = undefined;
+    try {
+      localStorage.removeItem(KIT_KEY);
+    } catch {
+      /* nothing kept */
+    }
+    fillLensOptions();
+    renderKit();
+  }
+  fillLensOptions();
   fillFocusOptions();
+  renderKit();
+
+  on('frame-lens-more', 'click', () => openCameraGroup());
+
+  /** Open the sheet's Camera group and bring it into view. */
+  function openCameraGroup(fold?: string) {
+    const group = $<HTMLDetailsElement>('group-camera');
+    group.open = true;
+    if (fold) $<HTMLDetailsElement>(fold).open = true;
+    openSheetTo('full');
+    requestAnimationFrame(() => (fold ? $(fold) : group).scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
 
   function fillFocusOptions() {
     const focusSelect = $<HTMLSelectElement>('frame-focus');
@@ -6708,6 +6819,7 @@ export async function startScout(): Promise<void> {
 
   on('frame-sensor', 'change', (event) => {
     lens.sensor = (event.target as HTMLSelectElement).value;
+    leaveKit();
     frameChanged();
   });
   on('frame-focal', 'change', (event) => {
@@ -6716,6 +6828,7 @@ export async function startScout(): Promise<void> {
   });
   on('frame-mp', 'change', (event) => {
     lens.megapixels = Number((event.target as HTMLSelectElement).value);
+    leaveKit();
     frameChanged();
   });
   on('frame-aperture', 'change', (event) => {
@@ -10127,10 +10240,18 @@ export async function startScout(): Promise<void> {
     $<HTMLInputElement>('slab-height').value = String(slab.heightM);
     $('slab-out').textContent = formatHeight(slab.heightM);
 
-    $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
-    $<HTMLSelectElement>('frame-focal').value = String(lens.focalLengthMm);
-    $<HTMLSelectElement>('frame-mp').value = String(lens.megapixels);
-    $<HTMLSelectElement>('frame-aperture').value = String(lens.aperture);
+    // A fresh tab starts on the kit entry last chosen on this device; a
+    // session that already has a lens keeps its own.
+    if (!saved.lens) {
+      try {
+        const last = kit.find((k) => k.id === localStorage.getItem(KIT_KEY));
+        if (last) loadKitQuietly(last);
+      } catch {
+        /* no storage */
+      }
+    }
+    if (lens.kit && !kitEntry()) lens.kit = undefined;
+    syncLensControls();
     $<HTMLSelectElement>('frame-focus').value = String(lens.focusDistanceM);
     $<HTMLInputElement>('frame-bearing').value = String(lens.bearing);
     $<HTMLInputElement>('frame-tilt').value = String(lens.tiltDeg);
@@ -10261,6 +10382,9 @@ export async function startScout(): Promise<void> {
      publishes nothing. */
   const stage = document.querySelector<HTMLElement>('.scout-stage');
   const dock = document.getElementById('dock');
+  /** Raise the sheet (or show the sidebar) so a section opened from
+   *  elsewhere — the Layers panel, ⌘K, a link — can actually be seen. */
+  let openSheetTo: (height: 'half' | 'full') => void = () => {};
   if (stage && dock) {
     type Detent = 'peek' | 'half' | 'full';
     const order: Detent[] = ['peek', 'half', 'full'];
@@ -10480,6 +10604,13 @@ export async function startScout(): Promise<void> {
     });
     setDetent('peek');
     applySidebar();
+    openSheetTo = (height) => {
+      if (wideQuery.matches) {
+        if (sidebarHidden) toggleSidebar();
+      } else if (order.indexOf(detent) < order.indexOf(height)) {
+        setDetent(height);
+      }
+    };
   }
 
   /* ── Saying that the row runs on ────────────────────────────────────────

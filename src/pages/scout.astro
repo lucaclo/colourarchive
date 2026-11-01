@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { readManifest } from '../lib/manifest';
 import { findColourGaps } from '../lib/gaps';
 import { GLOSSARY, GLOSSARY_GROUPS, glossaryEntry } from '../lib/scout/glossary';
+import { kitFromPhotos } from '../lib/scout/kit';
 
 // Prerendered, so /scout ships in the static publish alongside the archive.
 // Nothing above this line reads anything server-side: the page is an empty shell
@@ -15,7 +16,20 @@ export const prerender = true;
 // The one server-side read on this page (see the note over `#gap-data`
 // below): which hue anchors the archive is missing, baked at build/request
 // time from the manifest the same way `index.astro` bakes its chapters.
-const colourGaps = findColourGaps((await readManifest()).chapters);
+const manifest = await readManifest();
+const colourGaps = findColourGaps(manifest.chapters);
+
+// Issue #153: the bodies and lenses the archive was shot with, from its EXIF.
+const kit = kitFromPhotos(
+  manifest.chapters.flatMap((c) => c.photos).map((p) => ({
+    medium: p.medium,
+    camera: p.exif.camera,
+    lens: p.exif.lens,
+    focalLength: p.exif.focalLength,
+    width: p.width,
+    height: p.height,
+  })),
+);
 
 // Every other page seeds --accent from its own real colour data (a chapter's
 // OKLCH hue) — this page's equivalent is #f0b866, the warm amber its sun
@@ -399,6 +413,89 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
               <!-- Everything else, in three sets and a footnote, so the panel has
                    one level of folding to scan rather than thirteen rows. -->
+              <!-- ── Camera ─────────────────────────────────────────────────────
+                   The body, the lens and what they make of the scene: your own
+                   kit read off the archive (issue #153), depth of field, field of
+                   view, a focus stack, and the two calculators that need no map.
+                   Where the frame points stays with the frame, in Layers. -->
+              <details class="group" id="group-camera">
+                <summary>Camera</summary>
+                <div class="kit" id="kit" role="group" aria-label="Your kit" hidden></div>
+                <div class="lensbox">
+                  <div class="frame-row">
+                    <label class="frame-field" for="frame-sensor"><span>Sensor</span>
+                      <select id="frame-sensor"></select>
+                    </label>
+                    <label class="frame-field" for="frame-focal"><span>Focal length</span>
+                      <select id="frame-focal"></select>
+                    </label>
+                  </div>
+                  <div class="frame-row">
+                    <!-- The pixels are not part of the frame; they decide the
+                         pixel-sharp circle of confusion and the night's shutter
+                         limit. -->
+                    <label class="frame-field" for="frame-mp"><span>Resolution</span>
+                      <select id="frame-mp"></select>
+                    </label>
+                    <label class="frame-field" for="frame-aperture"><span>Aperture</span>
+                      <select id="frame-aperture"></select>
+                    </label>
+                  </div>
+                </div>
+
+                <details class="fold" id="fold-dof">
+                  <summary>Depth of field</summary>
+                  <div class="frame-row">
+                    <label class="frame-field" for="frame-focus"><span>Focus distance</span>
+                      <select id="frame-focus"></select>
+                    </label>
+                  </div>
+                  <p class="slab-note" id="frame-dof">—</p>
+                </details>
+
+                <details class="fold" id="fold-nd">
+                  <summary>Long exposure</summary>
+                  <div class="slab">
+                    <div class="frame-row">
+                      <label class="frame-field" for="nd-base"><span>Base shutter</span>
+                        <select id="nd-base"></select>
+                      </label>
+                      <label class="frame-field" for="nd-filter"><span>ND filter</span>
+                        <select id="nd-filter"></select>
+                      </label>
+                    </div>
+                    <p class="slab-note" id="nd-result">—</p>
+                    <button class="wide" id="nd-start" type="button">Start countdown</button>
+                    <p class="nd-countdown" id="nd-countdown" hidden>—</p>
+                  </div>
+                </details>
+
+                <details class="fold" id="fold-timelapse">
+                  <summary>Time-lapse</summary>
+                  <div class="slab">
+                    <label class="slab-row" for="tl-length">
+                      <span>Clip length</span>
+                      <output id="tl-length-out">10 s</output>
+                    </label>
+                    <input id="tl-length" type="range" min="1" max="60" step="1" value="10" />
+                    <div class="frame-row">
+                      <label class="frame-field" for="tl-fps"><span>Frame rate</span>
+                        <select id="tl-fps"></select>
+                      </label>
+                      <label class="frame-field" for="tl-interval"><span>Shooting interval</span>
+                        <select id="tl-interval"></select>
+                      </label>
+                    </div>
+                    <label class="slab-row" for="tl-photosize">
+                      <span>File size per photo</span>
+                      <output id="tl-photosize-out">30 MB</output>
+                    </label>
+                    <input id="tl-photosize" type="range" min="5" max="100" step="5" value="30" />
+                    <p class="slab-note" id="tl-result">—</p>
+                  </div>
+                </details>
+              </details>
+
               <details class="group" id="group-night">
                 <summary>Night sky</summary>
                 <details class="fold" id="fold-twilight">
@@ -885,22 +982,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
              picture, which no bearing readout can tell you without a focal
              length. -->
         <div class="slab" id="framebox" hidden>
-          <div class="frame-row">
-            <label class="frame-field" for="frame-sensor"><span>Sensor</span>
-              <select id="frame-sensor"></select>
-            </label>
-            <label class="frame-field" for="frame-focal"><span>Lens</span>
-              <select id="frame-focal"></select>
-            </label>
-          </div>
-          <!-- Not part of the frame at all — the rectangle is the same however
-               finely it is sampled. It is here because it belongs to the body,
-               and it is the one number the night's shutter limit turns on. -->
-          <div class="frame-row">
-            <label class="frame-field" for="frame-mp"><span>Sensor pixels</span>
-              <select id="frame-mp"></select>
-            </label>
-          </div>
           <div class="seg seg-wide" id="frameorient">
             <button type="button" data-orient="landscape" class="on">Landscape</button>
             <button type="button" data-orient="portrait">Portrait</button>
@@ -922,7 +1003,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                  will be at the best moment of the night rather than at now. -->
             <button class="chip chip-step" id="aim-core" type="button">At the core</button>
           </div>
-          <p class="slab-note" id="frame-lens">—</p>
+          <div class="frame-lensrow">
+            <p class="slab-note" id="frame-lens">—</p>
+            <button class="frame-lens-more" id="frame-lens-more" type="button" data-cmdk="Camera and lens" data-cmdk-keywords="kit, depth of field, focus, aperture, sensor" data-cmdk-always>Lens and focus</button>
+          </div>
 
           <!-- Issue #72: the same aim/tilt geometry, drawn on the phone's own
                camera feed instead of the map. Live compass and tilt replace
@@ -930,19 +1014,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                for why — and only the sensor/focal length here still applies. -->
           <button class="chip chip-step" id="ar-open" type="button">Live camera view</button>
 
-          <!-- Depth of field: the same rectangle from `frame.ts`, asked what is
-               sharp in it rather than what is in it. Aperture and focus distance
-               belong to this exposure and not to the lens, but there is nowhere
-               else on the page for them to live. -->
-          <div class="frame-row">
-            <label class="frame-field" for="frame-aperture"><span>Aperture</span>
-              <select id="frame-aperture"></select>
-            </label>
-            <label class="frame-field" for="frame-focus"><span>Focus distance</span>
-              <select id="frame-focus"></select>
-            </label>
-          </div>
-          <p class="slab-note" id="frame-dof">—</p>
         </div>
 
         <!-- Can I see it from here? Bare earth only, and it says so. -->
@@ -964,50 +1035,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
           <p class="slab-note">Drag the slab on the map.</p>
         </div>
 
-        <!-- These two calculators do not touch the map at all — no coordinate,
-             no sun. Kept alongside the ones that do because there is nowhere
-             else on the page for them to live. -->
-        <details class="fold" id="fold-nd">
-          <summary>Long exposure</summary>
-          <div class="slab">
-            <div class="frame-row">
-              <label class="frame-field" for="nd-base"><span>Base shutter</span>
-                <select id="nd-base"></select>
-              </label>
-              <label class="frame-field" for="nd-filter"><span>ND filter</span>
-                <select id="nd-filter"></select>
-              </label>
-            </div>
-            <p class="slab-note" id="nd-result">—</p>
-            <button class="wide" id="nd-start" type="button">Start countdown</button>
-            <p class="nd-countdown" id="nd-countdown" hidden>—</p>
-          </div>
-        </details>
-
-        <details class="fold" id="fold-timelapse">
-          <summary>Time-lapse</summary>
-          <div class="slab">
-            <label class="slab-row" for="tl-length">
-              <span>Clip length</span>
-              <output id="tl-length-out">10 s</output>
-            </label>
-            <input id="tl-length" type="range" min="1" max="60" step="1" value="10" />
-            <div class="frame-row">
-              <label class="frame-field" for="tl-fps"><span>Frame rate</span>
-                <select id="tl-fps"></select>
-              </label>
-              <label class="frame-field" for="tl-interval"><span>Shooting interval</span>
-                <select id="tl-interval"></select>
-              </label>
-            </div>
-            <label class="slab-row" for="tl-photosize">
-              <span>File size per photo</span>
-              <output id="tl-photosize-out">30 MB</output>
-            </label>
-            <input id="tl-photosize" type="range" min="5" max="100" step="5" value="30" />
-            <p class="slab-note" id="tl-result">—</p>
-          </div>
-        </details>
 
         <!-- ── A light sweep, exported ───────────────────────────────────
              Issue #65: the dome and the Play scrubber already draw every
@@ -1128,6 +1155,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
            photographs, but the archive's own colour coverage is a fact about
            the archive, not about wherever the map happens to be pointed. -->
       <script type="application/json" id="gap-data" is:inline set:html={JSON.stringify(colourGaps)} />
+      <script type="application/json" id="kit-data" is:inline set:html={JSON.stringify(kit)} />
     </div>
   </main>
 </Layout>
@@ -3180,7 +3208,44 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border: 1px solid var(--border);
     border-radius: 5px;
   }
-  .frame-aims { display: flex; gap: 0.3rem; margin-top: 0.5rem; }
+  /* Your kit: the pairings you shoot, as words to tap. */
+  .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }
+  .kit[hidden] { display: none; }
+  .kit :global(.kit-chip) {
+    min-height: 32px;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--fg) 22%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--secondary);
+    font-family: var(--font-ui);
+    font-size: var(--t-caption);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease), transform 110ms ease-out;
+  }
+  .kit :global(.kit-chip:active) { transform: scale(0.96); }
+  .kit :global(.kit-chip:focus-visible) { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .kit :global(.kit-chip:hover) { color: var(--fg); border-color: color-mix(in oklab, var(--fg) 45%, transparent); }
+  .kit :global(.kit-chip.on) { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+  .lensbox { margin-bottom: 0.2rem; }
+  .frame-aims { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+  .frame-lensrow { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin: 0.35rem 0 0.4rem; }
+  .frame-lensrow .slab-note { margin: 0; }
+  .frame-lens-more {
+    flex: none;
+    padding: 0.3rem 0;
+    border: 0;
+    background: none;
+    font-family: var(--font-note);
+    font-style: italic;
+    font-size: var(--t-caption);
+    color: var(--secondary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .frame-lens-more:hover { color: var(--fg); }
   .frame-aims .chip { flex: 1; }
 
   .wide {

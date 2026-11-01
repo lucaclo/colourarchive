@@ -147,6 +147,8 @@ export interface Lens {
   aperture: number;
   /** Where the lens is focused, metres from the camera. */
   focusDistanceM: number;
+  /** The kit entry loaded (issue #153), by id; unset once the body is changed by hand. */
+  kit?: string;
 }
 
 export const defaultLens = (): Lens => ({
