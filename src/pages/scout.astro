@@ -463,7 +463,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     <p class="dof-split" id="dof-split"></p>
                     <svg class="dof-chart" id="dof-chart" viewBox="0 0 320 96" aria-hidden="true">
                       <rect class="dof-zone" id="dof-zone" x="0" y="34" width="0" height="38" />
-                      <g id="dof-stack"></g>
                       <line class="dof-ground" x1="0" y1="72" x2="320" y2="72" />
                       <g id="dof-ticks"></g>
                       <line class="dof-h" id="dof-h" x1="-10" y1="34" x2="-10" y2="72" />
@@ -513,6 +512,48 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     </label>
                     <input id="fov-subject" type="range" min="0" max="999" step="1" value="500" aria-describedby="fov-text" />
                     <button class="frame-lens-more fov-use-focus" id="fov-use-focus" type="button">Use the focus distance</button>
+                  </div>
+                </details>
+
+                <!-- Issue #152: the fewest frames that hold the near and the far
+                     sharp, the nearest point read off the terrain at the bottom
+                     of the frame, and a shot list to tick off on site. -->
+                <details class="fold" id="fold-stack">
+                  <summary>Focus stack</summary>
+                  <div class="stack">
+                    <div class="seg seg-wide dof-standard" id="stack-standard" role="group" aria-label="Sharp enough for">
+                      <button type="button" data-standard="print" aria-pressed="false">For print</button>
+                      <button type="button" data-standard="pixel" class="on" aria-pressed="true">Pixel-sharp</button>
+                    </div>
+                    <label class="slab-row" for="stack-near">
+                      <span>Nearest</span>
+                      <output id="stack-near-out">1 m</output>
+                    </label>
+                    <input id="stack-near" type="range" min="0" max="999" step="1" value="300" />
+                    <button class="frame-lens-more" id="stack-ground" type="button" hidden></button>
+                    <p class="dof-split stack-ground-note" id="stack-ground-note"></p>
+                    <label class="slab-row" for="stack-far">
+                      <span>Farthest</span>
+                      <output id="stack-far-out">∞</output>
+                    </label>
+                    <input id="stack-far" type="range" min="0" max="1000" step="1" value="1000" />
+                    <p class="dof-answer stack-count" id="stack-count">—</p>
+                    <p class="dof-split" id="stack-line"></p>
+                    <svg class="dof-chart" id="stack-chart" viewBox="0 0 320 96" aria-hidden="true">
+                      <g id="stack-zones"></g>
+                      <line class="dof-ground" x1="0" y1="72" x2="320" y2="72" />
+                      <g id="stack-ticks"></g>
+                      <g class="dof-camera" transform="translate(4 58)">
+                        <rect x="0" y="0" width="17" height="12" rx="2" />
+                        <rect x="17" y="3" width="5" height="6" rx="1" />
+                        <rect x="4" y="-2.5" width="6" height="3" rx="1" />
+                      </g>
+                    </svg>
+                    <ol class="stack-list" id="stack-list" aria-label="Shot list"></ol>
+                    <div class="stack-actions">
+                      <button class="wide" id="stack-copy" type="button">Copy the shot list</button>
+                      <button class="frame-lens-more" id="stack-clear" type="button" hidden>Clear ticks</button>
+                    </div>
                   </div>
                 </details>
 
@@ -3336,6 +3377,37 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .fov-speck { fill: #f0b866; }
   .fov input[type='range'] { width: 100%; margin: 0; accent-color: var(--fg); }
   .fov-use-focus { margin-top: 0.3rem; }
+
+
+  /* ── Focus stack (issue #152) ────────────────────────────────────────── */
+  .stack { padding: 0.15rem 0 0.4rem; }
+  .stack input[type='range'] { width: 100%; margin: 0 0 0.3rem; accent-color: var(--fg); }
+  .stack-ground-note:empty { display: none; }
+  #stack-ground { display: block; margin: -0.1rem 0 0.4rem; }
+  #stack-ground[hidden] { display: none; }
+  .stack-count { margin-top: 0.6rem; }
+  .stack-list { list-style: none; margin: 0.2rem 0 0.6rem; padding: 0; counter-reset: none; }
+  .stack-list :global(li) { border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent); }
+  .stack-list :global(li:last-child) { border-bottom: 0; }
+  .stack-list :global(label) {
+    display: grid;
+    grid-template-columns: 28px 1.6rem 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: var(--t-footnote);
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .stack-list :global(input) { width: 22px; height: 22px; margin: 0; accent-color: #f0b866; }
+  .stack-list :global(.stack-n) { color: var(--secondary); font-size: var(--t-caption); }
+  .stack-list :global(.stack-focus) { font-weight: 600; font-size: 1rem; }
+  .stack-list :global(.stack-range) { color: var(--secondary); font-size: var(--t-caption); }
+  .stack-list :global(li.done label) { color: var(--secondary); }
+  .stack-list :global(li.done .stack-focus) { text-decoration: line-through; text-decoration-thickness: 1px; }
+  .stack-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
 
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }

@@ -154,6 +154,10 @@ export interface Lens {
   sharpness?: SharpnessStandard;
   /** Where the subject stands, metres, for the field of view at it (issue #156). */
   subjectM?: number;
+  /** The focus stack's range and standard (issue #152). Far at `FOCUS_INFINITY_M` is the horizon. */
+  stackNearM?: number;
+  stackFarM?: number;
+  stackSharpness?: SharpnessStandard;
 }
 
 export const defaultLens = (): Lens => ({

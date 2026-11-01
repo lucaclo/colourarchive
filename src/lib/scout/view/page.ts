@@ -345,8 +345,9 @@ import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
 import { createGlossary } from './glossary';
 import { kitFocalLengths, readKit, type KitEntry } from '../kit';
-import { circleOfConfusionMm, readSharpness, sharpWhere } from '../sharpness';
-import { FOCUS_INFINITY_M, axisTicks, describeSplit, distanceX, dofSplit, focusToSlider, sliderToFocus, zoneX } from '../dof-diagram';
+import { SHARPNESS_LABEL, circleOfConfusionMm, readSharpness, sharpWhere } from '../sharpness';
+import { describeStack, groundNearPoint, planStack, stackText, type GroundNear, type StackPlan } from '../stack';
+import { FOCUS_INFINITY_M, axisTicks, describeSplit, distanceX, dofSplit, focusToSlider, roundFocus, sliderToFocus, zoneX } from '../dof-diagram';
 import { distanceUnits, formatHeight, formatLength, readDistanceUnits, setDistanceUnits } from '../units';
 import { createFirstVisitOrientation } from './orientation';
 import { mountSpace, globeFillsView } from './space';
@@ -4031,6 +4032,8 @@ export async function startScout(): Promise<void> {
         // freshly loaded field is a reason to recompute the spot's day.
         rebuildSpot();
         renderFacts();
+        // The focus stack reads its near point off this same ground.
+        renderStack();
       });
   }
 
@@ -6875,6 +6878,7 @@ export async function startScout(): Promise<void> {
       b.setAttribute('aria-pressed', String(on));
     }
     renderFov();
+    renderStack();
   }
 
   /* ── Field of view to scale ─────────────────────────────────────────────
@@ -6938,6 +6942,202 @@ export async function startScout(): Promise<void> {
     lens.subjectM = lens.focusDistanceM;
     renderFov();
     save();
+  });
+
+  /* ── Focus stack ───────────────────────────────────────────────────────
+     Issue #152. The fewest frames covering near to far, each zone drawn on
+     the same log axis as depth of field, and a shot list ticked off on
+     site. Pixel-sharp by default: a stack is judged at 100%. The ticks are
+     kept on this device for the place and the plan, so leaving the page
+     between frames loses nothing, and a changed plan starts clean. */
+  const STACK_TICKS_KEY = 'scout.stack-ticks';
+  let stackTickUnits = '';
+  let stackPlan: StackPlan | null = null;
+
+  const stackStandard = () => (lens.stackSharpness === 'print' ? 'print' : 'pixel');
+
+  /** Where the bottom of the frame meets the ground, from the terrain under the aim. */
+  function stackGround(): GroundNear | null {
+    const field = terrainShadows?.state().field;
+    if (!field || !centre) return null;
+    const here = elevationAt(field, centre.lon, centre.lat);
+    if (here == null) return null;
+    const at = centre;
+    return groundNearPoint(CAMERA_HEIGHT_M, lens.tiltDeg, currentFov().verticalDeg, (d) => {
+      const p = destination(at, lens.bearing, d);
+      const h = elevationAt(field, p.lon, p.lat);
+      return h == null ? null : h - here;
+    });
+  }
+
+  const stackKey = (plan: StackPlan) =>
+    centre ? `${centre.lat.toFixed(4)},${centre.lon.toFixed(4)}|${plan.frames.map((f) => f.focusM.toFixed(3)).join(',')}` : '';
+
+  function readTicks(): Record<string, boolean[]> {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STACK_TICKS_KEY) || '{}');
+      return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+      return {};
+    }
+  }
+  function writeTicks(key: string, ticks: boolean[]) {
+    const all = readTicks();
+    if (ticks.some(Boolean)) all[key] = ticks;
+    else delete all[key];
+    // Only the latest few plans: this is a field checklist, not an archive.
+    const keys = Object.keys(all);
+    for (const old of keys.slice(0, Math.max(0, keys.length - 12))) delete all[old];
+    try {
+      localStorage.setItem(STACK_TICKS_KEY, JSON.stringify(all));
+    } catch {
+      /* ticks last this visit */
+    }
+  }
+
+  function renderStack() {
+    if (!$<HTMLDetailsElement>('fold-stack').open) return;
+    const sensor = sensorByKey(lens.sensor) ?? SENSORS[0];
+    const standard = stackStandard();
+    const ground = stackGround();
+    const groundBtn = $<HTMLButtonElement>('stack-ground');
+    const groundNote = $('stack-ground-note');
+    if (ground?.kind === 'ground') {
+      // First time here: start from the ground, as the issue asks.
+      if (!(lens.stackNearM && lens.stackNearM > 0)) lens.stackNearM = roundFocus(ground.distanceM);
+      groundBtn.hidden = false;
+      groundBtn.textContent = `The ground at the bottom of the frame is ${formatLength(ground.distanceM)} away`;
+      groundBtn.dataset.distance = String(ground.distanceM);
+      groundNote.textContent = '';
+    } else {
+      groundBtn.hidden = true;
+      groundNote.textContent =
+        ground?.kind === 'sky'
+          ? 'The bottom of the frame is above level at this tilt, so it never meets the ground.'
+          : '';
+    }
+    const nearM = lens.stackNearM && lens.stackNearM > 0 ? lens.stackNearM : 1;
+    const farRaw = lens.stackFarM && lens.stackFarM > 0 ? lens.stackFarM : FOCUS_INFINITY_M;
+    const farM = farRaw >= FOCUS_INFINITY_M ? Infinity : Math.max(farRaw, nearM);
+
+    $('stack-near-out').textContent = formatLength(nearM);
+    $('stack-far-out').textContent = Number.isFinite(farM) ? formatLength(farM) : '∞';
+    const nearSlider = $<HTMLInputElement>('stack-near');
+    const farSlider = $<HTMLInputElement>('stack-far');
+    if (document.activeElement !== nearSlider) nearSlider.value = String(Math.min(999, focusToSlider(nearM)));
+    if (document.activeElement !== farSlider) farSlider.value = String(focusToSlider(Number.isFinite(farM) ? farM : FOCUS_INFINITY_M));
+    nearSlider.setAttribute('aria-valuetext', formatLength(nearM));
+    farSlider.setAttribute('aria-valuetext', Number.isFinite(farM) ? formatLength(farM) : 'infinity');
+    for (const b of $('stack-standard').querySelectorAll<HTMLButtonElement>('button')) {
+      const on = b.dataset.standard === standard;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+
+    const plan = planStack({
+      focalLengthMm: lens.focalLengthMm,
+      aperture: lens.aperture,
+      circleOfConfusionMm: circleOfConfusionMm(standard, sensor, lens.megapixels),
+      nearM,
+      farM,
+    });
+    stackPlan = plan;
+    const n = plan.frames.length;
+    $('stack-count').textContent = plan.single ? 'One frame' : `${n} frames`;
+    $('stack-line').textContent = describeStack(plan);
+
+    if (stackTickUnits !== distanceUnits()) {
+      stackTickUnits = distanceUnits();
+      $('stack-ticks').replaceChildren(
+        ...axisTicks(distanceUnits()).flatMap((t) => [
+          svgEl('line', { class: 'dof-tick', x1: t.x, x2: t.x, y1: 72, y2: t.label ? 77 : 75 }),
+          ...(t.label ? [Object.assign(svgEl('text', { class: 'dof-tick-label', x: t.x, y: 89 }), { textContent: t.label })] : []),
+        ]),
+      );
+    }
+    // Alternate two tones so neighbouring zones and their overlap read apart,
+    // and step each a little higher so the overlaps show.
+    $('stack-zones').replaceChildren(
+      ...plan.frames.flatMap((fr, i) => {
+        const z = zoneX(fr.nearM, fr.farM);
+        const top = 34 + (i % 2) * 6;
+        const fx = distanceX(fr.focusM);
+        return [
+          svgEl('rect', { class: `dof-stack-zone ${i % 2 ? 'even' : 'odd'}`, x: z.x, y: top, width: z.width, height: 72 - top }),
+          svgEl('line', { class: 'dof-stack-focus', x1: fx, x2: fx, y1: top - 6, y2: 72 }),
+        ];
+      }),
+    );
+
+    const key = stackKey(plan);
+    const ticks = (readTicks()[key] ?? []).slice(0, n);
+    const list = $('stack-list');
+    list.replaceChildren(
+      ...plan.frames.map((fr, i) => {
+        const li = document.createElement('li');
+        li.classList.toggle('done', Boolean(ticks[i]));
+        const label = document.createElement('label');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = Boolean(ticks[i]);
+        box.addEventListener('change', () => {
+          ticks[i] = box.checked;
+          li.classList.toggle('done', box.checked);
+          writeTicks(key, Array.from({ length: n }, (_, j) => Boolean(ticks[j])));
+          $<HTMLButtonElement>('stack-clear').hidden = !ticks.some(Boolean);
+        });
+        const num = Object.assign(document.createElement('span'), { className: 'stack-n', textContent: String(i + 1) });
+        const focus = Object.assign(document.createElement('span'), { className: 'stack-focus', textContent: `Focus ${formatLength(fr.focusM)}` });
+        const far = Number.isFinite(fr.farM) ? formatLength(fr.farM) : '∞';
+        const range = Object.assign(document.createElement('span'), { className: 'stack-range', textContent: `${formatLength(fr.nearM)}–${far}` });
+        label.append(box, num, focus, range);
+        li.append(label);
+        return li;
+      }),
+    );
+    $<HTMLButtonElement>('stack-clear').hidden = !ticks.some(Boolean);
+  }
+
+  $<HTMLDetailsElement>('fold-stack').addEventListener('toggle', () => renderStack());
+  on('stack-standard', 'click', (event) => {
+    const next = (event.target as HTMLElement).closest('button')?.dataset.standard;
+    if (!next) return;
+    lens.stackSharpness = readSharpness(next);
+    renderStack();
+    save();
+  });
+  on('stack-near', 'input', (event) => {
+    lens.stackNearM = sliderToFocus(Number((event.target as HTMLInputElement).value));
+    renderStack();
+  });
+  on('stack-far', 'input', (event) => {
+    lens.stackFarM = sliderToFocus(Number((event.target as HTMLInputElement).value));
+    renderStack();
+  });
+  on('stack-near', 'change', () => save());
+  on('stack-far', 'change', () => save());
+  on('stack-ground', 'click', () => {
+    const d = Number($('stack-ground').dataset.distance);
+    if (!(d > 0)) return;
+    lens.stackNearM = roundFocus(d);
+    renderStack();
+    save();
+  });
+  on('stack-clear', 'click', () => {
+    if (stackPlan) writeTicks(stackKey(stackPlan), []);
+    renderStack();
+  });
+  on('stack-copy', 'click', async () => {
+    if (!stackPlan) return;
+    const settings = `${lens.focalLengthMm}mm ƒ/${lens.aperture}, ${SHARPNESS_LABEL[stackStandard()].toLowerCase()}`;
+    const button = $<HTMLButtonElement>('stack-copy');
+    try {
+      await navigator.clipboard.writeText(stackText(stackPlan, settings, label.name || undefined));
+      button.textContent = 'Copied';
+    } catch {
+      button.textContent = 'Couldn’t copy here';
+    }
+    setTimeout(() => (button.textContent = 'Copy the shot list'), 1600);
   });
 
   on('dof-hyper', 'click', () => {
