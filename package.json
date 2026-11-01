@@ -33,6 +33,7 @@
     "check": "astro sync && tsc --noEmit && tsx scripts/check-astro-scripts.ts",
     "lint": "eslint .",
     "match:bench": "tsx scripts/match-bench.ts",
+    "floor:test": "tsx scripts/floor-test.ts",
     "app:build": "node desktop/build.mjs",
     "app": "electron .",
     "app:dist": "node desktop/build.mjs && electron-builder --mac"

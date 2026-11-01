@@ -117,12 +117,30 @@ const accent = manifest.chapters[0]
                 <button type="button" class="book-cover-btn" id="book-cover">Cover spread PDF</button>
                 <span class="book-cover-hint">Back, spine and front in one file. Use your printer’s spine width.</span>
               </div>
+              {/* Issue #147: sequence with small prints on the floor, then read the order back. */}
+              <div class="book-cover">
+                <button type="button" class="book-cover-btn" id="book-workprints">Work prints PDF</button>
+                <label class="book-cover-btn book-floor-pick">
+                  Read the floor from a photo
+                  <input type="file" id="book-floor-file" accept="image/*" capture="environment" hidden />
+                </label>
+                <span class="book-cover-hint">Cut the prints out, lay them in order with a little space between, photograph them from above.</span>
+              </div>
             </div>
           </span>
         </div>
       )}
     </header>
     <script type="application/json" id="book-layout-init" is:inline set:html={JSON.stringify(layoutInit)} />
+
+    <section class="book-floor" id="book-floor" hidden aria-label="Order read from the floor">
+      <p class="book-floor-head" id="book-floor-head"></p>
+      <ol class="book-floor-strip" id="book-floor-strip"></ol>
+      <div class="book-floor-actions">
+        <button type="button" class="book-floor-use" id="book-floor-use">Use this order</button>
+        <button type="button" class="book-floor-cancel" id="book-floor-cancel">Leave it</button>
+      </div>
+    </section>
 
     <section class="book-spreads" id="book-spreads" hidden aria-label="Spreads">
       <div class="book-pagectl" id="book-pagectl" hidden>
@@ -1539,6 +1557,95 @@ const accent = manifest.chapters[0]
   });
 </script>
 
+<script>
+  // Sequence on the floor (issue #147): work prints out, the floor's order in.
+  import { applyOrder } from '../lib/floor/detect';
+
+  const status = () => document.getElementById('book-pdf-status');
+  document.getElementById('book-workprints')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Building…';
+    try {
+      const d = await fetch('/api/book/floor?make=1', { method: 'POST' }).then((r) => r.json());
+      if (!d.ok) throw new Error(d.error);
+      const a = document.createElement('a');
+      a.href = d.href;
+      a.textContent = `Download work prints (${d.pages} pages)`;
+      a.className = 'book-share-link';
+      status()?.replaceChildren(a);
+      a.click();
+    } catch (err) {
+      const s = status();
+      if (s) s.textContent = err instanceof Error ? err.message : 'The work prints couldn’t be made.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
+
+  const floor = document.getElementById('book-floor')!;
+  const head = document.getElementById('book-floor-head')!;
+  const strip = document.getElementById('book-floor-strip')!;
+  let proposed: string[] = [];
+  const cellOf = (id: string) => document.querySelector<HTMLElement>(`.book-cell[data-id="${CSS.escape(id)}"]`);
+
+  document.getElementById('book-floor-file')?.addEventListener('change', async (e) => {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    floor.hidden = false;
+    head.textContent = 'Reading the prints…';
+    strip.replaceChildren();
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      const d = await fetch('/api/book/floor', { method: 'POST', body: fd }).then((r) => r.json());
+      if (!d.ok) throw new Error(d.error);
+      const prints = d.prints as { id: string | null; score: number; pairedWithNext: boolean }[];
+      proposed = prints.map((p) => p.id).filter((id): id is string => Boolean(id) && Boolean(cellOf(id!)));
+      const unread = prints.length - proposed.length;
+      // What changes, chapter by chapter, if this order is used.
+      const moved = [...document.querySelectorAll<HTMLElement>('.book-chapter')].filter((ch) => {
+        const ids = [...ch.querySelectorAll<HTMLElement>('.book-cell')].map((c) => c.dataset.id!);
+        return applyOrder(ids, proposed).some((id, i) => id !== ids[i]);
+      }).map((ch) => ch.dataset.name);
+      head.textContent = `Read ${proposed.length} of ${prints.length} prints${unread ? ` (${unread} couldn’t be matched)` : ''}. `
+        + (moved.length ? `Using this order changes ${moved.join(', ')}; each chapter keeps its own photos.` : 'That’s the order the book already has.');
+      strip.replaceChildren(...prints.map((p, i) => {
+        const li = document.createElement('li');
+        const img = document.createElement('img');
+        img.src = p.id ? cellOf(p.id)?.querySelector('img')?.getAttribute('src') || '' : '';
+        img.alt = '';
+        const n = document.createElement('span');
+        n.textContent = p.id ? String(i + 1) : '?';
+        if (p.pairedWithNext) li.classList.add('paired');
+        li.append(img, n);
+        return li;
+      }));
+      (document.getElementById('book-floor-use') as HTMLButtonElement).disabled = moved.length === 0;
+    } catch (err) {
+      head.textContent = err instanceof Error ? err.message : 'The photo couldn’t be read.';
+    }
+  });
+
+  document.getElementById('book-floor-use')?.addEventListener('click', () => {
+    for (const ch of document.querySelectorAll<HTMLElement>('.book-chapter')) {
+      const list = ch.querySelector<HTMLElement>('[data-chapter-list]');
+      if (!list) continue;
+      const cells = [...list.querySelectorAll<HTMLElement>('.book-cell')];
+      const next = applyOrder(cells.map((c) => c.dataset.id!), proposed);
+      list.append(...next.map((id) => cells.find((c) => c.dataset.id === id)!));
+    }
+    (window as unknown as { bookMarkDirty?: () => void }).bookMarkDirty?.();
+    window.dispatchEvent(new Event('book:changed'));
+    floor.hidden = true;
+  });
+  document.getElementById('book-floor-cancel')?.addEventListener('click', () => { floor.hidden = true; });
+</script>
+
 <style is:global>
   /* Survey (runtime-built children, so global). */
   .survey {
@@ -1748,6 +1855,22 @@ const accent = manifest.chapters[0]
     background: none; color: var(--fg); font: 500 var(--t-footnote) var(--font-ui);
   }
   .book-cover-hint { font-size: var(--t-caption); color: var(--muted); }
+  .book-floor-pick { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .book-floor { margin: 0 0 var(--sp-6); padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--r-md); }
+  .book-floor[hidden] { display: none; }
+  .book-floor-head { margin: 0 0 var(--sp-3); font-size: var(--t-footnote); color: var(--secondary); }
+  .book-floor-strip { list-style: none; margin: 0 0 var(--sp-3); padding: 0; display: flex; gap: 6px; overflow-x: auto; }
+  .book-floor-strip li { position: relative; flex: 0 0 auto; }
+  .book-floor-strip li.paired { margin-right: -4px; }
+  .book-floor-strip img { display: block; height: 64px; width: auto; border-radius: 2px; background: var(--border); }
+  .book-floor-strip span { position: absolute; left: 3px; bottom: 3px; font: 10px var(--font-data); color: #fff; text-shadow: 0 0 3px #000; }
+  .book-floor-actions { display: flex; gap: var(--sp-2); }
+  .book-floor-actions button {
+    appearance: none; cursor: pointer; min-height: 2.25rem; padding: 0 1rem; border-radius: var(--r-pill);
+    border: 1px solid var(--rule); background: none; color: var(--fg); font: 500 var(--t-footnote) var(--font-ui);
+  }
+  .book-floor-use { background: var(--fg) !important; color: var(--bg) !important; border-color: var(--fg) !important; }
+  .book-floor-use:disabled { opacity: 0.4; cursor: default; }
   .bs-spread > :first-child .bs-num { left: 4%; }
   .bs-spread > :last-child .bs-num { right: 4%; }
 </style>

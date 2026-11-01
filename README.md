@@ -243,6 +243,19 @@ the sky itself is doing the blocking regardless of the moon, and the core
 planner says so by name rather than leaving a reader to notice the skyglow
 on their own.
 
+### Sequence on the floor
+
+Book's Print panel has **Work prints PDF**: the book small, sixteen to an A4,
+each on a card with its number. Cut them out, lay them in the order you want
+on the floor (a little space between), photograph them from above, and **Read
+the floor from a photo**. Each card is found, straightened and matched by its
+DINOv2 fingerprint against what was printed, read in rows, and shown against
+the current order; **Use this order** applies it inside each chapter.
+`npm run floor:test` is the recognition test: it lays 20 real work prints on
+a synthetic floor (turned, tilted, glare, a phone's JPEG) and reads them back
+(20 of 20 against the printed set; 19 of 20 against the whole archive, where
+one near-duplicate swaps). Cards that touch or overlap can merge.
+
 ### Notes, said aloud
 
 Book's note editor (tap a photo's name) has **Hold to speak**: hold, say why the
