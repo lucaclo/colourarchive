@@ -1732,6 +1732,12 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   font: 500 var(--t-footnote) var(--font-ui); color: #efebe4; background: rgb(0 0 0 / 0.55); text-align: center;
 }
 .cclock-caption[hidden] { display: none; }
+.cclock-nv {
+  position: absolute; right: 1rem; top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  min-height: 44px; padding: 0.45rem 0.9rem; border: 0; border-radius: 999px;
+  font: 500 var(--t-footnote) var(--font-ui); color: #efebe4; background: rgb(0 0 0 / 0.55); cursor: pointer;
+}
+.cclock-nv[hidden] { display: none; }
 html.cclock-on, html.cclock-on body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .cclock-img { transition-duration: 1s; } }
 
@@ -1754,3 +1760,23 @@ html.cclock-on, html.cclock-on body { overflow: hidden; }
 .lb-roll-frame img { display: block; height: 56px; width: auto; }
 .lb-roll-frame[aria-current='true'] { opacity: 1; outline: 2px solid #efebe4; }
 .lb-roll-frame:hover { opacity: 1; }
+
+/* ── Night vision (issue #157) ─────────────────────────────────────────────
+   One layer over everything that maps what's beneath to a single dim
+   amber-red: white becomes a low orange, black stays black. It covers the
+   WebGL map and every hard-coded ink alike. Dialogs and the fullscreen clock sit in the top layer,
+   above it, so they take the same filter themselves. Held on a photo,
+   data-nv-peek lifts it. */
+:root { --nv-filter: grayscale(1) brightness(0.35) sepia(1) hue-rotate(-42deg) saturate(4.5) brightness(1.3); }
+html[data-night-vision]:not([data-nv-peek]) body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+  -webkit-backdrop-filter: var(--nv-filter);
+  backdrop-filter: var(--nv-filter);
+}
+html[data-night-vision]:not([data-nv-peek]) dialog[open],
+html[data-night-vision]:not([data-nv-peek]) :fullscreen { filter: var(--nv-filter); }
+html[data-night-vision] { color-scheme: dark; }

@@ -11,6 +11,7 @@ import { lightPhase, nextFrame, phaseFromClock, poolFor, PHASE_WORD, type ClockF
 import { sunPosition } from './scout/sun';
 import { cloudStructure, hourAt } from './scout/weather';
 import { fetchForecastDirect } from './scout/browser/sources';
+import { bindNightVisionPeek, nightVisionOn, nightVisionSaved, setNightVision } from './night-vision';
 
 export interface ClockPhoto extends ClockFrame { src: string; caption: string }
 
@@ -59,6 +60,24 @@ export function openColourClock(photos: ClockPhoto[], onClose?: () => void): voi
   caption.className = 'cclock-caption';
   caption.hidden = true;
   root.append(caption);
+  // Issue #157: night vision beside a bed. Shown with the caption; on its
+  // own after dark when it was last left on, on this device.
+  const nvButton = document.createElement('button');
+  nvButton.type = 'button';
+  nvButton.className = 'cclock-nv';
+  nvButton.hidden = true;
+  root.append(nvButton);
+  const nvWas = nightVisionOn();
+  const showNv = () => {
+    nvButton.textContent = nightVisionOn() ? 'Night vision off' : 'Night vision';
+    nvButton.setAttribute('aria-pressed', String(nightVisionOn()));
+  };
+  nvButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setNightVision(!nightVisionOn());
+    showNv();
+  });
+  bindNightVisionPeek();
   document.body.append(root);
   document.documentElement.classList.add('cclock-on');
 
@@ -87,6 +106,10 @@ export function openColourClock(photos: ClockPhoto[], onClose?: () => void): voi
     phase = await currentPhase(at);
     pool = poolFor(phase, photos) as ClockPhoto[];
     if (phase !== was || !current) show();
+    if (phase !== was && nightVisionSaved()) {
+      setNightVision(phase === 'night' || phase === 'blue', false);
+      showNv();
+    }
   };
 
   const wake = async () => {
@@ -109,13 +132,19 @@ export function openColourClock(photos: ClockPhoto[], onClose?: () => void): voi
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     root.remove();
     document.documentElement.classList.remove('cclock-on');
+    setNightVision(nvWas, false);
     onClose?.();
   };
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   root.addEventListener('click', () => {
     if (tapTimer) { clearTimeout(tapTimer); tapTimer = 0; close(); return; }
-    tapTimer = window.setTimeout(() => { tapTimer = 0; caption.hidden = !caption.hidden; }, 300);
+    tapTimer = window.setTimeout(() => {
+      tapTimer = 0;
+      caption.hidden = !caption.hidden;
+      nvButton.hidden = caption.hidden;
+      showNv();
+    }, 300);
   });
 
   root.style.setProperty('--fade', `${FADE_MS}ms`);

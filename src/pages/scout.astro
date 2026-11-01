@@ -61,6 +61,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     'https://s3.amazonaws.com',
   ]}
 >
+  <!-- Night vision before first paint, so a dark-adapted eye never gets a
+       bright frame (issue #157; lib/night-vision.ts). -->
+  <script is:inline>try{if(localStorage.getItem('night-vision')==='1')document.documentElement.setAttribute('data-night-vision','')}catch(e){}</script>
   <main class="scout">
     <div class="scout-stage" data-glass="light">
       <!-- Deep space round the globe; the map's canvas is clear outside it. -->
@@ -91,6 +94,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
         </button>
         <button class="scout-mapmsg-close" id="mapmsg-close" type="button" aria-label="Dismiss">×</button>
         <p class="scout-mapmsg-body" id="mapmsg-body" hidden></p>
+      </div>
+
+      <!-- Issue #157: offered once it is astronomically dark at the pin and a
+           night fold is open. Quiet, and gone for the visit once dismissed. -->
+      <div class="toast nv-offer" id="nv-offer" role="status" hidden>
+        <span>It’s dark out. Night vision?</span>
+        <button class="toast-do" id="nv-offer-on" type="button">Turn on</button>
+        <button class="toast-do nv-offer-close" id="nv-offer-close" type="button" aria-label="Not now">×</button>
       </div>
 
       <!-- Undo for a tap that moved the pin somewhere you did not mean. -->
@@ -1080,6 +1091,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
           <button type="button" data-units="m" class="on" aria-pressed="true" data-cmdk="Use metres" data-cmdk-keywords="units, metric, km" data-cmdk-always>Metres</button>
           <button type="button" data-units="ft" aria-pressed="false" data-cmdk="Use feet" data-cmdk-keywords="units, imperial, miles" data-cmdk-always>Feet</button>
         </div>
+        <!-- Issue #157: amber on black, for working in the dark. -->
+        <label class="toggle"><input type="checkbox" id="t-nightvision" data-cmdk="Night vision" data-cmdk-keywords="red, amber, dark, astro, night mode" data-cmdk-always /><span class="toggle-box" aria-hidden="true"></span> <span>Night vision</span></label>
         <p class="layers-head">Show</p>
         <label class="toggle"><input type="checkbox" id="t-buildings" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Building shadows</span></label>
         <label class="toggle"><input type="checkbox" id="t-trees" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Trees</span></label>
@@ -3477,6 +3490,15 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .nd-notes { margin: 0.2rem 0 0.6rem; padding: 0 0 0 0.6rem; list-style: none; border-left: 1px solid #f0b866; }
   .nd-notes:empty { display: none; }
   .nd-notes :global(li) { font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--secondary); }
+
+
+  /* ── Night vision (issue #157) ───────────────────────────────────────────
+     The global layer turns everything amber; the pale day map is inverted
+     under it first, or it would become a bright orange sheet. */
+  :global(html[data-night-vision]) .scout-stage[data-map-tone='paper'] .scout-map :global(canvas) { filter: invert(1) hue-rotate(180deg) brightness(0.85); }
+  :global(html[data-night-vision]) .scout-stage[data-map-tone='imagery'] .scout-map :global(canvas) { filter: brightness(0.6); }
+  .nv-offer { gap: 0.5rem; }
+  .nv-offer-close { padding-inline: 0.5rem; }
 
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }

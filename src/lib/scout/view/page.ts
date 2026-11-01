@@ -348,6 +348,7 @@ import type { MonthGridView } from './month-grid';
 import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
 import { createGlossary } from './glossary';
+import { bindNightVisionPeek, nightVisionOn, setNightVision } from '../../night-vision';
 import { kitFocalLengths, readKit, type KitEntry } from '../kit';
 import { SHARPNESS_LABEL, circleOfConfusionMm, readSharpness, sharpWhere } from '../sharpness';
 import { FILM_STOCKS, correctExposure, filmStock, formatStops } from '../reciprocity';
@@ -1178,7 +1179,12 @@ export async function startScout(): Promise<void> {
     const stageEl = document.querySelector<HTMLElement>('.scout-stage');
     // On the pastel map the glass follows the ground into the night: light
     // over paper, dark once the map is more dark than light.
-    if (stageEl) stageEl.dataset.glass = basemap === 'light' && mix >= 0.5 ? 'light' : 'dark';
+    if (!stageEl) return;
+    // Night vision wants dark chrome whatever the map (issue #157).
+    stageEl.dataset.glass = basemap === 'light' && mix >= 0.5 && !nightVisionOn() ? 'light' : 'dark';
+    // What the map looks like right now: the pastel style is paper by day
+    // and dark at night, and only paper wants inverting for night vision.
+    stageEl.dataset.mapTone = basemap === 'satellite' ? 'imagery' : basemap === 'light' && mix >= 0.5 ? 'paper' : 'dark';
   }
 
   function swapStyle() {
@@ -8404,6 +8410,7 @@ export async function startScout(): Promise<void> {
   on('night-button', 'click', () => {
     if (eyeView) setEyeLevel(false);
     setNightMode($('night-button').getAttribute('aria-pressed') !== 'true');
+    maybeOfferNightVision();
   });
 
   /* ── Eye level ─────────────────────────────────────────────────────────
@@ -8712,6 +8719,55 @@ export async function startScout(): Promise<void> {
     alignPanel.restate();
     renderPanel();
   }
+
+  /* ── Night vision ──────────────────────────────────────────────────────
+     Issue #157. Toggle in Layers and ⌘K; offered, once a visit, when it is
+     astronomically dark at the pin right now and a night fold is open or
+     the Milky Way mode is on. */
+  bindNightVisionPeek();
+  const nvBox = $<HTMLInputElement>('t-nightvision');
+  function showNightVision() {
+    const on = nightVisionOn();
+    nvBox.checked = on;
+    nvBox.dataset.cmdk = on ? 'Night vision off' : 'Night vision';
+    applyGlass();
+    if (on) $<HTMLElement>('nv-offer').hidden = true;
+  }
+  showNightVision();
+  nvBox.addEventListener('change', () => {
+    setNightVision(nvBox.checked);
+    showNightVision();
+  });
+  let nvOffered = false;
+  try {
+    nvOffered = sessionStorage.getItem('scout.nv-offered') === '1';
+  } catch {
+    /* offered at most once anyway */
+  }
+  function maybeOfferNightVision() {
+    if (nvOffered || nightVisionOn() || !centre) return;
+    const nightFoldOpen =
+      $('night-button').getAttribute('aria-pressed') === 'true' ||
+      ['fold-core', 'fold-aurora', 'fold-meteor', 'fold-twilight'].some((id) => $<HTMLDetailsElement>(id).open && $<HTMLDetailsElement>('group-night').open);
+    if (!nightFoldOpen) return;
+    if (sunPosition(centre.lat, centre.lon, new Date()).altitude > SUN_ALTITUDE.astronomical) return;
+    nvOffered = true;
+    try {
+      sessionStorage.setItem('scout.nv-offered', '1');
+    } catch {
+      /* this visit */
+    }
+    $<HTMLElement>('nv-offer').hidden = false;
+  }
+  for (const id of ['fold-core', 'fold-aurora', 'fold-meteor', 'fold-twilight', 'group-night']) {
+    $<HTMLDetailsElement>(id).addEventListener('toggle', maybeOfferNightVision);
+  }
+  setInterval(maybeOfferNightVision, 60_000);
+  on('nv-offer-on', 'click', () => {
+    setNightVision(true);
+    showNightVision();
+  });
+  on('nv-offer-close', 'click', () => ($<HTMLElement>('nv-offer').hidden = true));
 
   const firstVisit = createFirstVisitOrientation();
 
