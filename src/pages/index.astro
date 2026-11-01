@@ -260,6 +260,12 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           <span class="tb-label">Overview</span>
         </button>
       )}
+      {hasPhotos && (
+        <button type="button" class="tb-button" id="clock-btn" data-cmdk="Colour clock" data-cmdk-keywords="frame, ambient, light, stand" aria-label="Colour clock" title="Colour clock: the archive follows the light outside">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg>
+          <span class="tb-label">Clock</span>
+        </button>
+      )}
       <a class="tb-button tb-get" id="get-app" href="/get" aria-label="Get the app" title="Get the app">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
         <span class="tb-label">Get the app</span>
@@ -402,6 +408,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
                       style={`--frame-bg:${oklchCss(p.oklch)};aspect-ratio:${p.width}/${p.height}`}
                       data-id={p.id}
                       data-chapter={ch.name}
+                      data-key={ch.key}
                       data-ci={ci}
                       data-oklch={`L ${p.oklch.L} · C ${p.oklch.C} · H ${p.oklch.H}°`}
                       data-file={p.filename}
@@ -478,6 +485,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           <button class="lb-tool" id="lb-play" data-cmdk="Slideshow" data-cmdk-keywords="play" aria-label="Play slideshow" title="Play slideshow" aria-pressed="false">
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
+          <button class="lb-tool" id="lb-clock" aria-label="Colour clock" title="Colour clock: the archive follows the light outside"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg></button>
           <button class="lb-tool" id="lb-info" data-cmdk="Photo details" data-cmdk-keywords="info, exif" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-similar" data-cmdk="Similar photos" data-cmdk-keywords="like this" aria-label="More like this in your archive" title="More like this in your archive">Similar</button>}
           {!STATIC && <button class="lb-tool lb-text" id="lb-match" data-cmdk="Match this look" data-cmdk-keywords="lightroom, preset" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
@@ -2600,4 +2608,27 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       getApp.querySelector('.tb-label')!.textContent = 'Open in app';
     });
   }
+</script>
+
+<script>
+  // Issue #145: the colour clock, from the top bar or beside Slideshow.
+  import { openColourClock, type ClockPhoto } from '../lib/clock-view';
+  import { paletteLightness } from '../lib/colour-clock';
+
+  function clockPhotos(): ClockPhoto[] {
+    return [...document.querySelectorAll<HTMLElement>('.archive .frame')].map((f) => ({
+      id: f.dataset.id || '',
+      key: f.dataset.key || '',
+      L: paletteLightness(f.dataset.swatches || '', Number((f.dataset.oklch || '').match(/L ([\d.]+)/)?.[1] ?? 0.5)),
+      src: f.dataset.full || '',
+      caption: f.getAttribute('aria-label') || '',
+    })).filter((p) => p.src);
+  }
+  const start = () => {
+    // Out of the lightbox first, so its own keys and timers stand down.
+    if (!document.getElementById('lightbox')?.hidden) document.getElementById('lb-close')?.click();
+    openColourClock(clockPhotos());
+  };
+  document.getElementById('clock-btn')?.addEventListener('click', start);
+  document.getElementById('lb-clock')?.addEventListener('click', start);
 </script>

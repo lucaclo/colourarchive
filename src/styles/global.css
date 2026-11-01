@@ -1718,3 +1718,19 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .cf-tray { padding: var(--sp-1) var(--sp-2); gap: var(--sp-2); }
   .cf-tray-item img { height: 56px; }
 }
+
+/* --- Colour clock (issue #145) -------------------------------------------- */
+.cclock { position: fixed; inset: 0; z-index: 1000; background: #000; cursor: none; }
+.cclock-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  opacity: 0; transition: opacity var(--fade, 4s) ease-in-out;
+}
+.cclock-img.on { opacity: 1; }
+.cclock-caption {
+  position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem); transform: translateX(-50%);
+  margin: 0; padding: 0.45rem 0.9rem; border-radius: 999px; max-width: calc(100% - 2rem);
+  font: 500 var(--t-footnote) var(--font-ui); color: #efebe4; background: rgb(0 0 0 / 0.55); text-align: center;
+}
+.cclock-caption[hidden] { display: none; }
+html.cclock-on, html.cclock-on body { overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .cclock-img { transition-duration: 1s; } }
