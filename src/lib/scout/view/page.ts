@@ -6879,7 +6879,7 @@ export async function startScout(): Promise<void> {
     group.open = true;
     if (fold) $<HTMLDetailsElement>(fold).open = true;
     openSheetTo('full');
-    requestAnimationFrame(() => (fold ? $(fold) : group).scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    requestAnimationFrame(() => (fold ? $(fold) : group).scrollIntoView({ block: 'start', behavior: reducedMotion?.matches ? 'auto' : 'smooth' }));
   }
 
   /* ── Depth of field, drawn ──────────────────────────────────────────────

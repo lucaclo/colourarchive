@@ -1297,7 +1297,7 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
    overlapping circles were guesses on touch, where there's no tooltip. Kept
    apart from the symbol buttons so a word never reads as a symbol's label. */
 .lb-tool.lb-text {
-  width: auto; padding: 0 0.95rem; border-radius: 999px;
+  width: auto; padding: 0 0.95rem; border-radius: 999px; white-space: nowrap;
   font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500; letter-spacing: 0;
 }
 #lb-similar { margin-left: 0.35rem; }
@@ -1492,8 +1492,14 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .lb-tools {
     top: auto; left: 0; right: 0;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
-    justify-content: center; gap: 0.7rem;
+    justify-content: safe center; gap: 0.7rem;
+    /* Five words and two symbols are wider than a small phone: the bar
+       scrolls rather than squeezing or wrapping them, centred while it fits.
+       The close is fixed, so it isn't clipped by the scroll. */
+    overflow-x: auto; padding: 0 var(--edge); scrollbar-width: none;
   }
+  .lb-tools::-webkit-scrollbar { display: none; }
+  .lb-tools > * { flex: none; }
   .lb-tools .lb-close { position: fixed; top: var(--edge); right: var(--edge); }
   .lb-count { line-height: var(--hit); }
   .lb-stage, .lb-stage img { max-width: 100vw; max-height: 72vh; }
