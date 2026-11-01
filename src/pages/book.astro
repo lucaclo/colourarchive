@@ -126,6 +126,11 @@ const accent = manifest.chapters[0]
                 </label>
                 <span class="book-cover-hint">Cut the prints out, lay them in order with a little space between, photograph them from above.</span>
               </div>
+              {/* Issue #158: a card per lens, for the bag. */}
+              <div class="book-cover">
+                <a class="book-cover-btn book-cards" href="/scout/cards">Hyperfocal cards</a>
+                <span class="book-cover-hint">A small table for each of your lenses, to cut out.</span>
+              </div>
             </div>
           </span>
         </div>
@@ -1855,6 +1860,7 @@ const accent = manifest.chapters[0]
     background: none; color: var(--fg); font: 500 var(--t-footnote) var(--font-ui);
   }
   .book-cover-hint { font-size: var(--t-caption); color: var(--muted); }
+  .book-cards { display: flex; align-items: center; justify-content: center; text-decoration: none; }
   .book-floor-pick { display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .book-floor { margin: 0 0 var(--sp-6); padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--r-md); }
   .book-floor[hidden] { display: none; }

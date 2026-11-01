@@ -6797,6 +6797,7 @@ export async function startScout(): Promise<void> {
   function renderKit() {
     const box = $<HTMLElement>('kit');
     box.hidden = kit.length === 0;
+    $<HTMLElement>('kit-cards').hidden = kit.length === 0;
     box.replaceChildren(
       ...kit.map((entry) => {
         const b = document.createElement('button');

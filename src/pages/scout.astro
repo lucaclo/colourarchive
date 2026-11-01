@@ -454,6 +454,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                   </div>
                 </div>
 
+                <!-- Issue #158: the same numbers, on paper, for every lens above. -->
+                <a class="frame-lens-more kit-cards" id="kit-cards" href="/scout/cards" data-cmdk="Hyperfocal cards" data-cmdk-keywords="print, pdf, lens, depth of field" data-cmdk-always>Print hyperfocal cards for these lenses</a>
+
                 <details class="fold" id="fold-dof">
                   <summary>Depth of field</summary>
                   <!-- Issue #151: which standard of sharp, named and one tap away. -->
@@ -3521,6 +3524,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .kit :global(.kit-chip:hover) { color: var(--fg); border-color: color-mix(in oklab, var(--fg) 45%, transparent); }
   .kit :global(.kit-chip.on) { color: var(--bg); background: var(--fg); border-color: var(--fg); }
   .lensbox { margin-bottom: 0.2rem; }
+  .kit-cards[hidden] { display: none; }
+  .kit-cards { display: inline-block; margin: 0 0 0.4rem; min-height: 0; padding: 0.35rem 0; }
   .frame-aims { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .frame-lensrow { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin: 0.35rem 0 0.4rem; }
   .frame-lensrow .slab-note { margin: 0; }

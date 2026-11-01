@@ -1,0 +1,186 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { readManifest } from '../../lib/manifest';
+import { kitFromPhotos } from '../../lib/scout/kit';
+import { hyperfocalCards } from '../../lib/scout/cards';
+import { formatLength } from '../../lib/scout/units';
+
+// Issue #158: a hyperfocal card for every lens in the archive's EXIF, at
+// credit-card size, to print and keep in the bag. Prerendered like /scout,
+// so the static publish has it; the browser's own print dialog makes the PDF.
+export const prerender = true;
+
+const manifest = await readManifest();
+const kit = kitFromPhotos(
+  manifest.chapters.flatMap((c) => c.photos).map((p) => ({
+    medium: p.medium,
+    camera: p.exif.camera,
+    lens: p.exif.lens,
+    focalLength: p.exif.focalLength,
+    width: p.width,
+    height: p.height,
+  })),
+  12,
+);
+const cards = hyperfocalCards(kit);
+const len = (m: number) => formatLength(m, 'm');
+---
+
+<Layout title="Hyperfocal cards — Colour Archive" tab="scout" description="A hyperfocal card for each of your lenses, to print and cut out.">
+  <main class="hc">
+    <header class="hc-top">
+      <a class="hc-back" href="/scout" aria-label="Back to Scout">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        <span>Scout</span>
+      </a>
+      <h1 class="hc-title">Hyperfocal cards</h1>
+      <div class="hc-tools">
+        <div class="hc-seg" id="hc-units" role="group" aria-label="Units">
+          <button type="button" data-units="m" aria-pressed="true">Metres</button>
+          <button type="button" data-units="ft" aria-pressed="false">Feet</button>
+        </div>
+        <div class="hc-seg" id="hc-paper" role="group" aria-label="Paper">
+          <button type="button" data-paper="a4" aria-pressed="true">A4</button>
+          <button type="button" data-paper="letter" aria-pressed="false">Letter</button>
+        </div>
+        <button type="button" class="hc-print" id="hc-print" data-cmdk="Print the hyperfocal cards" data-cmdk-keywords="pdf, lens, cards">Print or save as PDF</button>
+      </div>
+    </header>
+
+    {cards.length === 0 ? (
+      <p class="hc-empty">No lenses yet: cards come from the camera and lens in your digital photos.</p>
+    ) : (
+      <section class="hc-sheet" id="hc-sheet" aria-label={`${cards.length} cards`}>
+        {cards.map((card) => (
+          <article class="hc-card">
+            <header class="hc-head">
+              <h2>{card.title}</h2>
+              <p>{card.detail}</p>
+            </header>
+            <table>
+              <thead>
+                <tr><th scope="col">ƒ</th><th scope="col">For print</th><th scope="col">sharp from</th><th scope="col">Pixel-sharp</th></tr>
+              </thead>
+              <tbody>
+                {card.rows.map((r) => (
+                  <tr>
+                    <th scope="row">{r.aperture}</th>
+                    <td><span data-m={r.printM}>{len(r.printM)}</span></td>
+                    <td class="hc-near"><span data-m={r.printM / 2}>{len(r.printM / 2)}</span></td>
+                    <td><span data-m={r.pixelM}>{len(r.pixelM)}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p class="hc-foot">Focus at the distance shown: sharp from half of it to ∞.</p>
+          </article>
+        ))}
+      </section>
+    )}
+  </main>
+</Layout>
+
+<style>
+  .hc { max-width: 60rem; margin: 0 auto; padding: var(--sp-6, 1.5rem) 1rem calc(var(--tabbar-space, 5rem) + 1rem); }
+  .hc-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem 1rem; margin-bottom: 1.4rem; }
+  .hc-back { display: inline-flex; align-items: center; gap: 0.2rem; min-height: 44px; color: var(--secondary); text-decoration: none; font: 500 var(--t-footnote) var(--font-ui); }
+  .hc-back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+  .hc-back:hover { color: var(--fg); }
+  .hc-title { flex: 1; margin: 0; font-family: var(--font-note); font-style: italic; font-weight: 400; font-size: 1.6rem; }
+  .hc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+  .hc-seg { display: flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
+  .hc-seg button { min-height: 36px; padding: 0 0.85rem; border: 0; background: none; color: var(--secondary); font: 500 var(--t-footnote) var(--font-ui); cursor: pointer; }
+  .hc-seg button[aria-pressed='true'] { background: var(--fg); color: var(--bg); }
+  .hc-print { min-height: 36px; padding: 0 1rem; border: 1px solid var(--fg); border-radius: 999px; background: var(--fg); color: var(--bg); font: 600 var(--t-footnote) var(--font-ui); cursor: pointer; }
+  .hc-print:active, .hc-seg button:active { transform: scale(0.97); }
+  .hc-empty { color: var(--secondary); font-family: var(--font-ui); }
+
+  /* The sheet: paper, cards at their real size, cut lines between them. */
+  .hc-sheet {
+    --card-w: 85.6mm;
+    --card-h: 54mm;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--card-w));
+    justify-content: center;
+    gap: 0;
+    padding: 10mm;
+    background: #fbfaf7;
+    color: #111;
+    border-radius: 4px;
+    box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.6);
+    overflow-x: auto;
+  }
+  .hc-card {
+    box-sizing: border-box;
+    width: var(--card-w);
+    height: var(--card-h);
+    padding: 3.2mm 3.6mm 2.6mm;
+    display: flex;
+    flex-direction: column;
+    border: 0.25mm dashed #b9b4ab;
+    margin: -0.125mm;
+    font-family: var(--font-ui);
+    break-inside: avoid;
+  }
+  .hc-head h2 { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 10.5pt; line-height: 1.1; }
+  .hc-head p { margin: 0.4mm 0 1.4mm; font-size: 6pt; color: #555; }
+  .hc-card table { width: 100%; border-collapse: collapse; font-size: 7pt; font-variant-numeric: tabular-nums; }
+  .hc-card th, .hc-card td { padding: 0.35mm 0; text-align: right; }
+  .hc-card thead th { font-size: 5.6pt; font-weight: 500; color: #555; border-bottom: 0.2mm solid #999; }
+  .hc-card thead th:first-child, .hc-card tbody th { text-align: left; }
+  .hc-card tbody th { font-weight: 600; }
+  .hc-card tbody tr + tr td, .hc-card tbody tr + tr th { border-top: 0.1mm solid #e2ded6; }
+  .hc-near { color: #666; }
+  .hc-foot { margin: auto 0 0; font-size: 5.6pt; color: #666; }
+
+  @media print {
+    :global(body) { background: #fff !important; }
+    :global(.tabbar), :global(.offline-pill), .hc-top { display: none !important; }
+    .hc { max-width: none; padding: 0; }
+    .hc-sheet { padding: 0; box-shadow: none; border-radius: 0; background: #fff; grid-template-columns: repeat(2, var(--card-w)); justify-content: start; overflow: visible; }
+  }
+</style>
+
+<style is:global>
+  @page { size: A4; margin: 12mm; }
+</style>
+
+<script>
+  import { formatLength, readDistanceUnits, type DistanceUnits } from '../../lib/scout/units';
+
+  const UNITS_KEY = 'scout.units';
+  let units: DistanceUnits = 'm';
+  try {
+    units = readDistanceUnits(localStorage.getItem(UNITS_KEY));
+  } catch {
+    /* metres */
+  }
+
+  function render() {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-m]')) el.textContent = formatLength(Number(el.dataset.m), units);
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#hc-units button')) b.setAttribute('aria-pressed', String(b.dataset.units === units));
+  }
+  render();
+  document.getElementById('hc-units')?.addEventListener('click', (event) => {
+    const next = (event.target as HTMLElement).closest('button')?.dataset.units;
+    if (!next) return;
+    units = readDistanceUnits(next);
+    try {
+      localStorage.setItem(UNITS_KEY, units);
+    } catch {
+      /* this visit */
+    }
+    render();
+  });
+
+  // The page size is a stylesheet rule, so the paper choice swaps it.
+  const pageRule = document.createElement('style');
+  document.head.append(pageRule);
+  document.getElementById('hc-paper')?.addEventListener('click', (event) => {
+    const paper = (event.target as HTMLElement).closest('button')?.dataset.paper;
+    if (!paper) return;
+    pageRule.textContent = paper === 'letter' ? '@page { size: letter; margin: 0.5in; }' : '';
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#hc-paper button')) b.setAttribute('aria-pressed', String(b.dataset.paper === paper));
+  });
+  document.getElementById('hc-print')?.addEventListener('click', () => window.print());
+</script>
