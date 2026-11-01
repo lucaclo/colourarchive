@@ -277,7 +277,10 @@ import {
 import { lineOfSight, profileGeometry, type LineOfSight } from '../profile';
 import {
   BASE_SHUTTER_SPEEDS_S,
-  ND_FILTERS,
+  FILTER_STOPS,
+  describeFilter,
+  longExposureNotes,
+  parseFilter,
   countdownAfter,
   formatCountdown,
   formatExposureDuration,
@@ -347,6 +350,7 @@ import { createInfoTips } from './infotip';
 import { createGlossary } from './glossary';
 import { kitFocalLengths, readKit, type KitEntry } from '../kit';
 import { SHARPNESS_LABEL, circleOfConfusionMm, readSharpness, sharpWhere } from '../sharpness';
+import { FILM_STOCKS, correctExposure, filmStock, formatStops } from '../reciprocity';
 import { describeStack, groundNearPoint, planStack, stackText, type GroundNear, type StackPlan } from '../stack';
 import { FOCUS_INFINITY_M, axisTicks, describeSplit, distanceX, dofSplit, focusToSlider, roundFocus, sliderToFocus, zoneX } from '../dof-diagram';
 import { distanceUnits, formatHeight, formatLength, readDistanceUnits, setDistanceUnits } from '../units';
@@ -7300,21 +7304,72 @@ export async function startScout(): Promise<void> {
     const baseSelect = $<HTMLSelectElement>('nd-base');
     for (const s of BASE_SHUTTER_SPEEDS_S) baseSelect.append(new Option(formatShutterSpeed(s), String(s)));
     baseSelect.value = String(1 / 60);
+    // Each filter in all three of its markings (issue #155).
     const filterSelect = $<HTMLSelectElement>('nd-filter');
-    for (const f of ND_FILTERS) filterSelect.append(new Option(f.label, f.label));
+    FILTER_STOPS.forEach((stops, i) => filterSelect.append(new Option(describeFilter(stops), String(i))));
+    filterSelect.value = String(FILTER_STOPS.indexOf(6));
+    const ring = $<HTMLInputElement>('nd-ring');
+    const filmSelect = $<HTMLSelectElement>('nd-film');
+    filmSelect.append(new Option('Digital', ''));
+    for (const stock of FILM_STOCKS) filmSelect.append(new Option(stock.name, stock.id));
+    try {
+      filmSelect.value = filmStock(localStorage.getItem('scout.film') ?? '')?.id ?? '';
+    } catch {
+      /* digital */
+    }
 
-    const currentFilter = () => ND_FILTERS.find((f) => f.label === filterSelect.value) ?? ND_FILTERS[0];
-    const currentExposureSeconds = () => ndExposureSeconds(Number(baseSelect.value), currentFilter().stops);
+    /** The filter's stops: what's typed, when it reads as a filter, else the list's. */
+    const currentStops = () => parseFilter(ring.value) ?? FILTER_STOPS[Number(filterSelect.value)] ?? 6;
+    const meteredSeconds = () => ndExposureSeconds(Number(baseSelect.value), currentStops());
+    let exposureSeconds = meteredSeconds();
+    const currentExposureSeconds = () => exposureSeconds;
 
     function ndChanged() {
-      const filter = currentFilter();
+      const typed = ring.value.trim();
+      const parsed = typed ? parseFilter(typed) : null;
+      ring.setAttribute('aria-invalid', String(Boolean(typed) && parsed == null));
+      const stops = currentStops();
+      const metered = meteredSeconds();
+      const stock = filmStock(filmSelect.value);
+      const film = stock ? correctExposure(stock, metered) : null;
+      exposureSeconds = film && !film.refusal ? film.seconds : metered;
+      $('nd-time').textContent = formatExposureDuration(exposureSeconds);
       $('nd-result').textContent =
-        `${formatShutterSpeed(Number(baseSelect.value))} at ${filter.label} ` +
-        `(${filter.stops.toFixed(1)} stops) becomes ${formatExposureDuration(currentExposureSeconds())}.`;
+        `${formatShutterSpeed(Number(baseSelect.value))} through ${describeFilter(stops)}` +
+        (typed && parsed == null ? '. That marking isn’t one I can read, so the list’s filter is used.' : '.');
+      let filmLine = '';
+      if (stock && film) {
+        if (film.refusal) filmLine = film.refusal;
+        else if (film.stops > 0.05) {
+          filmLine =
+            `Metered ${formatExposureDuration(metered)} → ${formatExposureDuration(film.seconds)} on ${stock.name} (${formatStops(film.stops)} stop${film.stops > 1.1 ? 's' : ''}` +
+            `${film.filter ? `, and a ${film.filter} filter` : ''}).` +
+            (film.extrapolated ? ' Past the maker’s table, so carried on from it: bracket.' : '') +
+            (stock.rule.kind === 'stops' ? ' Opening up instead of adding time is closer to the sheet.' : '');
+        } else filmLine = `No correction needed on ${stock.name} at this time.`;
+      }
+      const filmEl = $('nd-film-line');
+      filmEl.textContent = filmLine;
+      filmEl.title = stock ? stock.source : '';
+      $('nd-notes').replaceChildren(
+        ...longExposureNotes(exposureSeconds).map((n) => Object.assign(document.createElement('li'), { textContent: n })),
+      );
     }
     ndChanged();
     on('nd-base', 'change', ndChanged);
-    on('nd-filter', 'change', ndChanged);
+    on('nd-filter', 'change', () => {
+      ring.value = '';
+      ndChanged();
+    });
+    on('nd-ring', 'input', ndChanged);
+    on('nd-film', 'change', () => {
+      try {
+        localStorage.setItem('scout.film', filmSelect.value);
+      } catch {
+        /* this visit only */
+      }
+      ndChanged();
+    });
 
     let countdown: Countdown | null = null;
     let countdownStartedAt = 0;

@@ -564,11 +564,21 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                       <label class="frame-field" for="nd-base"><span>Base shutter</span>
                         <select id="nd-base"></select>
                       </label>
-                      <label class="frame-field" for="nd-filter"><span>ND filter</span>
+                      <label class="frame-field" for="nd-filter"><span>ND filter<button class="infotip" type="button" aria-label="How filters are marked" data-term="nd" data-tip={tip('nd')}>i</button></span>
                         <select id="nd-filter"></select>
                       </label>
                     </div>
-                    <p class="slab-note" id="nd-result">—</p>
+                    <!-- Issue #155: whichever way the filter is marked. -->
+                    <label class="frame-field nd-ring" for="nd-ring"><span>Or as marked on the filter</span>
+                      <input id="nd-ring" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="ND400, 2.7 or 9 stops" />
+                    </label>
+                    <label class="frame-field nd-film" for="nd-film"><span>Film<button class="infotip" type="button" aria-label="What reciprocity failure is" data-term="reciprocity" data-tip={tip('reciprocity')}>i</button></span>
+                      <select id="nd-film"></select>
+                    </label>
+                    <p class="dof-answer nd-time" id="nd-time">—</p>
+                    <p class="dof-split" id="nd-result">—</p>
+                    <p class="dof-split nd-film-line" id="nd-film-line"></p>
+                    <ul class="nd-notes" id="nd-notes"></ul>
                     <button class="wide" id="nd-start" type="button">Start countdown</button>
                     <p class="nd-countdown" id="nd-countdown" hidden>—</p>
                   </div>
@@ -3445,6 +3455,28 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .core-ahead-list :global(.ca-time) { font-size: var(--t-footnote); font-variant-numeric: tabular-nums; color: #b9a6ff; }
   .core-ahead-list :global(.ca-detail) { grid-column: 1 / -1; font-size: var(--t-caption); color: var(--secondary); }
   .core-ahead-list :global(button[aria-current='date'] .ca-date)::after { content: ' · shown'; font-weight: 400; color: var(--secondary); }
+
+
+  /* ── Long exposure (issue #155) ──────────────────────────────────────── */
+  .nd-ring, .nd-film { display: grid; margin-bottom: 0.5rem; }
+  .nd-ring input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.35rem 0.45rem;
+    font: inherit;
+    font-size: 16px; /* no focus zoom on iOS */
+    color: var(--fg);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }
+  .nd-ring input[aria-invalid='true'] { border-color: #e0603a; }
+  .nd-film select { width: 100%; padding: 0.3rem 0.35rem; font: inherit; font-size: var(--t-caption); color: var(--fg); background: transparent; border: 1px solid var(--border); border-radius: 5px; }
+  .nd-time { margin-top: 0.4rem; }
+  .nd-film-line:empty { display: none; }
+  .nd-notes { margin: 0.2rem 0 0.6rem; padding: 0 0 0 0.6rem; list-style: none; border-left: 1px solid #f0b866; }
+  .nd-notes:empty { display: none; }
+  .nd-notes :global(li) { font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--secondary); }
 
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }
