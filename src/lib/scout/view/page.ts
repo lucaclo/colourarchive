@@ -72,7 +72,8 @@ import {
   hourMarks,
   splitAtHorizon,
 } from '../dome';
-import { decodeScoutLink, encodeScoutLink } from '../share';
+import { decodePlanAgain, decodeScoutLink, encodeScoutLink, wallClockToInstant, type LinkLens, type PlanAgain } from '../share';
+import { sameLightAhead } from '../relight';
 import {
   addProof,
   addSpot,
@@ -263,6 +264,7 @@ import {
   depthOfField,
   describeLens,
   describeFrameSize,
+  sensorShortName,
   frameSizeAt,
   PERSON_HEIGHT_M,
   fieldOfView,
@@ -5617,6 +5619,8 @@ export async function startScout(): Promise<void> {
     void loadWeather();
     void loadPhotos();
     save();
+    // A searched place carries its own zone; a tapped point waits for its name.
+    if (place.kind !== 'point') afterPlaceKnown();
   }
 
   /** The pin was dragged: keep everything, ask what the new spot is called. */
@@ -5670,6 +5674,8 @@ export async function startScout(): Promise<void> {
         }
       }
       save();
+      // Named (or not) with the best zone there is: a waiting plan can go.
+      if (token === reverseToken) afterPlaceKnown();
     })();
   }
 
@@ -10870,6 +10876,131 @@ export async function startScout(): Promise<void> {
     rememberRecent();
   })();
 
+  /* ── Plan this shot again ───────────────────────────────────────────────
+     Issue #160. From the lightbox (or a placed photo's pin): the photo's lens
+     goes into the Camera group, its place becomes the pin (asked for when the
+     link doesn't carry one, or found among your located photos on the Mac),
+     and the date moves to the next time the sun stands where it stood. */
+  let pendingPlan: PlanAgain | null = decodePlanAgain(location.search);
+  const planHasPlace = Boolean(decodeScoutLink(location.search));
+
+  function applyPlanLens(l: LinkLens) {
+    lens.sensor = sensorByKey(l.sensor) ? l.sensor : lens.sensor;
+    lens.focalLengthMm = l.focalLengthMm;
+    if (l.aperture) lens.aperture = l.aperture;
+    if (l.megapixels) lens.megapixels = l.megapixels;
+    const match = kit.find(
+      (k) => k.sensor === lens.sensor && k.megapixels === lens.megapixels && l.focalLengthMm >= k.focalMin && l.focalLengthMm <= k.focalMax,
+    );
+    lens.kit = match?.id;
+    syncLensControls();
+    frameChanged();
+  }
+
+  function describePlanLens(l: LinkLens): string {
+    const sensor = sensorByKey(l.sensor);
+    return [`${l.focalLengthMm}mm`, l.aperture ? `ƒ/${l.aperture}` : '', sensor ? `${sensorShortName(sensor.key)}${l.megapixels ? `, ${l.megapixels} MP` : ''}` : '']
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  function startPlanAgain(plan: PlanAgain) {
+    if (plan.lens) {
+      applyPlanLens(plan.lens);
+      $('replan-lens').textContent = `Lens set to ${describePlanLens(plan.lens)}.`;
+    }
+    $('replan-when').textContent = '';
+    $<HTMLElement>('replan').hidden = false;
+    if (planHasPlace && centre) {
+      // A link with no zone gets one from `nameTheSpot`, which finishes this;
+      // the camera's own offset makes the zone unnecessary.
+      if (plan.offset || decodeScoutLink(location.search)?.timeZone || !plan.taken) finishPlanAgain();
+      return;
+    }
+    void (async () => {
+      // On the Mac the photo may already have a place: GPS, the iPhone, or
+      // placed by hand.
+      if (!STATIC && plan.photo) {
+        try {
+          const data = await fetch('/api/scout/mine').then((r) => r.json());
+          const hit = data.ok ? (data.photos as { id: string; lat?: number; lon?: number }[]).find((p) => p.id === plan.photo) : null;
+          if (hit && hit.lat !== undefined && hit.lon !== undefined) {
+            placeForPlan({ lat: hit.lat, lon: hit.lon });
+            return;
+          }
+        } catch {
+          /* ask instead */
+        }
+      }
+      $<HTMLElement>('replan-ask').hidden = false;
+      searchBox.show();
+      searchBox.focus();
+    })();
+  }
+
+  /** A known place for the photo: named and zoned first, so its clock is right. */
+  async function placeForPlan(at: LatLon) {
+    try {
+      const data = await getScoutJson(`/api/scout/reverse?lat=${at.lat}&lon=${at.lon}`);
+      if (data.ok) {
+        setCentre({ ...(data.place as Place), lat: at.lat, lon: at.lon });
+        map?.flyTo({ center: [at.lon, at.lat], zoom: 13 });
+        return;
+      }
+    } catch {
+      /* the browser's zone, then */
+    }
+    if (!centre) placeFirstSpotAt(at);
+    else setCentreCoordinates(at);
+  }
+
+  /** Called whenever a place and its zone become known; finishes a waiting plan. */
+  function afterPlaceKnown() {
+    if (!pendingPlan || !centre) return;
+    if ($<HTMLElement>('replan').hidden) return;
+    finishPlanAgain();
+  }
+
+  function finishPlanAgain() {
+    const plan = pendingPlan;
+    if (!plan || !centre) return;
+    pendingPlan = null;
+    $<HTMLElement>('replan-ask').hidden = true;
+    const when = $('replan-when');
+    if (!plan.taken) {
+      when.textContent = 'No capture time on the photo, so the date is left as it was.';
+      return;
+    }
+    const taken = wallClockToInstant(plan.taken, plan.offset, timeZone);
+    const found = sameLightAhead(centre.lat, centre.lon, taken, new Date());
+    const day = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone });
+    if (found.kind === 'dark') {
+      // The same date and wall-clock time, in the next year it's still ahead.
+      const thisYear = Number(isoDateIn(new Date(), timeZone).slice(0, 4));
+      let next = taken;
+      for (let year = thisYear; year <= thisYear + 1 && next.getTime() < Date.now(); year++) {
+        next = wallClockToInstant(`${year}${plan.taken.slice(4)}`, plan.offset, timeZone);
+      }
+      goToInstant(next);
+      const landed = currentInstant() ?? next;
+      when.textContent = `${found.refusal} ${day(landed)}, ${formatClock(landed, timeZone)}.`;
+      return;
+    }
+    const why = found.kind === 'anniversary' ? 'its anniversary' : 'the date mirrored about the solstice';
+    goToInstant(found.at);
+    // Quoted at the minute the clock landed on, so the two never differ.
+    const landed = currentInstant() ?? found.at;
+    when.textContent = `The sun stands where it did on ${day(landed)} at ${formatClock(landed, timeZone)}, ${why}: ${found.azimuth.toFixed(0)}°, ${found.altitude.toFixed(0)}° up.`;
+  }
+
+  on('replan-close', 'click', () => {
+    $<HTMLElement>('replan').hidden = true;
+    $<HTMLElement>('replan-ask').hidden = true;
+    pendingPlan = null;
+  });
+  on('replan-ask-close', 'click', () => ($<HTMLElement>('replan-ask').hidden = true));
+  if (pendingPlan) startPlanAgain(pendingPlan);
+
   /**
    * Put a name — and the *right* zone — on a spot that arrived as bare
    * coordinates.
@@ -10899,6 +11030,9 @@ export async function startScout(): Promise<void> {
         label = { name: formatCoords(centre), detail: '' };
         renderPanel();
       }
+    } finally {
+      // With whatever zone there now is, a waiting plan can go.
+      if (token === reverseToken) afterPlaceKnown();
     }
   }
 

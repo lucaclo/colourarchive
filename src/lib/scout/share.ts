@@ -172,3 +172,92 @@ export function decodeScoutLink(search: string): ScoutLink | null {
 
   return link;
 }
+
+/* ── Plan this shot again (issue #160) ─────────────────────────────────────── */
+
+/** The lens a photo was made with, as a link carries it: `l=ff,35,8,33`. */
+export interface LinkLens {
+  sensor: string;
+  focalLengthMm: number;
+  aperture?: number;
+  megapixels?: number;
+}
+
+/**
+ * A photograph to plan again: which one, the lens, and when it was taken as
+ * the camera's own clock read it, with the camera's offset when the file
+ * knows it. Separate from `ScoutLink` because it can arrive without a place
+ * (the static publish doesn't know where a photo was taken), and then Scout
+ * asks for one.
+ */
+export interface PlanAgain {
+  photo?: string;
+  lens?: LinkLens;
+  /** Wall-clock capture time, `YYYY-MM-DDTHH:MM(:SS)`. */
+  taken?: string;
+  /** The camera's UTC offset, `+02:00`. */
+  offset?: string;
+}
+
+const SENSOR_KEY = /^[a-z]{2,8}$/;
+
+export function encodePlanAgain(plan: PlanAgain): string {
+  const params = new URLSearchParams();
+  if (plan.photo) params.set('pa', plan.photo);
+  if (plan.lens) {
+    const l = plan.lens;
+    params.set('l', [l.sensor, l.focalLengthMm, l.aperture ?? '', l.megapixels ?? ''].join(',').replace(/,+$/, ''));
+  }
+  if (plan.taken) params.set('pt', plan.taken);
+  if (plan.offset) params.set('po', plan.offset);
+  return params.toString();
+}
+
+/** Read the plan-again fields back, each checked; null when there are none. */
+export function decodePlanAgain(search: string): PlanAgain | null {
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(search);
+  } catch {
+    return null;
+  }
+  const plan: PlanAgain = {};
+  const photo = params.get('pa');
+  if (photo && /^[\w-]{1,64}$/.test(photo)) plan.photo = photo;
+  const l = params.get('l');
+  if (l) {
+    const [sensor, focal, aperture, mp] = l.split(',');
+    const f = Number(focal);
+    if (SENSOR_KEY.test(sensor ?? '') && f > 0 && f <= 2000) {
+      plan.lens = { sensor, focalLengthMm: f };
+      const a = Number(aperture);
+      if (aperture && a > 0 && a <= 64) plan.lens.aperture = a;
+      const m = Number(mp);
+      if (mp && m > 0 && m <= 400) plan.lens.megapixels = m;
+    }
+  }
+  const taken = params.get('pt');
+  if (taken && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(taken) && isCalendarDate(taken.slice(0, 10))) plan.taken = taken;
+  const offset = params.get('po');
+  if (offset && /^[+-]\d{2}:\d{2}$/.test(offset)) plan.offset = offset;
+  return plan.photo || plan.lens || plan.taken ? plan : null;
+}
+
+/**
+ * A wall-clock time to a real instant: with the camera's offset when known,
+ * else in the place's own time zone (a camera set to local time, the usual
+ * case, in the place it was used).
+ */
+export function wallClockToInstant(wall: string, offset: string | undefined, timeZone: string): Date {
+  const base = wall.length === 16 ? `${wall}:00` : wall;
+  if (offset) return new Date(`${base}${offset}`);
+  // Guess the zone's offset at that wall time, then correct once for DST edges.
+  const asUtc = Date.parse(`${base}Z`);
+  const zoneOffset = (t: number) => {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(t));
+    const v = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+    return Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'), v('second')) - t;
+  };
+  const first = asUtc - zoneOffset(asUtc);
+  return new Date(asUtc - zoneOffset(first));
+}

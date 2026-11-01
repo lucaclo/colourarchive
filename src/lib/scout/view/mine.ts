@@ -421,6 +421,11 @@ export function createMineLayer(ports: MinePorts): MineLayer {
       }),
       action('Move', () => startPlacing(photo.id)),
     );
+    // Issue #160: its lens, here, at the next time the light repeats.
+    if (photo.plan) {
+      const query = `${photo.plan}&at=${photo.lat},${photo.lon}`;
+      actions.append(action('Plan again', () => (location.href = `/scout?${query}`)));
+    }
     // A GPS position is the file's, not a choice made here, so there is no
     // placement to take back.
     if (photo.source === 'placed' || photo.source === 'phone') actions.append(action('Remove', () => (popup?.remove(), void save(photo.id, null))));

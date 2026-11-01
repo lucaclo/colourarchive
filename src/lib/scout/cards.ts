@@ -8,18 +8,9 @@
  * at /scout/cards lays them out at credit-card size and prints them.
  */
 
-import { APERTURES, hyperfocalDistanceMm, sensorByKey, SENSORS } from './frame';
+import { APERTURES, hyperfocalDistanceMm, sensorByKey, sensorShortName, SENSORS } from './frame';
 import { kitFocalLengths, type KitEntry } from './kit';
 import { circleOfConfusionMm } from './sharpness';
-
-/** The format as it fits on a card. */
-const SENSOR_SHORT: Record<string, string> = {
-  ff: 'full frame',
-  apsc: 'APS-C',
-  mft: 'Micro Four Thirds',
-  medium: 'medium format',
-  phone: 'phone',
-};
 
 export interface CardRow {
   aperture: number;
@@ -55,7 +46,7 @@ export function hyperfocalCards(kit: readonly KitEntry[]): HyperfocalCard[] {
     for (const f of focals) {
       cards.push({
         title: zoom ? `${entry.body} · ${f}mm` : entry.label,
-        detail: `${entry.lens}${zoom ? ` at ${f}mm` : ''} · ${SENSOR_SHORT[sensor.key] ?? sensor.label}, ${entry.megapixels} MP`,
+        detail: `${entry.lens}${zoom ? ` at ${f}mm` : ''} · ${sensorShortName(sensor.key)}, ${entry.megapixels} MP`,
         rows: cardApertures(entry.maxAperture).map((aperture) => ({
           aperture,
           printM: hyperfocalDistanceMm(f, aperture, printCoc) / 1000,

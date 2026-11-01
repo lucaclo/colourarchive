@@ -134,3 +134,21 @@ describe('proofs in a link — issue #66', () => {
     assert.equal(decodeScoutLink(query)?.proofs, undefined);
   });
 });
+
+describe('plan again in a link', () => {
+  it('round-trips the photo, the lens and the moment, and checks each', async () => {
+    const { encodePlanAgain, decodePlanAgain } = await import('./share.ts');
+    const q = encodePlanAgain({ photo: 'a1b2', lens: { sensor: 'ff', focalLengthMm: 35, aperture: 8, megapixels: 33 }, taken: '2026-07-25T02:33:53', offset: '+08:00' });
+    assert.deepEqual(decodePlanAgain(q), { photo: 'a1b2', lens: { sensor: 'ff', focalLengthMm: 35, aperture: 8, megapixels: 33 }, taken: '2026-07-25T02:33:53', offset: '+08:00' });
+    assert.deepEqual(decodePlanAgain('l=ff,24'), { lens: { sensor: 'ff', focalLengthMm: 24 } });
+    assert.equal(decodePlanAgain('l=<script>,35&pt=2026-02-31T10:00'), null);
+    assert.equal(decodePlanAgain('at=1,2'), null);
+  });
+
+  it('reads a wall clock in the camera offset, or else the place’s zone', async () => {
+    const { wallClockToInstant } = await import('./share.ts');
+    assert.equal(wallClockToInstant('2026-07-25T10:00:00', '+08:00', 'Europe/London').toISOString(), '2026-07-25T02:00:00.000Z');
+    assert.equal(wallClockToInstant('2026-07-25T10:00:00', undefined, 'Europe/London').toISOString(), '2026-07-25T09:00:00.000Z');
+    assert.equal(wallClockToInstant('2026-01-25T10:00', undefined, 'Europe/London').toISOString(), '2026-01-25T10:00:00.000Z');
+  });
+});

@@ -21,6 +21,8 @@
  * the pins; both go through here so they agree on what counts as a location.
  */
 
+import { lensOfPhoto } from './kit';
+import { encodePlanAgain } from './share';
 import type { LatLon } from './geo';
 
 /** Hand placements by photo id. `via: 'phone'` marks one accepted from an
@@ -44,6 +46,8 @@ export interface MinePhoto {
   lat?: number;
   lon?: number;
   source?: MineSource;
+  /** "Plan again" (issue #160): its lens and moment as a Scout link query. */
+  plan?: string;
 }
 
 /** A finite coordinate on the planet. Everything else is refused. */
@@ -77,7 +81,10 @@ export interface MineInput {
   id: string;
   placeholder: string;
   derivatives: { width: number; avif: string }[];
-  exif: { capturedAt?: string; location?: { lat: number; lon: number } };
+  exif: { capturedAt?: string; location?: { lat: number; lon: number }; camera?: string; lens?: string; focalLength?: string; aperture?: string; offset?: string };
+  medium?: 'film' | 'digital';
+  width?: number;
+  height?: number;
 }
 
 export interface MineChapterInput {
@@ -101,6 +108,8 @@ export function resolveMinePhotos(chapters: MineChapterInput[], placed: PlacedLo
         chapter: chapter.name,
       };
       if (photo.exif.capturedAt) mine.capturedAt = photo.exif.capturedAt;
+      const lens = photo.medium ? lensOfPhoto({ ...photo.exif, medium: photo.medium, width: photo.width, height: photo.height }) : null;
+      if (lens) mine.plan = encodePlanAgain({ photo: photo.id, lens, taken: photo.exif.capturedAt?.slice(0, 19), offset: photo.exif.offset });
       const hand = placed[photo.id];
       const gps = gpsById[photo.id] ?? (isLatLon(photo.exif.location) ? photo.exif.location : undefined);
       const at = hand ?? gps;

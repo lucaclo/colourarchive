@@ -49,3 +49,10 @@ test('a baked list is checked, not trusted', () => {
   assert.equal(readKit([{ id: 'x', label: 'x', sensor: 'ff', megapixels: 0, focalMin: 1, focalMax: 1, focalUsual: 1, maxAperture: 1 }]).length, 0);
   assert.deepEqual(readKit('nope'), []);
 });
+
+test('one photo’s lens, for planning it again', async () => {
+  const { lensOfPhoto } = await import('./kit');
+  assert.deepEqual(lensOfPhoto({ medium: 'digital', camera: 'SONY ILCE-7CM2', lens: 'FE 35mm F2.8 ZA', focalLength: '35mm', aperture: 'f/8' }), { sensor: 'ff', focalLengthMm: 35, aperture: 8, megapixels: 33 });
+  assert.equal(lensOfPhoto({ medium: 'film', camera: 'NORITSU KOKI EZ Controller' }), null);
+  assert.equal(lensOfPhoto({ medium: 'digital', camera: 'SONY ILCE-7M3', lens: '----', focalLength: '' }), null);
+});

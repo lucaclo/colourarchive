@@ -104,6 +104,12 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
         <button class="toast-do nv-offer-close" id="nv-offer-close" type="button" aria-label="Not now">×</button>
       </div>
 
+      <!-- Issue #160: a photo with no place yet asks for one. -->
+      <div class="toast replan-ask" id="replan-ask" role="status" hidden>
+        <span>Where was this taken? Search, or tap the map.</span>
+        <button class="toast-do nv-offer-close" id="replan-ask-close" type="button" aria-label="Not now">×</button>
+      </div>
+
       <!-- Undo for a tap that moved the pin somewhere you did not mean. -->
       <div class="toast" id="toast" hidden>
         <span id="toast-text"></span>
@@ -299,6 +305,15 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
             <div class="panel-body" id="panel-body">
               <p class="panel-detail" id="panel-detail"></p>
+
+              <!-- Issue #160: a photo being planned again, its lens loaded and
+                   the next time the light stands where it stood. -->
+              <div class="replan" id="replan" hidden>
+                <p class="replan-head">Planning a photo again</p>
+                <p class="replan-line" id="replan-lens"></p>
+                <p class="replan-line replan-when" id="replan-when"></p>
+                <button class="replan-close" id="replan-close" type="button" aria-label="Done planning this photo">×</button>
+              </div>
 
               <!-- The answer first: the light in a word or two, and what the sun
                    does next. Everything below it is the working. -->
@@ -3502,6 +3517,17 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   :global(html[data-night-vision]) .scout-stage[data-map-tone='imagery'] .scout-map :global(canvas) { filter: brightness(0.6); }
   .nv-offer { gap: 0.5rem; }
   .nv-offer-close { padding-inline: 0.5rem; }
+
+
+  /* ── Plan again (issue #160) ─────────────────────────────────────────── */
+  .replan { position: relative; margin: 0.2rem 0 0.8rem; padding: 0.15rem 2.2rem 0.15rem 0.75rem; border-left: 1px solid #f0b866; }
+  .replan[hidden] { display: none; }
+  .replan-head { margin: 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .replan-line { margin: 0.15rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--fg); }
+  .replan-line:empty { display: none; }
+  .replan-when { color: color-mix(in oklab, #f0b866 80%, var(--fg)); }
+  .replan-close { position: absolute; right: -0.4rem; top: -0.4rem; width: var(--hit, 44px); height: var(--hit, 44px); border: 0; background: none; color: var(--secondary); font-size: 1.2rem; cursor: pointer; }
+  .replan-close:hover { color: var(--fg); }
 
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }

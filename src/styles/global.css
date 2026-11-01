@@ -1301,6 +1301,8 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500; letter-spacing: 0;
 }
 #lb-similar { margin-left: 0.35rem; }
+a.lb-tool { text-decoration: none; }
+.lb-tool[hidden] { display: none; }
 .lb-tool.lb-close { margin-left: 0.35rem; }
 /* One icon set for the viewer, drawn on the same 24-unit grid and stroke as
    the tab bar, in place of the ‹ › × ≈ ◐ i characters it used to borrow from

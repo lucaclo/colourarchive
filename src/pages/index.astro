@@ -1,4 +1,6 @@
 ---
+import { lensOfPhoto } from '../lib/scout/kit';
+import { encodePlanAgain } from '../lib/scout/share';
 import Layout from '../layouts/Layout.astro';
 import { readManifest, readOverrides } from '../lib/manifest';
 import { oklchCss, readableInk, baseKeyOf } from '../lib/color';
@@ -184,6 +186,14 @@ const roman = (n: number) =>
 // one outsized or tiny chapter can't swing the title past legible bounds.
 const avgChapterSize = hasPhotos ? manifest.count / manifest.chapters.length : 1;
 const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avgChapterSize));
+
+// "Plan again" (issue #160): this photo's lens and the moment it was taken,
+// as Scout's link reads them; empty when there's no focal length to load.
+function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number]): string {
+  const lens = lensOfPhoto({ medium: p.medium, camera: p.exif.camera, lens: p.exif.lens, focalLength: p.exif.focalLength, aperture: p.exif.aperture, width: p.width, height: p.height });
+  if (!lens) return '';
+  return encodePlanAgain({ photo: p.id, lens, taken: p.exif.capturedAt?.slice(0, 19), offset: p.exif.offset });
+}
 ---
 
 <Layout title={SITE_TITLE} accent={initialAccent} tab="archive">
@@ -392,6 +402,8 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
                     'data-iso': p.exif.iso ? String(p.exif.iso) : '',
                     'data-shadow': shadow ? shadow.sentence : '',
                     'data-location': p.exif.location ? `${p.exif.location.lat}, ${p.exif.location.lon}` : '',
+                    // Issue #160: Scout, set to this photo's lens and moment.
+                    'data-plan': planAgainQuery(p),
                   } : { 'data-camera': FILM_CAMERA }; // film: label the real camera, hide scanner EXIF
                   // Issue #105: what the lightbox's chapter menu needs — never
                   // baked into the published snapshot, which cannot move anything.
@@ -501,6 +513,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           <button class="lb-tool" id="lb-clock" aria-label="Colour clock" title="Colour clock: the archive follows the light outside"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg></button>
           <button class="lb-tool" id="lb-info" data-cmdk="Photo details" data-cmdk-keywords="info, exif" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-similar" data-cmdk="Similar photos" data-cmdk-keywords="like this" aria-label="More like this in your archive" title="More like this in your archive">Similar</button>}
+          <a class="lb-tool lb-text" id="lb-plan" href="/scout" data-cmdk="Plan this shot again" data-cmdk-keywords="scout, lens, same light, again" title="Plan this shot again in Scout: its lens, its place, the next time the light stands there" hidden>Plan again</a>
           <button class="lb-tool lb-text" id="lb-roll" data-cmdk="Same roll" data-cmdk-keywords="film" aria-label="The rest of this roll" title="The rest of this roll" aria-expanded="false" hidden>Same roll</button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-match" data-cmdk="Match this look" data-cmdk-keywords="lightroom, preset" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
           {!STATIC && (
@@ -1568,6 +1581,10 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     lbCap.innerHTML = captionHtml(f);
     lbImg.alt = `${f.dataset.chapter || ''} — ${f.dataset.file || 'photograph'}`;
     syncRoll(f);
+    if (planBtn) {
+      planBtn.hidden = !f.dataset.plan;
+      if (f.dataset.plan) planBtn.href = `/scout?${f.dataset.plan}`;
+    }
     currentOrig = f.dataset.orig || '';
     origSwapped = false;
     resetZoom();
@@ -1578,6 +1595,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
   // --- Same roll (issue #146) -------------------------------------------
   const STATIC_SITE = lb.dataset.static === '1';
   const rollBtn = document.getElementById('lb-roll');
+  const planBtn = document.getElementById('lb-plan');
   const rollStrip = document.getElementById('lb-rollstrip');
   const rollTitle = document.getElementById('lb-roll-title');
   const rollInput = document.getElementById('lb-roll-input');

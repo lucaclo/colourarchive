@@ -183,3 +183,22 @@ export function readKit(value: unknown): KitEntry[] {
       [e.megapixels, e.focalMin, e.focalMax, e.focalUsual, e.maxAperture].every((n) => typeof n === 'number' && n > 0),
   );
 }
+
+/**
+ * One photograph's lens, for "plan this shot again" (issue #160): the body's
+ * format and resolution, the focal length it was shot at and its aperture.
+ * Null for film, or a photo whose EXIF names no focal length.
+ */
+export function lensOfPhoto(p: KitPhoto & { aperture?: string }): { sensor: string; focalLengthMm: number; aperture?: number; megapixels: number } | null {
+  if (p.medium !== 'digital' || !p.camera || SCANNER.test(p.camera)) return null;
+  const focal = parseFloat(p.focalLength ?? '');
+  if (!(focal > 0)) return null;
+  const body = BODIES.find((b) => b.test.test(p.camera!));
+  const aperture = parseFloat((p.aperture ?? '').replace(/^f\//i, ''));
+  return {
+    sensor: body?.sensor ?? sensorFromMount(cleanLens(p.lens ?? '')),
+    focalLengthMm: focal,
+    ...(aperture > 0 ? { aperture } : {}),
+    megapixels: body?.megapixels ?? megapixelsFrom([p]) ?? 24,
+  };
+}

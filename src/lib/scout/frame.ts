@@ -78,6 +78,16 @@ export const SENSORS: Sensor[] = [
   { key: 'phone', label: 'Phone main camera (1/1.28")', widthMm: 9.8, heightMm: 7.3 },
 ];
 
+/** The format in a few words, for a card or a sentence: "full frame", "APS-C". */
+const SENSOR_SHORT: Record<string, string> = {
+  ff: 'full frame',
+  apsc: 'APS-C',
+  mft: 'Micro Four Thirds',
+  medium: 'medium format',
+  phone: 'phone',
+};
+export const sensorShortName = (key: string): string => SENSOR_SHORT[key] ?? key;
+
 export const sensorByKey = (key: string): Sensor | undefined =>
   SENSORS.find((s) => s.key === key);
 
