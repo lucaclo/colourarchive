@@ -11,6 +11,7 @@ import { groupPhotosByLens, gearPresets, type GearPreset } from '../lib/match/ge
 import { shadowHeadroom } from '../lib/match/shadow-headroom';
 import { encodePalette, oklchToHex, searchPalette } from '../lib/colour-search';
 import ColourFilter from '../components/ColourFilter.astro';
+import { inferRolls, frameCaption, type Roll } from '../lib/rolls';
 
 // Prerenderable: `astro build` bakes a static snapshot of the archive (from the
 // current manifest) into dist/client — hostable read-only anywhere — while the
@@ -26,6 +27,13 @@ const FILM_CAMERA = 'Leica Mini Zoom';
 // Server-only chrome (Add/Remove, Inspiration, original-image zoom) is hidden.
 const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
 const manifest = await readManifest();
+// Issue #146: film scans grouped into the rolls they came from, so each film
+// caption is its frame and roll rather than the same generated sentence.
+const rollOf = new Map<string, Roll>();
+for (const roll of inferRolls(manifest.chapters.flatMap((c) => c.photos).filter((p) => p.medium === 'film')
+  .map((p) => ({ id: p.id, filename: p.filename, camera: p.exif.camera, software: p.exif.software, capturedAt: p.exif.capturedAt })))) {
+  for (const id of roll.ids) rollOf.set(id, roll);
+}
 const hasPhotos = manifest.count > 0;
 // Moving a photo between chapters (issue #105) writes to the Mac's overrides
 // file, so the choices only exist where there is a server to write them.
@@ -398,7 +406,10 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
                     ? new Date(p.exif.capturedAt).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
                     : '';
                   const kind = p.genre ? `${p.genre[0].toUpperCase()}${p.genre.slice(1)} photograph` : 'Photograph';
-                  const name = [p.medium === 'film' ? `${kind} on film` : kind, ch.name, when].filter(Boolean).join(', ');
+                  const roll = p.medium === 'film' ? rollOf.get(p.id) : undefined;
+                  const name = roll
+                    ? `${frameCaption(roll, p.id)}, ${ch.name}`
+                    : [p.medium === 'film' ? `${kind} on film` : kind, ch.name, when].filter(Boolean).join(', ');
                   return (
                     <figure
                       class="frame"
@@ -409,6 +420,8 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
                       data-id={p.id}
                       data-chapter={ch.name}
                       data-key={ch.key}
+                      data-roll={roll ? String(roll.number) : undefined}
+                      data-roll-key={roll?.key}
                       data-ci={ci}
                       data-oklch={`L ${p.oklch.L} · C ${p.oklch.C} · H ${p.oklch.H}°`}
                       data-file={p.filename}
@@ -476,7 +489,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
       </nav>
 
       <!-- Immersive single-photo view: full, uncropped, with metadata. -->
-      <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photograph" tabindex="-1">
+      <div class="lightbox" id="lightbox" data-static={STATIC ? '1' : undefined} hidden role="dialog" aria-modal="true" aria-label="Photograph" tabindex="-1">
         <span class="lb-count" id="lb-count" aria-live="polite"></span>
         <!-- Every keyboard shortcut also needs a control: on the iPad — the
              device this is actually read on — `i` and `p` are unreachable, so
@@ -488,6 +501,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
           <button class="lb-tool" id="lb-clock" aria-label="Colour clock" title="Colour clock: the archive follows the light outside"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg></button>
           <button class="lb-tool" id="lb-info" data-cmdk="Photo details" data-cmdk-keywords="info, exif" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-similar" data-cmdk="Similar photos" data-cmdk-keywords="like this" aria-label="More like this in your archive" title="More like this in your archive">Similar</button>}
+          <button class="lb-tool lb-text" id="lb-roll" data-cmdk="Same roll" data-cmdk-keywords="film" aria-label="The rest of this roll" title="The rest of this roll" aria-expanded="false" hidden>Same roll</button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-match" data-cmdk="Match this look" data-cmdk-keywords="lightroom, preset" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
           {!STATIC && (
             <button class="lb-tool lb-text" id="lb-chapter" data-cmdk="Move to another chapter" data-cmdk-keywords="chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">Chapter</button>
@@ -514,6 +528,14 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
         </div>
         <button class="lb-nav lb-next" id="lb-next" aria-label="Next" title="Next"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></button>
         <div class="lb-caption" id="lb-caption"></div>
+        {/* Issue #146: the roll this film frame came from. */}
+        <div class="lb-roll" id="lb-rollstrip" hidden>
+          <div class="lb-roll-head">
+            <button type="button" class="lb-roll-title" id="lb-roll-title" title={STATIC ? undefined : 'Rename this roll'}></button>
+            <input class="lb-roll-input" id="lb-roll-input" type="text" maxlength="80" aria-label="Roll name" hidden />
+          </div>
+          <div class="lb-roll-list" id="lb-roll-list"></div>
+        </div>
         <span class="lb-progress" aria-hidden="true"></span>
       </div>
 
@@ -1545,6 +1567,7 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     lbImg.src = f.dataset.full || f.querySelector('img.photo')?.currentSrc || '';
     lbCap.innerHTML = captionHtml(f);
     lbImg.alt = `${f.dataset.chapter || ''} — ${f.dataset.file || 'photograph'}`;
+    syncRoll(f);
     currentOrig = f.dataset.orig || '';
     origSwapped = false;
     resetZoom();
@@ -1552,6 +1575,80 @@ const chapterWeight = (count: number) => Math.max(0.7, Math.min(1.5, count / avg
     if (!lb.hidden) syncUrl();
     requestAnimationFrame(() => preloadNeighbours(i));
   }
+  // --- Same roll (issue #146) -------------------------------------------
+  const STATIC_SITE = lb.dataset.static === '1';
+  const rollBtn = document.getElementById('lb-roll');
+  const rollStrip = document.getElementById('lb-rollstrip');
+  const rollTitle = document.getElementById('lb-roll-title');
+  const rollInput = document.getElementById('lb-roll-input');
+  const rollList = document.getElementById('lb-roll-list');
+  let rollTitles = null; // from /api/rolls on the Mac: key -> title
+  async function loadRollTitles() {
+    if (rollTitles || STATIC_SITE) return;
+    try {
+      const d = await fetch('/api/rolls').then((r) => r.json());
+      rollTitles = d.ok ? d.titles : {};
+    } catch { rollTitles = {}; }
+  }
+  function syncRoll(f) {
+    const roll = f.dataset.roll;
+    if (rollBtn) rollBtn.hidden = !roll;
+    if (!roll && rollStrip) { rollStrip.hidden = true; rollBtn?.setAttribute('aria-expanded', 'false'); }
+    if (roll && rollStrip && !rollStrip.hidden) renderRoll(f);
+  }
+  function renderRoll(f) {
+    const key = f.dataset.rollKey;
+    const same = frames.filter((x) => x.dataset.rollKey === key);
+    rollTitle.textContent = (rollTitles && rollTitles[key]) || `Roll ${f.dataset.roll}`;
+    rollTitle.dataset.key = key;
+    rollList.replaceChildren(...same.map((x) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lb-roll-frame';
+      b.setAttribute('aria-label', x.getAttribute('aria-label') || '');
+      b.setAttribute('aria-current', String(x === f));
+      const img = document.createElement('img');
+      img.src = x.querySelector('img.photo')?.getAttribute('src') || x.dataset.full || '';
+      img.alt = '';
+      img.loading = 'lazy';
+      b.append(img);
+      b.addEventListener('click', () => showAt(frames.indexOf(x)));
+      return b;
+    }));
+    rollList.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  rollBtn?.addEventListener('click', async () => {
+    const open = rollStrip.hidden;
+    rollStrip.hidden = !open;
+    rollBtn.setAttribute('aria-expanded', String(open));
+    if (open) { await loadRollTitles(); renderRoll(frames[lbIndex]); }
+  });
+  // Renaming is one tap on the title, then type and Enter (Mac only).
+  rollTitle?.addEventListener('click', () => {
+    if (STATIC_SITE) return;
+    rollInput.value = rollTitle.textContent;
+    rollTitle.hidden = true;
+    rollInput.hidden = false;
+    rollInput.focus();
+    rollInput.select();
+  });
+  const finishRename = async (save) => {
+    if (rollInput.hidden) return;
+    rollInput.hidden = true;
+    rollTitle.hidden = false;
+    const key = rollTitle.dataset.key;
+    if (!save || !key) return;
+    try {
+      const d = await fetch('/api/rolls', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, name: rollInput.value }) }).then((r) => r.json());
+      if (d.ok) { rollTitles = d.titles; renderRoll(frames[lbIndex]); }
+    } catch { /* stays as it was */ }
+  };
+  rollInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finishRename(true); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishRename(false); }
+  });
+  rollInput?.addEventListener('blur', () => finishRename(true));
+
   // byKeyboard: focus lands on Close, ready for the next key. From a tap or a
   // deep link it lands on the viewer itself — Chromium otherwise rings the
   // Close button on every photo you open, which reads as a selected state.

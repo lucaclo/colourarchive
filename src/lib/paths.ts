@@ -47,6 +47,9 @@ export const GPS_PATH = kept('photos.gps.json');
 export const PLACE_DISMISSED_PATH = kept('photos.places-dismissed.json');
 // Every sky reading Scout gave for a kept spot, to check later (issue #143).
 export const SKY_READINGS_PATH = kept('photos.sky-readings.json');
+// Film roll names given by hand (issue #146). Private: a roll is often named
+// for where it was shot.
+export const ROLLS_PATH = kept('photos.rolls.json');
 // Each checked photo's measured sky colour (sky-measure.ts): derived, cached.
 export const SKY_CACHE_PATH = kept('.sky-cache.json');
 export const EXPORT_PATH = kept('sequence.json');

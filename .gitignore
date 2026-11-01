@@ -13,6 +13,7 @@ photos.locations.json
 photos.gps.json
 photos.places-dismissed.json
 photos.sky-readings.json
+photos.rolls.json
 
 # Local Netlify folder
 .netlify

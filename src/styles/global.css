@@ -1734,3 +1734,23 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
 .cclock-caption[hidden] { display: none; }
 html.cclock-on, html.cclock-on body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .cclock-img { transition-duration: 1s; } }
+
+/* --- Same roll, in the lightbox (issue #146) ------------------------------ */
+.lb-roll {
+  position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 5.2rem); transform: translateX(-50%);
+  z-index: 5; width: min(46rem, calc(100% - 2rem)); padding: 0.55rem 0.7rem 0.7rem; border-radius: var(--r-md);
+  background: rgb(10 9 8 / 0.78); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: #efebe4;
+}
+.lb-roll[hidden] { display: none; }
+.lb-roll-head { display: flex; align-items: center; min-height: 32px; margin-bottom: 0.35rem; }
+.lb-roll-title {
+  appearance: none; border: 0; background: none; padding: 0; color: inherit; cursor: text;
+  font: italic 500 1rem var(--font-display);
+}
+.lb-roll-title[hidden] { display: none; }
+.lb-roll-input { font: italic 500 1rem var(--font-display); background: rgb(255 255 255 / 0.08); color: inherit; border: 1px solid rgb(255 255 255 / 0.25); border-radius: 4px; padding: 0.2rem 0.4rem; width: 100%; }
+.lb-roll-list { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.lb-roll-frame { appearance: none; border: 0; padding: 0; background: none; cursor: pointer; flex: 0 0 auto; border-radius: 3px; overflow: hidden; opacity: 0.7; outline-offset: 2px; }
+.lb-roll-frame img { display: block; height: 56px; width: auto; }
+.lb-roll-frame[aria-current='true'] { opacity: 1; outline: 2px solid #efebe4; }
+.lb-roll-frame:hover { opacity: 1; }
