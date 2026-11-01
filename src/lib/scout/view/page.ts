@@ -257,7 +257,6 @@ import {
 import {
   APERTURES,
   FOCAL_LENGTHS,
-  FOCUS_DISTANCES_M,
   SENSORS,
   checkFraming,
   depthOfField,
@@ -344,6 +343,7 @@ import { createInfoTips } from './infotip';
 import { createGlossary } from './glossary';
 import { kitFocalLengths, readKit, type KitEntry } from '../kit';
 import { circleOfConfusionMm, readSharpness, sharpWhere } from '../sharpness';
+import { FOCUS_INFINITY_M, axisTicks, describeSplit, distanceX, dofSplit, focusToSlider, sliderToFocus, zoneX } from '../dof-diagram';
 import { distanceUnits, formatHeight, formatLength, readDistanceUnits, setDistanceUnits } from '../units';
 import { createFirstVisitOrientation } from './orientation';
 import { mountSpace, globeFillsView } from './space';
@@ -6764,7 +6764,6 @@ export async function startScout(): Promise<void> {
     renderKit();
   }
   fillLensOptions();
-  fillFocusOptions();
   renderKit();
 
   on('frame-lens-more', 'click', () => openCameraGroup());
@@ -6778,12 +6777,95 @@ export async function startScout(): Promise<void> {
     requestAnimationFrame(() => (fold ? $(fold) : group).scrollIntoView({ block: 'start', behavior: 'smooth' }));
   }
 
-  function fillFocusOptions() {
-    const focusSelect = $<HTMLSelectElement>('frame-focus');
-    const value = focusSelect.value;
-    focusSelect.replaceChildren(...FOCUS_DISTANCES_M.map((m) => new Option(formatLength(m), String(m))));
-    if (value) focusSelect.value = value;
+  /* ── Depth of field, drawn ──────────────────────────────────────────────
+     Issue #150. The answer first ("3.4 m to ∞"), the real split either side
+     of the focus, and a side view on a log axis. Only the focus moves this
+     on its own, so the slider redraws just this, not the frame on the map. */
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const svgEl = (name: string, attrs: Record<string, string | number>) => {
+    const el = document.createElementNS(SVG_NS, name);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    return el;
+  };
+  let tickUnits = '';
+
+  /** The lens's depth of field at its focus, in the chosen standard. */
+  function currentDof() {
+    const sensor = sensorByKey(lens.sensor) ?? SENSORS[0];
+    const standard = readSharpness(lens.sharpness);
+    return {
+      standard,
+      dof: depthOfField(
+        lens.focalLengthMm,
+        lens.aperture,
+        circleOfConfusionMm(standard, sensor, lens.megapixels),
+        lens.focusDistanceM,
+        sharpWhere(standard),
+      ),
+    };
   }
+
+  const focusLabel = (m: number) => (m >= FOCUS_INFINITY_M ? '∞' : formatLength(m));
+
+  function renderDof() {
+    const { standard, dof } = currentDof();
+    const focus = lens.focusDistanceM;
+    $('dof-lead').textContent = sharpWhere(standard);
+    const far = Number.isFinite(dof.farM) ? formatLength(dof.farM) : '∞';
+    const range = $('dof-range');
+    range.textContent = `${formatLength(dof.nearM)} to ${far}`;
+    range.setAttribute('aria-label', `${sharpWhere(standard)} from ${formatLength(dof.nearM)} to ${Number.isFinite(dof.farM) ? far : 'infinity'}`);
+    $('dof-split').textContent = describeSplit(dofSplit(dof, focus));
+    $('dof-more').dataset.tip = dof.note;
+    $('frame-focus-out').textContent = focusLabel(focus);
+    const slider = $<HTMLInputElement>('frame-focus');
+    if (document.activeElement !== slider) slider.value = String(focusToSlider(focus));
+    slider.setAttribute('aria-valuetext', focusLabel(focus));
+
+    // Ticks follow the units, so they are only rebuilt when those change.
+    if (tickUnits !== distanceUnits()) {
+      tickUnits = distanceUnits();
+      $('dof-ticks').replaceChildren(
+        ...axisTicks(distanceUnits()).flatMap((t) => [
+          svgEl('line', { class: 'dof-tick', x1: t.x, x2: t.x, y1: 72, y2: t.label ? 77 : 75 }),
+          ...(t.label ? [Object.assign(svgEl('text', { class: 'dof-tick-label', x: t.x, y: 89 }), { textContent: t.label })] : []),
+        ]),
+      );
+    }
+    const zone = zoneX(dof.nearM, dof.farM);
+    const zoneRect = $('dof-zone');
+    zoneRect.setAttribute('x', String(zone.x));
+    zoneRect.setAttribute('width', String(zone.width));
+    const fx = String(distanceX(focus));
+    for (const id of ['dof-focus']) {
+      $(id).setAttribute('x1', fx);
+      $(id).setAttribute('x2', fx);
+    }
+    $('dof-focus-dot').setAttribute('cx', fx);
+    const hx = String(distanceX(dof.hyperfocalM));
+    $('dof-h').setAttribute('x1', hx);
+    $('dof-h').setAttribute('x2', hx);
+    $('dof-h-label').setAttribute('x', hx);
+    // Beside the focus line the H would sit on its dot; the line marks it then.
+    $('dof-h-label').toggleAttribute('hidden', Math.abs(Number(hx) - Number(fx)) < 9);
+
+    const hyper = $<HTMLButtonElement>('dof-hyper');
+    const atHyper = dofSplit(dof, focus).situation === 'at-hyperfocal';
+    hyper.textContent = atHyper ? `At hyperfocal · ${formatLength(dof.hyperfocalM)}` : `Focus at hyperfocal · ${formatLength(dof.hyperfocalM)}`;
+    hyper.setAttribute('aria-pressed', String(atHyper));
+
+    for (const b of $('dof-standard').querySelectorAll<HTMLButtonElement>('button')) {
+      const on = b.dataset.standard === standard;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+  }
+
+  on('dof-hyper', 'click', () => {
+    lens.focusDistanceM = currentDof().dof.hyperfocalM;
+    renderDof();
+    save();
+  });
 
   /** Everything the frame draws and says, after any of its controls moves. */
   function frameChanged({ persist = true } = {}) {
@@ -6791,19 +6873,7 @@ export async function startScout(): Promise<void> {
     $('frame-bearing-out').textContent = `${lens.bearing}° ${compassPoint(lens.bearing)}`;
     $('frame-tilt-out').textContent = `${lens.tiltDeg > 0 ? '+' : ''}${lens.tiltDeg}°`;
     $('frame-lens').textContent = describeLens(sensor, lens.focalLengthMm, currentFov());
-    const standard = readSharpness(lens.sharpness);
-    $('frame-dof').textContent = depthOfField(
-      lens.focalLengthMm,
-      lens.aperture,
-      circleOfConfusionMm(standard, sensor, lens.megapixels),
-      lens.focusDistanceM,
-      sharpWhere(standard),
-    ).note;
-    for (const b of $('dof-standard').querySelectorAll<HTMLButtonElement>('button')) {
-      const on = b.dataset.standard === standard;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-pressed', String(on));
-    }
+    renderDof();
     drawFrame();
     renderFraming();
     // The core fold prints two answers about this lens, and both go stale the
@@ -6847,10 +6917,11 @@ export async function startScout(): Promise<void> {
     lens.sharpness = readSharpness(next);
     frameChanged();
   });
-  on('frame-focus', 'change', (event) => {
-    lens.focusDistanceM = Number((event.target as HTMLSelectElement).value);
-    frameChanged();
+  on('frame-focus', 'input', (event) => {
+    lens.focusDistanceM = sliderToFocus(Number((event.target as HTMLInputElement).value));
+    renderDof();
   });
+  on('frame-focus', 'change', () => save());
   on('frameorient', 'click', (event) => {
     const button = (event.target as HTMLElement).closest('button');
     const next = button?.dataset.orient as Orientation | undefined;
@@ -8232,7 +8303,6 @@ export async function startScout(): Promise<void> {
     $('slab-out').textContent = formatHeight(slab.heightM);
     $('sight-out').textContent = formatHeight(target.heightM);
     $('radius-out').textContent = formatDistance(radiusKm * 1000);
-    fillFocusOptions();
     frameChanged({ persist: false });
     renderSight();
     alignPanel.restate();
@@ -10264,7 +10334,6 @@ export async function startScout(): Promise<void> {
     }
     if (lens.kit && !kitEntry()) lens.kit = undefined;
     syncLensControls();
-    $<HTMLSelectElement>('frame-focus').value = String(lens.focusDistanceM);
     $<HTMLInputElement>('frame-bearing').value = String(lens.bearing);
     $<HTMLInputElement>('frame-tilt').value = String(lens.tiltDeg);
     for (const b of $('frameorient').querySelectorAll('button')) {

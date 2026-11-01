@@ -450,12 +450,40 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     <button type="button" data-standard="print" class="on" aria-pressed="true">For print</button>
                     <button type="button" data-standard="pixel" aria-pressed="false">Pixel-sharp</button>
                   </div>
-                  <div class="frame-row">
-                    <label class="frame-field" for="frame-focus"><span>Focus distance</span>
-                      <select id="frame-focus"></select>
+                  <!-- Issue #150: the answer first, then the drawing. Distance on
+                       a log scale, like a lens's own focus scale; the shaded band
+                       is what is sharp, the line where it is focused, H the
+                       hyperfocal distance. -->
+                  <div class="dof">
+                    <p class="dof-lead" id="dof-lead">Sharp in a 10 × 8 print</p>
+                    <p class="dof-answer">
+                      <span id="dof-range">—</span>
+                      <button class="infotip" id="dof-more" type="button" aria-label="Depth of field in full" data-term="depth-of-field" data-tip="">i</button>
+                    </p>
+                    <p class="dof-split" id="dof-split"></p>
+                    <svg class="dof-chart" id="dof-chart" viewBox="0 0 320 96" aria-hidden="true">
+                      <rect class="dof-zone" id="dof-zone" x="0" y="34" width="0" height="38" />
+                      <g id="dof-stack"></g>
+                      <line class="dof-ground" x1="0" y1="72" x2="320" y2="72" />
+                      <g id="dof-ticks"></g>
+                      <line class="dof-h" id="dof-h" x1="-10" y1="34" x2="-10" y2="72" />
+                      <text class="dof-h-label" id="dof-h-label" x="-10" y="29">H</text>
+                      <line class="dof-focus" id="dof-focus" x1="-10" y1="22" x2="-10" y2="72" />
+                      <circle class="dof-focus-dot" id="dof-focus-dot" cx="-10" cy="22" r="2.4" />
+                      <!-- The camera, side on. -->
+                      <g class="dof-camera" transform="translate(4 58)">
+                        <rect x="0" y="0" width="17" height="12" rx="2" />
+                        <rect x="17" y="3" width="5" height="6" rx="1" />
+                        <rect x="4" y="-2.5" width="6" height="3" rx="1" />
+                      </g>
+                    </svg>
+                    <label class="slab-row" for="frame-focus">
+                      <span>Focus</span>
+                      <output id="frame-focus-out">10 m</output>
                     </label>
+                    <input id="frame-focus" type="range" min="0" max="1000" step="1" value="500" aria-describedby="dof-range" />
+                    <button class="wide dof-hyper" id="dof-hyper" type="button" data-cmdk="Focus at hyperfocal" data-cmdk-keywords="depth of field, sharp, infinity" data-cmdk-always>Focus at hyperfocal</button>
                   </div>
-                  <p class="slab-note" id="frame-dof">—</p>
                 </details>
 
                 <details class="fold" id="fold-nd">
@@ -3213,6 +3241,56 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border: 1px solid var(--border);
     border-radius: 5px;
   }
+
+  /* ── Depth of field, drawn (issue #150) ──────────────────────────────── */
+  .dof { padding: 0.15rem 0 0.4rem; }
+  .dof-standard { margin-bottom: 0.7rem; }
+  .dof-lead {
+    margin: 0;
+    font-family: var(--font-note);
+    font-style: italic;
+    font-size: var(--t-footnote);
+    color: var(--secondary);
+  }
+  .dof-answer {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin: 0.05rem 0 0;
+    font-family: var(--font-ui);
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+  }
+  .dof-answer .infotip { align-self: center; }
+  .dof-split { margin: 0.15rem 0 0.4rem; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--secondary); }
+  .dof-split:empty { display: none; }
+  .dof-chart { display: block; width: 100%; height: auto; margin: 0.2rem 0 0.5rem; overflow: visible; }
+  .dof-zone { fill: color-mix(in oklab, #f0b866 20%, transparent); stroke: #f0b866; stroke-width: 1; }
+  .dof input[type='range'] { width: 100%; margin: 0; accent-color: var(--fg); }
+  .dof-chart :global(.dof-stack-zone) { stroke-width: 1; }
+  .dof-chart :global(.dof-stack-zone.odd) { fill: color-mix(in oklab, #f0b866 30%, transparent); stroke: #f0b866; }
+  .dof-chart :global(.dof-stack-zone.even) { fill: color-mix(in oklab, #9aa7ff 26%, transparent); stroke: #9aa7ff; }
+  .dof-chart :global(.dof-stack-focus) { stroke: var(--fg); stroke-width: 1; opacity: 0.7; }
+  .dof-ground { stroke: color-mix(in oklab, var(--fg) 45%, transparent); stroke-width: 1; }
+  .dof-chart :global(.dof-tick) { stroke: color-mix(in oklab, var(--fg) 35%, transparent); stroke-width: 1; }
+  .dof-chart :global(.dof-tick-label) {
+    fill: var(--secondary);
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    text-anchor: middle;
+  }
+  .dof-h { stroke: var(--secondary); stroke-width: 1; stroke-dasharray: 2.5 2.5; }
+  .dof-h-label { fill: var(--secondary); font-family: var(--font-ui); font-size: 10.5px; text-anchor: middle; }
+  .dof-focus { stroke: var(--fg); stroke-width: 1.5; }
+  .dof-focus-dot { fill: var(--fg); }
+  .dof-camera { fill: var(--fg); }
+  .dof-hyper { margin-top: 0.6rem; }
+  .dof-h-label[hidden] { display: none; }
+  .dof-hyper[aria-pressed='true'] { border-color: #f0b866; color: #f0b866; }
+
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }
   .kit[hidden] { display: none; }
