@@ -157,7 +157,9 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
           id: el.dataset.cmdkId,
           title: el.dataset.cmdk || '',
           keywords: el.dataset.cmdkKeywords,
-          visible: visible && !el.closest('[inert]'),
+          // `data-cmdk-always`: a control that works from the palette even while
+          // its panel is closed (Scout's units, its glossary).
+          visible: (visible || el.hasAttribute('data-cmdk-always')) && !el.closest('[inert]'),
           disabled: (el as HTMLButtonElement).disabled === true || el.getAttribute('aria-disabled') === 'true',
           current: el.getAttribute('aria-pressed') === 'true' || el.hasAttribute('aria-current') || el.getAttribute('aria-selected') === 'true',
         };

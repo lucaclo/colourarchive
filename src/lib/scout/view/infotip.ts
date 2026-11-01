@@ -13,9 +13,11 @@ import { $ } from './dom';
 
 const MARGIN = 8;
 
-export function createInfoTips(): void {
+export function createInfoTips(openGlossary?: (termId: string) => void): void {
   const pop = $<HTMLElement>('infotip-pop');
   const text = $<HTMLElement>('infotip-pop-text');
+  // Issue #159: a tip whose word is in the glossary links to its entry.
+  const more = $<HTMLButtonElement>('infotip-more');
   let openButton: HTMLButtonElement | null = null;
 
   function close(): void {
@@ -48,11 +50,22 @@ export function createInfoTips(): void {
 
   function open(button: HTMLButtonElement): void {
     text.textContent = button.dataset.tip ?? '';
+    more.hidden = !(openGlossary && button.dataset.term);
     button.setAttribute('aria-expanded', 'true');
     openButton = button;
     place(button);
     pop.classList.add('is-open');
   }
+
+  more.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const term = openButton?.dataset.term;
+    close();
+    if (term) openGlossary?.(term);
+  });
+  // Clicks inside the popover (on its link, or selecting its text) are not
+  // "somewhere else".
+  pop.addEventListener('click', (event) => event.stopPropagation());
 
   document.querySelectorAll<HTMLButtonElement>('.infotip').forEach((button) => {
     button.setAttribute('aria-expanded', 'false');

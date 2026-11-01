@@ -36,6 +36,7 @@
  */
 
 import { destination, type LatLon } from './geo';
+import { formatLength } from './units';
 
 const RAD = Math.PI / 180;
 const DEG = 180 / Math.PI;
@@ -592,11 +593,7 @@ export function depthOfField(
 
 /** "3.4 m", "820 m", "1.2 km" — never more precision than the model itself has. */
 function formatDistanceM(m: number): string {
-  if (!Number.isFinite(m)) return 'infinity';
-  if (m >= 10_000) return `${Math.round(m / 1000)} km`;
-  if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
-  if (m >= 10) return `${Math.round(m)} m`;
-  return `${m.toFixed(1)} m`;
+  return Number.isFinite(m) ? formatLength(m) : 'infinity';
 }
 
 function describeDepthOfField(

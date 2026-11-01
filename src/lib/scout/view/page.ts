@@ -342,6 +342,8 @@ import { createPlanPanel, PLAN_SOURCE } from './plan-panel';
 import type { MonthGridView } from './month-grid';
 import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
+import { createGlossary } from './glossary';
+import { distanceUnits, formatHeight, formatLength, readDistanceUnits, setDistanceUnits } from '../units';
 import { createFirstVisitOrientation } from './orientation';
 import { mountSpace, globeFillsView } from './space';
 
@@ -724,6 +726,8 @@ export async function startScout(): Promise<void> {
   // The map is optional. Everything else on this page — the search, the sun
   // times, the slider — is arithmetic, and works perfectly well without a GPU.
   let map: MapLibreMap | null = null;
+  /** Follows the page's metres-or-feet setting (issue #159). */
+  let scaleControl: maplibregl.ScaleControl | null = null;
 
   /**
    * The library, fetched as its own chunk rather than as part of this page.
@@ -797,7 +801,8 @@ export async function startScout(): Promise<void> {
         'to see it. Everything else here works.',
     );
   } else {
-    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+    scaleControl = new maplibregl.ScaleControl({ unit: 'metric' });
+    map.addControl(scaleControl, 'bottom-right');
     /**
      * Start the credit folded.
      *
@@ -2424,7 +2429,7 @@ export async function startScout(): Promise<void> {
     $('sight-detail').textContent = [
       `${formatDistance(sight.distanceM)} ${compassPoint(sight.bearing)}`,
       rise == null ? '' : `${rise >= 0 ? '+' : ''}${rise.toFixed(1)}° above level`,
-      `eye ${sight.eyeM} m${sight.targetM ? `, subject ${sight.targetM} m` : ''}`,
+      `eye ${formatLength(sight.eyeM)}${sight.targetM ? `, subject ${formatHeight(sight.targetM)}` : ''}`,
     ]
       .filter(Boolean)
       .join(' · ');
@@ -4435,7 +4440,7 @@ export async function startScout(): Promise<void> {
 
     const elevationField = terrainShadows?.state().field;
     const elevation = elevationField ? elevationAt(elevationField, centre.lon, centre.lat) : null;
-    $('c-elevation').textContent = elevation == null ? '—' : `${Math.round(elevation)} m`;
+    $('c-elevation').textContent = elevation == null ? '—' : formatHeight(elevation);
 
     renderLightQuality(elevation, elevationField);
 
@@ -6639,7 +6644,7 @@ export async function startScout(): Promise<void> {
 
   on('slab-height', 'input', (event) => {
     slab.heightM = Number((event.target as HTMLInputElement).value);
-    $('slab-out').textContent = `${slab.heightM} m`;
+    $('slab-out').textContent = formatHeight(slab.heightM);
     drawSlab();
   });
   on('slab-height', 'change', () => save());
@@ -6659,10 +6664,14 @@ export async function startScout(): Promise<void> {
     for (const mp of RESOLUTIONS) pixelSelect.append(new Option(`${mp} MP`, String(mp)));
     const apertureSelect = $<HTMLSelectElement>('frame-aperture');
     for (const a of APERTURES) apertureSelect.append(new Option(`ƒ/${a}`, String(a)));
+  }
+  fillFocusOptions();
+
+  function fillFocusOptions() {
     const focusSelect = $<HTMLSelectElement>('frame-focus');
-    for (const m of FOCUS_DISTANCES_M) {
-      focusSelect.append(new Option(m >= 1000 ? `${m / 1000} km` : `${m} m`, String(m)));
-    }
+    const value = focusSelect.value;
+    focusSelect.replaceChildren(...FOCUS_DISTANCES_M.map((m) => new Option(formatLength(m), String(m))));
+    if (value) focusSelect.value = value;
   }
 
   /** Everything the frame draws and says, after any of its controls moves. */
@@ -6869,7 +6878,7 @@ export async function startScout(): Promise<void> {
 
   on('sight-height', 'input', (event) => {
     target.heightM = Number((event.target as HTMLInputElement).value);
-    $('sight-out').textContent = `${target.heightM} m`;
+    $('sight-out').textContent = formatHeight(target.heightM);
     solveSight();
     renderSight();
     alignPanel.restate();
@@ -8059,7 +8068,52 @@ export async function startScout(): Promise<void> {
     onQueryChanged: () => renderKept(),
   });
 
-  createInfoTips();
+  const glossary = createGlossary();
+  createInfoTips(glossary.open);
+
+  /* ── Metres or feet ──────────────────────────────────────────────────────
+     Issue #159. One setting for every length on the page, remembered on this
+     device. Changing it redraws everything that prints a distance. */
+  const UNITS_KEY = 'scout.units';
+  function showUnits() {
+    scaleControl?.setUnit(distanceUnits() === 'ft' ? 'imperial' : 'metric');
+    for (const b of $('unitseg').querySelectorAll<HTMLButtonElement>('button')) {
+      const on = b.dataset.units === distanceUnits();
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+  }
+  try {
+    setDistanceUnits(readDistanceUnits(localStorage.getItem(UNITS_KEY)));
+  } catch {
+    /* storage blocked: metres */
+  }
+  showUnits();
+  on('unitseg', 'click', (event) => {
+    const next = readDistanceUnits((event.target as HTMLElement).closest('button')?.dataset.units);
+    if (next === distanceUnits()) return;
+    setDistanceUnits(next);
+    try {
+      localStorage.setItem(UNITS_KEY, next);
+    } catch {
+      /* remembered for this visit only */
+    }
+    showUnits();
+    unitsChanged();
+  });
+
+  /** Everything that prints a length, printed again. */
+  function unitsChanged() {
+    $('slab-out').textContent = formatHeight(slab.heightM);
+    $('sight-out').textContent = formatHeight(target.heightM);
+    $('radius-out').textContent = formatDistance(radiusKm * 1000);
+    fillFocusOptions();
+    frameChanged({ persist: false });
+    renderSight();
+    alignPanel.restate();
+    renderPanel();
+  }
+
   const firstVisit = createFirstVisitOrientation();
 
   /* ── Kept spots ────────────────────────────────────────────────────────
@@ -9541,7 +9595,7 @@ export async function startScout(): Promise<void> {
     if (spot.slabHeightM) {
       slab.heightM = spot.slabHeightM;
       $<HTMLInputElement>('slab-height').value = String(slab.heightM);
-      $('slab-out').textContent = `${slab.heightM} m`;
+      $('slab-out').textContent = formatHeight(slab.heightM);
       drawSlab();
     }
 
@@ -10071,7 +10125,7 @@ export async function startScout(): Promise<void> {
       $<HTMLInputElement>(id).checked = shown[key];
     }
     $<HTMLInputElement>('slab-height').value = String(slab.heightM);
-    $('slab-out').textContent = `${slab.heightM} m`;
+    $('slab-out').textContent = formatHeight(slab.heightM);
 
     $<HTMLSelectElement>('frame-sensor').value = lens.sensor;
     $<HTMLSelectElement>('frame-focal').value = String(lens.focalLengthMm);
@@ -10084,7 +10138,7 @@ export async function startScout(): Promise<void> {
       b.classList.toggle('on', b.dataset.orient === lens.orientation);
     }
     $<HTMLInputElement>('sight-height').value = String(target.heightM);
-    $('sight-out').textContent = `${target.heightM} m`;
+    $('sight-out').textContent = formatHeight(target.heightM);
     // Labels and the lens line only — nothing is drawn yet, and `save()` here
     // would write a session back before the restore that is reading it finishes.
     frameChanged({ persist: false });

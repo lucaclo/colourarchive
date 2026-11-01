@@ -37,6 +37,7 @@
 
 import { distance, initialBearing, intermediatePoint, type LatLon } from './geo';
 import { elevationAt, type HeightField } from './terrain';
+import { formatLength, formatMapDistance } from './units';
 
 /** Refraction-corrected earth radius, metres. Same 7/6 as `terrain.ts`. */
 const EFFECTIVE_EARTH_RADIUS_M = (7 / 6) * 6_371_008.8;
@@ -227,8 +228,8 @@ export function lineOfSight(
   };
 }
 
-const metres = (m: number) => (m < 10 ? `${m.toFixed(1)} m` : `${Math.round(m)} m`);
-const km = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
+const metres = (m: number) => formatLength(m);
+const km = (m: number) => formatMapDistance(m);
 
 function sightNote(
   clear: boolean,

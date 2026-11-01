@@ -3,6 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { readManifest } from '../lib/manifest';
 import { findColourGaps } from '../lib/gaps';
+import { GLOSSARY, GLOSSARY_GROUPS, glossaryEntry } from '../lib/scout/glossary';
 
 // Prerendered, so /scout ships in the static publish alongside the archive.
 // Nothing above this line reads anything server-side: the page is an empty shell
@@ -27,6 +28,9 @@ const colourGaps = findColourGaps((await readManifest()).chapters);
 // wiring the chrome to the one colour that already means "this page" is the
 // static equivalent, not an attempt to fake a dynamic one.
 const accent = '#f0b866';
+
+// An infotip whose text is a glossary entry's, so the two never disagree.
+const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 ---
 
 <Layout
@@ -91,9 +95,34 @@ const accent = '#f0b866';
            and the panel clips its own overflow to scroll — a popover nested
            in there would be cut off exactly when it had somewhere to say.
            Positioned in JS, next to whichever button opened it. -->
-      <div class="infotip-pop" id="infotip-pop" role="tooltip">
+      <div class="infotip-pop" id="infotip-pop" role="note">
         <p id="infotip-pop-text"></p>
+        <button class="infotip-more" id="infotip-more" type="button" hidden>In the glossary</button>
       </div>
+
+      <!-- Issue #159. Every term the page uses, read together. The infotips
+           marked with `data-term` take their text from the same entries. -->
+      <dialog class="glossary" id="glossary" aria-labelledby="glossary-title">
+        <div class="glossary-head">
+          <h2 class="glossary-title" id="glossary-title">Glossary</h2>
+          <button class="glossary-close" id="glossary-close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="glossary-body" id="glossary-body">
+          {GLOSSARY_GROUPS.map((group) => (
+            <section class="glossary-group">
+              <h3>{group}</h3>
+              <dl>
+                {GLOSSARY.filter((e) => e.group === group).map((e) => (
+                  <div class="glossary-entry" id={`term-${e.id}`}>
+                    <dt>{e.term}</dt>
+                    <dd>{e.text}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      </dialog>
 
       <!-- ── The sheet ──────────────────────────────────────────────────────
            One surface for place, time and everything Scout knows about both,
@@ -269,10 +298,10 @@ const accent = '#f0b866';
 
               <div class="detail" id="detail-sun" hidden>
                 <div class="cards" id="cards">
-                  <div class="card"><span class="card-k">Azimuth<button class="infotip" type="button" aria-label="What azimuth means" data-tip="Compass bearing to the sun from here. 0° is north, 90° east, 180° south, 270° west.">i</button></span><span class="card-v" id="c-azimuth">—</span></div>
-                  <div class="card"><span class="card-k">Altitude<button class="infotip" type="button" aria-label="What altitude means" data-tip="How high the sun is. 0° is on the horizon, 90° is straight overhead.">i</button></span><span class="card-v" id="c-altitude">—</span></div>
-                  <div class="card"><span class="card-k">Shadow<button class="infotip" type="button" aria-label="What the shadow ratio means" data-tip="Shadow length as a multiple of height. At 1 : 2.4, a metre-tall thing throws a 2.4 m shadow. It grows as the sun drops and means nothing once the sun is down.">i</button></span><span class="card-v" id="c-shadow">—</span></div>
-                  <div class="card"><span class="card-k">Elevation<button class="infotip" type="button" aria-label="What elevation means" data-tip="How high the ground is above sea level here, from the elevation model. Nothing to do with the sun.">i</button></span><span class="card-v" id="c-elevation">—</span></div>
+                  <div class="card"><span class="card-k">Azimuth<button class="infotip" type="button" aria-label="What azimuth means" data-term="azimuth" data-tip={tip('azimuth')}>i</button></span><span class="card-v" id="c-azimuth">—</span></div>
+                  <div class="card"><span class="card-k">Altitude<button class="infotip" type="button" aria-label="What altitude means" data-term="altitude" data-tip={tip('altitude')}>i</button></span><span class="card-v" id="c-altitude">—</span></div>
+                  <div class="card"><span class="card-k">Shadow<button class="infotip" type="button" aria-label="What the shadow ratio means" data-term="shadow-ratio" data-tip={tip('shadow-ratio')}>i</button></span><span class="card-v" id="c-shadow">—</span></div>
+                  <div class="card"><span class="card-k">Elevation<button class="infotip" type="button" aria-label="What elevation means" data-term="elevation" data-tip={tip('elevation')}>i</button></span><span class="card-v" id="c-elevation">—</span></div>
                 </div>
 
                 <!-- The day's light as one picture. The row above is the light at
@@ -732,7 +761,7 @@ const accent = '#f0b866';
               <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin is in the shadow of a hill or ridge, using the same elevation data as the map's terrain shading. The grid size it was read at is shown too.">i</button></dt><dd id="f-landform">—</dd></div>
                   <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Reviewed photographs from Wikimedia Commons (and Flickr, if there's a key), grouped into hotspots near here. It's a sample, not every photo ever taken here. Anything by a photographer on the notable list is marked and goes to the top.">i</button></dt><dd id="f-photos">—</dd></div>
                   <div>
-                    <dt>Light<button class="infotip" type="button" aria-label="What this means" data-tip="The colour and contrast of the sunlight right now, in kelvin and stops of shadow fill. It assumes a clear sky. For cloud, see the weather note above.">i</button></dt>
+                    <dt>Light<button class="infotip" type="button" aria-label="What this means" data-term="light" data-tip={tip('light')}>i</button></dt>
                     <dd id="f-light">
                       <!-- The colour, as a colour. A number in kelvin is a fact about
                            the light that a photographer has to translate; the swatch
@@ -742,6 +771,7 @@ const accent = '#f0b866';
                     </dd>
                   </div>
                 </dl>
+                <button class="events-all" id="glossary-open" type="button" data-cmdk="Glossary" data-cmdk-keywords="terms, words, hyperfocal, help" data-cmdk-always>Glossary</button>
               </details>
             </div>
           </section>
@@ -825,6 +855,12 @@ const accent = '#f0b866';
           <button type="button" data-base="light" class="on">Light</button>
           <button type="button" data-base="dark">Dark</button>
           <button type="button" data-base="satellite">Satellite</button>
+        </div>
+        <!-- Issue #159: every length on the page, in one unit. -->
+        <p class="layers-head">Units</p>
+        <div class="seg seg-wide" id="unitseg">
+          <button type="button" data-units="m" class="on" aria-pressed="true" data-cmdk="Use metres" data-cmdk-keywords="units, metric, km" data-cmdk-always>Metres</button>
+          <button type="button" data-units="ft" aria-pressed="false" data-cmdk="Use feet" data-cmdk-keywords="units, imperial, miles" data-cmdk-always>Feet</button>
         </div>
         <p class="layers-head">Show</p>
         <label class="toggle"><input type="checkbox" id="t-buildings" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Building shadows</span></label>
@@ -1409,6 +1445,84 @@ const accent = '#f0b866';
     line-height: 1.55;
     color: var(--fg);
   }
+
+  .infotip-more {
+    margin: 0.4rem 0 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--font-note);
+    font-style: italic;
+    font-size: var(--t-caption);
+    color: var(--secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .infotip-more[hidden] { display: none; }
+  .infotip-more:hover { color: var(--fg); }
+
+  /* ── Glossary (issue #159) ───────────────────────────────────────────────
+     A reading sheet, not a form: italic section names, hairline rules
+     between entries, the term set like a dictionary head-word. */
+  .glossary {
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: min(44rem, calc(100dvh - 3rem));
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: color-mix(in oklab, var(--bg) 96%, #000);
+    color: var(--fg);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+    overflow: hidden;
+  }
+  .glossary[open] { display: flex; flex-direction: column; }
+  .glossary::backdrop { background: color-mix(in oklab, #000 40%, transparent); }
+  .glossary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem 0.6rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .glossary-title {
+    margin: 0;
+    font-family: var(--font-note);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 1.35rem;
+  }
+  .glossary-close {
+    width: var(--hit, 44px);
+    height: var(--hit, 44px);
+    margin: -0.5rem -0.6rem -0.5rem 0;
+    border: 0;
+    background: none;
+    color: var(--secondary);
+    font-size: 1.4rem;
+    cursor: pointer;
+  }
+  .glossary-close:hover { color: var(--fg); }
+  .glossary-body { overflow: auto; padding: 0.2rem 1rem 1.2rem; overscroll-behavior: contain; }
+  .glossary-group h3 {
+    margin: 1rem 0 0.2rem;
+    font-family: var(--font-note);
+    font-style: italic;
+    font-weight: 400;
+    font-size: var(--t-footnote);
+    color: var(--secondary);
+  }
+  .glossary-group dl { margin: 0; }
+  .glossary-entry {
+    padding: 0.55rem 0;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+    scroll-margin: 2rem;
+    transition: background 600ms var(--ease);
+  }
+  .glossary-entry:last-child { border-bottom: 0; }
+  .glossary-entry.is-target { background: color-mix(in oklab, #f0b866 10%, transparent); box-shadow: -1rem 0 0 color-mix(in oklab, #f0b866 10%, transparent), 1rem 0 0 color-mix(in oklab, #f0b866 10%, transparent); }
+  .glossary-entry dt { font-family: var(--font-ui); font-weight: 600; font-size: 0.9375rem; }
+  .glossary-entry dd { margin: 0.2rem 0 0; font-family: var(--font-ui); font-size: var(--t-footnote); line-height: 1.55; color: var(--secondary); }
 
   /* ── The panel ────────────────────────────────────────────────────────── */
 

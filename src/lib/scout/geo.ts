@@ -10,6 +10,8 @@
  * All angles in degrees, all distances in metres, all coordinates {lat, lon}.
  */
 
+import { formatMapDistance } from './units';
+
 const RAD = Math.PI / 180;
 const DEG = 180 / Math.PI;
 
@@ -204,16 +206,14 @@ export const withinRadius = (centre: LatLon, point: LatLon, radiusM: number): bo
 /* ── Presentation ──────────────────────────────────────────────────────────── */
 
 /**
- * "850 m", "2.4 km", "18 km" — one decimal only where it earns it.
+ * "850 m", "2.4 km", "18 km" — one decimal only where it earns it, and in
+ * feet and miles when the page is set to them (`units.ts`).
  *
  * The branch is at 9.95 rather than 10 so that a distance which would *round*
  * to ten never prints as "10.0 km" one metre before it prints as "10 km".
  */
 export function formatDistance(metres: number): string {
-  if (!Number.isFinite(metres)) return '—';
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  const km = metres / 1000;
-  return km < 9.95 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+  return formatMapDistance(metres);
 }
 
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
