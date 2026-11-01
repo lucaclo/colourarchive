@@ -152,6 +152,8 @@ export interface Lens {
   kit?: string;
   /** Which standard of sharp depth of field is worked to (issue #151). */
   sharpness?: SharpnessStandard;
+  /** Where the subject stands, metres, for the field of view at it (issue #156). */
+  subjectM?: number;
 }
 
 export const defaultLens = (): Lens => ({

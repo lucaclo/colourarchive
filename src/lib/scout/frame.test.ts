@@ -647,3 +647,18 @@ describe('SENSORS', () => {
     }
   });
 });
+
+describe('frameSizeAt', () => {
+  it('gives the frame’s size at a distance, and a person in it', async () => {
+    const { frameSizeAt, describeFrameSize, fieldOfView, SENSORS } = await import('./frame.ts');
+    const fov = fieldOfView(SENSORS[0], 50);
+    const size = frameSizeAt(fov, 12);
+    // 35.9 × 24 mm at 50 mm: 12 m × 35.9/50 = 8.6 m, × 24/50 = 5.76 m.
+    assert.ok(Math.abs(size.widthM - 8.616) < 0.01);
+    assert.ok(Math.abs(size.heightM - 5.76) < 0.01);
+    assert.ok(Math.abs(size.personShare - 1.75 / 5.76) < 0.001);
+    assert.equal(describeFrameSize(size, 12), 'At 12 m this frame is 8.6 m wide and 5.8 m tall. A person standing there fills 30% of its height.');
+    assert.match(describeFrameSize(frameSizeAt(fov, 1), 1), /taller than the frame/);
+    assert.match(describeFrameSize(frameSizeAt(fieldOfView(SENSORS[0], 16), 400), 400), /speck/);
+  });
+});

@@ -486,6 +486,36 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                   </div>
                 </details>
 
+                <!-- Issue #156: how big the frame is where the subject stands,
+                     and a person in it to scale, seen from a level camera at
+                     eye height (so the horizon runs through the middle). -->
+                <details class="fold" id="fold-fov">
+                  <summary>Field of view</summary>
+                  <div class="fov">
+                    <svg class="fov-chart" id="fov-chart" viewBox="0 0 320 150" aria-hidden="true">
+                      <defs><clipPath id="fov-clip"><rect id="fov-clip-rect" x="0" y="0" width="0" height="0" /></clipPath></defs>
+                      <rect class="fov-frame" id="fov-frame" x="0" y="0" width="0" height="0" />
+                      <g clip-path="url(#fov-clip)">
+                        <line class="fov-horizon" id="fov-horizon" x1="0" y1="0" x2="0" y2="0" />
+                        <line class="fov-ground" id="fov-ground" x1="0" y1="0" x2="0" y2="0" />
+                        <!-- A standing figure, 1 unit tall, feet at the origin. -->
+                        <g id="fov-person" class="fov-person">
+                          <circle cx="0" cy="-0.92" r="0.075" />
+                          <path d="M-0.11 -0.82 h0.22 l0.03 0.4 h-0.05 l-0.025 0.42 h-0.065 l-0.01 -0.3 l-0.01 0.3 h-0.065 l-0.025 -0.42 h-0.05 z" />
+                        </g>
+                      </g>
+                      <circle class="fov-speck" id="fov-speck" cx="-10" cy="-10" r="2" />
+                    </svg>
+                    <p class="dof-split" id="fov-text">—</p>
+                    <label class="slab-row" for="fov-subject">
+                      <span>Subject at</span>
+                      <output id="fov-subject-out">10 m</output>
+                    </label>
+                    <input id="fov-subject" type="range" min="0" max="999" step="1" value="500" aria-describedby="fov-text" />
+                    <button class="frame-lens-more fov-use-focus" id="fov-use-focus" type="button">Use the focus distance</button>
+                  </div>
+                </details>
+
                 <details class="fold" id="fold-nd">
                   <summary>Long exposure</summary>
                   <div class="slab">
@@ -1065,7 +1095,11 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
             <output id="slab-out">10 m</output>
           </label>
           <input id="slab-height" type="range" min="1" max="200" step="1" value="10" />
-          <p class="slab-note">Drag the slab on the map.</p>
+          <div class="frame-lensrow">
+            <p class="slab-note">Drag the slab on the map.</p>
+            <!-- Issue #156: a person for scale, beside the slab's own heights. -->
+            <button class="frame-lens-more" id="slab-person" type="button">A person, 1.75 m</button>
+          </div>
         </div>
 
 
@@ -3290,6 +3324,18 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .dof-hyper { margin-top: 0.6rem; }
   .dof-h-label[hidden] { display: none; }
   .dof-hyper[aria-pressed='true'] { border-color: #f0b866; color: #f0b866; }
+
+
+  /* ── Field of view to scale (issue #156) ─────────────────────────────── */
+  .fov { padding: 0.15rem 0 0.4rem; }
+  .fov-chart { display: block; width: 100%; height: auto; margin: 0.1rem 0 0.4rem; }
+  .fov-frame { fill: color-mix(in oklab, var(--fg) 5%, transparent); stroke: var(--fg); stroke-width: 1.2; }
+  .fov-horizon { stroke: color-mix(in oklab, var(--fg) 30%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
+  .fov-ground { stroke: color-mix(in oklab, var(--fg) 55%, transparent); stroke-width: 1; }
+  .fov-person { fill: #f0b866; }
+  .fov-speck { fill: #f0b866; }
+  .fov input[type='range'] { width: 100%; margin: 0; accent-color: var(--fg); }
+  .fov-use-focus { margin-top: 0.3rem; }
 
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }

@@ -636,3 +636,35 @@ export function describeLens(sensor: Sensor, focalLengthMm: number, fov: Fov): s
 export function frameWidthAt(fov: Fov, distanceM: number): number {
   return 2 * distanceM * Math.tan((fov.horizontalDeg / 2) * RAD);
 }
+
+/* ── Field of view to scale (issue #156) ───────────────────────────────────── */
+
+/** A standing adult, for scale. */
+export const PERSON_HEIGHT_M = 1.75;
+
+export interface FrameSize {
+  widthM: number;
+  heightM: number;
+  /** How much of the frame's height a standing person fills, 0–∞. */
+  personShare: number;
+}
+
+/**
+ * How big the frame is where the subject stands: "At 12 m this frame is
+ * 8.6 m wide and 5.7 m tall", and a person's height as a share of it. The
+ * flat-plane chord, as `frameWidthAt`, for a subject square on to the lens.
+ */
+export function frameSizeAt(fov: Fov, distanceM: number, personM = PERSON_HEIGHT_M): FrameSize {
+  if (!(distanceM > 0)) throw new RangeError('distanceM must be greater than zero');
+  const widthM = frameWidthAt(fov, distanceM);
+  const heightM = 2 * distanceM * Math.tan((fov.verticalDeg / 2) * RAD);
+  return { widthM, heightM, personShare: personM / heightM };
+}
+
+/** "At 12 m this frame is 8.6 m wide and 5.7 m tall." Lengths in the page's units. */
+export function describeFrameSize(size: FrameSize, distanceM: number): string {
+  const head = `At ${formatLength(distanceM)} this frame is ${formatLength(size.widthM)} wide and ${formatLength(size.heightM)} tall.`;
+  if (size.personShare >= 1) return `${head} A person standing there is taller than the frame.`;
+  if (size.personShare < 0.02) return `${head} A person standing there would be a speck, under 2% of its height.`;
+  return `${head} A person standing there fills ${Math.round(size.personShare * 100)}% of its height.`;
+}

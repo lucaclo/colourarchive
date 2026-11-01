@@ -261,6 +261,9 @@ import {
   checkFraming,
   depthOfField,
   describeLens,
+  describeFrameSize,
+  frameSizeAt,
+  PERSON_HEIGHT_M,
   fieldOfView,
   frameAxis,
   frameOffsetToSky,
@@ -6643,9 +6646,21 @@ export async function startScout(): Promise<void> {
     });
   }
 
+  /** Whole metres from the slider; the person's 1.75 m keeps its decimal. */
+  const slabLabel = (m: number) => (Number.isInteger(m) ? formatHeight(m) : formatLength(m));
+  on('slab-person', 'click', () => {
+    slab.heightM = PERSON_HEIGHT_M;
+    slab.sizeM = 0.5;
+    $<HTMLInputElement>('slab-height').value = String(Math.round(PERSON_HEIGHT_M));
+    $('slab-out').textContent = slabLabel(slab.heightM);
+    drawSlab();
+    save();
+  });
   on('slab-height', 'input', (event) => {
+    // Back from the person to a slab of the usual footprint.
+    slab.sizeM = defaultSlab().sizeM;
     slab.heightM = Number((event.target as HTMLInputElement).value);
-    $('slab-out').textContent = formatHeight(slab.heightM);
+    $('slab-out').textContent = slabLabel(slab.heightM);
     drawSlab();
   });
   on('slab-height', 'change', () => save());
@@ -6859,7 +6874,71 @@ export async function startScout(): Promise<void> {
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
     }
+    renderFov();
   }
+
+  /* ── Field of view to scale ─────────────────────────────────────────────
+     Issue #156. The frame's width and height where the subject stands, and a
+     1.75 m person drawn in it to scale, seen from a level camera on a tripod
+     at chest height: the horizon through the middle, the ground 1.5 m below
+     it. The focus stack (#152) stands the camera at the same height. */
+  const CAMERA_HEIGHT_M = 1.5;
+  const subjectDistance = () => (lens.subjectM && lens.subjectM > 0 ? lens.subjectM : 10);
+
+  function renderFov() {
+    const d = subjectDistance();
+    const size = frameSizeAt(currentFov(), d);
+    $('fov-text').textContent = describeFrameSize(size, d);
+    $('fov-subject-out').textContent = formatLength(d);
+    const slider = $<HTMLInputElement>('fov-subject');
+    if (document.activeElement !== slider) slider.value = String(Math.min(999, focusToSlider(d)));
+    slider.setAttribute('aria-valuetext', formatLength(d));
+
+    // Fit the frame's own shape into the drawing.
+    const box = { w: 300, h: 130 };
+    const aspect = size.widthM / size.heightM;
+    const w = Math.min(box.w, box.h * aspect);
+    const h = w / aspect;
+    const x = (320 - w) / 2;
+    const y = (150 - h) / 2;
+    for (const id of ['fov-frame', 'fov-clip-rect']) {
+      const r = $(id);
+      r.setAttribute('x', String(x));
+      r.setAttribute('y', String(y));
+      r.setAttribute('width', String(w));
+      r.setAttribute('height', String(h));
+    }
+    const perM = h / size.heightM;
+    const horizonY = y + h / 2;
+    const groundY = horizonY + CAMERA_HEIGHT_M * perM;
+    const line = (id: string, ly: number) => {
+      const el = $(id);
+      el.setAttribute('x1', String(x));
+      el.setAttribute('x2', String(x + w));
+      el.setAttribute('y1', String(ly));
+      el.setAttribute('y2', String(ly));
+    };
+    line('fov-horizon', horizonY);
+    line('fov-ground', groundY);
+    const personPx = PERSON_HEIGHT_M * perM;
+    const tiny = personPx < 4;
+    $('fov-person').setAttribute('transform', tiny ? 'scale(0)' : `translate(${320 / 2} ${groundY}) scale(${personPx})`);
+    const speck = $('fov-speck');
+    speck.setAttribute('cx', tiny ? String(320 / 2) : '-10');
+    speck.setAttribute('cy', tiny ? String(Math.min(groundY, y + h) - 2) : '-10');
+    $<HTMLButtonElement>('fov-use-focus').hidden = Math.abs(lens.focusDistanceM - d) / d < 0.02 || lens.focusDistanceM >= FOCUS_INFINITY_M;
+  }
+
+  on('fov-subject', 'input', (event) => {
+    lens.subjectM = sliderToFocus(Number((event.target as HTMLInputElement).value));
+    renderFov();
+  });
+  on('fov-subject', 'change', () => save());
+  on('fov-use-focus', 'click', () => {
+    lens.subjectM = lens.focusDistanceM;
+    renderFov();
+    save();
+  });
 
   on('dof-hyper', 'click', () => {
     lens.focusDistanceM = currentDof().dof.hyperfocalM;
@@ -8300,7 +8379,7 @@ export async function startScout(): Promise<void> {
 
   /** Everything that prints a length, printed again. */
   function unitsChanged() {
-    $('slab-out').textContent = formatHeight(slab.heightM);
+    $('slab-out').textContent = slabLabel(slab.heightM);
     $('sight-out').textContent = formatHeight(target.heightM);
     $('radius-out').textContent = formatDistance(radiusKm * 1000);
     frameChanged({ persist: false });
@@ -9790,7 +9869,7 @@ export async function startScout(): Promise<void> {
     if (spot.slabHeightM) {
       slab.heightM = spot.slabHeightM;
       $<HTMLInputElement>('slab-height').value = String(slab.heightM);
-      $('slab-out').textContent = formatHeight(slab.heightM);
+      $('slab-out').textContent = slabLabel(slab.heightM);
       drawSlab();
     }
 
@@ -10320,7 +10399,7 @@ export async function startScout(): Promise<void> {
       $<HTMLInputElement>(id).checked = shown[key];
     }
     $<HTMLInputElement>('slab-height').value = String(slab.heightM);
-    $('slab-out').textContent = formatHeight(slab.heightM);
+    $('slab-out').textContent = slabLabel(slab.heightM);
 
     // A fresh tab starts on the kit entry last chosen on this device; a
     // session that already has a lens keeps its own.
