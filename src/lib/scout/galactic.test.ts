@@ -323,3 +323,29 @@ function shiftDay(isoDate: string): string {
   next.setUTCDate(next.getUTCDate() + 1);
   return next.toISOString().slice(0, 10);
 }
+
+describe('bestCoreNights', () => {
+  it('finds dark core nights in a southern winter and ranks them by minutes', async () => {
+    const { bestCoreNights } = await import('./galactic.ts');
+    // Atacama, from 1 June 2026 (new moon 15 June): long, high core nights.
+    const ahead = bestCoreNights(-24.6, -70.4, new Date('2026-06-01T16:00:00Z'), 30, 3, null, 15);
+    assert.equal(ahead.best.length, 3);
+    assert.ok(ahead.qualifying >= 10);
+    for (let i = 1; i < ahead.best.length; i++) assert.ok(ahead.best[i - 1].minutes >= ahead.best[i].minutes);
+    assert.ok(ahead.best[0].minutes > 240);
+    assert.ok(ahead.best[0].best.altitude > 60);
+    assert.equal(ahead.refusal, '');
+  });
+
+  it('refuses in a British June, and says why for all the nights', async () => {
+    const { bestCoreNights } = await import('./galactic.ts');
+    // Edinburgh: the core peaks about 5° up, which outranks the light nights.
+    const scotland = bestCoreNights(55.95, -3.19, new Date('2026-06-01T12:00:00Z'), 30, 3, null, 15);
+    assert.equal(scotland.best.length, 0);
+    assert.match(scotland.refusal, /^The core does not clear 10° here on any of these nights/);
+    // Further south it clears 10°, and the bright nights are the reason.
+    const cornwall = bestCoreNights(50.1, -5.5, new Date('2026-06-10T12:00:00Z'), 20, 3, null, 15);
+    assert.equal(cornwall.best.length, 0);
+    assert.match(cornwall.refusal, /never gets astronomically dark on any of these nights/);
+  });
+});

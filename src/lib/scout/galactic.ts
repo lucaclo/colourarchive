@@ -498,3 +498,68 @@ function refusalFor(state: {
   if (!state.moonFree.length) return 'The moon is up for the whole of the dark window.';
   return 'The core is up, and the sky is dark, but not at the same time tonight.';
 }
+
+/* ── The best nights ahead (issue #154) ────────────────────────────────────*/
+
+export interface CoreNightRank {
+  /** Noon that starts the night: its date is the evening's. */
+  from: Date;
+  /** Minutes of moon-free astronomical darkness with the core above `CORE_USABLE_ALTITUDE`. */
+  minutes: number;
+  /** Highest the core gets in that time. */
+  best: { at: Date; altitude: number };
+  windows: Interval[];
+}
+
+export interface CoreNightsAhead {
+  /** At most `count`, best first. Empty when no night qualifies. */
+  best: CoreNightRank[];
+  /** How many of the nights checked qualified at all. */
+  qualifying: number;
+  /** Why not, when none do: the reason most nights failed, as `coreNight` words it. */
+  refusal: string;
+}
+
+/**
+ * The best Milky Way core nights in the `days` starting at `firstNoon`, each
+ * night noon to noon as the core fold reads one. Ranked by how long the core
+ * stands above 10° in astronomical darkness with the moon down, which is the
+ * one quantity all three conditions share, then by how high it climbs. No
+ * score: the minutes and the altitude are what's printed.
+ *
+ * When nothing qualifies the reason that sank most nights is returned: at a
+ * British latitude in June it is the sky never getting dark, and saying so is
+ * the useful answer.
+ */
+export function bestCoreNights(
+  latitude: number,
+  longitude: number,
+  firstNoon: Date,
+  days = 30,
+  count = 3,
+  lightPollutionZone: number | null = null,
+  stepMinutes = 10,
+): CoreNightsAhead {
+  const ranked: CoreNightRank[] = [];
+  const reasons = new Map<string, number>();
+  for (let i = 0; i < days; i++) {
+    const from = new Date(firstNoon.getTime() + i * 86_400_000);
+    const to = new Date(from.getTime() + 86_400_000);
+    const night = coreNight(latitude, longitude, from, to, CORE_USABLE_ALTITUDE, stepMinutes, lightPollutionZone);
+    if (!night.visible.length || !night.best) {
+      reasons.set(night.refusal, (reasons.get(night.refusal) ?? 0) + 1);
+      continue;
+    }
+    const minutes = night.visible.reduce((sum, w) => sum + (w.to.getTime() - w.from.getTime()) / 60_000, 0);
+    ranked.push({ from, minutes: Math.round(minutes), best: night.best, windows: night.visible });
+  }
+  ranked.sort((a, b) => b.minutes - a.minutes || b.best.altitude - a.best.altitude || a.from.getTime() - b.from.getTime());
+  let refusal = '';
+  if (!ranked.length) {
+    let most = 0;
+    for (const [reason, n] of reasons) if (n > most) [refusal, most] = [reason, n];
+    // Worded for one night; this speaks for all of them.
+    refusal = refusal.replace(/ tonight\b/, ' on any of these nights');
+  }
+  return { best: ranked.slice(0, count), qualifying: ranked.length, refusal };
+}

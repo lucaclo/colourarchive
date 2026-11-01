@@ -164,6 +164,7 @@ import { aodAt, type AirReport } from '../air';
 import {
   CORE_RISE_ALTITUDE,
   coreNight,
+  bestCoreNights,
   corePosition,
   coreTrack,
   type CoreNight,
@@ -4755,7 +4756,76 @@ export async function startScout(): Promise<void> {
       : night.refusal;
 
     renderCoreLens(night, window);
+    renderCoreAhead();
   }
+
+  /* ── The best core nights ahead ──────────────────────────────────────────
+     Issue #154. Thirty nights from the one shown (or from tonight, if the
+     date shown is past), ranked by minutes of moonless dark with the core
+     up, worked out only while the fold is open and only once per place and
+     start. The first week carries the forecast cloud. */
+  let coreAheadKey = '';
+  let coreAheadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function renderCoreAhead() {
+    const box = $<HTMLElement>('core-ahead');
+    const window = nightWindow();
+    if (!centre || !window || !$<HTMLDetailsElement>('fold-core').open) return;
+    // From the night shown, or tonight if that is already over.
+    let start = window.from.getTime();
+    const tonight = Date.now() - 12 * 3_600_000;
+    while (start < tonight) start += 86_400_000;
+    const zone = lightPollutionField ? lightPollutionZoneAt(lightPollutionField, centre.lon, centre.lat) : null;
+    const key = `${centre.lat.toFixed(3)},${centre.lon.toFixed(3)}|${start}|${zone}|${weather ? weather.hours.length : 0}|${isoDate}|${distanceUnits()}`;
+    if (key === coreAheadKey) return;
+    coreAheadKey = key;
+    if (coreAheadTimer) clearTimeout(coreAheadTimer);
+    const at = centre;
+    const zoneNow = timeZone;
+    // Thirty nights of sun, moon and core: a few tens of milliseconds, kept
+    // off the frame that opened the fold.
+    coreAheadTimer = setTimeout(() => {
+      const ahead = bestCoreNights(at.lat, at.lon, new Date(start), 30, 3, zone);
+      const fromToday = start <= Date.now() + 12 * 3_600_000;
+      $('core-ahead-head').textContent = fromToday
+        ? 'Best nights in the next 30'
+        : `Best nights in the 30 from ${new Date(start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: zoneNow })}`;
+      const day = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: zoneNow });
+      let beyondForecast = false;
+      $('core-ahead-list').replaceChildren(
+        ...ahead.best.map((n) => {
+          const li = document.createElement('li');
+          const b = document.createElement('button');
+          b.type = 'button';
+          const evening = isoDateIn(n.from, zoneNow);
+          if (evening === isoDate) b.setAttribute('aria-current', 'date');
+          const hour = weather ? hourAt(weather, n.best.at) : null;
+          if (!hour) beyondForecast = true;
+          const cloud =
+            hour?.cloudCover == null ? '' : hour.cloudCover < 15 ? ' · clear in the forecast' : ` · ${Math.round(hour.cloudCover)}% cloud forecast`;
+          b.append(
+            Object.assign(document.createElement('span'), { className: 'ca-date', textContent: day(n.from) }),
+            Object.assign(document.createElement('span'), { className: 'ca-time', textContent: formatDuration(n.minutes) }),
+            Object.assign(document.createElement('span'), {
+              className: 'ca-detail',
+              textContent: `Best ${formatClock(n.best.at, zoneNow)}, ${n.best.altitude.toFixed(0)}° up${cloud}`,
+            }),
+          );
+          b.setAttribute('aria-label', `${day(n.from)}: ${formatDuration(n.minutes)} of dark sky with the core up and the moon down. Go to that night.`);
+          b.addEventListener('click', () => goToInstant(n.best.at));
+          li.append(b);
+          return li;
+        }),
+      );
+      $('core-ahead-note').textContent = !ahead.best.length
+        ? ahead.refusal
+        : beyondForecast
+          ? 'Minutes of dark sky with the core up and the moon down. Cloud only where the forecast reaches, about a week.'
+          : 'Minutes of dark sky with the core up and the moon down.';
+      box.hidden = false;
+    }, 30);
+  }
+  $<HTMLDetailsElement>('fold-core').addEventListener('toggle', () => renderCoreAhead());
 
   /**
    * The core against the lens: where it falls in the picture, and how long an
@@ -8885,6 +8955,9 @@ export async function startScout(): Promise<void> {
    * instant rather than taken from the row, which is why this can step a day.
    */
   function goToInstant(instant: Date) {
+    // A jump is a hand on the clock: left following, the ten-second tick
+    // pulled the page straight back to now (and to today).
+    handsOnTheClock();
     let iso = isoDateIn(instant, timeZone);
     setDate(iso);
     for (let pass = 0; pass < 3; pass++) {
@@ -8892,6 +8965,8 @@ export async function startScout(): Promise<void> {
       const delta = Math.round((instant.getTime() - day.dayStart.getTime()) / 60_000);
       if (delta >= 0 && delta <= MINUTES_PER_DAY) {
         setMinute(delta);
+        // So the address bar names the moment jumped to, not the one before.
+        save();
         return;
       }
       iso = shiftIsoDate(iso, delta < 0 ? -1 : 1);

@@ -651,6 +651,13 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                        hidden the rest of the time rather than printing "—", which
                        would read as a measurement that came back empty. -->
                   <p class="core-note" id="core-stars-note" hidden></p>
+                  <!-- Issue #154: the best nights in the next 30, ranked by how
+                       long the core is up in moonless dark. Tap one to go. -->
+                  <div class="core-ahead" id="core-ahead" hidden>
+                    <p class="core-ahead-head" id="core-ahead-head">Best nights ahead</p>
+                    <ol class="core-ahead-list" id="core-ahead-list"></ol>
+                    <p class="core-caveat" id="core-ahead-note"></p>
+                  </div>
                 </details>
 
                 <!-- Issue #69. Kp, Bz and the solar wind, joined with the same
@@ -3408,6 +3415,36 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .stack-list :global(li.done label) { color: var(--secondary); }
   .stack-list :global(li.done .stack-focus) { text-decoration: line-through; text-decoration-thickness: 1px; }
   .stack-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+
+
+  /* ── Best core nights ahead (issue #154) ──────────────────────────────── */
+  .core-ahead { margin: 0.8rem 0 0.3rem; }
+  .core-ahead[hidden] { display: none; }
+  .core-ahead-head { margin: 0 0 0.2rem; font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .core-ahead-list { list-style: none; margin: 0; padding: 0; }
+  .core-ahead-list :global(li) { border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent); }
+  .core-ahead-list :global(li:last-child) { border-bottom: 0; }
+  .core-ahead-list :global(button) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.1rem 0.6rem;
+    width: 100%;
+    min-height: 48px;
+    padding: 0.45rem 0.2rem;
+    border: 0;
+    background: none;
+    color: var(--fg);
+    text-align: left;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    border-radius: 6px;
+  }
+  .core-ahead-list :global(button:hover) { background: color-mix(in oklab, var(--fg) 7%, transparent); }
+  .core-ahead-list :global(button:active) { transform: scale(0.98); }
+  .core-ahead-list :global(.ca-date) { font-size: var(--t-footnote); font-weight: 600; }
+  .core-ahead-list :global(.ca-time) { font-size: var(--t-footnote); font-variant-numeric: tabular-nums; color: #b9a6ff; }
+  .core-ahead-list :global(.ca-detail) { grid-column: 1 / -1; font-size: var(--t-caption); color: var(--secondary); }
+  .core-ahead-list :global(button[aria-current='date'] .ca-date)::after { content: ' · shown'; font-weight: 400; color: var(--secondary); }
 
   /* Your kit: the pairings you shoot, as words to tap. */
   .kit { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.15rem 0 0.7rem; }
