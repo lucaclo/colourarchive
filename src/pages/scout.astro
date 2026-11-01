@@ -445,6 +445,11 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
                 <details class="fold" id="fold-dof">
                   <summary>Depth of field</summary>
+                  <!-- Issue #151: which standard of sharp, named and one tap away. -->
+                  <div class="seg seg-wide dof-standard" id="dof-standard" role="group" aria-label="Sharp enough for">
+                    <button type="button" data-standard="print" class="on" aria-pressed="true">For print</button>
+                    <button type="button" data-standard="pixel" aria-pressed="false">Pixel-sharp</button>
+                  </div>
                   <div class="frame-row">
                     <label class="frame-field" for="frame-focus"><span>Focus distance</span>
                       <select id="frame-focus"></select>

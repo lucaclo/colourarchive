@@ -559,6 +559,8 @@ export function depthOfField(
   aperture: number,
   circleOfConfusionMm: number,
   focusDistanceM: number,
+  /** How the note opens: which standard of sharp it is (see `sharpness.ts`). */
+  lead = 'Sharp',
 ): DepthOfField {
   if (!(focusDistanceM > 0)) throw new RangeError('focusDistanceM must be greater than zero');
   const hyperfocalMm = hyperfocalDistanceMm(focalLengthMm, aperture, circleOfConfusionMm);
@@ -587,7 +589,7 @@ export function depthOfField(
     nearM,
     farM,
     spanM: Number.isFinite(farM) ? farM - nearM : Infinity,
-    note: describeDepthOfField(focusDistanceM, hyperfocalM, nearM, farM),
+    note: describeDepthOfField(focusDistanceM, hyperfocalM, nearM, farM, lead),
   };
 }
 
@@ -601,13 +603,14 @@ function describeDepthOfField(
   hyperfocalM: number,
   nearM: number,
   farM: number,
+  lead: string,
 ): string {
   const range = `${formatDistanceM(nearM)} to ${Number.isFinite(farM) ? formatDistanceM(farM) : 'infinity'}`;
   const hyperfocalNote =
     focusDistanceM >= hyperfocalM
       ? ` Focused at or past the hyperfocal distance (${formatDistanceM(hyperfocalM)}) — this is as much as the lens can bring in.`
       : ` The hyperfocal distance is ${formatDistanceM(hyperfocalM)}; focus there instead for the widest range that still reaches infinity.`;
-  return `Sharp from ${range}, focused at ${formatDistanceM(focusDistanceM)}.${hyperfocalNote}`;
+  return `${lead} from ${range}, focused at ${formatDistanceM(focusDistanceM)}.${hyperfocalNote}`;
 }
 
 /* ── Presentation ──────────────────────────────────────────────────────────── */

@@ -256,7 +256,6 @@ import {
 } from '../weather';
 import {
   APERTURES,
-  CIRCLE_OF_CONFUSION_PX,
   FOCAL_LENGTHS,
   FOCUS_DISTANCES_M,
   SENSORS,
@@ -344,6 +343,7 @@ import type { ArCameraView } from './ar-camera';
 import { createInfoTips } from './infotip';
 import { createGlossary } from './glossary';
 import { kitFocalLengths, readKit, type KitEntry } from '../kit';
+import { circleOfConfusionMm, readSharpness, sharpWhere } from '../sharpness';
 import { distanceUnits, formatHeight, formatLength, readDistanceUnits, setDistanceUnits } from '../units';
 import { createFirstVisitOrientation } from './orientation';
 import { mountSpace, globeFillsView } from './space';
@@ -6791,13 +6791,19 @@ export async function startScout(): Promise<void> {
     $('frame-bearing-out').textContent = `${lens.bearing}° ${compassPoint(lens.bearing)}`;
     $('frame-tilt-out').textContent = `${lens.tiltDeg > 0 ? '+' : ''}${lens.tiltDeg}°`;
     $('frame-lens').textContent = describeLens(sensor, lens.focalLengthMm, currentFov());
-    const circleOfConfusionMm = pixelPitchMm(sensor, lens.megapixels) * CIRCLE_OF_CONFUSION_PX;
+    const standard = readSharpness(lens.sharpness);
     $('frame-dof').textContent = depthOfField(
       lens.focalLengthMm,
       lens.aperture,
-      circleOfConfusionMm,
+      circleOfConfusionMm(standard, sensor, lens.megapixels),
       lens.focusDistanceM,
+      sharpWhere(standard),
     ).note;
+    for (const b of $('dof-standard').querySelectorAll<HTMLButtonElement>('button')) {
+      const on = b.dataset.standard === standard;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
     drawFrame();
     renderFraming();
     // The core fold prints two answers about this lens, and both go stale the
@@ -6833,6 +6839,12 @@ export async function startScout(): Promise<void> {
   });
   on('frame-aperture', 'change', (event) => {
     lens.aperture = Number((event.target as HTMLSelectElement).value);
+    frameChanged();
+  });
+  on('dof-standard', 'click', (event) => {
+    const next = (event.target as HTMLElement).closest('button')?.dataset.standard;
+    if (!next) return;
+    lens.sharpness = readSharpness(next);
     frameChanged();
   });
   on('frame-focus', 'change', (event) => {

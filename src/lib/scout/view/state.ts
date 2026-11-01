@@ -15,6 +15,7 @@
  * test inherits the first one's monolith.
  */
 
+import type { SharpnessStandard } from '../sharpness';
 import { DEFAULT_MEGAPIXELS } from '../astrophoto';
 import type { Orientation } from '../frame';
 
@@ -149,6 +150,8 @@ export interface Lens {
   focusDistanceM: number;
   /** The kit entry loaded (issue #153), by id; unset once the body is changed by hand. */
   kit?: string;
+  /** Which standard of sharp depth of field is worked to (issue #151). */
+  sharpness?: SharpnessStandard;
 }
 
 export const defaultLens = (): Lens => ({
