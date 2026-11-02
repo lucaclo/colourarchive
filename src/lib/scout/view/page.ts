@@ -74,6 +74,7 @@ import {
 } from '../dome';
 import { decodePlanAgain, decodeScoutLink, encodeScoutLink, wallClockToInstant, type LinkLens, type PlanAgain } from '../share';
 import { sameLightAhead } from '../relight';
+import { ARCHIVE_SOURCE, parseSharedFeed, sharedNear, type SharedFeed } from '../sources/archive';
 import {
   addProof,
   addSpot,
@@ -98,8 +99,8 @@ import {
   type SpotVisit,
 } from '../spots';
 import { crossCheckProof } from '../proof-check';
-import { PHOTO_SEARCH_RADIUS_M } from '../sources/types';
-import { photographerCount } from '../sources/photo-client';
+import { PHOTO_SEARCH_RADIUS_M, type RawPhoto } from '../sources/types';
+import { photographerCount, toHotspots } from '../sources/photo-client';
 import { isLandmark, placeNameFor, type NamedPlace } from '../place-names';
 import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-upload';
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
@@ -5954,6 +5955,31 @@ export async function startScout(): Promise<void> {
     spotLights = hotspots.map((spot) => dayLightAt(spot.at, samples));
   }
 
+  /* ── Shared from the archive ────────────────────────────────────────────
+     Photos shared from the lightbox, as a hotspot source: baked into the
+     published site as /scout-shared.json, live from the API on the Mac.
+     Read fresh each visit (past the service worker's cache), since a new
+     publish can add to it; any failure just means none. */
+  let sharedFeed: Promise<SharedFeed> | null = null;
+  function loadSharedFeed(): Promise<SharedFeed> {
+    sharedFeed ??= (STATIC
+      ? fetch(`/scout-shared.json?t=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+      : fetch('/api/scout/shared', { cache: 'no-store' }).then((r) => r.json()).then((d) => (d?.ok ? d.feed : null))
+    )
+      .then(parseSharedFeed)
+      .catch(() => parseSharedFeed(null));
+    return sharedFeed;
+  }
+  // Shared or unshared from a pin's card on this page: read the feed again.
+  document.addEventListener('scout:shared', () => {
+    sharedFeed = null;
+    photoKey = '';
+    void loadPhotos();
+  });
+  async function sharedPhotosNear(at: LatLon): Promise<RawPhoto[]> {
+    return sharedNear(await loadSharedFeed(), at, PHOTO_SEARCH_RADIUS_M);
+  }
+
   async function loadPhotos() {
     if (!map || !styleReady) return;
     const source = map.getSource(PHOTO_SOURCE) as GeoJSONSource | undefined;
@@ -6002,7 +6028,14 @@ export async function startScout(): Promise<void> {
       // A slower earlier search must not overwrite a faster later one, and a
       // result for a spot you have already left is not a result.
       if (token !== photoToken) return;
-      hotspots = found?.hotspots ?? [];
+      // The archive's own shared photos join everyone else's, clustered
+      // together, so a place you shared from reads as one more photographer.
+      const shared = await sharedPhotosNear(at);
+      if (token !== photoToken) return;
+      // The server sends whole RawPhotos (the `Hotspot` type here names only
+      // what the sheet reads); clustering needs their `at`, which they carry.
+      const theirs = (found?.hotspots ?? []).flatMap((h) => h.photos) as unknown as RawPhoto[];
+      hotspots = shared.length ? toHotspots([...theirs, ...shared]) : (found?.hotspots ?? []);
       photoTiers = found?.tiers ?? [];
       photoFailed = !found;
       // A failed answer is not an answer: let the next attempt through rather
@@ -6391,7 +6424,8 @@ export async function startScout(): Promise<void> {
   let exposureToken = 0;
   async function loadExposure(spot: Hotspot) {
     const token = ++exposureToken;
-    const requests = spot.photos.slice(0, 24).map((p) => ({ source: p.source, id: p.id }));
+    // The archive's own shared photos aren't on Commons or Flickr to ask.
+    const requests = spot.photos.filter((p) => p.source !== ARCHIVE_SOURCE).slice(0, 24).map((p) => ({ source: p.source, id: p.id }));
     let settings: Record<string, ExposureSettings> = {};
     try {
       settings = STATIC

@@ -1303,6 +1303,23 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 #lb-similar { margin-left: 0.35rem; }
 a.lb-tool { text-decoration: none; }
 .lb-tool[hidden] { display: none; }
+/* A quiet note under the tools: what Share just did, or what it needs. */
+.lb-note {
+  position: fixed; z-index: 82; left: 50%; transform: translateX(-50%);
+  top: calc(var(--edge) + var(--hit) + 0.6rem); margin: 0;
+  display: flex; align-items: center; gap: 0.7rem; max-width: calc(100vw - 2rem);
+  padding: 0.5rem 0.6rem 0.5rem 0.95rem; border-radius: 999px;
+  font: 500 var(--t-footnote) var(--font-ui); color: var(--fg);
+  background: color-mix(in oklab, #000 62%, transparent); border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+.lb-note[hidden] { display: none; }
+.lb-note-do {
+  flex: none; min-height: 32px; display: inline-flex; align-items: center; padding: 0 0.8rem; border-radius: 999px;
+  background: var(--fg); color: var(--bg); text-decoration: none; font-weight: 600;
+}
+.lb-note-do[hidden] { display: none; }
+.lb-tool[disabled] { opacity: 0.5; }
 .lb-tool.lb-close { margin-left: 0.35rem; }
 /* One icon set for the viewer, drawn on the same 24-unit grid and stroke as
    the tab bar, in place of the ‹ › × ≈ ◐ i characters it used to borrow from

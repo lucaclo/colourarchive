@@ -76,7 +76,54 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     renderFold();
     refreshSource();
     void loadSuggestions();
+    void loadShared();
+    placeFromLink();
   })();
+
+  /* ── Shared to Scout's hotspots ────────────────────────────────────── */
+
+  let sharedIds = new Set<string>();
+  async function loadShared() {
+    try {
+      const data = await fetch('/api/scout/shared', { cache: 'no-store' }).then((r) => r.json());
+      if (data.ok) sharedIds = new Set(data.shared as string[]);
+    } catch {
+      /* the card simply offers Share */
+    }
+  }
+  async function setShared(id: string, shared: boolean): Promise<boolean> {
+    try {
+      const data = await fetch('/api/scout/shared', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, shared }),
+      }).then((r) => r.json());
+      if (!data.ok) return false;
+      if (shared) sharedIds.add(id);
+      else sharedIds.delete(id);
+      // Scout's own hotspots read the same feed; tell them it changed.
+      document.dispatchEvent(new Event('scout:shared'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** `?place=<id>` (from the lightbox's Share): that photo, ready to place; `&then=share` shares it once placed. */
+  let shareAfterPlacing: string | null = null;
+  function placeFromLink() {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('place');
+    if (!id || !byId(id)) return;
+    if (params.get('then') === 'share') shareAfterPlacing = id;
+    const group = document.getElementById('group-yours') as HTMLDetailsElement | null;
+    if (group) group.open = true;
+    $<HTMLDetailsElement>('fold-mine').open = true;
+    const hand = document.getElementById('mine-hand') as HTMLDetailsElement | null;
+    if (hand) hand.open = true;
+    startPlacing(id);
+    requestAnimationFrame(() => $('fold-mine').scrollIntoView({ block: 'start' }));
+  }
 
   /* ── Suggestions from the iPhone (issue #139) ──────────────────────── */
 
@@ -263,6 +310,8 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     if (at) Object.assign(photo, { lat: at.lat, lon: at.lon, source: 'placed' });
     else Object.assign(photo, { lat: undefined, lon: undefined, source: undefined });
     if (at && !shown) shown = true;
+    const thenShare = at && shareAfterPlacing === id;
+    if (thenShare) shareAfterPlacing = null;
     renderFold();
     refreshSource();
     try {
@@ -276,7 +325,9 @@ export function createMineLayer(ports: MinePorts): MineLayer {
       // Clearing a placement falls back to GPS if the file has one — only the
       // server knows that, so ask it rather than guess.
       if (!at) await reload();
-      ports.notify(at ? 'Photo placed' : 'Location removed');
+      if (thenShare && (await setShared(id, true))) {
+        ports.notify('Placed and shared. It shows on the published Scout after the next publish.');
+      } else ports.notify(at ? 'Photo placed' : 'Location removed');
     } catch (err) {
       Object.assign(photo, before);
       renderFold();
@@ -420,6 +471,17 @@ export function createMineLayer(ports: MinePorts): MineLayer {
         ports.scoutAt(at);
       }),
       action('Move', () => startPlacing(photo.id)),
+    );
+    // Shared to the published Scout's hotspots, or not.
+    const isShared = sharedIds.has(photo.id);
+    actions.append(
+      action(isShared ? 'Stop sharing' : 'Share to Scout', async () => {
+        popup?.remove();
+        const ok = await setShared(photo.id, !isShared);
+        ports.notify(
+          !ok ? 'Couldn’t save that' : isShared ? 'No longer shared, from the next publish' : 'Shared. It shows on the published Scout after the next publish.',
+        );
+      }),
     );
     // Issue #160: its lens, here, at the next time the light repeats.
     if (photo.plan) {

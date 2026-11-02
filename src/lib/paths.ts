@@ -43,6 +43,10 @@ export const LOCATIONS_PATH = kept('photos.locations.json');
 // GPS read from a photo's own EXIF at ingest (issue #139) — just as private,
 // so it is moved here and never kept in photos.json or the manifest.
 export const GPS_PATH = kept('photos.gps.json');
+// Photos shared to Scout's hotspots: ids only. Kept beside the locations and
+// git-ignored like them; the places themselves are only ever published in the
+// built site's /scout-shared.json, for the photos named here.
+export const SHARED_PATH = kept('photos.shared.json');
 // Place suggestions turned down with "Not here", so they aren't offered again.
 export const PLACE_DISMISSED_PATH = kept('photos.places-dismissed.json');
 // Every sky reading Scout gave for a kept spot, to check later (issue #143).

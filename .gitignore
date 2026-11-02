@@ -11,6 +11,7 @@ push.json
 # Where photos were taken (Scout) — private, never published
 photos.locations.json
 photos.gps.json
+photos.shared.json
 photos.places-dismissed.json
 photos.sky-readings.json
 photos.rolls.json

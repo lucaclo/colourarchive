@@ -26,6 +26,8 @@ import path from 'node:path';
 import { ROOT, IMG_DIR } from '../src/lib/paths.ts';
 import { readManifest, readStore } from '../src/lib/manifest.ts';
 import { describeAudit } from '../src/lib/derivatives.ts';
+import { buildSharedFeed } from '../src/lib/shared-photos.ts';
+import { parseSharedFeed } from '../src/lib/scout/sources/archive.ts';
 import {
   SITE_URL,
   STAMP_FILE,
@@ -153,6 +155,28 @@ async function builtStamp(): Promise<PublishStamp | null> {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Photos shared to Scout's hotspots go out in the build's /scout-shared.json.
+ * Say how many the build carries, and whether it is behind the Mac's list
+ * (shared since the last build means rebuild before publishing).
+ */
+async function reportShared(manifest: Awaited<ReturnType<typeof readManifest>>) {
+  const wanted = (await buildSharedFeed(manifest)).photos.length;
+  let built: number | null = null;
+  try {
+    built = parseSharedFeed(JSON.parse(await fs.readFile(path.join(BUILT, 'scout-shared.json'), 'utf8'))).photos.length;
+  } catch {
+    /* not built yet */
+  }
+  const line =
+    built === null
+      ? `Scout hotspots: ${wanted} shared on the Mac; this build has no feed yet.`
+      : built === wanted
+        ? `Scout hotspots: ${built} shared photo${built === 1 ? '' : 's'} in this build.`
+        : `Scout hotspots: this build has ${built} shared, the Mac has ${wanted}. Run \`npm run export:static\` first to send them.`;
+  console.log(`  ${line}`);
+}
+
 async function main() {
   const [manifest, photos] = await Promise.all([readManifest(), readStore()]);
   const nameOf = (id: string) => photos.find((p) => p.id === id)?.filename ?? id;
@@ -164,6 +188,7 @@ async function main() {
   const drift = driftBetween(local, published, new Date(), published ? null : await fetchCover());
   console.log(describeDrift(drift, nameOf).join('\n'));
   await reportFunctions();
+  await reportShared(manifest);
 
   if (CHECK) {
     console.log('\nNothing published — run `npm run deploy:site` to publish.');

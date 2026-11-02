@@ -516,6 +516,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           <a class="lb-tool lb-text" id="lb-plan" href="/scout" data-cmdk="Plan this shot again" data-cmdk-keywords="scout, lens, same light, again" title="Plan this shot again in Scout: its lens, its place, the next time the light stands there" hidden>Plan again</a>
           <button class="lb-tool lb-text" id="lb-roll" data-cmdk="Same roll" data-cmdk-keywords="film" aria-label="The rest of this roll" title="The rest of this roll" aria-expanded="false" hidden>Same roll</button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-match" data-cmdk="Match this look" data-cmdk-keywords="lightroom, preset" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
+          {/* Share to Scout's hotspots: the place goes out with the next publish. */}
+          {!STATIC && <button class="lb-tool lb-text" id="lb-share" data-cmdk="Share to Scout" data-cmdk-keywords="hotspot, publish, place, map" aria-pressed="false" title="Show this photo on the published Scout’s photo hotspots, at its place, credited to Colour Archive">Share</button>}
           {!STATIC && (
             <button class="lb-tool lb-text" id="lb-chapter" data-cmdk="Move to another chapter" data-cmdk-keywords="chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">Chapter</button>
           )}
@@ -534,6 +536,12 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
             ))}
             <p class="lbc-status" id="lbc-status" aria-live="polite" />
           </div>
+        )}
+        {!STATIC && (
+          <p class="lb-note" id="lb-note" role="status" aria-live="polite" hidden>
+            <span id="lb-note-text"></span>
+            <a class="lb-note-do" id="lb-note-do" hidden></a>
+          </p>
         )}
         <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg></button>
         <div class="lb-stage">
@@ -1581,6 +1589,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     lbCap.innerHTML = captionHtml(f);
     lbImg.alt = `${f.dataset.chapter || ''} — ${f.dataset.file || 'photograph'}`;
     syncRoll(f);
+    if (shareBtn) { syncShare(f); void loadShareState().then(() => frames[lbIndex] === f && syncShare(f)); }
+    if (note) note.hidden = true;
     if (planBtn) {
       planBtn.hidden = !f.dataset.plan;
       if (f.dataset.plan) planBtn.href = `/scout?${f.dataset.plan}`;
@@ -1596,6 +1606,69 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   const STATIC_SITE = lb.dataset.static === '1';
   const rollBtn = document.getElementById('lb-roll');
   const planBtn = document.getElementById('lb-plan');
+
+  // --- Share to Scout -----------------------------------------------------
+  // A shared photo appears among the published Scout's photo hotspots, at
+  // its place, credited to Colour Archive; it goes out with the next
+  // publish (/scout-shared.json). Only a photo with a place can be shared:
+  // otherwise the note offers to place it in Scout.
+  const shareBtn = document.getElementById('lb-share');
+  const note = document.getElementById('lb-note');
+  const noteText = document.getElementById('lb-note-text');
+  const noteDo = document.getElementById('lb-note-do');
+  let shareState = null; // { shared: Set, located: Set }
+  let noteTimer = 0;
+  async function loadShareState() {
+    if (shareState || !shareBtn) return shareState;
+    try {
+      const d = await fetch('/api/scout/shared', { cache: 'no-store' }).then((r) => r.json());
+      if (d.ok) shareState = { shared: new Set(d.shared), located: new Set(d.located) };
+    } catch { /* the button stays as it is */ }
+    return shareState;
+  }
+  function showNote(text, action) {
+    if (!note) return;
+    noteText.textContent = text;
+    noteDo.hidden = !action;
+    if (action) { noteDo.textContent = action.label; noteDo.href = action.href; }
+    note.hidden = false;
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { note.hidden = true; }, action ? 9000 : 5000);
+  }
+  function syncShare(f) {
+    if (!shareBtn) return;
+    const on = !!shareState?.shared.has(f.dataset.id);
+    shareBtn.setAttribute('aria-pressed', String(on));
+    shareBtn.textContent = on ? 'Shared' : 'Share';
+    shareBtn.dataset.cmdk = on ? 'Stop sharing to Scout' : 'Share to Scout';
+  }
+  shareBtn?.addEventListener('click', async () => {
+    const f = frames[lbIndex];
+    if (!f) return;
+    const state = await loadShareState();
+    const id = f.dataset.id;
+    const next = !(state?.shared.has(id));
+    if (next && state && !state.located.has(id)) {
+      showNote('It needs a place to appear on the map.', { label: 'Place it in Scout', href: `/scout?place=${encodeURIComponent(id)}&then=share` });
+      return;
+    }
+    shareBtn.disabled = true;
+    try {
+      const res = await fetch('/api/scout/shared', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, shared: next }) });
+      const d = await res.json();
+      if (d.ok) {
+        if (next) state?.shared.add(id); else state?.shared.delete(id);
+        syncShare(f);
+        showNote(next ? 'Shared. It shows on the published Scout after the next publish.' : 'No longer shared, from the next publish.');
+      } else if (d.needsPlace) {
+        showNote('It needs a place to appear on the map.', { label: 'Place it in Scout', href: `/scout?place=${encodeURIComponent(id)}&then=share` });
+      } else showNote('Couldn’t save that. Try again.');
+    } catch {
+      showNote('Couldn’t reach the Mac. Try again.');
+    } finally {
+      shareBtn.disabled = false;
+    }
+  });
   const rollStrip = document.getElementById('lb-rollstrip');
   const rollTitle = document.getElementById('lb-roll-title');
   const rollInput = document.getElementById('lb-roll-input');
