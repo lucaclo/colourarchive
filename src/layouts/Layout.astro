@@ -120,6 +120,10 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
     {tab && <TabBar current={tab} />}
     {tab && <CommandPalette />}
     {cursor && <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>}
+    <script>
+      // Press springs, segmented-control gliders, collapsing page titles.
+      import '../lib/ui/index';
+    </script>
     <script is:inline>
       // Custom cursor: a ring tinted to whatever --accent currently is (set
       // per-page/per-chapter elsewhere), difference-blended so it reads over

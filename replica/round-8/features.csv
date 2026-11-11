@@ -1,0 +1,20 @@
+feature,area,priority,original,clone,notes
+Stepped massing from building:part (hide_3d outlines hidden),buildings,must,yes,yes,G1; Empire State outline 444 m hide_3d=true extruded solid today
+Facade tint from OSM building:colour,buildings,should,yes,yes,G2; 1298 of 1488 midtown features carry colour
+Procedural window grid on walls (floors and bays),buildings,should,yes,yes,G3; custom layer; Atlas gets it from Mapbox show3dFacades
+Lit windows at night,buildings,could,yes,yes,G3; ties into the night basemap
+Cast shadows from buildings driven by time,buildings,must,yes,yes,Scout shadow-layer
+3D trees with shadows,buildings,must,yes,yes,OSM natural=tree plus estimated scatter
+Roof shapes (domes spires gables),buildings,could,yes,no,G4; roof:shape not in OpenMapTiles; needs Overpass
+Hand-modelled 3D landmark models,buildings,skip,yes,no,G5; Mapbox licensed content; Google 3D Tiles metered and no caching
+Photo pins on map with thumbnail,hotspots,must,yes,yes,Flickr interestingness + curated NSIDs
+Per-spot camera settings (EXIF),hotspots,should,yes,yes,"H1; Commons live-verified, Flickr per docs (no key in dev)"
+Spot quality score,hotspots,should,yes,yes,H2; distinct photographers ranked and said in words
+Named spots and clusters,hotspots,should,yes,yes,H3; nearest OSM name or tourism=viewpoint
+Lighter pin and cluster style,hotspots,could,yes,yes,"H4; already discs + clusters, lighter than Atlas thumbnails"
+Forecast and cloud cover per spot,hotspots,must,yes,yes,Scout weather
+Sunrise sunset golden hour per spot,hotspots,must,yes,yes,
+Time scrub on map moves light,light,must,yes,yes,Scout twilight strip and sun-ring drag
+Bulk-seeded POI spots (2.7M),hotspots,skip,yes,no,against scout-hotspot-quality; likely places-database import
+LLM-written pro tips per spot,hotspots,skip,yes,no,no LLM text in Scout
+User posts create spots / Showroom / leaderboards,social,skip,yes,no,no login by decision

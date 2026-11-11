@@ -35,3 +35,9 @@ test('photoName drops names a machine gave the file', () => {
   assert.equal(photoName('Screenshot-2026-08-13-at-12-16-18.5fb880c287a47b42.png'), 'Screenshot-2026-08-13-at-12-16-18');
   assert.equal(photoName('IMG_20240512_183012.jpg'), 'IMG_20240512_183012');
 });
+
+test('photoName turns a web slug back into words, with its credit', () => {
+  assert.equal(photoName('approaching-shadow-hong-kong-by-fan-ho.9c8bbaf0eab03262.webp'), 'Approaching shadow hong kong by Fan Ho');
+  assert.equal(photoName('illuminated-gas-station-ballyscanlon.7871b3fe5a94c54a.jpeg'), 'Illuminated gas station ballyscanlon');
+  assert.equal(photoName('Fan-Ho-1.1adaf557fb6801ff.avif'), 'Fan-Ho-1');
+});

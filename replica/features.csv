@@ -1,0 +1,42 @@
+feature,area,priority,original,clone,notes
+Hue-ordered continuous archive scroll in fixed colour chapters,archive,must,none,yes,no competitor found doing this
+CLIP natural-language search,archive,must,Immich / Lightroom desktop 9.3,yes,src/lib/textSearch.ts
+Find similar (composition and colour blend),archive,must,Cosmos / mymind Same Vibe,yes,src/lib/similar.ts
+Burst and duplicate detection,archive,should,Lightroom 9.4 stacking,yes,src/lib/duplicates.ts
+Offline PWA snapshot,archive,should,Immich mobile,yes,public/sw.js
+Pick a colour (hex or wheel) and find photos containing it,archive,must,Eagle / PhotoPrism / Cosmos,yes,components/ColourFilter.astro + colour-search.ts; hue-led match tuned on the archive
+Chroma and lightness filters,archive,should,PhotoPrism chroma filter,yes,area-weighted over the palette; slider spans this archive's real range
+Per-photo palette with copyable hex codes,archive,could,mymind / Cosmos,yes,lightbox details; tap copies
+Save to board from the iPad share sheet,inspiration,should,mymind / Cosmos,yes,/inspiration/add + og:image follow; the Shortcut is made once by hand (README)
+Colour search on the inspiration board,inspiration,should,Cosmos / Eagle,yes,same component
+Reference to Lightroom xmp with measured evidence,match,must,FindPreset / Preset Generator,yes,src/lib/match
+Multiple references merged and weighted,match,should,Capture One Match Look,yes,group.ts / solve.ts
+Per-group strength (light colour effects),match,should,Capture One group toggles,yes,api/match/preset.ts; finer than on/off
+Grain vignette and texture matching,match,should,none (Match Look is tone and colour only),yes,texture-core.ts
+Exact settings read from reference crs metadata,match,must,FindPreset,no,not chosen on 2026-10-09
+Batch match: one adapted preset per target photo,match,should,Capture One Match Look,yes,one solve per photo; /api/match/presets.zip
+Measure the finished edit and correct (round trip),match,should,none,yes,Check tab
+Sun and moon ephemeris with alignment finder,scout,must,PhotoPills / Planit,yes,alignment.ts against real skyline
+Building terrain and tree shadows,scout,must,ShadowMap / Sunlitt,yes,shadows.ts / trees.ts
+Line of sight with curvature and refraction,scout,should,TPE,yes,profile.ts
+Meteor shower planner (radiant and peak and moon),scout,should,PhotoPills Meteor Shower pill,yes,scout/meteor.ts + fold; rate is one-observer upper figure
+Eye-level first-person view from the pin along the aim,scout,should,ShadowMap FPV / Planit VR,yes,camera 1.7 m above ground; frame aim or sun
+Calendar export with reminder,scout,could,PhotoPills,yes,ics.ts VALARM
+Per-spot community knowledge (best months crowd),scout,could,PhotoHound / Locationscout,skip,their data; per-spot notes are the honest version
+Timelapse and star-trail simulation,scout,could,Planit Pro,no,calculated not simulated; low value for this use
+Account sync of saved places,scout,could,TPE / Planit iCloud,skip,single-user local-first by decision
+Curated book sequence by colour,book,must,none,yes,book.ts
+Spread view showing facing pages,book,must,Lightroom Book module / Milanote,yes,/book Spreads; page 1 a right-hand page
+Multi-photo page layouts (two-up and photo with blank),book,must,Lightroom Book module / Black's,yes,"border, full bleed, two-up, blank before"
+Print-service trim bleed and page-count presets,book,should,Lightroom Book to Blurb,yes,Blurb and A-sizes; TrimBox/BleedBox PDF at 300 dpi
+Zine 8-page one sheet,book,must,pdfimpose / Dirty Little Zine,yes,src/lib/zine
+Zine 16-page,book,could,Mini Magic Zine Imposer,yes,"round 5 (2026-10-14): two nested sheets, 8 pp / 16 pp switch"
+AI style learned from thousands of own edits,match,could,Imagen / Aftershoot,skip,needs cloud or large model; no-network rule
+Sunset quality score,scout,could,Alpenglow / SunsetWX,skip,rejected on purpose: not reproducible
+remove with undo (no server change),archive,should,Immich 3.1 / Gmail,yes,round 5
+colour harmony partners with counts,archive,could,Adobe Color,yes,round 5; one partner at a time
+survey similar shots side by side with shared zoom,book,should,Narrative Select / Lightroom Survey,yes,round 5
+multi-day sunset sky verdict,scout,should,Alpenglow / Sunsethue,yes,round 5; no score; calendar marks
+sunset alerts over a threshold,scout,could,Sunsethue Glow / Alpenglow Pro,skip,needs push and a server
+single-picture draggable before/after on phone,match,should,Photomator,yes,round 5
+command palette context actions,archive,could,Immich 2.4,yes,round 5

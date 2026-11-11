@@ -111,9 +111,12 @@ const accent = manifest.chapters[0]
                 <summary id="book-soft-head"></summary>
                 <ul id="book-soft-list"></ul>
               </details>
+              {/* The next step for the soft pages: each one's suggested layout
+                  (two-up, a border, full bleed) in one tap. */}
+              <button type="button" class="book-cover-btn" id="book-soft-fix" hidden></button>
               <button type="button" class="book-pdf" id="book-pdf">Make PDF</button>
               <div class="book-cover">
-                <label class="book-poprow"><span>Spine</span><span><input type="number" id="book-spine" min="0" max="100" step="0.1" inputmode="decimal" aria-label="Spine width in millimetres" /> mm</span></label>
+                <label class="book-poprow"><span>Spine</span><span><input type="number" class="field" id="book-spine" min="0" max="100" step="0.1" inputmode="decimal" aria-label="Spine width in millimetres" /> mm</span></label>
                 <button type="button" class="book-cover-btn" id="book-cover">Cover spread PDF</button>
                 <span class="book-cover-hint">Back, spine and front in one file. Use your printer’s spine width.</span>
               </div>
@@ -354,6 +357,9 @@ const accent = manifest.chapters[0]
   }
   .book-dup-summary:hover { background: color-mix(in oklab, #c9973a 24%, transparent); }
   .book-dup-summary:focus-visible { outline: 2px solid #c9973a; outline-offset: 2px; }
+  /* Small pills, bigger targets (24px at least), the visuals unchanged. */
+  .book-dup-summary, .book-dup { position: relative; }
+  .book-dup-summary::after, .book-dup::after, .book-exclude::after { content: ''; position: absolute; inset: -5px; }
 
   .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); align-items: start; gap: 8px; list-style: none; margin: 0; padding: 0; }
   .book-cell {
@@ -1148,6 +1154,7 @@ const accent = manifest.chapters[0]
   const softHead = document.getElementById('book-soft-head');
   const softList = document.getElementById('book-soft-list');
   const spineIn = document.getElementById('book-spine') as HTMLInputElement | null;
+  const softFix = document.getElementById('book-soft-fix') as HTMLButtonElement | null;
   function updateCheck() {
     const all = pages();
     flags = printCheck(all, TRIMS[state.trim]);
@@ -1155,6 +1162,13 @@ const accent = manifest.chapters[0]
     if (softEl && softHead && softList) {
       softEl.hidden = flags.length === 0;
       softHead.textContent = `${flags.length} ${flags.length === 1 ? 'photo' : 'photos'} may print soft`;
+      const fixable = flags.filter((f) => f.fix);
+      if (softFix) {
+        softFix.hidden = fixable.length === 0;
+        softFix.textContent = fixable.length === flags.length
+          ? `Use the suggested layout${fixable.length === 1 ? '' : 's'}`
+          : `Use the suggested layouts for ${fixable.length}`;
+      }
       softList.replaceChildren(...flags.map((f) => {
         const li = document.createElement('li');
         const b = document.createElement('button');
@@ -1421,6 +1435,17 @@ const accent = manifest.chapters[0]
     else state.layout[selected] = t;
     change();
   });
+  softFix?.addEventListener('click', () => {
+    const all = pages();
+    for (const f of flags) {
+      const page = all[f.page];
+      if (!f.fix || !page || page.kind !== 'photo') continue;
+      const first = page.photos[0].id;
+      if (f.fix.treatment === 'border') delete state.layout[first];
+      else state.layout[first] = f.fix.treatment;
+    }
+    change();
+  });
   // A flagged page in the Print panel: show it in Spreads.
   softList?.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-soft-page]');
@@ -1462,7 +1487,17 @@ const accent = manifest.chapters[0]
     if (!printPop || !printOpen) return;
     printPop.hidden = !open;
     printOpen.setAttribute('aria-expanded', String(open));
+    if (open) fitPrintPop();
   };
+  // Taller than a laptop screen once every section is in it: it stops short
+  // of the tab bar and scrolls inside rather than running under it.
+  function fitPrintPop() {
+    if (!printPop || printPop.hidden) return;
+    const floor = document.getElementById('tabbar')?.getBoundingClientRect().top ?? innerHeight;
+    const room = Math.min(floor, innerHeight) - printPop.getBoundingClientRect().top - 12;
+    printPop.style.maxHeight = `${Math.max(200, room)}px`;
+  }
+  addEventListener('resize', fitPrintPop);
   printOpen?.addEventListener('click', () => setPrintOpen(!!printPop?.hidden));
   document.addEventListener('click', (e) => {
     const path = e.composedPath();
@@ -1760,6 +1795,7 @@ const accent = manifest.chapters[0]
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   }
   .book-printpop[hidden] { display: none; }
+  .book-printpop { overflow-y: auto; overscroll-behavior: contain; }
   .book-poprow { display: grid; gap: var(--sp-1); color: var(--secondary); font-size: var(--t-caption); }
   .book-printpop #book-trim { width: 100%; }
   .book-printpop .book-check { white-space: normal; }
@@ -1854,7 +1890,7 @@ const accent = manifest.chapters[0]
   }
   .book-soft li button:hover { color: var(--fg); }
   .book-cover { display: grid; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--separator); }
-  .book-cover input { width: 4.5rem; }
+  .book-cover input { width: 5.5rem; min-height: 2.25rem; padding: 0 0.6rem; }
   .book-cover-btn {
     appearance: none; cursor: pointer; min-height: 2.25rem; border-radius: var(--r-pill); border: 1px solid var(--rule);
     background: none; color: var(--fg); font: 500 var(--t-footnote) var(--font-ui);

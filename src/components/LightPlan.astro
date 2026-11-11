@@ -1,0 +1,130 @@
+---
+// "Shoot this light", under a reference in the board's enlarged view: the
+// light it was taken in, and when that light next happens at the spots you
+// keep in Scout, each a link that opens Scout at that place and minute.
+// Lives in the browser because Scout keeps spots in localStorage.
+---
+
+<script>
+  import { readSpots, type SavedSpot } from '../lib/scout/spots';
+  import { encodeScoutLink } from '../lib/scout/share';
+  import { isoDateIn, scoutDay, zonedNoon } from '../lib/scout/daylight';
+  import { describeWish, planLight, type CloudHours, type LightWish, type LightWindow } from '../lib/light-plan';
+
+  // Scout's own key (lib/scout/view/session.ts, SPOTS_KEY). Not imported:
+  // that module brings the whole map view with it.
+  const SPOTS_KEY = 'scout-spots.v1';
+
+  const box = document.getElementById('lb-light');
+  let token = 0;
+
+  function spots(): SavedSpot[] {
+    try { return readSpots(localStorage.getItem(SPOTS_KEY)); } catch { return []; }
+  }
+
+  function zoneOf(spot: SavedSpot): string {
+    return spot.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+
+  /** Scout's slider counts minutes from solar midnight of that date. */
+  function scoutHref(w: LightWindow): string {
+    const tz = zoneOf(w.spot);
+    const isoDate = isoDateIn(w.start, tz);
+    const { dayStart } = scoutDay(w.spot.lat, w.spot.lon, zonedNoon(isoDate, tz));
+    const minute = Math.max(0, Math.min(1440, Math.round((w.start.getTime() - dayStart.getTime()) / 60_000)));
+    return `/scout?${encodeScoutLink({ centre: { lat: w.spot.lat, lon: w.spot.lon }, name: w.spot.name, timeZone: tz, isoDate, minute })}`;
+  }
+
+  function when(w: LightWindow): string {
+    const tz = zoneOf(w.spot);
+    const day = isoDateIn(w.start, tz) === isoDateIn(new Date(), tz)
+      ? 'Today'
+      : w.start.toLocaleDateString(undefined, { weekday: 'short', timeZone: tz });
+    return `${day} ${w.start.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: tz })}`;
+  }
+
+  function render(wish: LightWish, windows: LightWindow[] | null) {
+    if (!box) return;
+    const head = document.createElement('p');
+    head.className = 'lb-light-wish';
+    head.textContent = describeWish(wish);
+    const kids: Node[] = [head];
+    if (windows === null) {
+      // No spots kept: Scout is where you'd start.
+      const a = document.createElement('a');
+      a.href = '/scout';
+      a.className = 'lb-light-row';
+      a.textContent = 'Find a place for it in Scout ↗';
+      kids.push(a);
+    } else if (!windows.length) {
+      const p = document.createElement('p');
+      p.className = 'lb-light-note';
+      p.textContent = 'Not at your spots this week';
+      kids.push(p);
+    } else {
+      for (const w of windows) {
+        const a = document.createElement('a');
+        a.href = scoutHref(w);
+        a.className = 'lb-light-row';
+        const t = document.createElement('span');
+        t.className = 'lb-light-when';
+        t.textContent = when(w);
+        const n = document.createElement('span');
+        n.textContent = w.spot.name;
+        a.append(t, n);
+        const caveats = [w.aimUnknown && 'no aim saved', w.noForecast && 'no forecast yet'].filter(Boolean).join(' · ');
+        if (caveats) {
+          const c = document.createElement('span');
+          c.className = 'lb-light-note';
+          c.textContent = caveats;
+          a.append(c);
+        }
+        kids.push(a);
+      }
+    }
+    box.replaceChildren(...kids);
+    box.hidden = false;
+  }
+
+  async function cloudFor(spot: SavedSpot): Promise<CloudHours | undefined> {
+    try {
+      const r = await (await fetch(`/api/scout/weather?lat=${spot.lat}&lon=${spot.lon}`)).json();
+      const hours = r?.report?.hours as { time: number; cloudCover: number | null }[] | undefined;
+      if (!hours?.length) return undefined;
+      return new Map(hours.filter((h) => h.cloudCover != null).map((h) => [h.time, h.cloudCover!]));
+    } catch { return undefined; }
+  }
+
+  window.addEventListener('insp:lightbox', async (e) => {
+    const id = (e as CustomEvent<{ id: string }>).detail?.id;
+    if (!box || !id) return;
+    const mine = ++token;
+    box.hidden = true;
+    box.replaceChildren();
+    let wish: LightWish | null = null;
+    try { wish = (await (await fetch(`/api/inspiration/light?id=${encodeURIComponent(id)}`)).json()).light ?? null; } catch { /* nothing to say */ }
+    if (mine !== token || !wish) return;
+    const kept = spots();
+    if (!kept.length) { render(wish, null); return; }
+    const now = new Date();
+    // The sun alone first, so something shows at once; then the cloud, for
+    // the spots whose windows come soonest.
+    render(wish, planLight(kept, wish, now));
+    const soonest = planLight(kept, wish, now, 7, new Map(), 6).map((w) => w.spot);
+    const clouds = new Map<SavedSpot, CloudHours>();
+    await Promise.all(soonest.map(async (s) => { const c = await cloudFor(s); if (c) clouds.set(s, c); }));
+    if (mine !== token) return;
+    render(wish, planLight(kept, wish, now, 7, clouds));
+  });
+  window.addEventListener('insp:lightbox-close', () => { token++; if (box) { box.hidden = true; box.replaceChildren(); } });
+</script>
+
+<style is:global>
+  .lb-light { display: grid; gap: 0.35rem; justify-items: center; font-family: var(--font-ui); font-size: var(--t-footnote); max-width: min(92vw, 34rem); }
+  .lb-light[hidden] { display: none; }
+  .lb-light-wish { margin: 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--fg); }
+  .lb-light-row { display: flex; flex-wrap: wrap; gap: 0 0.7rem; align-items: baseline; justify-content: center; color: var(--secondary); text-decoration: none; min-height: 32px; }
+  .lb-light-row:hover { color: var(--fg); }
+  .lb-light-when { font-family: var(--font-label); font-size: var(--t-caption); color: var(--fg); }
+  .lb-light-note { margin: 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-caption); color: var(--muted); }
+</style>

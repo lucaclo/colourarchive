@@ -93,8 +93,20 @@ export function morningRows(rows: SunEventRow[]): SunEventRow[] {
  * the caller falls back to a plain "Photo spot". A real title with spaces in
  * it, even one ending in a number ("Central Pier 9"), is kept.
  */
-export function readableTitle(title: string | null | undefined): string | null {
-  const trimmed = (title ?? '').replace(/\.[a-z0-9]{3,4}$/i, '').trim();
+export function readableTitle(title: string | null | undefined, author?: string): string | null {
+  let trimmed = (title ?? '').replace(/\.[a-z0-9]{3,4}$/i, '').trim();
+  // File-title furniture: " - Diliff" (the author's own handle), " - Feb 2008"
+  // or " - 2017-09-16-3" (a date), and a trailing country after the city.
+  const who = author?.trim().toLowerCase();
+  for (let again = true; again; ) {
+    const before = trimmed;
+    const tail = trimmed.match(/\s+-\s+((?:(?!\s-\s).)+)$/);
+    if (tail && (tail[1].toLowerCase() === who || /^(?:[a-z]{3,9}\s+)?\d{2,4}(?:[-\s:]\d+)*$/i.test(tail[1]))) {
+      trimmed = trimmed.slice(0, tail.index).trim();
+    }
+    trimmed = trimmed.replace(/,\s*(?:UK|U\.K\.|USA|U\.S\.A\.|England|United Kingdom|United States)$/i, '').trim();
+    again = trimmed !== before && trimmed.length > 0;
+  }
   if (!trimmed) return null;
   if (/^(img|dsc|dscf|dscn|pxl|mvimg|gopr|p\d{3}|_mg|dji)[\s_-]?\d+/i.test(trimmed)) return null;
   if (!/\s/.test(trimmed) && /\d/.test(trimmed) && /[-_]/.test(trimmed)) return null;

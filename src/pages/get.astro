@@ -316,7 +316,13 @@ const glyphs: Record<string, string> = {
     transition: transform 120ms ease-out, background var(--dur-fast) var(--ease);
   }
   .get-btn:hover { background: color-mix(in oklab, var(--fg) 88%, var(--bg)); }
-  .get-btn:active { transform: scale(0.97); }
+  /* The page arrives the way the archive's cover does: icon, name, then the
+     one button, each rising a beat after the last. */
+  .get-icon, .get h1, .get-btn, .get-for { animation: riseIn 520ms var(--ease) both; }
+  .get h1 { animation-name: titleIn; animation-delay: 70ms; }
+  .get-btn { animation-delay: 140ms; }
+  .get-for { animation-delay: 200ms; }
+  @media (prefers-reduced-motion: reduce) { .get-icon, .get h1, .get-btn, .get-for { animation: none; } }
   .get-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
   .get-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .get[data-state='installed'] .get-btn svg { display: none; }

@@ -9,6 +9,11 @@ import { clusterByEmbedding } from '../lib/similar';
 import { GENRES, GENRE_LABEL } from '../lib/types';
 import { encodePalette, searchPalette } from '../lib/colour-search';
 import ColourFilter from '../components/ColourFilter.astro';
+import Photographers from '../components/Photographers.astro';
+import { creditLabel } from '../lib/photographers/kinds';
+import LightPlan from '../components/LightPlan.astro';
+import { readPhotographers } from '../lib/photographers/store';
+import { readInstagram } from '../lib/photographers/instagram-api';
 
 export const prerender = false;
 
@@ -54,6 +59,39 @@ const clusterGroups: GroupBucket[] = await (async () => {
   return leftOver.length ? [...groups, { label: 'On their own', ids: leftOver }] : groups;
 })();
 
+// Who took what (lib/photographers/). The credit lives in a private file,
+// not on the reference, so it is joined here: each tile's caption, the
+// favourites shelf, and a fourth way to group the board.
+const people = await readPhotographers();
+const instagram = await readInstagram();
+const boardPhotos = manifest.chapters.flatMap((ch) => ch.photos);
+const personById = new Map(people.photographers.map((p) => [p.id, p]));
+const creditOf = (refId: string) => personById.get(people.credits[refId] ?? '');
+const smallest = (p: (typeof boardPhotos)[number]) => p.derivatives[0]?.avif;
+
+const photographerGroups: GroupBucket[] = (() => {
+  const by = new Map<string, string[]>();
+  const loose: string[] = [];
+  for (const p of boardPhotos) {
+    const who = creditOf(p.id);
+    if (!who) { loose.push(p.id); continue; }
+    const ids = by.get(who.id);
+    if (ids) ids.push(p.id); else by.set(who.id, [p.id]);
+  }
+  const named = [...by.entries()]
+    .map(([id, ids]) => ({ person: personById.get(id)!, ids }))
+    .sort((a, b) => Number(b.person.favourite) - Number(a.person.favourite) || b.ids.length - a.ids.length || a.person.name.localeCompare(b.person.name))
+    .map(({ person, ids }) => ({ label: person.name, ids }));
+  return loose.length ? [...named, { label: 'Uncredited', ids: loose }] : named;
+})();
+
+const favourites = people.photographers.filter((p) => p.favourite).map((p) => {
+  const ref = boardPhotos.find((r) => people.credits[r.id] === p.id);
+  return { id: p.id, name: p.name, cover: ref ? smallest(ref) : undefined };
+});
+const shelfPeople = people.photographers.map((p) => ({ id: p.id, name: p.name, favourite: p.favourite }));
+const shelfRefs = boardPhotos.map((p) => ({ id: p.id, thumb: smallest(p), credit: creditOf(p.id)?.id }));
+
 // Arriving from the archive lightbox's "Match this look" (index.astro,
 // ?match=<archive id>) — resolved here rather than client-side because the
 // photo is not necessarily on this board's own DOM at all, the way a
@@ -87,9 +125,16 @@ const accent = manifest.chapters[0]
     <!-- The board comes first; adding sits behind one button (Cosmos,
          Are.na). It starts open only when there is nothing on the board yet.
          Dragging files over the page or pasting anywhere also adds. -->
-    <header class="insp-head">
-      <h1>Reference</h1>
-      <button class="insp-addbtn" id="add-toggle" type="button" data-cmdk="Add a reference" data-cmdk-keywords="upload, paste, link" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add">Add</button>
+    {/* Named like its tab: it was "Reference" here and "Inspiration" in the
+        tab bar, two names for one place. */}
+    <header class="page-head insp-head">
+      <div class="ph-titles">
+        <h1>Inspiration</h1>
+        {hasItems && <span class="ph-count">{manifest.count}</span>}
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-primary insp-addbtn" id="add-toggle" type="button" data-cmdk="Add a reference" data-cmdk-keywords="upload, paste, link" aria-expanded={hasItems ? 'false' : 'true'} aria-controls="insp-add"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span id="add-toggle-say">Add</span></button>
+      </div>
     </header>
 
     <section class="insp-add" id="insp-add" hidden={hasItems}>
@@ -109,6 +154,9 @@ const accent = manifest.chapters[0]
     <ul id="results" class="results"></ul>
     <div class="drop-veil" id="drop-veil" hidden aria-hidden="true"><p>Drop to pin up</p></div>
 
+    <Photographers favourites={favourites} people={shelfPeople} refs={shelfRefs} similar={clusterGroups.map((g) => g.ids)} instagram={instagram ? { username: instagram.username } : null} />
+    <LightPlan />
+
     <!-- Style Match reports you've explicitly kept (POST /api/match/keep) —
          the library that mx-keep's "Kept" button used to write to with no way
          back. Populated client-side (see the module script below), because
@@ -127,14 +175,17 @@ const accent = manifest.chapters[0]
     {
       hasItems ? (
         <>
-          <div class="insp-groupby" id="groupby" role="group" aria-label="Group the board by">
-            <button type="button" class="on" data-groupby="colour">Colour</button>
-            <button type="button" data-groupby="genre">Genre</button>
-            <button type="button" data-groupby="cluster">Similar</button>
+          <div class="insp-groupbar">
+            <div class="insp-groupby" id="groupby" role="group" aria-label="Group the board by" data-seg>
+              <button type="button" class="on" data-groupby="colour">Colour</button>
+              <button type="button" data-groupby="genre">Genre</button>
+              <button type="button" data-groupby="cluster">Similar</button>
+              <button type="button" data-groupby="photographer">Photographer</button>
+            </div>
             <span class="insp-cf"><ColourFilter items=".insp-frame" /></span>
           </div>
           <p class="insp-cf-empty" id="insp-cf-empty" hidden>No references near this colour.</p>
-          <script type="application/json" id="insp-groupings" is:inline set:html={JSON.stringify({ genre: genreGroups, cluster: clusterGroups })} />
+          <script type="application/json" id="insp-groupings" is:inline set:html={JSON.stringify({ genre: genreGroups, cluster: clusterGroups, photographer: photographerGroups })} />
           <div class="insp-board" id="board">
             {/* Three parallel groupings of the same photos, not three copies —
                 only "colour" ever renders the actual <figure> elements; genre
@@ -175,7 +226,14 @@ const accent = manifest.chapters[0]
                           <button class="cell-similar" type="button" data-similar={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-label="Find similar in your archive">Similar</button>
                           <button class="cell-match" type="button" data-match={p.id} data-full={largest.avif} data-name={p.filename} aria-label="Match this look in Lightroom">Match</button>
                           <button class="cell-group" type="button" data-group={p.id} data-full={largest.avif} data-source={p.source ?? ''} aria-pressed="false" aria-label="Add to a group of similarly-edited references">+ group</button>
-                          {p.source && <figcaption class="src">{p.source}</figcaption>}
+                          {(() => {
+                            // The photographer when known (opens their sheet), else
+                            // what came with it, else a question.
+                            const who = creditOf(p.id);
+                            if (who) return <figcaption class="src"><button type="button" class="credit" data-ph={who.id}>{creditLabel(who.name)}</button></figcaption>;
+                            const said = p.source && !/^https?:\/\//i.test(p.source) ? p.source : '';
+                            return <figcaption class="src">{said}<button type="button" class="cell-who" data-ref={p.id} aria-label="Who took this?">Who?</button></figcaption>;
+                          })()}
                         </figure>
                       );
                     })}
@@ -185,6 +243,14 @@ const accent = manifest.chapters[0]
             </div>
             <div class="insp-view" data-view="genre" hidden>
               {genreGroups.map((g) => (
+                <section class="insp-chapter">
+                  <h2 class="insp-chtitle">{g.label}<span class="n">{g.ids.length}</span></h2>
+                  <div class="collage insp-collage" data-collage={g.label} />
+                </section>
+              ))}
+            </div>
+            <div class="insp-view" data-view="photographer" hidden>
+              {photographerGroups.map((g) => (
                 <section class="insp-chapter">
                   <h2 class="insp-chtitle">{g.label}<span class="n">{g.ids.length}</span></h2>
                   <div class="collage insp-collage" data-collage={g.label} />
@@ -292,7 +358,7 @@ const accent = manifest.chapters[0]
             <div class="mx-batch-foot" id="mx-batch-foot" hidden>
               <label class="mx-batch-strength">
                 <span>Strength</span>
-                <input type="range" id="mx-batch-strength" min="0" max="100" value="50" aria-label="Strength for every preset" />
+                <input type="range" class="range" id="mx-batch-strength" min="0" max="100" value="50" aria-label="Strength for every preset" />
                 <output id="mx-batch-strength-out">50%</output>
               </label>
               <button type="button" class="mx-batch-download" id="mx-batch-download">Download presets</button>
@@ -300,7 +366,7 @@ const accent = manifest.chapters[0]
           </div>
           <label class="mx-field">
             <span>If it’s a RAW, start from</span>
-            <select id="mx-baseline">
+            <select class="field" id="mx-baseline">
               <option value="macos">The Mac’s decode</option>
               <option value="export">A zero-slider JPEG (exact)</option>
               <option value="preview">The camera preview (quickest)</option>
@@ -348,15 +414,15 @@ const accent = manifest.chapters[0]
           <div class="mx-bar">
             <div class="mx-strength">
               <span class="mx-end">None</span>
-              <input type="range" id="mx-strength" min="0" max="100" value="50" aria-label="Match strength" />
+              <input type="range" class="range" id="mx-strength" min="0" max="100" value="50" aria-label="Match strength" />
               <span class="mx-end">Full</span>
             </div>
             <p class="mx-strengthlabel" id="mx-strengthlabel"></p>
             <button type="button" class="mx-groupreveal" id="mx-groupreveal" aria-expanded="false">
-              Separate sliders ›
+              Separate sliders<span class="mx-chev" aria-hidden="true">›</span>
             </button>
             <label class="mx-check">
-              <input type="checkbox" id="mx-wipe" /><span>Before / after</span>
+              <input type="checkbox" class="switch" id="mx-wipe" /><span>Before / after</span>
             </label>
           </div>
 
@@ -369,17 +435,17 @@ const accent = manifest.chapters[0]
           <div class="mx-groupbar" id="mx-groupbar" hidden>
             <label class="mx-groupslider">
               <span class="mx-grouplabel">Light</span>
-              <input type="range" id="mx-strength-light" min="0" max="100" value="50" aria-label="Light strength" />
+              <input type="range" class="range" id="mx-strength-light" min="0" max="100" value="50" aria-label="Light strength" />
               <button type="button" class="mx-unlink" id="mx-unlink-light" aria-pressed="false" aria-label="Light follows the main slider" title="Follows the main slider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
             </label>
             <label class="mx-groupslider">
               <span class="mx-grouplabel">Colour</span>
-              <input type="range" id="mx-strength-colour" min="0" max="100" value="50" aria-label="Colour strength" />
+              <input type="range" class="range" id="mx-strength-colour" min="0" max="100" value="50" aria-label="Colour strength" />
               <button type="button" class="mx-unlink" id="mx-unlink-colour" aria-pressed="false" aria-label="Colour follows the main slider" title="Follows the main slider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
             </label>
             <label class="mx-groupslider">
               <span class="mx-grouplabel">Effects</span>
-              <input type="range" id="mx-strength-effects" min="0" max="100" value="50" aria-label="Effects strength" />
+              <input type="range" class="range" id="mx-strength-effects" min="0" max="100" value="50" aria-label="Effects strength" />
               <button type="button" class="mx-unlink" id="mx-unlink-effects" aria-pressed="false" aria-label="Effects follows the main slider" title="Follows the main slider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
             </label>
           </div>
@@ -387,15 +453,15 @@ const accent = manifest.chapters[0]
 
         <!-- Tabs mirror Lightroom's own panel order, so what you read here maps
              onto where you'll type it there. -->
-        <nav class="mx-tabs" id="mx-tabs" role="tablist">
-          <button type="button" role="tab" data-tab="light" class="on">Light</button>
-          <button type="button" role="tab" data-tab="colour">Colour</button>
-          <button type="button" role="tab" data-tab="details">Details</button>
-          <button type="button" role="tab" data-tab="measured">Measured</button>
-          <button type="button" role="tab" data-tab="notes">
+        <nav class="mx-tabs" id="mx-tabs" role="tablist" data-seg="line">
+          <button type="button" role="tab" data-tab="light" class="on" aria-selected="true">Light</button>
+          <button type="button" role="tab" data-tab="colour" aria-selected="false">Colour</button>
+          <button type="button" role="tab" data-tab="details" aria-selected="false">Details</button>
+          <button type="button" role="tab" data-tab="measured" aria-selected="false">Measured</button>
+          <button type="button" role="tab" data-tab="notes" aria-selected="false">
             Notes<span class="count" id="mx-notecount"></span>
           </button>
-          <button type="button" role="tab" data-tab="check" id="mx-tab-check">Check</button>
+          <button type="button" role="tab" data-tab="check" id="mx-tab-check" aria-selected="false">Check</button>
         </nav>
 
         <div class="mx-scroll" id="mx-scroll">
@@ -429,6 +495,8 @@ const accent = manifest.chapters[0]
     <button class="lb-close" id="lb-close" aria-label="Close">×</button>
     <img id="lb-img" alt="" />
     <div class="lb-src" id="lb-src"></div>
+    <button type="button" class="lb-more" id="lb-more" hidden></button>
+    <div class="lb-light" id="lb-light" hidden></div>
   </div>
 
   <!-- Enlarged tone curve: the in-panel curve is 116px, too small to read a
@@ -496,8 +564,7 @@ const accent = manifest.chapters[0]
 </Layout>
 
 <style>
-  .insp { max-width: 68rem; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) var(--edge) calc(var(--tabbar-space) + 5rem); }
-  .insp-head h1 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2.2rem, 6vw, 4rem); margin: 0.3rem 0 2.2rem; line-height: 1; }
+  .insp { max-width: 68rem; margin: 0 auto; padding: 0 var(--edge) calc(var(--tabbar-space) + 5rem); }
   .insp-lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 40rem; }
 
   .insp-add { margin-bottom: 3.5rem; }
@@ -547,7 +614,6 @@ const accent = manifest.chapters[0]
   :global(.kept-strip li:hover .kept-remove),
   :global(.kept-strip li:focus-within .kept-remove) { opacity: 1; }
   :global(.kept-remove:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
-  :global(.kept-remove:active) { transform: scale(0.88); }
   @media (hover: none), (pointer: coarse) { :global(.kept-remove) { opacity: 0.85; } }
   @media (max-width: 640px) { :global(.kept-strip li) { width: 42vw; max-width: 190px; } }
   .drop { border: 1.5px dashed var(--glass-edge); border-radius: var(--r-lg); padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 160ms, background 160ms; background: var(--surface-1); }
@@ -572,19 +638,16 @@ const accent = manifest.chapters[0]
   .results :global(.ch) { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-caption); }
   .results :global(.err) { color: #e0603a; }
 
-  .insp-groupby {
-    /* A segmented control: one choice of three, on one capsule. */
-    display: inline-flex; gap: 2px; margin: 0 0 1.6rem; padding: 4px;
-    background: var(--surface-1); border: 1px solid var(--separator); border-radius: 999px;
-  }
+  /* Group-by is a segmented control like every other one in the app (it
+     was slash-separated underlined words); the colour search sits beside it. */
+  .insp-groupbar { display: flex; align-items: center; gap: var(--sp-3); margin: 0 0 2rem; }
   .insp-groupby button {
     background: transparent; border: 0; color: var(--secondary);
     font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
-    cursor: pointer; min-height: 2.25rem; padding: 0 0.95rem; border-radius: 999px;
-    transition: background 140ms var(--ease), color 140ms var(--ease);
+    cursor: pointer; min-height: calc(var(--hit) - 6px); padding: 0 1rem; border-radius: 999px;
+    transition: color 140ms var(--ease);
   }
-  .insp-groupby button:hover { background: var(--fill); color: var(--fg); }
-  .insp-groupby button.on { background: var(--fill-active); color: var(--fg); }
+  .insp-groupby button:hover { color: var(--fg); }
   .insp-view[hidden] { display: none; }
 
   .insp-chapter { margin-bottom: 3rem; }
@@ -596,6 +659,13 @@ const accent = manifest.chapters[0]
   .insp-collage { columns: 3; column-gap: 6px; }
   @media (max-width: 900px) { .insp-collage { columns: 2; } }
   .insp-frame { margin: 0 0 6px; cursor: zoom-in; }
+  /* Each reference develops in as it scrolls up the board, the same as the
+     book's prints (global.css › Develop on scroll). */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .insp-frame { animation: developIn linear both; animation-timeline: view(); animation-range: entry 0% entry 70%; }
+    }
+  }
   .insp-frame .src {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
     font-family: var(--font-ui); font-size: var(--t-caption);
@@ -604,6 +674,21 @@ const accent = manifest.chapters[0]
     opacity: 0; transition: opacity 160ms var(--ease);
   }
   .insp-frame:hover .src { opacity: 1; }
+  /* The credit opens the photographer; "Who?" asks for one (Photographers.astro). */
+  .insp-frame .src .credit {
+    all: unset; cursor: pointer; text-decoration: underline; text-decoration-color: transparent;
+    text-underline-offset: 3px; transition: text-decoration-color 140ms;
+  }
+  .insp-frame .src .credit:hover, .insp-frame .src .credit:focus-visible { text-decoration-color: currentColor; }
+  .cell-who {
+    background: none; border: 0; padding: 0; margin-left: 0.5em; cursor: pointer; color: #fff;
+    font-family: var(--font-ui); font-style: normal; font-size: var(--t-caption);
+    text-decoration: underline; text-decoration-color: color-mix(in oklab, #fff 45%, transparent); text-underline-offset: 3px;
+  }
+  .cell-who:first-child { margin-left: 0; }
+  .cell-who { position: relative; }
+  .cell-who::after { content: ''; position: absolute; inset: -5px -4px; }
+  .cell-who:hover { text-decoration-color: #fff; }
   .cell-remove { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; background: color-mix(in oklab, #000 55%, transparent); color: #fff; font-size: 15px; line-height: 26px; text-align: center; opacity: 0; transition: opacity 140ms; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
   .insp-frame:hover .cell-remove, .insp-frame:focus-within .cell-remove { opacity: 1; }
   .cell-remove:hover { background: color-mix(in oklab, #c0392b 82%, transparent); }
@@ -652,34 +737,23 @@ const accent = manifest.chapters[0]
     .insp-lb :is(img, .lb-src), .sim-left, .sim-right, .mx-head, .mx-body { transition: none; transform: none; }
   }
 
-  /* Press feedback: nothing on this page confirmed a tap was heard before now
-     — the archive's photo grid and topbar links already do (scale/colour on
-     press), this board and workbench never did. See Layout.astro for the
-     iOS touchstart shim that makes :active fire reliably on a phone/iPad,
-     which this whole page is designed to be used on. */
+  /* Press feedback itself is app-wide now (src/lib/ui/press.ts); these
+     keep their colour and border transitions. */
   .drop, .urlrow button, .cell-remove, .cell-similar, .cell-match, .cell-group,
   .mx-check, .mx-stop, .mx-tabs button, button.mx-cw, .mx-actions button, #mx-close, #addurl,
   .group-tray-find, .group-tray-clear, .mx-curve-btn {
     transition: transform 120ms ease-out, border-color 160ms var(--ease), background 160ms var(--ease), opacity 140ms;
   }
-  .drop:active, .urlrow button:active, .cell-remove:active, .cell-similar:active, .cell-match:active, .cell-group:active,
-  .mx-stop:active, .mx-tabs button:active, button.mx-cw:active, .mx-actions button:active, #mx-close:active, #addurl:active,
-  .group-tray-find:active, .group-tray-clear:active, .mx-curve-btn:active {
-    transform: scale(0.96);
-  }
   @media (prefers-reduced-motion: reduce) {
     .drop, .urlrow button, .cell-remove, .cell-similar, .cell-match, .cell-group,
     .mx-stop, .mx-tabs button, button.mx-cw, .mx-actions button, #mx-close, #addurl,
     .group-tray-find, .group-tray-clear, .mx-curve-btn { transition: none; }
-    .drop:active, .urlrow button:active, .cell-remove:active, .cell-similar:active, .cell-match:active, .cell-group:active,
-    .mx-stop:active, .mx-tabs button:active, button.mx-cw:active, .mx-actions button:active, #mx-close:active, #addurl:active,
-    .group-tray-find:active, .group-tray-clear:active, .mx-curve-btn:active {
-      transform: none;
-    }
   }
   .insp-lb { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; background: color-mix(in oklab, var(--bg) 96%, #000); }
   .insp-lb[hidden] { display: none; }
   .insp-lb img { max-width: 92vw; max-height: 82vh; object-fit: contain; }
+  /* Room for "shoot this light" underneath when it has something to say. */
+  .insp-lb:has(.lb-light:not([hidden])) img { max-height: 68vh; }
   .lb-src { font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--muted); }
   .lb-src a { color: var(--fg); }
 
@@ -793,7 +867,10 @@ const accent = manifest.chapters[0]
 
   /* The in-panel curve is a button now, not inert — matches the app's own
      press feedback and gives it a visible affordance to click. */
-  .mx-curve-btn { all: unset; cursor: zoom-in; display: block; border-radius: 4px; }
+  /* :global — the curve is built at runtime, so a scoped rule never reached
+     it and it drew as the browser's grey default button. */
+  :global(.mx-curve-btn) { all: unset; cursor: zoom-in; display: block; border-radius: 8px; }
+  :global(.mx-curve-btn:focus-visible) { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
   /* Focus ring now comes from the panel-wide rule near .mx's own definition. */
 
   /* --- Style match ---------------------------------------------------- */
@@ -840,6 +917,13 @@ const accent = manifest.chapters[0]
     .cell-group { left: 12px; bottom: 12px; }
     /* The credit is hover-revealed too, and on touch that means never. */
     .insp-frame .src { opacity: 1; padding-right: 5.5rem; }
+    /* A question on every tile is noise: it waits for the first tap, like the actions. */
+    .insp-frame:not(.is-active, :focus-within) .src:has(.cell-who) { opacity: 0; pointer-events: none; }
+    .cell-who::after { content: ''; position: absolute; inset: -10px; }
+    /* Clear of "+ group" and its grown hit area, which own the bottom-left
+       corner on touch; more specific than the phone caption padding below. */
+    .insp-frame figcaption.src { padding-left: 3.8rem; }
+    .cell-who { position: relative; }
 
     /* ── The Add URL row ──────────────────────────────────────────────────
        The three controls on a reference tile grow their target with the
@@ -929,7 +1013,8 @@ const accent = manifest.chapters[0]
   .mx-startcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
   .mx-zone { margin: 0; }
   .mx-field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
-  .mx-field select { width: 100%; max-width: 100%; background: transparent; border: 1px solid var(--border); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-footnote); letter-spacing: 0; text-transform: none; padding: 0.6rem 0.7rem; border-radius: 2px; }
+  /* The well is the global `select.field`. */
+  .mx-field select { width: 100%; max-width: 100%; font-size: var(--t-footnote); letter-spacing: 0; text-transform: none; }
   .mx-note { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); margin: 0; min-height: 1.2em; }
   .mx-note :global(.err) { color: #e0603a; }
 
@@ -972,6 +1057,25 @@ const accent = manifest.chapters[0]
     object-fit: contain; display: block;
     transition: max-height 120ms linear;
   }
+  /* Each figure hugs its picture, so the caption chip and the hold hint sit
+     on the photograph's own corner rather than the far corner of a half-
+     screen cell (on desktop "The reference" was 240px from its picture).
+     The hairline between the two columns moves to the frames' background. */
+  @media (min-width: 641px) {
+    .mx-frames { background: linear-gradient(var(--accent-hair), var(--accent-hair)) no-repeat center / 1px 100%, var(--bg); }
+    .mx-fig { justify-self: center; align-self: center; width: fit-content; max-width: 100%; }
+  }
+  /* The result develops in, the stage first, the way a print comes up in
+     the tray: after up to a minute of measuring, the answer shouldn't land
+     in a single frame. */
+  @media (prefers-reduced-motion: no-preference) {
+    .mx-result:not([hidden]) .mx-frames { animation: mxDevelop 760ms var(--ease) both; }
+    .mx-result:not([hidden]) .mx-bar { animation: mxRise 520ms var(--ease) 90ms both; }
+    .mx-result:not([hidden]) .mx-tabs { animation: mxRise 520ms var(--ease) 150ms both; }
+    .mx-result:not([hidden]) .mx-scroll { animation: mxRise 520ms var(--ease) 210ms both; }
+  }
+  @keyframes mxDevelop { from { opacity: 0; filter: blur(8px) saturate(0.4); } }
+  @keyframes mxRise { from { opacity: 0; translate: 0 8px; } }
   .mx-fig figcaption {
     position: absolute; left: 8px; bottom: 8px;
     font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
@@ -1023,18 +1127,22 @@ const accent = manifest.chapters[0]
      archive's own chapter titles, so the workbench still reads as part of
      the same system rather than a spreadsheet dropped into it. */
   .mx-strengthlabel { font-family: var(--font-display); font-style: var(--title-style); font-size: 1rem; color: var(--fg); margin: 0; flex: 0 1 auto; text-align: center; line-height: 1.3; }
-  .mx-check { display: flex; align-items: center; gap: 0.45rem; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); flex: 0 0 auto; cursor: pointer; }
+  .mx-check { display: flex; align-items: center; gap: 0.55rem; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); flex: 0 0 auto; cursor: pointer; }
   /* Chip treatment, matching the confidence/calibration badges below it —
      plain text here had no affordance at all on touch, where there is no
      hover to reveal it's tappable. */
   .mx-groupreveal {
-    background: transparent; cursor: pointer; color: var(--muted);
-    border: 1px solid var(--border); border-radius: 999px;
-    font-family: var(--font-ui); font-size: 0.6875rem;
-    padding: 0.3rem 0.7rem; flex: 0 0 auto; transition: color 140ms, border-color 140ms;
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: transparent; cursor: pointer; color: var(--secondary);
+    border: 0; border-radius: 999px;
+    font-family: var(--font-ui); font-size: var(--t-caption);
+    padding: 0.35rem 0.8rem; min-height: 30px; flex: 0 0 auto; transition: color 140ms, background 140ms;
   }
-  .mx-groupreveal:hover { color: var(--accent-mix); border-color: var(--accent-mix); }
-  .mx-groupreveal[aria-expanded="true"] { color: var(--fg); border-color: var(--fg); }
+  .mx-groupreveal:hover { color: var(--fg); background: var(--fill-hover); }
+  .mx-groupreveal[aria-expanded="true"] { color: var(--fg); background: var(--fill-active); }
+  .mx-groupreveal:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+  .mx-chev { display: inline-block; line-height: 1; transition: rotate 420ms var(--spring-move); }
+  .mx-groupreveal[aria-expanded="true"] .mx-chev { rotate: 180deg; }
 
   /* `display: flex` below would otherwise beat the attribute, and the three
      sliders never folded away. */
@@ -1067,18 +1175,23 @@ const accent = manifest.chapters[0]
      to — a fade that outlived the content it promised would be worse than
      the clipped edge it replaces. */
   .mx-tabs.has-overflow {
-    mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 3.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3.5rem), transparent 100%);
   }
   .mx-tabs button {
     position: relative; background: transparent; border: 0; cursor: pointer; color: var(--muted);
     font-family: var(--font-ui); font-size: var(--t-caption);
     padding: 0.78rem 0.95rem 0.7rem; white-space: nowrap; transition: color 140ms;
   }
-  .mx-tabs button::after { content: ''; position: absolute; left: 0.95rem; right: 0.95rem; bottom: -1px; height: 1px; background: transparent; transition: background 140ms; }
   .mx-tabs button:hover { color: var(--accent-mix); }
-  .mx-tabs button.on { color: var(--fg); }
-  .mx-tabs button.on::after { background: var(--fg); }
+  .mx-tabs button.on { color: var(--fg); font-weight: 600; }
+  /* The chosen tab's underline is one line that slides between tabs
+     (`data-seg="line"`), inset to the label like the old per-tab rule. It
+     was 1px on a 1px hairline, so the selection all but disappeared. */
+  .mx-tabs :global(.seg-thumb) {
+    background: linear-gradient(color-mix(in oklab, var(--accent-mix) 55%, var(--fg)), color-mix(in oklab, var(--accent-mix) 55%, var(--fg)))
+      no-repeat center bottom / calc(100% - 1.9rem) 2px;
+  }
   .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.6875rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
   .mx-tabs .count:empty { display: none; }
 
@@ -1087,9 +1200,12 @@ const accent = manifest.chapters[0]
   :global(.mx-rt-form) { display: grid; gap: 0.9rem; max-width: 40rem; margin-bottom: 1.4rem; }
   :global(.mx-rt-field) { display: grid; gap: 0.35rem; font-size: var(--t-footnote); color: var(--muted); }
   :global(.mx-rt-field select) {
-    font: inherit; font-size: 16px; color: var(--fg); background: var(--fill); border: 1px solid var(--separator);
-    border-radius: var(--r-md, 10px); min-height: 2.6rem; padding: 0 0.7rem;
+    appearance: none; font: inherit; font-size: 16px; color: var(--fg); background: var(--fill); border: 1px solid var(--separator);
+    border-radius: var(--r-sm); min-height: 2.6rem; padding: 0 2.2rem 0 0.8rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23a8a49d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.8rem center; background-size: 12px;
   }
+  :global(.mx-rt-applied input[type='radio']) { accent-color: var(--fg); }
   :global(.mx-rt-applied) { border: 0; margin: 0; padding: 0; display: grid; gap: 0.4rem; font-size: var(--t-footnote); }
   :global(.mx-rt-applied legend) { color: var(--muted); margin-bottom: 0.3rem; padding: 0; }
   :global(.mx-rt-applied label) { display: flex; gap: 0.55rem; align-items: center; min-height: 2rem; cursor: pointer; }
@@ -1163,6 +1279,7 @@ const accent = manifest.chapters[0]
      the TEMPLATE, and nodes created at runtime never receive it — so these
      rules must be :global() or they simply do not apply. */
   .mx-badges { display: flex; flex-direction: column; gap: 0.7rem; }
+  .mx-badges[hidden] { display: none; }
   /* Numeric readings: a measured value, not a note about one — the largest,
      most figure-like thing in the panel, spec-sheet style (tabular mono
      figure + a small unit riding its baseline, a smaller caption below). */
@@ -1284,7 +1401,7 @@ const accent = manifest.chapters[0]
 
   /* Tone curve, drawn. "0,0 28,26 56,50 …" is data, not a curve. */
   :global(.mx-curvebox) { display: flex; align-items: center; gap: 1rem; }
-  :global(.mx-curvebox svg) { flex: 0 0 auto; background: color-mix(in oklab, var(--fg) 4%, transparent); border-radius: 2px; }
+  :global(.mx-curvebox svg) { flex: 0 0 auto; background: color-mix(in oklab, #000 38%, transparent); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--separator); }
   :global(.mx-curvebox .legend) { font-size: var(--t-caption); color: var(--muted); line-height: 1.6; }
 
   /* Evidence deltas, with a bar so direction and size read at a glance. */
@@ -1306,16 +1423,29 @@ const accent = manifest.chapters[0]
     padding: 0.85rem var(--edge); border-top: 1px solid var(--accent-hair);
     background: color-mix(in oklab, var(--bg) 96%, #000);
   }
-  .mx-actions button { background: var(--fg); color: var(--bg); border: 0; cursor: pointer; font-family: var(--font-ui); font-size: var(--t-caption); padding: 0.66rem 1.1rem; border-radius: 2px; }
-  .mx-actions button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
-  .mx-actions button:disabled { opacity: 0.4; cursor: default; }
-  .mx-actions button:not(:disabled):hover { opacity: 0.85; }
+  /* The app's pills (`.btn`): Download is the one filled action, Keep a
+     quiet fill, More a round icon. They were 2px rectangles. */
+  .mx-actions button {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: var(--hit); padding: 0 1.2rem; border: 1px solid transparent; border-radius: var(--r-pill);
+    background: var(--fg); color: var(--bg); cursor: pointer;
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
+    transition: background var(--dur-fast) var(--ease), translate var(--dur-med) var(--spring-move), box-shadow var(--dur-med) var(--ease);
+  }
+  .mx-actions button.ghost { background: var(--fill); color: var(--fg); font-weight: 500; }
+  .mx-actions button:disabled { opacity: 0.45; cursor: default; }
+  .mx-actions button:not(:disabled):hover { background: color-mix(in oklab, var(--fg) 88%, var(--accent)); }
+  .mx-actions button.ghost:not(:disabled):hover { background: var(--fill-hover); }
+  .mx-actions button:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) {
+    .mx-actions > button:not(:disabled):hover, .mx-more > button:not(:disabled):hover { translate: 0 -1px; box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.6); }
+  }
   /* More: the variant downloads in a small menu above the footer, so the
      one filled button is the only loud thing at the bottom. */
   .mx-more { position: relative; flex: 0 0 auto; display: flex; }
   .mx-actions .mx-more-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 2.6rem; padding: 0; flex: 0 0 auto;
+    width: var(--hit); padding: 0; flex: 0 0 auto; border-radius: 50%;
   }
   .mx-more-btn svg { width: 18px; height: 18px; fill: currentColor; }
   .mx-more-menu {
@@ -1325,10 +1455,12 @@ const accent = manifest.chapters[0]
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
     border: 1px solid var(--glass-edge); border-radius: var(--r-md, 12px); box-shadow: var(--glass-shadow);
   }
+  .mx-more-menu:not([hidden]) { transform-origin: bottom right; animation: popIn 260ms var(--spring-move) both; }
   .mx-more-menu[hidden] { display: none; }
   .mx-actions .mx-more-menu button {
     display: block; width: 100%; text-align: left;
-    background: transparent; color: var(--fg); border-radius: 8px; padding: 0.6rem 0.75rem;
+    min-height: 0; background: transparent; color: var(--fg); border-radius: 9px; padding: 0.6rem 0.75rem;
+    font-weight: 500; justify-content: flex-start;
   }
   .mx-actions .mx-more-menu button:hover, .mx-actions .mx-more-menu button:focus-visible { background: var(--surface-2); opacity: 1; }
 
@@ -1454,8 +1586,7 @@ const accent = manifest.chapters[0]
      phone is the same client one size down. Nothing here changes what the
      match does — only whether you can reach it with a thumb. */
   @media (max-width: 640px) {
-    .insp { padding: calc(env(safe-area-inset-top, 0px) + 3rem) 1.1rem calc(var(--tabbar-space) + 5rem); }
-    .insp-head h1 { margin-bottom: 0.4rem; }
+    .insp { padding: 0 1.1rem calc(var(--tabbar-space) + 5rem); }
     .insp-lead { margin-bottom: 1.8rem; }
     .drop { padding: 2.2rem 1rem; }
 
@@ -1532,19 +1663,9 @@ const accent = manifest.chapters[0]
      become plain tags, and value rows get a dotted leader. Controls keep the
      UI face and data keeps the mono. Only the words that name things change. */
   /* Round 3: title and Add on one line, the capture form behind Add. */
-  .insp-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-  .insp-head h1 { margin-bottom: 1.4rem; }
-  .insp-addbtn {
-    appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
-    min-height: 2.5rem; padding: 0 1.2rem; background: var(--fg); color: var(--bg);
-    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
-    transition: transform 110ms ease-out, opacity 140ms;
-  }
-  .insp-addbtn:active { transform: scale(0.96); }
-  .insp-addbtn[aria-expanded='true'] { background: var(--fill); color: var(--fg); }
-  .insp-addbtn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .insp-addbtn[aria-expanded='true'] { background: var(--fill-active); color: var(--fg); }
   .insp-add[hidden] { display: none; }
-  .insp-add { margin-bottom: 2.4rem; }
+  .insp-add { margin-bottom: 2.4rem; transform-origin: top right; animation: popIn 300ms var(--spring-move) both; }
   .insp-add .drop { padding: 1.8rem 1rem; }
   .insp-add .drop-title { margin: 0; font-size: 1.2rem; }
   .status, .results { margin-top: 0; }
@@ -1576,32 +1697,39 @@ const accent = manifest.chapters[0]
     border-color: var(--rule); --mark: var(--fg);
     background-color: color-mix(in oklab, var(--fg) 3%, transparent);
   }
+  /* A photo held over the zone: the crop marks close in on it, the way you
+     frame a print on the easel before you let it go. */
+  .drop { transition: background-position 420ms var(--spring-move), background-size 420ms var(--spring-move), background-color 160ms, border-color 160ms; }
+  .drop.over {
+    background-size: 22px 1px, 1px 22px, 22px 1px, 1px 22px, 22px 1px, 1px 22px, 22px 1px, 1px 22px;
+    background-position:
+      left 10px top 10px, left 10px top 10px, right 10px top 10px, right 10px top 10px,
+      left 10px bottom 10px, left 10px bottom 10px, right 10px bottom 10px, right 10px bottom 10px;
+  }
+  @media (prefers-reduced-motion: reduce) { .drop { transition: background-color 160ms, border-color 160ms; } }
   .drop-sub { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
 
-  .urlrow { gap: 0.4rem 1.2rem; align-items: end; }
+  /* Filled wells like every other text input in the app (`.field`), rather
+     than the notebook's old underlines. */
+  .urlrow { gap: 0.6rem; align-items: center; }
   .urlrow input {
-    background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding: 0 0.1rem;
+    background: var(--fill); border: 1px solid var(--separator); border-radius: var(--r-sm); padding: 0 0.9rem;
+    transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease);
   }
-  .urlrow input:focus-visible { border-bottom-color: var(--fg); }
+  .urlrow input:hover { background: var(--fill-hover); }
+  .urlrow input:focus-visible {
+    border-color: color-mix(in oklab, var(--accent-mix) 60%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-mix) 18%, transparent);
+  }
   .urlrow .or { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); align-self: center; }
-  .urlrow button { border-radius: 2px; }
+  .urlrow button { border-radius: var(--r-pill); }
   .results :global(.ch) { font-family: var(--font-note); font-style: italic; text-transform: none; letter-spacing: 0; font-size: var(--t-footnote); }
 
-  .insp-groupby {
-    background: none; border: 0; border-radius: 0; padding: 0; gap: 0; align-items: baseline;
-    margin-bottom: 2rem;
+  /* Four choices and the colour dot don't fit a phone's width at full pad. */
+  @media (max-width: 640px) {
+    .insp-groupby button { padding: 0 0.7rem; }
+    .insp-groupbar { gap: var(--sp-2); }
   }
-  .insp-groupby button {
-    border-radius: 0; padding: 0 0.15rem; min-height: var(--hit); color: var(--muted);
-    font-size: var(--t-body);
-    text-decoration: underline transparent; text-underline-offset: 6px; text-decoration-thickness: 1px;
-    transition: color 140ms var(--ease), text-decoration-color 140ms var(--ease);
-  }
-  .insp-groupby button + button::before {
-    content: '/'; color: var(--separator); margin: 0 0.7rem 0 0.55rem; text-decoration: none; display: inline-block;
-  }
-  .insp-groupby button:hover { background: none; color: var(--fg); }
-  .insp-groupby button.on { background: none; color: var(--fg); text-decoration-color: currentColor; }
 
   .insp-chtitle {
     font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: 1.2rem;
@@ -1656,7 +1784,6 @@ const accent = manifest.chapters[0]
   }
   .mx-addref-toggle:hover { border-color: var(--fg); }
   .mx-field > span { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--secondary); }
-  .mx-field select { border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding-left: 0; }
   .mx-stop {
     font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
     letter-spacing: 0; text-transform: none; border-bottom-color: var(--separator);
@@ -1672,7 +1799,7 @@ const accent = manifest.chapters[0]
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.45);
   }
   .mx-end { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); }
-  .mx-groupreveal, :global(.mx-globaltoggle) {
+  :global(.mx-globaltoggle) {
     border: 0; border-bottom: 1px solid var(--separator); border-radius: 0; padding: 0.3rem 0;
     font-size: var(--t-caption);
   }
@@ -1713,7 +1840,7 @@ const accent = manifest.chapters[0]
     font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: var(--t-footnote);
     letter-spacing: 0; text-transform: none;
   }
-  :global(.mx-curvebox svg), .curve-lb-body svg { border-radius: 0; }
+  .curve-lb-body svg { border-radius: 0; }
   :global(.mx-track), :global(.mx-track i) { border-radius: 0; }
   :global(.mx-track) { height: 3px; }
 
@@ -1721,6 +1848,36 @@ const accent = manifest.chapters[0]
   :global(.mx-noterow), :global(.mx-noterow.caution) { background: none; border-left-width: 1px; }
   :global(.mx-noterow .panel) { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); padding-top: 0.1rem; }
   :global(.mx-rt-caltable .tag) { border-radius: 2px; }
+
+  /* ── Last of the tracked capitals ─────────────────────────────────────
+     The Style Match workbench kept its small spaced-out uppercase labels
+     after the rest of the app moved to sentence case (round 3 left them as
+     the next audit). Same rule as everywhere else now: the interface face,
+     sentence case, no tracking, and nothing under the 12px floor. Data
+     (counts, values) stays in the mono where it already is. */
+  .sim-count, .sim-slider, .mx-stop, .mx-h, .mx-fig figcaption, .cell-match,
+  :global(.mx-ref .mx-ref-weight), :global(.mx-rt-h), :global(.mx-stat .mx-stat-label),
+  :global(.mx-grouphead), :global(.mx-mixer .hdr), :global(.mx-cw .nm), :global(.mx-bars .cap),
+  .results :global(.ch) {
+    text-transform: none; letter-spacing: 0; font-family: var(--font-ui); font-size: var(--t-caption);
+  }
+
+  /* Round 2: the stage's two captions over bright pictures. A text shadow
+     alone left "Hold for the original" unreadable on white umbrellas; a
+     small dark capsule reads on any photograph and stays out of its way. */
+  .mx-fig figcaption, .mx-holdhint {
+    padding: 0.12rem 0.55rem; border-radius: 999px;
+    background: rgb(10 10 12 / 0.52);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    text-shadow: none;
+  }
+  /* A credit is a line of caption text; its target is a little bigger. */
+  .insp-frame .src .credit { position: relative; }
+  .insp-frame .src .credit::after { content: ''; position: absolute; inset: -6px -4px; }
+  @media (hover: none), (pointer: coarse) { .insp-frame .src .credit::after { inset: -10px -6px; } }
+  @media (prefers-reduced-transparency: reduce) {
+    .mx-fig figcaption, .mx-holdhint { background: rgb(10 10 12 / 0.85); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  }
 </style>
 
 <script is:inline>
@@ -1853,14 +2010,25 @@ const accent = manifest.chapters[0]
   // when the board is empty.
   const addToggle = document.getElementById('add-toggle');
   const addPanel = document.getElementById('insp-add');
+  // The label only: setting the button's own text used to drop its + icon
+  // after the first open and close.
+  const addSay = document.getElementById('add-toggle-say');
   function setAddOpen(open) {
     addPanel.hidden = !open;
     addToggle.setAttribute('aria-expanded', String(open));
-    addToggle.textContent = open ? 'Done' : 'Add';
+    addSay.textContent = open ? 'Done' : 'Add';
     if (open) urlEl.focus({ preventScroll: true });
   }
-  if (!addPanel.hidden) addToggle.textContent = 'Done';
+  if (!addPanel.hidden) addSay.textContent = 'Done';
   addToggle.addEventListener('click', () => setAddOpen(addPanel.hidden));
+  // Escape puts it away, as it does every other panel — not when the board
+  // is empty (the form is all there is), nor under an open overlay.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || addPanel.hidden || e.defaultPrevented || !document.querySelector('.insp-frame')) return;
+    if ([...document.querySelectorAll('dialog[open], [role="dialog"], #lb')].some((d) => d.checkVisibility())) return;
+    setAddOpen(false);
+    addToggle.focus();
+  });
 
   // Files dragged anywhere over the page: the page is the drop zone. The
   // Style Match workbench has its own zones and handles its own drops.
@@ -1936,6 +2104,7 @@ const accent = manifest.chapters[0]
       // pre-selected, rather than making you go find and re-tap what you
       // just added.
       const addedIds = data.results.filter((r) => r.status === 'added' && r.id).map((r) => r.id);
+      rememberCredit(data.results);
       if (data.added > 0) reloadKeepingPlace(addedIds);
     } catch (err) { statusText.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
   }
@@ -1945,6 +2114,12 @@ const accent = manifest.chapters[0]
   // not honest was throwing away where you were and what you had typed: the
   // credit field emptied itself and the page jumped to the top, every time.
   const RESUME_KEY = 'insp-resume';
+  // Who the new references were credited to, for the shelf to offer more of
+  // their work after the reload (Photographers.astro reads it).
+  function rememberCredit(rows) {
+    const by = (rows || []).find((r) => r.photographer)?.photographer;
+    try { if (by) sessionStorage.setItem('ph-credited', JSON.stringify(by)); } catch (err) { /* private mode */ }
+  }
   function reloadKeepingPlace(newIds) {
     try {
       sessionStorage.setItem(RESUME_KEY, JSON.stringify({ y: window.scrollY, source: sourceEl.value, newIds: newIds || [] }));
@@ -1982,6 +2157,7 @@ const accent = manifest.chapters[0]
       data.results.forEach(row);
       urlEl.value = '';
       statusText.textContent = `${data.added ?? data.results.length} added.`;
+      rememberCredit(data.results);
       reloadKeepingPlace();
     } catch (err) { statusText.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
   }
@@ -2013,14 +2189,98 @@ const accent = manifest.chapters[0]
   );
   document.querySelectorAll('.insp-frame').forEach((f) => revealBoard.observe(f));
 
-  // Remove (two-step confirm)
-  let armed = null;
+  // Remove, then Undo — the same as Add & remove. The reference leaves the
+  // board at once and the server is told when the Undo window runs out (or
+  // the page is left). The counts — the page's, each group's — follow, and a
+  // group left empty goes with its heading.
+  const UNDO_MS = 6000;
+  let pendingRemove = null; // { id, frame, parent, next, timer }
+  const undoBar = document.createElement('div');
+  undoBar.className = 'undo-bar';
+  undoBar.setAttribute('role', 'status');
+  undoBar.hidden = true;
+  const undoText = document.createElement('span');
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.className = 'undo-btn';
+  undoBtn.textContent = 'Undo';
+  undoBar.append(undoText, undoBtn);
+  document.body.appendChild(undoBar);
+  let undoHide = 0;
+  const showUndo = (text, withUndo, ms = 0) => {
+    clearTimeout(undoHide);
+    undoText.textContent = text; undoBtn.hidden = !withUndo; undoBar.hidden = false;
+    if (ms) undoHide = setTimeout(() => { undoBar.hidden = true; }, ms);
+  };
+
+  /** Every count on the page, from what is actually on the board. */
+  function recountBoard() {
+    const onBoard = new Set([...document.querySelectorAll('.insp-frame')].map((f) => f.dataset.id));
+    const pc = document.querySelector('.ph-count');
+    if (pc) pc.textContent = String(onBoard.size);
+    // Colour sections own their frames (each frame's home collage, even while
+    // another grouping has borrowed it); the others count their id lists.
+    document.querySelectorAll('.insp-view[data-view="colour"] .insp-chapter').forEach((sec) => {
+      const collage = sec.querySelector('.collage');
+      const n = originalOrder.filter((f) => originalCollage.get(f) === collage && onBoard.has(f.dataset.id)).length;
+      setGroupCount(sec, n);
+    });
+    for (const view of ['genre', 'cluster', 'photographer']) {
+      const counts = new Map((groupings[view] || []).map((g) => [g.label, g.ids.filter((id) => onBoard.has(id)).length]));
+      document.querySelectorAll(`.insp-view[data-view="${view}"] .insp-chapter`).forEach((sec) => {
+        setGroupCount(sec, counts.get(sec.querySelector('[data-collage]')?.dataset.collage) ?? 0);
+      });
+    }
+  }
+  function setGroupCount(sec, n) {
+    const el = sec.querySelector('.insp-chtitle .n');
+    if (el) el.textContent = String(n);
+    sec.hidden = n === 0;
+  }
+
+  function removeLater(frame) {
+    if (pendingRemove) commitRemove();
+    pendingRemove = { id: frame.dataset.id, frame, parent: frame.parentElement, next: frame.nextSibling, timer: setTimeout(() => commitRemove(), UNDO_MS) };
+    frame.remove();
+    recountBoard();
+    showUndo('Removed', true);
+  }
+  function undoRemove() {
+    if (!pendingRemove) return;
+    const { frame, parent, next, timer } = pendingRemove;
+    clearTimeout(timer);
+    pendingRemove = null;
+    parent.insertBefore(frame, next && next.parentNode === parent ? next : null);
+    recountBoard();
+    undoBar.hidden = true;
+  }
+  async function commitRemove(leaving = false) {
+    if (!pendingRemove) return;
+    const it = pendingRemove;
+    pendingRemove = null;
+    clearTimeout(it.timer);
+    const send = () => fetch('/api/inspiration/remove', { method: 'POST', keepalive: leaving, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id }) });
+    if (leaving) { send(); return; }
+    undoBar.hidden = true;
+    let error = '';
+    try { const d = await (await send()).json(); if (!d.ok) error = d.error || 'The server said no.'; }
+    catch (err) { error = 'The archive app didn’t answer.'; }
+    if (!error) return;
+    console.warn('[inspiration] remove failed', error);
+    it.parent.insertBefore(it.frame, it.next && it.next.parentNode === it.parent ? it.next : null);
+    recountBoard();
+    showUndo(`Couldn’t remove it · ${error}`, false, 5000);
+  }
+  undoBtn.addEventListener('click', undoRemove);
+  addEventListener('keydown', (e) => {
+    if (pendingRemove && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.closest?.('input, textarea')) { e.preventDefault(); undoRemove(); }
+  });
+  addEventListener('pagehide', () => commitRemove(true));
   document.querySelectorAll('.cell-remove').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (armed !== btn) { if (armed) { armed.textContent = '×'; armed.classList.remove('armed'); } armed = btn; btn.textContent = '✓'; btn.classList.add('armed'); setTimeout(() => { if (armed === btn) { btn.textContent = '×'; btn.classList.remove('armed'); armed = null; } }, 2600); return; }
-      armed = null; btn.textContent = '…';
-      try { const res = await fetch('/api/inspiration/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: btn.dataset.remove }) }); const d = await res.json(); if (!d.ok) throw new Error(d.error); btn.closest('.insp-frame').remove(); } catch (err) { btn.textContent = '×'; }
+      const frame = btn.closest('.insp-frame');
+      if (frame) removeLater(frame);
     });
   });
 
@@ -2043,6 +2303,7 @@ const accent = manifest.chapters[0]
   const closeLb = () => {
     if (lb.hidden) return;
     lb.classList.remove('show'); unlockBoard();
+    window.dispatchEvent(new CustomEvent('insp:lightbox-close'));
     setTimeout(() => { lb.hidden = true; lbImg.src = ''; }, 220);
   };
   document.getElementById('lb-close').addEventListener('click', closeLb);
@@ -2175,6 +2436,8 @@ const accent = manifest.chapters[0]
     // The match button lives in the processed module script below; ignore it
     // here so it does not also open the lightbox.
     if (e.target.closest('.cell-remove') || e.target.closest('.cell-match')) return;
+    // A credit and "Who?" belong to the photographers script (Photographers.astro).
+    if (e.target.closest('.credit, .cell-who')) return;
     const f = e.target.closest('.insp-frame'); if (!f) return;
     // Touch: the first tap only shows the card's actions (they're hidden at
     // rest, see the Touch styles); the next tap on the picture enlarges it.
@@ -2184,6 +2447,8 @@ const accent = manifest.chapters[0]
       return;
     }
     openLb(f.dataset.full, f.dataset.source);
+    // "Shoot this light" (LightPlan.astro) fills in under the picture.
+    window.dispatchEvent(new CustomEvent('insp:lightbox', { detail: { id: f.dataset.id } }));
   });
   const coarse = matchMedia('(hover: none), (pointer: coarse)');
   document.addEventListener('click', (e) => {
@@ -2282,8 +2547,8 @@ const accent = manifest.chapters[0]
   groupReveal.addEventListener('click', () => {
     const open = groupBar.hidden;
     groupBar.hidden = !open;
+    // The chevron turns with aria-expanded (CSS), so the label stays put.
     groupReveal.setAttribute('aria-expanded', String(open));
-    groupReveal.textContent = open ? 'Separate sliders ‹' : 'Separate sliders ›';
     if (open) syncGroupSliders();
   });
 
@@ -2522,6 +2787,13 @@ const accent = manifest.chapters[0]
 
   // The group tray lives in the *other* script on this page (`is:inline`,
   // sharing no scope with this module) — see `window.getGroupIds` there.
+  // "Match their look" on a photographer's sheet (Photographers.astro):
+  // every reference credited to them, as one group.
+  window.addEventListener('insp:match', (e) => {
+    const ids = (e as CustomEvent<{ ids: string[] }>).detail?.ids ?? [];
+    if (ids.length) openWorkbench(ids);
+  });
+
   document.getElementById('group-tray-match')?.addEventListener('click', () => {
     const ids = (window as unknown as { getGroupIds?: () => string[] }).getGroupIds?.() ?? [];
     if (ids.length) openWorkbench(ids);
@@ -2570,7 +2842,9 @@ const accent = manifest.chapters[0]
     const matches: any[] = data.matches ?? [];
     alreadyEl.hidden = false;
     if (!matches.length) {
-      $('already-sub').textContent = 'Nothing in the archive is graded like this.';
+      $('already-sub').textContent = data.monochrome
+        ? 'Nothing in the archive is black and white like this.'
+        : 'Nothing in the archive is graded like this.';
       $('already-note').textContent =
         `Checked ${data.considered} of ${data.archiveSize} photographs, by the numbers only.`;
       return;
@@ -3254,9 +3528,14 @@ const accent = manifest.chapters[0]
   // ── Tabs ───────────────────────────────────────────────────────────────
   const tabs = $('mx-tabs');
   function showTab(name: string) {
-    tabs.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) =>
-      b.classList.toggle('on', b.dataset.tab === name),
-    );
+    tabs.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.tab === name);
+      b.setAttribute('aria-selected', String(b.dataset.tab === name));
+    });
+    // The two scores and their caveats are the answer, so they open the
+    // first tab. Over every tab they filled a phone's whole reading area,
+    // and switching tab looked like it did nothing.
+    $('mx-badges').hidden = name !== 'light';
     scroller.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => {
       p.hidden = p.dataset.panel !== name;
     });
@@ -3329,12 +3608,20 @@ const accent = manifest.chapters[0]
       ]);
     }
     caveats.push(
-      [`Your photo was read as: ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL].toLowerCase()}`, data.mine.baseline === 'preview'],
+      // Said as where the numbers came from, not as a mode name. Only the
+      // camera's preview is worth flagging: it is the one that is less exact.
+      [({
+        native: 'Read from the finished picture',
+        macos: 'Read from the RAW, decoded on this Mac',
+        export: 'Read from a Lightroom export with every slider at zero',
+        preview: 'Read from the small preview inside the RAW, so a little less exact',
+      } as Record<string, string>)[data.mine.baseline] ?? `Read as ${BASELINE_LABEL[data.mine.baseline as keyof typeof BASELINE_LABEL].toLowerCase()}`, data.mine.baseline === 'preview'],
       // Which constants were measured, as of when THIS match was solved — a
       // kept report from before any were approved stays "estimated".
       (data.calibrated || []).length
         ? [`Slider calibration: ${data.calibrated.length} of ${CAL_TARGETS.length} measured from your round trips, the rest estimated`, false]
-        : ['Slider calibration is estimated for now', true],
+        // Not a warning: nothing is wrong, and there is nothing to do here.
+        : ['Slider strengths are Lightroom’s typical response until a round trip measures yours', false],
     );
     // Only known once the group's own references have actually been
     // analysed — the start screen (see `openWorkbench`) shows what's about

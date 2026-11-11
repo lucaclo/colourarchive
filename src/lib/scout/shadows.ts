@@ -600,7 +600,7 @@ export interface ShadowPrisms extends ShadowTally {
  * the sum. `shadow-layer.ts` does that on the GPU, for nothing.
  */
 export function castPrisms(
-  buildings: Array<{ ring: Ring; height: number; estimated?: boolean; hull?: Ring }>,
+  buildings: Array<{ ring: Ring; height: number; estimated?: boolean; hull?: Ring; reachM?: number }>,
   sunAzimuth: number,
   sunAltitude: number,
   options: ShadowOptions & { limit?: number } = {},
@@ -626,14 +626,23 @@ export function castPrisms(
       skippedNoHeight++;
       continue;
     }
+    // `reachM`: where this building's shadow meets rising ground, if the
+    // caller has measured it — a shadow cast up a hillside ends where the
+    // slope climbs to meet the line from the roof to the sun, long before its
+    // flat-ground length. The ceilings are untouched, so the cut tip's ceiling
+    // is exactly the ground it lands on.
+    const cap = options.maxLengthM ?? maxShadowLength(sunAltitude);
     const shadow = castShadow(building.ring, building.height, sunAzimuth, sunAltitude, {
       ...options,
       hull: building.hull,
+      maxLengthM: building.reachM != null ? Math.min(cap, building.reachM) : cap,
     });
     if (!shadow) continue;
-    if (shadow.clipped) clipped++;
+    // Stopped by the ground is the true length, not a cap on it.
+    const stoppedByGround = building.reachM != null && building.reachM < cap;
+    if (shadow.clipped && !stoppedByGround) clipped++;
     if (shadow.lengthM > longestM) longestM = shadow.lengthM;
-    prisms.push({ ...shadow, estimated: Boolean(building.estimated) });
+    prisms.push({ ...shadow, clipped: shadow.clipped && !stoppedByGround, estimated: Boolean(building.estimated) });
   }
 
   return { prisms, cast: prisms.length, skippedNoHeight, clipped, longestM, omitted };
@@ -672,4 +681,68 @@ export function castShadows(
     longestM: result.longestM,
     omitted: result.omitted,
   };
+}
+
+/**
+ * Where a shadow meets the ground that rises to stop it, in metres from the
+ * footprint's down-sun edge — or null if nothing does within `capM`.
+ *
+ * The flat-ground length h/tan(altitude) assumes the ground stays at the
+ * building's base. Up a hillside it does not: the slope climbs to meet the
+ * line from the roof edge to the sun, and the shadow ends there. A 120 m tower
+ * with the sun 10° up throws 680 m on the flat and about 240 m up a 1-in-3
+ * slope. Left to a per-pixel depth test this only came out right looking
+ * straight down; tilted, long sheets of shadow climbed the hill a kilometre.
+ *
+ * Marched at `stepM` — the elevation grid's own cell, since the grid holds
+ * nothing narrower — then bisected to a metre, so a long shadow is not
+ * rounded to the step size.
+ * Only ever shortens: a shadow cast down a slope is longer than on the flat,
+ * and that case is left at the flat length rather than invented.
+ */
+export function terrainReach(opts: {
+  originLon: number;
+  originLat: number;
+  /** Ground elevation the height is measured from, metres. */
+  baseM: number;
+  heightM: number;
+  /** Direction the shadow points, degrees clockwise from north. */
+  bearingDeg: number;
+  /** tan(sun altitude). */
+  tanAlt: number;
+  capM: number;
+  stepM: number;
+  ground: (lon: number, lat: number) => number;
+}): number | null {
+  const { originLon, originLat, baseM, heightM, tanAlt, capM, ground } = opts;
+  const step = Math.max(1, opts.stepM);
+  const rad = Math.PI / 180;
+  const east = Math.sin(opts.bearingDeg * rad);
+  const north = Math.cos(opts.bearingDeg * rad);
+  const mPerLat = 110_540;
+  const mPerLon = 111_320 * Math.max(0.05, Math.cos(originLat * rad));
+  const roof = baseM + heightM;
+  const blocked = (d: number) => ground(originLon + (east * d) / mPerLon, originLat + (north * d) / mPerLat) >= roof - d * tanAlt;
+  const reach = Math.min(capM, heightM / Math.max(1e-6, tanAlt));
+  let prev = 0;
+  // Short of the natural tip only: there the ray is down to the base height,
+  // and ground at base height is the flat case, not a slope stopping it.
+  const last = reach - 0.5;
+  for (let d = step; d < last + step; d += step) {
+    const at = Math.min(d, last);
+    if (at <= prev) break;
+    if (blocked(at)) {
+      let lo = prev;
+      let hi = at;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) / 2;
+        if (blocked(mid)) hi = mid;
+        else lo = mid;
+      }
+      return lo;
+    }
+    prev = at;
+    if (at >= last) break;
+  }
+  return null;
 }

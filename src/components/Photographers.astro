@@ -1,0 +1,1334 @@
+---
+// The photographers behind the inspiration board: a shelf of favourites, a
+// sheet per photographer with their public work to pin from, "who took
+// these?" for uncredited references, and photographers like your
+// favourites. Server side in lib/photographers/; this is the board's half.
+interface Props {
+  favourites: { id: string; name: string; cover?: string }[];
+  people: { id: string; name: string; favourite: boolean }[];
+  refs: { id: string; thumb: string; credit?: string }[];
+  /** Board references grouped by look (similar.ts clusters), to preselect
+   *  likely companions when crediting one. */
+  similar: string[][];
+  /** Your own Instagram connection, if made (photographers/instagram-api.ts). */
+  instagram: { username: string } | null;
+}
+const { favourites, people, refs, similar, instagram } = Astro.props;
+// With no favourites yet, the people already credited on the board are the
+// likeliest ones to follow: offered as one tap each, most credited first.
+const creditCount = new Map<string, number>();
+for (const r of refs) if (r.credit) creditCount.set(r.credit, (creditCount.get(r.credit) ?? 0) + 1);
+const credited = favourites.length ? [] : people
+  .filter((p) => creditCount.has(p.id))
+  .sort((a, b) => creditCount.get(b.id)! - creditCount.get(a.id)!)
+  .slice(0, 6);
+---
+
+<section class="ph-shelf" id="ph-shelf" aria-labelledby="ph-shelf-title">
+  <header class="ph-shelf-head">
+    <h2 id="ph-shelf-title">Photographers</h2>
+    <button type="button" class="ph-textbtn" id="ph-like" hidden={!favourites.length} data-cmdk="Photographers like my favourites" data-cmdk-keywords="similar, suggest, discover">Like these</button>
+  </header>
+  <ul class="ph-row" id="ph-row">
+    {favourites.map((f) => (
+      <li>
+        <button type="button" class="ph-card" data-ph={f.id}>
+          <span class="ph-cover">{f.cover && <img src={f.cover} alt="" loading="lazy" />}</span>
+          <span class="ph-name">{f.name}</span>
+          <span class="ph-new" data-new={f.id} hidden></span>
+        </button>
+      </li>
+    ))}
+    <li>
+      <button type="button" class="ph-card ph-addcard" id="ph-add-toggle" aria-expanded="false" aria-controls="ph-addrow" data-cmdk="Add a photographer" data-cmdk-keywords="follow, favourite, profile">
+        <span class="ph-cover ph-plus" aria-hidden="true">+</span>
+        <span class="ph-name ph-name-add">Add<span class="ph-name-more"> a photographer</span></span>
+        <span class="ph-name ph-name-cancel">Cancel</span>
+      </button>
+    </li>
+  </ul>
+  <form class="ph-addrow" id="ph-addrow" hidden>
+    <input id="ph-add-input" class="field" type="text" inputmode="url" autocomplete="off" placeholder="Profile link or name" aria-label="Profile link or name" />
+    <button type="submit">Add</button>
+    <button type="button" class="ph-textbtn" id="ph-ig-pick">From your Instagram export</button>
+    <button type="button" class="ph-textbtn" id="ph-igc-open">{instagram ? `Instagram: @${instagram.username}` : 'Connect Instagram'}</button>
+    <input id="ph-ig-file" type="file" accept=".zip,.json,application/zip,application/json" multiple hidden />
+  </form>
+  <p class="ph-note" id="ph-shelf-note" role="status" hidden></p>
+  <p class="ph-credited" id="ph-credited" role="status" hidden></p>
+  {!favourites.length && (
+    <p class="ph-empty" id="ph-empty" aria-label={credited.length ? 'Photographers credited on your board' : undefined}>
+      {!credited.length && 'Follow photographers you like to see their new work here.'}
+      {credited.map((p) => (
+        <button type="button" class="ph-chip" data-ph={p.id}>{p.name} <span>{creditCount.get(p.id)}</span></button>
+      ))}
+    </p>
+  )}
+</section>
+
+<script type="application/json" id="ph-data" is:inline set:html={JSON.stringify({ people, refs, similar, instagram })} />
+
+<!-- One photographer -->
+<div class="ph-sheet" id="ph-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="ph-name">
+  <div class="ph-panel">
+    <header class="ph-head">
+      <button type="button" class="ph-close" id="ph-close" aria-label="Close">×</button>
+      <h2 class="ph-title"><button type="button" id="ph-name" title="Rename"></button></h2>
+      <form class="ph-inline" id="ph-rename" hidden><input id="ph-rename-input" type="text" aria-label="Name" /><button type="submit">Save</button></form>
+      <div class="ph-meta">
+        <button type="button" class="ph-star" id="ph-star" aria-pressed="false"></button>
+        <span class="ph-links" id="ph-links"></span>
+        <button type="button" class="ph-textbtn" id="ph-addlink" aria-expanded="false">+ link</button>
+        <button type="button" class="ph-textbtn" id="ph-ig-connect-here" hidden>Connect Instagram to see their posts</button>
+      </div>
+      <form class="ph-inline" id="ph-linkrow" hidden>
+        <input id="ph-link-input" type="url" inputmode="url" placeholder="Bluesky, Mastodon, Are.na, Flickr or a site" aria-label="Profile link" />
+        <button type="submit">Link</button>
+      </form>
+      <p class="ph-look" id="ph-look"></p>
+      <button type="button" class="ph-match" id="ph-match" hidden>Match their look</button>
+    </header>
+    <div class="ph-scroll" id="ph-scroll">
+      <section class="ph-sec" id="ph-yours" hidden>
+        <h3>On your board <span class="n"></span></h3>
+        <ul class="ph-strip"></ul>
+      </section>
+      <section class="ph-sec" id="ph-find" hidden>
+        <h3>Their work elsewhere</h3>
+        <ul class="ph-find-list" id="ph-find-list"></ul>
+      </section>
+      <section class="ph-sec" id="ph-new" hidden>
+        <h3>New <span class="n"></span></h3>
+        <ul class="ph-grid"></ul>
+      </section>
+      <p class="ph-end" id="ph-end" hidden></p>
+      <section class="ph-sec" id="ph-more" hidden>
+        <h3>Earlier <span class="n"></span></h3>
+        <ul class="ph-grid"></ul>
+        <button type="button" class="ph-textbtn" id="ph-passed" hidden></button>
+      </section>
+      <p class="ph-note" id="ph-status" role="status"></p>
+      <footer class="ph-foot">
+        <button type="button" class="ph-textbtn ph-danger" id="ph-remove">Remove</button>
+      </footer>
+    </div>
+  </div>
+  <div class="ph-view" id="ph-view" hidden>
+    <button type="button" class="ph-close" id="ph-view-close" aria-label="Back">×</button>
+    <img id="ph-view-img" alt="" referrerpolicy="no-referrer" />
+    <div class="ph-view-bar">
+      <a id="ph-view-post" target="_blank" rel="noopener noreferrer">Post ↗</a>
+      <button type="button" class="ph-textbtn" id="ph-view-pass">Pass</button>
+      <button type="button" class="ph-pinbtn" id="ph-view-pin">Pin</button>
+    </div>
+  </div>
+</div>
+
+<!-- Who took these? -->
+<div class="ph-sheet ph-credit" id="ph-credit" hidden role="dialog" aria-modal="true" aria-labelledby="ph-credit-title">
+  <div class="ph-panel ph-credit-panel">
+    <header class="ph-head">
+      <button type="button" class="ph-close" id="ph-credit-close" aria-label="Close">×</button>
+      <h2 class="ph-title" id="ph-credit-title">Who took these?</h2>
+    </header>
+    <div class="ph-scroll">
+      <ul class="ph-pick" id="ph-credit-refs"></ul>
+      <ul class="ph-chips" id="ph-credit-people"></ul>
+      <form class="ph-inline" id="ph-credit-form">
+        <input id="ph-credit-input" type="text" autocomplete="off" placeholder="Name or profile link" aria-label="Name or profile link" />
+        <button type="submit">Save</button>
+      </form>
+      <p class="ph-note" id="ph-credit-status" role="status"></p>
+    </div>
+  </div>
+</div>
+
+<!-- Your own Instagram connection -->
+<div class="ph-sheet ph-credit" id="ph-igc" hidden role="dialog" aria-modal="true" aria-labelledby="ph-igc-title">
+  <div class="ph-panel ph-credit-panel">
+    <header class="ph-head">
+      <button type="button" class="ph-close" id="ph-igc-close" aria-label="Close">×</button>
+      <h2 class="ph-title" id="ph-igc-title">Connect Instagram</h2>
+      <div class="ph-meta"><span class="ph-when" id="ph-igc-state"></span></div>
+    </header>
+    <div class="ph-scroll">
+      <details class="ph-how">
+        <summary>How, once</summary>
+        <ol>
+          <li>In Instagram, set your account type to Creator or Business (free), and link it to a Facebook Page.</li>
+          <li>At developers.facebook.com, create an app and add the Instagram product, choosing API setup with Facebook login.</li>
+          <li>In the Graph API Explorer, pick that app and generate a user token with instagram_basic, instagram_manage_insights, pages_show_list and pages_read_engagement.</li>
+          <li>Paste the app ID, the app secret (App settings, Basic) and the token below.</li>
+        </ol>
+        <p>It stays in development mode: only your account uses it, so no review. It reads professional accounts only; personal ones can't be read by anyone.</p>
+      </details>
+      <form class="ph-igc-form" id="ph-igc-form">
+        <label><span>App ID</span><input id="ph-igc-app" type="text" inputmode="numeric" autocomplete="off" /></label>
+        <label><span>App secret</span><input id="ph-igc-secret" type="password" autocomplete="off" /></label>
+        <label><span>Access token</span><input id="ph-igc-token" type="password" autocomplete="off" /></label>
+        <div class="ph-igc-actions">
+          <button type="submit" class="ph-pinbtn">Connect</button>
+          <button type="button" class="ph-textbtn ph-danger" id="ph-igc-off" hidden>Disconnect</button>
+        </div>
+      </form>
+      <p class="ph-note" id="ph-igc-status" role="status"></p>
+    </div>
+  </div>
+</div>
+
+<!-- From your Instagram export -->
+<div class="ph-sheet ph-credit" id="ph-ig" hidden role="dialog" aria-modal="true" aria-labelledby="ph-ig-title">
+  <div class="ph-panel ph-credit-panel">
+    <header class="ph-head">
+      <button type="button" class="ph-close" id="ph-ig-close" aria-label="Close">×</button>
+      <h2 class="ph-title" id="ph-ig-title">From your Instagram</h2>
+      <div class="ph-meta"><span class="ph-when" id="ph-ig-count"></span></div>
+    </header>
+    <div class="ph-scroll">
+      <ol class="ph-ig-list" id="ph-ig-list"></ol>
+    </div>
+    <footer class="ph-ig-foot">
+      <p class="ph-note" id="ph-ig-status" role="status"></p>
+      <button type="button" class="ph-pinbtn" id="ph-ig-add">Add</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Photographers like your favourites -->
+<div class="ph-sheet" id="ph-sug" hidden role="dialog" aria-modal="true" aria-labelledby="ph-sug-title">
+  <div class="ph-panel">
+    <header class="ph-head">
+      <button type="button" class="ph-close" id="ph-sug-close" aria-label="Close">×</button>
+      <h2 class="ph-title" id="ph-sug-title">Like your favourites</h2>
+      <div class="ph-meta">
+        <span class="ph-when" id="ph-sug-when"></span>
+        <button type="button" class="btn btn-sm" id="ph-sug-run">Look</button>
+      </div>
+      <div class="ph-progress" id="ph-sug-progress" hidden>
+        <div class="ph-bar"><i id="ph-sug-bar"></i></div>
+        <span id="ph-sug-stage"></span>
+      </div>
+    </header>
+    <div class="ph-scroll">
+      <ol class="ph-sug-list" id="ph-sug-list"></ol>
+      <p class="ph-note" id="ph-sug-status" role="status"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { canFetch, creditLabel, linkLabel, type ProfileLink, type WorkItem } from '../lib/photographers/kinds';
+
+  interface Person { id: string; name: string; favourite: boolean; links: ProfileLink[]; seenAt?: string }
+  interface Item extends WorkItem { mark: 'pinned' | 'passed' | null; isNew: boolean }
+  interface Suggestion { key: string; name: string; link: ProfileLink; thumbs: { src: string; url: string }[]; reason: string; traits: string[]; via: string }
+
+  const data = JSON.parse(document.getElementById('ph-data')?.textContent || '{}') as {
+    people: { id: string; name: string; favourite: boolean }[];
+    refs: { id: string; thumb: string; credit?: string }[];
+    similar: string[][];
+    instagram: { username: string } | null;
+  };
+  const igConnected = () => Boolean(data.instagram);
+  // A link new work can be read from now; Instagram only once connected.
+  const readableLink = (l: ProfileLink) => canFetch(l.kind) || (l.kind === 'instagram' && igConnected());
+  const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+  /** Build an element without innerHTML: names and captions come from other
+   *  people's sites, so they only ever go in as text. */
+  function h<K extends keyof HTMLElementTagNameMap>(
+    tag: K, attrs: Record<string, string | boolean | undefined> = {}, ...kids: (Node | string | null | undefined | false)[]
+  ): HTMLElementTagNameMap[K] {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === undefined || v === false) continue;
+      if (k === 'class') el.className = String(v);
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const k of kids) if (k !== null && k !== undefined && k !== false) el.append(k);
+    return el;
+  }
+
+  async function api<T = Record<string, unknown>>(path: string, body?: unknown): Promise<T & { ok: boolean; error?: string }> {
+    const res = await fetch(path, body === undefined ? undefined : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const out = await res.json().catch(() => ({ ok: false, error: `The app answered ${res.status}.` }));
+    return out;
+  }
+  const act = (action: string, rest: Record<string, unknown> = {}) => api<{ photographer?: Person }>('/api/photographers', { action, ...rest });
+
+  // Changes to who's credited or starred move tiles between groups that the
+  // server builds, so the board reloads on close — keeping its place, the
+  // same way the board's own Add does (inspiration.astro, "insp-resume").
+  let dirty = false;
+  function reloadKeepingPlace() {
+    try { sessionStorage.setItem('insp-resume', JSON.stringify({ y: window.scrollY, source: '', newIds: [] })); } catch { /* private mode */ }
+    location.reload();
+  }
+
+  let openCount = 0;
+  function show(el: HTMLElement) {
+    el.hidden = false;
+    if (openCount++ === 0) document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => el.classList.add('show'));
+  }
+  function hide(el: HTMLElement) {
+    if (el.hidden) return;
+    el.classList.remove('show');
+    openCount = Math.max(0, openCount - 1);
+    if (!openCount) document.body.style.overflow = '';
+    setTimeout(() => { el.hidden = true; }, 180);
+  }
+
+  const dateWords = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+  };
+
+  /* ── Shelf ─────────────────────────────────────────────────────────── */
+
+  const addToggle = $('ph-add-toggle');
+  const addRow = $<HTMLFormElement>('ph-addrow');
+  const addInput = $<HTMLInputElement>('ph-add-input');
+  const shelfNote = $('ph-shelf-note');
+
+  const setAddRow = (open: boolean) => {
+    addRow.hidden = !open;
+    addToggle.setAttribute('aria-expanded', String(open));
+    if (open) addInput.focus();
+  };
+  addToggle.addEventListener('click', () => setAddRow(addRow.hidden));
+  // Escape closes it, like every other panel in the app, unless something
+  // on top of it (a sheet, a dialog) is the thing Escape is for.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || addRow.hidden || e.defaultPrevented) return;
+    if ([...document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"]')].some((d) => d.checkVisibility())) return;
+    setAddRow(false);
+    addToggle.focus();
+  });
+  addRow.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const raw = addInput.value.trim();
+    if (!raw) return;
+    shelfNote.hidden = false;
+    shelfNote.textContent = /^https?:/i.test(raw) ? 'Reading their profile…' : 'Adding…';
+    const r = await act('add', /^https?:/i.test(raw) ? { link: raw } : { name: raw });
+    if (!r.ok || !r.photographer) { shelfNote.textContent = r.error || 'That did not work.'; return; }
+    shelfNote.hidden = true;
+    addInput.value = '';
+    dirty = true;
+    void openPhotographer(r.photographer.id);
+  });
+
+  document.getElementById('ph-empty')?.addEventListener('click', (e) => {
+    const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-ph]');
+    if (chip) void openPhotographer(chip.dataset.ph!);
+  });
+  document.getElementById('ph-row')?.addEventListener('click', (e) => {
+    const card = (e.target as HTMLElement).closest<HTMLElement>('[data-ph]');
+    if (card) void openPhotographer(card.dataset.ph!);
+  });
+
+  // How much is new from each favourite, fetched after the board is up.
+  if (document.querySelector('[data-new]')) {
+    void api<{ counts: Record<string, number>; covers: Record<string, string> }>('/api/photographers/work?news=1').then((r) => {
+      if (!r.ok) return;
+      for (const [id, n] of Object.entries(r.counts)) {
+        const el = document.querySelector<HTMLElement>(`[data-new="${CSS.escape(id)}"]`);
+        if (el && n > 0) { el.hidden = false; el.textContent = `${n} new`; }
+      }
+      for (const [id, src] of Object.entries(r.covers)) {
+        const cover = document.querySelector(`[data-ph="${CSS.escape(id)}"] .ph-cover`);
+        if (cover && !cover.querySelector('img')) cover.append(h('img', { src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }));
+      }
+    }).catch(() => {});
+  }
+
+  /* ── One photographer ──────────────────────────────────────────────── */
+
+  const sheet = $('ph-sheet');
+  let current: Person | null = null;
+  let items: Item[] = [];
+  let showPassed = false;
+
+  async function people(): Promise<{ photographers: Person[]; credits: Record<string, string> }> {
+    const r = await api<{ photographers: Person[]; credits: Record<string, string> }>('/api/photographers');
+    return { photographers: r.photographers ?? [], credits: r.credits ?? {} };
+  }
+
+  async function openPhotographer(id: string) {
+    const { photographers, credits } = await people();
+    const p = photographers.find((x) => x.id === id);
+    if (!p) return;
+    current = p;
+    items = [];
+    showPassed = false;
+    renderHead(p);
+    renderYours(Object.entries(credits).filter(([, who]) => who === id).map(([ref]) => ref));
+    for (const s of ['ph-new', 'ph-more', 'ph-find'] as const) $(s).hidden = true;
+    $('ph-end').hidden = true;
+    $('ph-status').textContent = '';
+    show(sheet);
+    $('ph-scroll').scrollTop = 0;
+
+    void api<{ words: string[] }>(`/api/photographers/look?id=${encodeURIComponent(id)}`).then((r) => {
+      if (current?.id === id) $('ph-look').textContent = r.ok ? r.words.join(' · ') : '';
+    });
+    if (p.links.some(readableLink)) await loadWork(id);
+    else void loadFind(id);
+  }
+
+  function renderHead(p: Person) {
+    $('ph-name').textContent = p.name;
+    $('ph-rename').hidden = true;
+    $('ph-name').hidden = false;
+    const star = $('ph-star');
+    star.setAttribute('aria-pressed', String(p.favourite));
+    star.textContent = p.favourite ? '★ Favourite' : '☆ Favourite';
+    const links = $('ph-links');
+    links.replaceChildren(...p.links.flatMap((l, i) => [
+      i ? ' · ' : '',
+      h('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer' }, `${linkLabel(l)} ↗`),
+      h('button', { type: 'button', class: 'ph-unlink', 'data-unlink': l.url, 'aria-label': `Unlink ${linkLabel(l)}` }, '×'),
+    ]));
+    $('ph-linkrow').hidden = true;
+    $('ph-ig-connect-here').hidden = igConnected() || !p.links.some((l) => l.kind === 'instagram');
+    $('ph-addlink').setAttribute('aria-expanded', 'false');
+    $('ph-look').textContent = '';
+  }
+
+  function renderYours(refIds: string[]) {
+    const sec = $('ph-yours');
+    const list = sec.querySelector('ul')!;
+    const refs = refIds.map((id) => data.refs.find((r) => r.id === id)).filter((r): r is NonNullable<typeof r> => Boolean(r));
+    sec.hidden = !refs.length;
+    sec.querySelector('.n')!.textContent = String(refs.length);
+    list.replaceChildren(...refs.map((r) => h('li', {}, h('img', { src: r.thumb, alt: '', loading: 'lazy' }))));
+    const match = $('ph-match');
+    match.hidden = !refs.length;
+    match.dataset.ids = refs.map((r) => r.id).join(',');
+  }
+
+  async function loadWork(id: string, force = false) {
+    $('ph-status').textContent = 'Fetching their work…';
+    const r = await api<{ items: Item[]; seenAt: string | null; errors: string[] }>(`/api/photographers/work?id=${encodeURIComponent(id)}${force ? '&force=1' : ''}`);
+    if (current?.id !== id) return;
+    if (!r.ok) { $('ph-status').textContent = r.error || 'Their work could not be read.'; return; }
+    items = r.items;
+    renderWork(r.seenAt);
+    $('ph-status').textContent = r.errors.length && !items.length ? r.errors[0] : !items.length ? 'Nothing public to show yet.' : '';
+    // What's on screen now is no longer new next time.
+    void act('seen', { id });
+  }
+
+  function itemCell(it: Item): HTMLLIElement {
+    const pinned = it.mark === 'pinned';
+    const li = h('li', { class: `ph-item${pinned ? ' pinned' : ''}`, 'data-key': it.key },
+      h('button', { type: 'button', class: 'ph-thumb', 'aria-label': it.title ? `View: ${it.title}` : 'View' },
+        h('img', { src: it.thumb, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })),
+      h('button', { type: 'button', class: 'ph-pin', disabled: pinned, 'aria-label': pinned ? 'Pinned' : 'Pin to the board' }, pinned ? 'Pinned' : 'Pin'),
+      pinned ? null : h('button', { type: 'button', class: 'ph-pass', 'aria-label': 'Pass' }, '×'),
+    );
+    // A picture the site no longer serves is left out, not shown broken.
+    li.querySelector('img')?.addEventListener('error', () => li.remove(), { once: true });
+    return li;
+  }
+
+  function renderWork(seenAt: string | null) {
+    const visible = items.filter((i) => i.mark !== 'passed' || showPassed);
+    const fresh = visible.filter((i) => i.isNew);
+    const rest = visible.filter((i) => !i.isNew);
+    const newSec = $('ph-new'), moreSec = $('ph-more');
+    newSec.hidden = !fresh.length;
+    newSec.querySelector('.n')!.textContent = String(fresh.length);
+    newSec.querySelector('ul')!.replaceChildren(...fresh.map(itemCell));
+    // The feed ends. Glass's fans and Cosmos's critics agree on that one.
+    const end = $('ph-end');
+    end.hidden = !fresh.length || !seenAt;
+    end.textContent = seenAt ? `That's everything since ${dateWords(seenAt)}` : '';
+    moreSec.hidden = !rest.length;
+    moreSec.querySelector('h3')!.firstChild!.textContent = fresh.length ? 'Earlier ' : 'Their work ';
+    moreSec.querySelector('.n')!.textContent = String(rest.length);
+    moreSec.querySelector('ul')!.replaceChildren(...rest.map(itemCell));
+    const passed = items.filter((i) => i.mark === 'passed').length;
+    const passedBtn = $('ph-passed');
+    passedBtn.hidden = !passed;
+    passedBtn.textContent = showPassed ? 'Hide passed' : `${passed} passed`;
+    if (!fresh.length && !rest.length && passed) moreSec.hidden = false;
+  }
+
+  $('ph-passed').addEventListener('click', () => { showPassed = !showPassed; renderWork(current?.seenAt ?? null); });
+
+  // Pins still on their way. Closing the sheet waits for them, so the board
+  // it reloads into has them on it.
+  const pending = new Set<Promise<unknown>>();
+
+  async function pin(key: string, cell?: Element | null) {
+    if (!current) return;
+    // Shown pinned at once: adding runs the board's whole colour pipeline,
+    // which takes a few seconds. Put back if it fails.
+    const it = items.find((i) => i.key === key);
+    if (it?.mark === 'pinned') return;
+    const was = it?.mark ?? null;
+    if (it) it.mark = 'pinned';
+    const btn = cell?.querySelector<HTMLButtonElement>('.ph-pin');
+    if (btn) { btn.disabled = true; btn.textContent = 'Pinned'; }
+    cell?.classList.add('pinned');
+    cell?.querySelector('.ph-pass')?.remove();
+    if (viewKey === key) syncView();
+    dirty = true;
+    const req = api<{ refId: string }>('/api/photographers/pin', { id: current.id, key });
+    pending.add(req);
+    const r = await req.finally(() => pending.delete(req));
+    if (r.ok) return;
+    if (it) it.mark = was;
+    if (current) renderWork(current.seenAt ?? null);
+    if (viewKey === key) syncView();
+    $('ph-status').textContent = r.error || 'That one could not be pinned.';
+  }
+
+
+  async function pass(key: string) {
+    if (!current) return;
+    const it = items.find((i) => i.key === key);
+    if (it) it.mark = 'passed';
+    renderWork(current.seenAt ?? null);
+    void act('mark', { id: current.id, key, mark: 'passed' });
+  }
+
+  const coarse = matchMedia('(hover: none), (pointer: coarse)');
+  for (const id of ['ph-new', 'ph-more']) {
+    $(id).addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const cell = t.closest<HTMLElement>('.ph-item');
+      if (!cell) return;
+      const key = cell.dataset.key!;
+      if (t.closest('.ph-pin')) void pin(key, cell);
+      else if (t.closest('.ph-pass')) void pass(key);
+      else if (t.closest('.ph-thumb')) {
+        // Touch: the first tap shows Pin and ×, the next enlarges, like the board's tiles.
+        if (coarse.matches && !cell.classList.contains('is-active')) {
+          for (const other of document.querySelectorAll('.ph-item.is-active')) other.classList.remove('is-active');
+          cell.classList.add('is-active');
+          return;
+        }
+        openView(key);
+      }
+    });
+  }
+
+  // Enlarged, inside the sheet; ← → walk the feed.
+  const view = $('ph-view');
+  let viewKey: string | null = null;
+  const viewable = () => items.filter((i) => i.mark !== 'passed' || showPassed);
+  function syncView() {
+    const it = items.find((i) => i.key === viewKey);
+    if (!it) return;
+    const img = $<HTMLImageElement>('ph-view-img');
+    img.src = it.thumb;
+    // The large one replaces the thumbnail once it has arrived.
+    const big = new Image();
+    big.referrerPolicy = 'no-referrer';
+    big.onload = () => { if (viewKey === it.key) img.src = it.full; };
+    big.src = it.full;
+    img.alt = it.title ?? '';
+    $<HTMLAnchorElement>('ph-view-post').href = it.url;
+    const pinBtn = $<HTMLButtonElement>('ph-view-pin');
+    pinBtn.disabled = it.mark === 'pinned';
+    pinBtn.textContent = it.mark === 'pinned' ? 'Pinned' : 'Pin';
+    $('ph-view-pass').hidden = it.mark === 'pinned';
+  }
+  function openView(key: string) { viewKey = key; syncView(); view.hidden = false; $('ph-view-close').focus(); }
+  function closeView() { view.hidden = true; viewKey = null; }
+  function step(d: number) {
+    const list = viewable();
+    const i = list.findIndex((x) => x.key === viewKey);
+    const next = list[i + d];
+    if (next) { viewKey = next.key; syncView(); }
+  }
+  $('ph-view-close').addEventListener('click', closeView);
+  $('ph-view-pin').addEventListener('click', () => { if (viewKey) void pin(viewKey, document.querySelector(`.ph-item[data-key="${CSS.escape(viewKey)}"]`)); });
+  $('ph-view-pass').addEventListener('click', () => { if (!viewKey) return; const k = viewKey; step(1); if (viewKey === k) closeView(); void pass(k); });
+
+  // Find their work elsewhere: for a name or an Instagram handle.
+  async function loadFind(id: string) {
+    const sec = $('ph-find');
+    const list = $('ph-find-list');
+    sec.hidden = false;
+    list.replaceChildren(h('li', { class: 'ph-note' }, 'Looking for their site and profiles…'));
+    const r = await api<{ options: { name: string; note?: string; link: ProfileLink; thumbs: string[]; sure?: boolean }[] }>(`/api/photographers/find?id=${encodeURIComponent(id)}`);
+    if (current?.id !== id) return;
+    // Their own site at their own name: linked straight away, and the × by
+    // the link undoes it. Anything less certain waits for "This is them".
+    const sure = r.ok ? r.options.find((o) => o.sure) : undefined;
+    if (sure) {
+      const res = await act('link', { id, link: sure.link });
+      if (res.ok && res.photographer && current?.id === id) {
+        dirty = true; current = res.photographer; renderHead(current);
+        r.options = r.options.filter((o) => o !== sure);
+        await loadWork(id, true);
+        if (!r.options.length) { sec.hidden = true; return; }
+      }
+    }
+    if (!r.ok || !r.options.length) {
+      list.replaceChildren(h('li', { class: 'ph-note' }, 'Nothing found. Paste a link with + link.'));
+      return;
+    }
+    list.replaceChildren(...r.options.map((o, i) => h('li', { class: 'ph-find' },
+      o.thumbs.length
+        ? h('div', { class: 'ph-find-thumbs' }, ...o.thumbs.map((src) => h('img', { src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })))
+        : h('div', { class: 'ph-find-thumbs ph-find-empty' }, 'opens on Instagram'),
+      h('div', { class: 'ph-find-text' },
+        h('a', { href: o.link.url, target: '_blank', rel: 'noopener noreferrer', class: 'ph-find-name' }, o.name),
+        h('span', { class: 'ph-find-note' }, `${linkLabel(o.link)}${o.note ? ` · ${o.note}` : ''}`)),
+      h('button', { type: 'button', class: 'ph-pinbtn', 'data-find': String(i) }, 'This is them'),
+    )));
+    list.onclick = async (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-find]');
+      if (!btn || !current) return;
+      btn.disabled = true;
+      const res = await act('link', { id: current.id, link: r.options[Number(btn.dataset.find)].link });
+      if (res.ok && res.photographer) { dirty = true; current = res.photographer; renderHead(current); sec.hidden = true; await loadWork(current.id, true); }
+      else btn.disabled = false;
+    };
+  }
+
+  // Header controls.
+  $('ph-star').addEventListener('click', async () => {
+    if (!current) return;
+    const r = await act('favourite', { id: current.id, on: !current.favourite });
+    if (r.ok && r.photographer) { dirty = true; current = r.photographer; renderHead(current); }
+  });
+  $('ph-name').addEventListener('click', () => {
+    if (!current) return;
+    $('ph-name').hidden = true;
+    $('ph-rename').hidden = false;
+    const input = $<HTMLInputElement>('ph-rename-input');
+    input.value = current.name;
+    input.focus();
+    input.select();
+  });
+  $('ph-rename').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!current) return;
+    const r = await act('rename', { id: current.id, name: $<HTMLInputElement>('ph-rename-input').value });
+    if (r.ok && r.photographer) { dirty = true; current = r.photographer; }
+    renderHead(current);
+  });
+  $('ph-addlink').addEventListener('click', () => {
+    const row = $('ph-linkrow');
+    row.hidden = !row.hidden;
+    $('ph-addlink').setAttribute('aria-expanded', String(!row.hidden));
+    if (!row.hidden) $('ph-link-input').focus();
+  });
+  $('ph-linkrow').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!current) return;
+    const input = $<HTMLInputElement>('ph-link-input');
+    $('ph-status').textContent = 'Reading their profile…';
+    const r = await act('link', { id: current.id, link: input.value });
+    if (!r.ok || !r.photographer) { $('ph-status').textContent = r.error || 'That link could not be read.'; return; }
+    input.value = '';
+    dirty = true;
+    current = r.photographer;
+    renderHead(current);
+    $('ph-find').hidden = true;
+    await loadWork(current.id, true);
+  });
+  $('ph-links').addEventListener('click', async (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-unlink]');
+    if (!btn || !current) return;
+    const r = await act('unlink', { id: current.id, url: btn.dataset.unlink });
+    if (r.ok && r.photographer) { dirty = true; current = r.photographer; renderHead(current); await loadWork(current.id, true); }
+  });
+  $('ph-match').addEventListener('click', () => {
+    const ids = ($('ph-match').dataset.ids || '').split(',').filter(Boolean);
+    if (!ids.length) return;
+    // Closed without the reload a change would bring: that would take the
+    // workbench down with it.
+    closeView();
+    hide(sheet);
+    current = null;
+    // Style Match lives in the page's other script; it listens for this.
+    window.dispatchEvent(new CustomEvent('insp:match', { detail: { ids } }));
+  });
+  let removeArmed = false;
+  $('ph-remove').addEventListener('click', async () => {
+    if (!current) return;
+    const btn = $('ph-remove');
+    if (!removeArmed) {
+      removeArmed = true;
+      btn.textContent = 'Remove them and their credits?';
+      setTimeout(() => { removeArmed = false; btn.textContent = 'Remove'; }, 3000);
+      return;
+    }
+    await act('remove', { id: current.id });
+    dirty = true;
+    void closeSheet();
+  });
+
+  async function closeSheet() {
+    closeView();
+    hide(sheet);
+    current = null;
+    if (pending.size) await Promise.allSettled([...pending]);
+    if (dirty) reloadKeepingPlace();
+  }
+  $('ph-close').addEventListener('click', () => void closeSheet());
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) void closeSheet(); });
+
+  /* ── More of their work, wherever a name or link went in ──────────── */
+
+  // A credit typed, inferred from a shared link, or picked in "Who took
+  // these?" — the board reloads after each, so who it was is carried across
+  // (sessionStorage) and offered here, under the shelf.
+  const CREDITED_KEY = 'ph-credited';
+  function rememberCredited(p?: { id: string; name: string } | null) {
+    try { if (p) sessionStorage.setItem(CREDITED_KEY, JSON.stringify({ id: p.id, name: p.name })); } catch { /* private mode */ }
+  }
+  (function offerCredited() {
+    let by: { id: string; name: string } | null = null;
+    try { by = JSON.parse(sessionStorage.getItem(CREDITED_KEY) || 'null'); sessionStorage.removeItem(CREDITED_KEY); } catch { return; }
+    if (!by?.id) return;
+    const note = $('ph-credited');
+    const more = h('button', { type: 'button', class: 'ph-credited-more', 'data-ph': by.id }, 'See more of their work');
+    const close = h('button', { type: 'button', class: 'ph-credited-close', 'aria-label': 'Dismiss' }, '×');
+    note.replaceChildren(h('span', {}, 'By ', h('em', {}, by.name)), more, close);
+    note.hidden = false;
+    more.addEventListener('click', () => { note.hidden = true; void openPhotographer(by!.id); });
+    close.addEventListener('click', () => { note.hidden = true; });
+  })();
+
+  // /inspiration?ph=<id>: the share sheet's "More by …" lands here.
+  {
+    const params = new URLSearchParams(location.search);
+    const ph = params.get('ph');
+    if (ph) {
+      params.delete('ph');
+      history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`);
+      void openPhotographer(ph);
+    }
+  }
+
+  // The enlarged view: "More by …" under a credited reference.
+  const lbMore = document.getElementById('lb-more');
+  window.addEventListener('insp:lightbox', (e) => {
+    if (!lbMore) return;
+    const ref = data.refs.find((r) => r.id === (e as CustomEvent<{ id: string }>).detail?.id);
+    const who = ref?.credit ? data.people.find((p) => p.id === ref.credit) : undefined;
+    lbMore.hidden = !who;
+    if (who) { lbMore.textContent = `More by ${creditLabel(who.name)}`; lbMore.dataset.ph = who.id; }
+  });
+  window.addEventListener('insp:lightbox-close', () => { if (lbMore) lbMore.hidden = true; });
+  lbMore?.addEventListener('click', () => { if (lbMore.dataset.ph) void openPhotographer(lbMore.dataset.ph); });
+
+  /* ── Who took these? ───────────────────────────────────────────────── */
+
+  const credit = $('ph-credit');
+  let picked = new Set<string>();
+
+  function openCredit(refId: string) {
+    const uncredited = data.refs.filter((r) => !r.credit);
+    // One name often covers several, so the rest are offered too, the ones
+    // that look like this one first. Only the tapped one starts ticked: a
+    // look-alike guess is a suggestion, and a wrong credit is worse than none.
+    const kin = new Set(data.similar.find((g) => g.includes(refId)) ?? []);
+    picked = new Set([refId]);
+    const rest = uncredited.map((r) => r.id).filter((id) => id !== refId);
+    const order = [refId, ...rest.filter((id) => kin.has(id)), ...rest.filter((id) => !kin.has(id))];
+    $('ph-credit-refs').replaceChildren(...order.map((id) => {
+      const r = data.refs.find((x) => x.id === id)!;
+      return h('li', {}, h('button', { type: 'button', 'data-ref': id, 'aria-pressed': String(picked.has(id)), 'aria-label': 'Include this reference' },
+        h('img', { src: r.thumb, alt: '', loading: 'lazy' })));
+    }));
+    const everyone = [...data.people].sort((a, b) => Number(b.favourite) - Number(a.favourite) || a.name.localeCompare(b.name));
+    $('ph-credit-people').replaceChildren(...everyone.map((p) => h('li', {}, h('button', { type: 'button', 'data-person': p.id }, p.name))));
+    $('ph-credit-status').textContent = '';
+    show(credit);
+    setTimeout(() => $('ph-credit-input').focus(), 60);
+  }
+  $('ph-credit-refs').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ref]');
+    if (!b) return;
+    const id = b.dataset.ref!;
+    if (picked.has(id)) picked.delete(id); else picked.add(id);
+    b.setAttribute('aria-pressed', String(picked.has(id)));
+  });
+  async function saveCredit(body: Record<string, unknown>) {
+    if (!picked.size) { $('ph-credit-status').textContent = 'Pick at least one.'; return; }
+    $('ph-credit-status').textContent = 'Saving…';
+    const r = await act('credit', { refIds: [...picked], ...body });
+    if (!r.ok) { $('ph-credit-status').textContent = r.error || 'That did not save.'; return; }
+    rememberCredited(r.photographer);
+    reloadKeepingPlace();
+  }
+  $('ph-credit-people').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-person]');
+    if (b) void saveCredit({ id: b.dataset.person });
+  });
+  $('ph-credit-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = $<HTMLInputElement>('ph-credit-input').value.trim();
+    if (v) void saveCredit(/^https?:/i.test(v) ? { link: v } : { name: v });
+  });
+  $('ph-credit-close').addEventListener('click', () => hide(credit));
+  credit.addEventListener('click', (e) => { if (e.target === credit) hide(credit); });
+
+  // The board's tiles: a credit opens its photographer, "Who?" asks. In the
+  // capture phase, so the board's own handler (enlarge) never sees the tap.
+  document.getElementById('board')?.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const who = t.closest<HTMLElement>('.cell-who');
+    const by = t.closest<HTMLElement>('.credit[data-ph]');
+    if (!who && !by) return;
+    e.stopPropagation();
+    if (who) openCredit(who.dataset.ref!);
+    else void openPhotographer(by!.dataset.ph!);
+  }, true);
+
+  /* ── Your own Instagram connection ────────────────────────────────── */
+
+  const igc = $('ph-igc');
+  function openConnect() {
+    $('ph-igc-state').textContent = data.instagram ? `Connected as @${data.instagram.username}` : '';
+    $('ph-igc-off').hidden = !data.instagram;
+    $('ph-igc-status').textContent = '';
+    (igc.querySelector('details') as HTMLDetailsElement).open = !data.instagram;
+    show(igc);
+  }
+  $('ph-igc-open').addEventListener('click', openConnect);
+  $('ph-ig-connect-here').addEventListener('click', openConnect);
+  $('ph-igc-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = (id: string) => $<HTMLInputElement>(id).value.trim();
+    $('ph-igc-status').textContent = 'Connecting…';
+    const r = await api<{ username: string }>('/api/photographers/instagram-connect', { appId: v('ph-igc-app'), appSecret: v('ph-igc-secret'), token: v('ph-igc-token') });
+    if (!r.ok) { $('ph-igc-status').textContent = r.error || 'That did not connect.'; return; }
+    data.instagram = { username: r.username };
+    for (const id of ['ph-igc-app', 'ph-igc-secret', 'ph-igc-token']) $<HTMLInputElement>(id).value = '';
+    $('ph-igc-open').textContent = `Instagram: @${r.username}`;
+    $('ph-igc-status').textContent = `Connected as @${r.username}`;
+    // The open photographer's Instagram posts, now that they can be read.
+    if (current) { renderHead(current); if (current.links.some((l) => l.kind === 'instagram')) { $('ph-find').hidden = true; void loadWork(current.id, true); } }
+    setTimeout(() => hide(igc), 900);
+  });
+  $('ph-igc-off').addEventListener('click', async () => {
+    await fetch('/api/photographers/instagram-connect', { method: 'DELETE' });
+    data.instagram = null;
+    $('ph-igc-open').textContent = 'Connect Instagram';
+    $('ph-igc-off').hidden = true;
+    $('ph-igc-state').textContent = '';
+    $('ph-igc-status').textContent = 'Disconnected';
+  });
+  $('ph-igc-close').addEventListener('click', () => hide(igc));
+  igc.addEventListener('click', (e) => { if (e.target === igc) hide(igc); });
+
+  /* ── From your Instagram export ─────────────────────────────────────── */
+
+  // Instagram can't be read, but your own data export can: who you save and
+  // like most is a favourites list you didn't have to type. The export is
+  // read on the Mac and not kept (api/photographers/instagram.ts).
+  interface IgPerson { username: string; saved: number; liked: number; following: boolean; known: boolean }
+  const ig = $('ph-ig');
+  const igFile = $<HTMLInputElement>('ph-ig-file');
+  let igPeople: IgPerson[] = [];
+  const igPicked = new Set<string>();
+
+  $('ph-ig-pick').addEventListener('click', () => igFile.click());
+  igFile.addEventListener('change', async () => {
+    const files = [...(igFile.files ?? [])];
+    if (!files.length) return;
+    shelfNote.hidden = false;
+    shelfNote.textContent = 'Reading the export…';
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    let r: { ok: boolean; error?: string; people?: IgPerson[] };
+    try { r = await (await fetch('/api/photographers/instagram', { method: 'POST', body: fd })).json(); }
+    catch { r = { ok: false, error: 'The export could not be sent.' }; }
+    igFile.value = '';
+    if (!r.ok || !r.people) { shelfNote.textContent = r.error || 'That did not work.'; return; }
+    shelfNote.hidden = true;
+    igPeople = r.people;
+    igPicked.clear();
+    // Ticked to start: people you've saved from more than once.
+    for (const p of igPeople) if (!p.known && p.saved >= 2) igPicked.add(p.username);
+    renderIg();
+    show(ig);
+  });
+
+  function igLine(p: IgPerson): string {
+    return [p.saved && `${p.saved} saved`, p.liked && `${p.liked} liked`, p.following && 'following'].filter(Boolean).join(' · ');
+  }
+  function renderIg() {
+    $('ph-ig-count').textContent = `${igPeople.length} people`;
+    $('ph-ig-list').replaceChildren(...igPeople.map((p) => h('li', {},
+      h('label', { class: `ph-ig-row${p.known ? ' known' : ''}` },
+        h('input', { type: 'checkbox', 'data-ig': p.username, checked: p.known || igPicked.has(p.username), disabled: p.known }),
+        h('span', { class: 'ph-ig-name' }, p.username),
+        h('span', { class: 'ph-ig-line' }, p.known ? 'already here' : igLine(p)),
+        h('a', { href: `https://www.instagram.com/${p.username}/`, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `Open ${p.username} on Instagram` }, '↗')),
+    )));
+    syncIgButton();
+  }
+  function syncIgButton() {
+    const btn = $<HTMLButtonElement>('ph-ig-add');
+    btn.textContent = igPicked.size ? `Add ${igPicked.size}` : 'Add';
+    btn.disabled = !igPicked.size;
+  }
+  $('ph-ig-list').addEventListener('change', (e) => {
+    const box = e.target as HTMLInputElement;
+    const name = box.dataset.ig;
+    if (!name) return;
+    if (box.checked) igPicked.add(name); else igPicked.delete(name);
+    syncIgButton();
+  });
+  $('ph-ig-add').addEventListener('click', async () => {
+    if (!igPicked.size) return;
+    $('ph-ig-status').textContent = 'Adding…';
+    const r = await act('addMany', { instagram: [...igPicked] });
+    if (!r.ok) { $('ph-ig-status').textContent = r.error || 'That did not work.'; return; }
+    reloadKeepingPlace();
+  });
+  $('ph-ig-close').addEventListener('click', () => hide(ig));
+  ig.addEventListener('click', (e) => { if (e.target === ig) hide(ig); });
+
+  /* ── Photographers like these ──────────────────────────────────────── */
+
+  const sug = $('ph-sug');
+  let suggestions: Suggestion[] = [];
+
+  function renderSuggestions(at: string | null) {
+    $('ph-sug-when').textContent = at ? `Looked ${dateWords(at)}` : '';
+    $('ph-sug-run').textContent = at ? 'Look again' : 'Look';
+    $('ph-sug-list').replaceChildren(...suggestions.map((s) => h('li', { class: 'ph-sugcard', 'data-key': s.key },
+      h('div', { class: 'ph-sug-thumbs' }, ...s.thumbs.map((t) => h('a', { href: t.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Open the post' },
+        h('img', { src: t.src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })))),
+      h('div', { class: 'ph-sug-text' },
+        h('a', { class: 'ph-sug-name', href: s.link.url, target: '_blank', rel: 'noopener noreferrer' }, s.name),
+        h('span', { class: 'ph-sug-via' }, `${linkLabel(s.link)} · ${s.via}`),
+        h('p', { class: 'ph-sug-reason' }, s.reason),
+        s.traits.length ? h('p', { class: 'ph-sug-traits' }, s.traits.join(' · ')) : null),
+      h('div', { class: 'ph-sug-actions' },
+        h('button', { type: 'button', class: 'ph-pinbtn', 'data-fav': s.key }, 'Favourite'),
+        h('button', { type: 'button', class: 'ph-textbtn', 'data-no': s.key }, 'Not for me')),
+    )));
+  }
+
+  async function openSuggestions() {
+    show(sug);
+    const r = await api<{ at: string | null; items: Suggestion[] }>('/api/photographers/suggest');
+    suggestions = r.items ?? [];
+    renderSuggestions(r.at ?? null);
+    if (!r.at) void runSuggestions();
+  }
+
+  let running = false;
+  async function runSuggestions() {
+    if (running) return;
+    running = true;
+    const status = $('ph-sug-status');
+    const progress = $('ph-sug-progress');
+    status.textContent = '';
+    progress.hidden = false;
+    $('ph-sug-run').setAttribute('disabled', '');
+    try {
+      const res = await fetch('/api/photographers/suggest', { method: 'POST' });
+      const reader = res.body!.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.progress) {
+            const { stage, done: n, total } = msg.progress;
+            $('ph-sug-stage').textContent = total > 1 ? `${stage} · ${n} of ${total}` : stage;
+            $('ph-sug-bar').style.width = `${total ? Math.round((n / total) * 100) : 0}%`;
+          } else if (msg.ok) {
+            suggestions = msg.items;
+            renderSuggestions(new Date().toISOString());
+            if (!suggestions.length) status.textContent = 'No one close enough this time.';
+          } else if (!document.querySelector('#ph-row .ph-card:not(.ph-addcard)')) {
+            // Nobody starred yet: the answer is on the shelf behind the sheet,
+            // so the way there is a button, not a sentence to act on.
+            const go = h('button', { type: 'button', class: 'btn btn-sm' }, 'Add someone to the shelf');
+            go.addEventListener('click', () => {
+              hide(sug);
+              $('ph-add-toggle').click();
+              $('ph-shelf').scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+            });
+            status.replaceChildren(h('span', {}, 'These come from the people you star. '), go);
+          } else {
+            status.textContent = msg.error || 'That did not work.';
+          }
+        }
+      }
+    } catch {
+      status.textContent = 'The search stopped. Try again.';
+    } finally {
+      running = false;
+      progress.hidden = true;
+      $('ph-sug-run').removeAttribute('disabled');
+    }
+  }
+
+  $('ph-like').addEventListener('click', () => void openSuggestions());
+  $('ph-sug-run').addEventListener('click', () => void runSuggestions());
+  $('ph-sug-list').addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    const fav = t.closest<HTMLButtonElement>('[data-fav]');
+    const no = t.closest<HTMLButtonElement>('[data-no]');
+    const key = fav?.dataset.fav ?? no?.dataset.no;
+    const s = suggestions.find((x) => x.key === key);
+    if (!s) return;
+    const card = t.closest('.ph-sugcard');
+    if (fav) {
+      fav.disabled = true;
+      const r = await act('add', { link: s.link, name: s.name, favourite: true });
+      if (r.ok) { dirty = true; fav.textContent = '★ Favourite'; card?.classList.add('done'); void act('dismiss', { key: s.key }); }
+      else fav.disabled = false;
+    } else {
+      card?.remove();
+      suggestions = suggestions.filter((x) => x.key !== key);
+      void act('dismiss', { key: s.key });
+    }
+  });
+  function closeSuggestions() { hide(sug); if (dirty) reloadKeepingPlace(); }
+  $('ph-sug-close').addEventListener('click', closeSuggestions);
+  sug.addEventListener('click', (e) => { if (e.target === sug) closeSuggestions(); });
+
+  addEventListener('keydown', (e) => {
+    if (!view.hidden) {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); closeView(); }
+      else if (e.key === 'ArrowRight') step(1);
+      else if (e.key === 'ArrowLeft') step(-1);
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    if (!igc.hidden) hide(igc);
+    else if (!credit.hidden) hide(credit);
+    else if (!ig.hidden) hide(ig);
+    else if (!sheet.hidden) void closeSheet();
+    else if (!sug.hidden) closeSuggestions();
+  });
+</script>
+
+<style>
+  .ph-shelf { margin: -0.6rem 0 3rem; }
+  .ph-shelf-head { display: flex; align-items: baseline; gap: 0.8rem; margin-bottom: 0.9rem; }
+  .ph-shelf-head h2 {
+    margin: 0; font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: 1.2rem; color: var(--fg);
+    display: flex; flex: 1 1 auto; align-items: baseline; gap: 0.8rem;
+  }
+  .ph-shelf-head h2::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--separator); align-self: center; }
+
+  /* :global — suggestion cards and "their work elsewhere" rows are built at
+     runtime, and Astro's scoping never reaches them (memory: scoped styles). */
+  :global(.ph-textbtn) {
+    background: none; border: 0; padding: 0 0.1rem; min-height: var(--hit); cursor: pointer; color: var(--secondary);
+    font-family: var(--font-ui); font-size: var(--t-footnote);
+    text-decoration: underline; text-decoration-color: var(--separator); text-underline-offset: 4px;
+  }
+  :global(.ph-textbtn:hover) { color: var(--fg); text-decoration-color: currentColor; }
+  :global(.ph-textbtn[hidden]) { display: none; }
+
+  .ph-row { list-style: none; margin: 0; padding: 0 0 0.3rem; display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .ph-row li { flex: 0 0 auto; scroll-snap-align: start; }
+  .ph-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; width: 104px;
+    background: none; border: 0; padding: 0; cursor: pointer; color: inherit; text-align: left; font: inherit;
+    transition: transform 120ms ease-out;
+  }
+  .ph-cover {
+    display: block; width: 104px; aspect-ratio: 1; overflow: hidden; background: var(--accent-hair, var(--surface-1));
+  }
+  .ph-cover :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ph-name {
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--fg);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ph-new { font-family: var(--font-label); font-size: 0.6875rem; color: var(--fg); margin-top: -0.2rem; }
+  .ph-new[hidden] { display: none; }
+  .ph-plus {
+    display: grid; place-items: center; font-size: 1.6rem; color: var(--muted);
+    border: 1px solid var(--separator); background: transparent;
+    background-image: var(--cropmarks-image); background-size: var(--cropmarks-size);
+    background-position: var(--cropmarks-pos); background-repeat: no-repeat;
+  }
+  .ph-addcard:hover .ph-plus { color: var(--fg); border-color: var(--rule); }
+  /* No favourites yet: a 104px crop-marked box used to take the page's first
+     screen to say one word. Until there is a shelf to show, the heading and
+     an Add pill share one line, and the board starts right under them. */
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) {
+    display: flex; flex-wrap: wrap; align-items: center; column-gap: 0.9rem; margin-bottom: 2rem;
+  }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) > .ph-shelf-head { flex: 1 1 auto; margin: 0; }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) > .ph-row { flex: 0 0 auto; overflow: visible; padding: 0; }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) > :is(.ph-addrow, .ph-note, .ph-credited) { flex-basis: 100%; }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-addcard {
+    flex-direction: row; align-items: center; gap: 0.3rem; width: auto;
+    min-height: var(--hit); padding: 0 1rem 0 0.55rem; border-radius: var(--r-pill); background: var(--fill);
+    transition: background var(--dur-fast) var(--ease);
+  }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-addcard:hover { background: var(--fill-hover); }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-addcard .ph-plus {
+    width: 1.4rem; border: 0; background: none; font-size: 1.15rem; color: var(--fg);
+  }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-addcard .ph-name { font-family: var(--font-ui); font-style: normal; font-weight: 500; }
+  .ph-name-more { display: none; }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-name-more { display: inline; }
+  /* Open, the toggle says what pressing it again does. */
+  .ph-name-cancel { display: none; }
+  .ph-addcard[aria-expanded='true'] .ph-name-add { display: none; }
+  .ph-addcard[aria-expanded='true'] .ph-name-cancel { display: inline; }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-addcard[aria-expanded='true'] .ph-plus { display: none; }
+  .ph-shelf:not(:has(.ph-card:not(.ph-addcard))) .ph-addcard[aria-expanded='true'] { padding-left: 1rem; }
+  .ph-addcard[aria-expanded='true'] .ph-plus { rotate: 45deg; }
+  .ph-plus { transition: rotate 360ms var(--spring-move), color var(--dur-fast) var(--ease); }
+
+  .ph-inline, .ph-addrow { display: flex; gap: 0.6rem 1rem; align-items: end; flex-wrap: wrap; margin-top: 0.9rem; }
+  .ph-addrow:not([hidden]) { animation: popIn 260ms var(--spring-move) both; transform-origin: top left; }
+  .ph-addrow[hidden], .ph-inline[hidden] { display: none; }
+  .ph-addrow input.field { flex: 1 1 14rem; min-width: 0; min-height: var(--hit); font-size: max(16px, var(--t-body)); }
+  .ph-inline input {
+    flex: 1 1 14rem; min-width: 0; background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0;
+    color: var(--fg); font-family: var(--font-ui); font-size: max(16px, var(--t-body)); min-height: var(--hit); padding: 0 0.1rem;
+  }
+  .ph-inline input:focus-visible { outline: none; border-bottom-color: var(--fg); }
+  .ph-inline button, .ph-addrow button, :global(.ph-pinbtn), .ph-match {
+    flex: 0 0 auto; background: var(--fg); color: var(--bg); border: 0; cursor: pointer; border-radius: var(--r-pill);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600; min-height: var(--hit); padding: 0 1.1rem;
+    transition: transform 120ms ease-out, opacity 140ms;
+  }
+  :global(.ph-pinbtn:disabled) { opacity: 0.55; cursor: default; }
+  /* The secondary ways in (an export, a connection) are quiet pills beside
+     the one filled Add, not three equal white slabs. */
+  .ph-addrow button.ph-textbtn { background: var(--fill); color: var(--fg); font-weight: 500; text-decoration: none; transition: background var(--dur-fast) var(--ease); }
+  .ph-addrow button.ph-textbtn:hover { background: var(--fill-hover); }
+  .ph-empty {
+    flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; margin: 0.7rem 0 0;
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary);
+  }
+  .ph-chip {
+    appearance: none; border: 0; cursor: pointer; min-height: 32px; padding: 0 0.8rem; border-radius: var(--r-pill);
+    background: var(--fill); color: var(--fg); font: inherit; font-weight: 500;
+    transition: background var(--dur-fast) var(--ease);
+  }
+  .ph-chip:hover { background: var(--fill-hover); }
+  .ph-chip span { font-family: var(--font-data); color: var(--muted); margin-left: 0.2rem; }
+  .ph-credited {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; margin: 0.9rem 0 0;
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary);
+  }
+  .ph-credited[hidden] { display: none; }
+  .ph-credited :global(em) { font-family: var(--font-note); font-size: var(--t-note); color: var(--fg); }
+  .ph-credited :global(.ph-credited-more) {
+    background: none; border: 0; padding: 0; min-height: var(--hit); cursor: pointer; color: var(--fg); font: inherit;
+    text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px;
+  }
+  .ph-credited :global(.ph-credited-more:hover) { text-decoration-color: currentColor; }
+  .ph-credited :global(.ph-credited-close) { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 1rem; min-width: 32px; min-height: 32px; }
+  :global(.lb-more) {
+    background: none; border: 0; padding: 0 0.2rem; min-height: var(--hit); cursor: pointer; color: var(--fg);
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-note);
+    text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px;
+  }
+  :global(.lb-more[hidden]) { display: none; }
+  :global(.lb-more:hover) { text-decoration-color: currentColor; }
+  .ph-note { margin: 0.6rem 0 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-note[hidden] { display: none; }
+  .ph-note:empty { display: none; }
+
+  /* Sheets: the board's overlays, same entrance. */
+  .ph-sheet {
+    position: fixed; inset: 0; z-index: 85; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--bg) 80%, #000 20%);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity 180ms var(--ease);
+  }
+  .ph-sheet[hidden] { display: none; }
+  .ph-sheet.show { opacity: 1; }
+  .ph-panel {
+    position: relative; width: min(64rem, 100%); height: min(92svh, 100%); display: flex; flex-direction: column;
+    background: var(--bg); border: 1px solid var(--separator); box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.7);
+    transform: translateY(8px); transition: transform 180ms var(--ease);
+  }
+  .ph-sheet.show .ph-panel { transform: none; }
+  @media (prefers-reduced-motion: reduce) { .ph-sheet, .ph-panel { transition: opacity 120ms linear; transform: none; } }
+  .ph-head { padding: 1.4rem 1.6rem 1rem; border-bottom: 1px solid var(--separator); }
+  .ph-close {
+    position: absolute; top: 0.7rem; right: 0.7rem; z-index: 2; width: var(--hit); height: var(--hit);
+    border: 0; background: none; color: var(--fg); font-size: 1.6rem; line-height: 1; cursor: pointer;
+  }
+  .ph-title { margin: 0 2.5rem 0.4rem 0; font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.05; }
+  .ph-title button { all: unset; cursor: text; }
+  .ph-title button:focus-visible { outline: 1px solid var(--rule); outline-offset: 4px; }
+  .ph-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 1rem; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-star { background: none; border: 0; padding: 0; min-height: var(--hit); cursor: pointer; color: var(--secondary); font: inherit; }
+  .ph-star[aria-pressed='true'] { color: var(--fg); }
+  .ph-links :global(a) { color: var(--fg); text-decoration: none; }
+  .ph-links :global(a:hover) { text-decoration: underline; text-underline-offset: 3px; }
+  .ph-links :global(.ph-unlink) { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 0.3rem; font-size: 0.9rem; opacity: 0; transition: opacity 140ms; }
+  .ph-meta:hover :global(.ph-unlink), .ph-links :global(.ph-unlink:focus-visible) { opacity: 1; }
+  @media (hover: none), (pointer: coarse) { .ph-links :global(.ph-unlink) { opacity: 0.7; } }
+  .ph-look { margin: 0.5rem 0 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--fg); min-height: 1.2em; }
+  .ph-look:empty { min-height: 0; margin: 0; }
+  .ph-match { margin-top: 0.8rem; }
+  .ph-match[hidden] { display: none; }
+  .ph-when { font-family: var(--font-note); font-style: italic; }
+
+  .ph-scroll { flex: 1 1 auto; overflow-y: auto; padding: 1.2rem 1.6rem 2rem; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .ph-sec { margin-bottom: 1.8rem; }
+  .ph-sec[hidden] { display: none; }
+  .ph-sec h3 {
+    margin: 0 0 0.8rem; font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: 1.1rem; color: var(--fg);
+    display: flex; align-items: baseline; gap: 0.6rem;
+  }
+  .ph-sec h3 .n { font-family: var(--font-label); font-style: normal; font-size: var(--t-caption); color: var(--muted); }
+  .ph-sec h3::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--separator); align-self: center; }
+  .ph-strip { list-style: none; margin: 0; padding: 0; display: flex; gap: 0.5rem; overflow-x: auto; }
+  .ph-strip :global(li) { flex: 0 0 auto; }
+  .ph-strip :global(img) { display: block; height: 96px; width: auto; }
+
+  .ph-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem; }
+  .ph-grid :global(.ph-item) { position: relative; aspect-ratio: 1; background: var(--surface-1); overflow: hidden; }
+  .ph-grid :global(.ph-thumb) { all: unset; display: block; width: 100%; height: 100%; cursor: zoom-in; }
+  .ph-grid :global(.ph-thumb img) { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 160ms; }
+  .ph-grid :global(.ph-item.pinned .ph-thumb img) { opacity: 0.45; }
+  .ph-grid :global(.ph-pin), .ph-grid :global(.ph-pass) {
+    position: absolute; z-index: 2; border: 0; cursor: pointer; color: #fff;
+    background: color-mix(in oklab, #0b0a09 84%, transparent); font-family: var(--font-ui);
+    opacity: 0; transition: opacity 140ms, background 140ms, transform 110ms ease-out;
+  }
+  .ph-grid :global(.ph-pin) { left: 6px; bottom: 6px; border-radius: 2px; font-size: var(--t-caption); font-weight: 500; padding: 0.3rem 0.6rem; }
+  .ph-grid :global(.ph-pass) { right: 6px; top: 6px; width: 26px; height: 26px; border-radius: 50%; font-size: 15px; line-height: 26px; padding: 0; }
+  .ph-grid :global(.ph-item:hover :is(.ph-pin, .ph-pass)), .ph-grid :global(.ph-item:focus-within :is(.ph-pin, .ph-pass)),
+  .ph-grid :global(.ph-item.pinned .ph-pin) { opacity: 1; }
+  .ph-grid :global(.ph-pin:hover:not(:disabled)) { background: var(--fg); color: var(--bg); }
+  @media (hover: none), (pointer: coarse) {
+    .ph-grid :global(:is(.ph-pin, .ph-pass)) { opacity: 0; pointer-events: none; }
+    .ph-grid :global(.ph-item.is-active :is(.ph-pin, .ph-pass)), .ph-grid :global(.ph-item.pinned .ph-pin) { opacity: 0.92; pointer-events: auto; }
+    .ph-grid :global(:is(.ph-pin, .ph-pass))::after { content: ''; position: absolute; inset: -9px; }
+    .ph-grid :global(.ph-pin) { left: 9px; bottom: 9px; }
+    .ph-grid :global(.ph-pass) { right: 9px; top: 9px; }
+  }
+  .ph-end { margin: -0.6rem 0 1.8rem; font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-end[hidden] { display: none; }
+  .ph-foot { margin-top: 2.5rem; padding-top: 0.6rem; border-top: 1px solid var(--separator); }
+  .ph-danger:hover { color: #e0603a; }
+
+  .ph-find-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+  .ph-find-list :global(.ph-note) { margin: 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-find-list :global(.ph-find) { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid var(--separator); padding-bottom: 0.9rem; }
+  .ph-find-list :global(.ph-find-thumbs) { display: flex; gap: 3px; }
+  .ph-find-list :global(.ph-find-thumbs img) { width: 64px; height: 64px; object-fit: cover; display: block; }
+  .ph-find-list :global(.ph-find-empty) { width: 198px; height: 64px; align-items: center; justify-content: center; border: 1px solid var(--separator); font-family: var(--font-note); font-style: italic; font-size: var(--t-caption); color: var(--muted); }
+  .ph-find-list :global(.ph-find-text) { flex: 1 1 10rem; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+  .ph-find-list :global(.ph-find-name) { font-family: var(--font-note); font-style: italic; font-size: 1.05rem; color: var(--fg); text-decoration: none; }
+  .ph-find-list :global(.ph-find-note) { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
+
+  .ph-view { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; background: color-mix(in oklab, var(--bg) 97%, #000); padding: 3.5rem 1rem 1.5rem; }
+  .ph-view[hidden] { display: none; }
+  .ph-view img { max-width: 100%; max-height: calc(100% - 4rem); object-fit: contain; }
+  .ph-view-bar { display: flex; align-items: center; gap: 1.4rem; font-family: var(--font-ui); font-size: var(--t-footnote); }
+  .ph-view-bar a { color: var(--secondary); }
+
+  .ph-credit-panel { width: min(40rem, 100%); height: auto; max-height: min(86svh, 100%); }
+  .ph-pick { list-style: none; margin: 0 0 1.2rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .ph-pick :global(button) { all: unset; cursor: pointer; display: block; position: relative; opacity: 0.4; transition: opacity 140ms; }
+  .ph-pick :global(button[aria-pressed='true']) { opacity: 1; box-shadow: 0 0 0 2px var(--fg); }
+  .ph-pick :global(button:focus-visible) { outline: 1px solid var(--rule); outline-offset: 3px; }
+  .ph-pick :global(img) { display: block; height: 84px; width: auto; }
+  .ph-chips { list-style: none; margin: 0 0 0.4rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
+  .ph-chips :global(button) {
+    background: none; border: 1px solid var(--separator); border-radius: 2px; cursor: pointer; color: var(--fg);
+    font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); padding: 0.35rem 0.7rem; min-height: 36px;
+  }
+  .ph-chips :global(button:hover) { border-color: var(--fg); }
+
+  .ph-how { margin: 0 0 1.2rem; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-how summary { cursor: pointer; font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--fg); min-height: var(--hit); display: flex; align-items: center; }
+  .ph-how ol { margin: 0.4rem 0 0.6rem; padding-left: 1.2rem; display: grid; gap: 0.4rem; }
+  .ph-how p { margin: 0; }
+  .ph-igc-form { display: grid; gap: 0.6rem; }
+  .ph-igc-form label { display: grid; gap: 0.1rem; }
+  .ph-igc-form label span { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-igc-form input {
+    background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; color: var(--fg);
+    font-family: var(--font-ui); font-size: max(16px, var(--t-body)); min-height: var(--hit); padding: 0 0.1rem;
+  }
+  .ph-igc-form input:focus-visible { outline: none; border-bottom-color: var(--fg); }
+  .ph-igc-actions { display: flex; align-items: center; gap: 1.2rem; margin-top: 0.4rem; }
+  .ph-ig-list { list-style: none; margin: 0; padding: 0; }
+  .ph-ig-list :global(.ph-ig-row) {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: baseline; gap: 0 0.8rem;
+    min-height: var(--hit); padding: 0.45rem 0; border-bottom: 1px solid var(--separator); cursor: pointer;
+  }
+  .ph-ig-list :global(.ph-ig-row.known) { opacity: 0.5; cursor: default; }
+  .ph-ig-list :global(input) { accent-color: var(--fg); width: 1.05rem; height: 1.05rem; align-self: center; }
+  .ph-ig-list :global(.ph-ig-name) { font-family: var(--font-note); font-style: italic; font-size: 1.02rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ph-ig-list :global(.ph-ig-line) { font-family: var(--font-label); font-size: 0.6875rem; color: var(--muted); white-space: nowrap; }
+  .ph-ig-list :global(a) { color: var(--secondary); text-decoration: none; padding: 0 0.3rem; }
+  .ph-ig-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1.6rem calc(env(safe-area-inset-bottom, 0px) + 0.9rem); border-top: 1px solid var(--separator); }
+  .ph-ig-foot .ph-note { margin: 0; }
+  @media (max-width: 640px) {
+    .ph-ig-foot { padding-inline: 1rem; }
+    .ph-ig-list :global(.ph-ig-row) { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .ph-ig-list :global(.ph-ig-line) { grid-column: 2; }
+  }
+
+  .ph-progress { margin-top: 0.8rem; display: grid; gap: 0.4rem; }
+  .ph-progress[hidden] { display: none; }
+  .ph-bar { height: 2px; background: var(--separator); overflow: hidden; }
+  .ph-bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width 200ms; }
+  .ph-progress span { font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--secondary); }
+  .ph-sug-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.6rem; }
+  .ph-sug-list :global(.ph-sugcard) { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 0.6rem 1.4rem; padding-bottom: 1.6rem; border-bottom: 1px solid var(--separator); }
+  .ph-sug-list :global(.ph-sugcard.done) { opacity: 0.55; }
+  .ph-sug-list :global(.ph-sug-thumbs) { grid-row: span 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+  .ph-sug-list :global(.ph-sug-thumbs img) { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .ph-sug-list :global(.ph-sug-text) { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+  .ph-sug-list :global(.ph-sug-name) { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.5rem; line-height: 1.1; color: var(--fg); text-decoration: none; overflow-wrap: anywhere; }
+  .ph-sug-list :global(.ph-sug-via) { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
+  .ph-sug-list :global(.ph-sug-reason) { margin: 0.4rem 0 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--fg); }
+  .ph-sug-list :global(.ph-sug-traits) { margin: 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--secondary); }
+  .ph-sug-list :global(.ph-sug-actions) { display: flex; align-items: center; gap: 1rem; align-self: end; }
+
+  @media (max-width: 640px) {
+    .ph-card { width: 84px; }
+    .ph-cover { width: 84px; }
+    .ph-sheet { align-items: stretch; }
+    .ph-panel { height: 100%; border: 0; }
+    .ph-credit-panel { max-height: 100%; }
+    .ph-head { padding: calc(env(safe-area-inset-top, 0px) + 1rem) 1rem 0.9rem; }
+    .ph-close { top: calc(env(safe-area-inset-top, 0px) + 0.4rem); }
+    .ph-scroll { padding: 1rem 1rem calc(env(safe-area-inset-bottom, 0px) + 2rem); }
+    .ph-grid { grid-template-columns: repeat(3, 1fr); gap: 3px; }
+    .ph-sug-list :global(.ph-sugcard) { grid-template-columns: 1fr; }
+    .ph-sug-list :global(.ph-sug-thumbs) { grid-row: auto; }
+  }
+
+  /* Round 2: the sheets join the rest of the app's surfaces — rounded,
+     a round close button, and the suggestions sheet sized to what is in it
+     rather than a full-height slab around one line. */
+  @media (min-width: 641px) {
+    .ph-panel { border-radius: var(--r-lg); overflow: hidden; border-color: var(--glass-edge, var(--separator)); }
+    #ph-sug .ph-panel { height: auto; max-height: min(92svh, 100%); }
+    #ph-sug .ph-scroll:has(.ph-sug-list:empty) { flex: 0 0 auto; }
+    .ph-close { top: 1rem; right: 1rem; }
+  }
+  .ph-close {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--fill); font-size: 1.2rem; display: grid; place-items: center;
+    transition: background var(--dur-fast, 140ms) var(--ease);
+  }
+  .ph-close:hover { background: var(--fill-hover); }
+  .ph-close::before { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+  .ph-when:empty { display: none; }
+  #ph-sug-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+</style>

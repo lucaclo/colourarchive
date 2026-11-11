@@ -35,6 +35,7 @@ import {
   readNotablePhotographers,
   tagNotable,
 } from './notable';
+import { fetchFavouritePhotos } from './favourites';
 import { MAX_PHOTOS, type RawPhoto, type SpotSearch } from './types';
 
 interface SpotCacheEntry {
@@ -48,12 +49,15 @@ const spotCache = new Map<string, SpotCacheEntry>();
  * Commons request each, not a Flickr one, so they do not need a key. Only the
  * two Flickr calls (general + per-photographer) are gated on a configured key.
  */
-export async function fetchSpotPhotos(query: SpotSearch): Promise<PhotoSearch> {
-  const cacheKey = `${query.centre.lat.toFixed(4)},${query.centre.lon.toFixed(4)},${Math.round(query.radiusM)},${query.limit}`;
+export async function fetchSpotPhotos(query: SpotSearch, { commons: withCommons = false } = {}): Promise<PhotoSearch> {
+  const cacheKey = `${query.centre.lat.toFixed(4)},${query.centre.lon.toFixed(4)},${Math.round(query.radiusM)},${query.limit},${withCommons}`;
   const hit = spotCache.get(cacheKey);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.result;
 
-  const commons = await fetchCommonsPhotos(query);
+  // Commons' tiers judge encyclopedic usefulness, not a point of view, so
+  // they're a reference layer you turn on, never the default source.
+  const commons = withCommons ? await fetchCommonsPhotos(query) : { photos: [], tiers: [] as TierStatus[] };
+  const favourites = await fetchFavouritePhotos(query);
   const photographers = await readNotablePhotographers();
   const key = flickrApiKey();
 
@@ -79,6 +83,7 @@ export async function fetchSpotPhotos(query: SpotSearch): Promise<PhotoSearch> {
 
   const tiers: TierStatus[] = [...commons.tiers];
   if (photographers.length) tiers.push({ accolade: 'notable', ok: notableOk });
+  if (favourites.asked) tiers.push({ accolade: 'favourites', ok: favourites.ok });
 
   const flickrPhotos: RawPhoto[] = [];
   if (!key) {
@@ -117,7 +122,7 @@ export async function fetchSpotPhotos(query: SpotSearch): Promise<PhotoSearch> {
   // and the notable-tagged copy wins where both exist.
   const merged = new Map<string, RawPhoto>();
   for (const photo of attachNotableByAuthor(
-    [...commons.photos, ...notablePhotos, ...flickrPhotos],
+    [...commons.photos, ...notablePhotos, ...favourites.photos, ...flickrPhotos],
     photographers,
   )) {
     const dedupeKey = `${photo.source}:${photo.id}`;

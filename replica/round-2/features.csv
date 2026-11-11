@@ -1,0 +1,27 @@
+feature,area,priority,original,clone,notes
+Pick one colour by wheel or hex and filter photos that hold it,archive-colour,must,Eagle / Adobe Stock,yes,ColourFilter.astro + colour-search.ts
+Chroma and lightness ranges,archive-colour,should,PhotoPrism chroma filter,yes,two sliders per axis
+Results ranked closest first and visible without scrolling,archive-colour,must,Eagle / TinEye,yes,"tray under the toolbar, closest first; archive keeps hue order"
+Show why a photo matched (matched swatch and share of frame),archive-colour,should,TinEye wildcard UI,yes,swatch bar under each tray thumb; share in the aria-label
+Tap a photo's palette swatch to search that colour,archive-colour,must,Eagle Swatch Book,yes,lightbox swatch searches; Copy button copies
+Several colours in one query with weights,archive-colour,should,TinEye Multicolr / Art Palette,yes,"up to 3, share any/10/25/50%; 23 of 24 real two-colour photos found"
+Suggested swatches from the library,archive-colour,could,Eagle recommended colours,partial,archive chapters; not on the inspiration board
+Two-thumb range control per axis,archive-colour,could,none,yes,"gradient track, two native range inputs"
+Colour search under 0.5 s,archive-colour,must,Eagle (claim),yes,0.02 ms for a two-colour search over 111 photos
+Time scrub under 16 ms a frame in a dense city,scout-speed,must,Sunlitt (claims smooth),yes,"95 to 15.4 ms per minute (BoundsGrid); CPU side, SwiftShader"
+Place loaded and named under 1 s,scout-speed,must,TPE / Sunlitt,yes,494 ms desktop and 196 ms phone (SwiftShader)
+Scene settled under 4 s on a city,scout-speed,should,Sunlitt,partial,"desktop 7.2 to 6.0 s, phone 4.5 to 4.2 s; hillshade framebuffers left, need an iPad measurement"
+No unused CSS or JS on Scout,scout-speed,could,none,yes,"the 48 KB book chunk is the shared global sheet, cached across tabs (corrected in architecture)"
+Attribution collapsed by default,scout-look,must,Sunlitt / TPE,yes,"folded on every width, UI font"
+Twilight labels fit the panel,scout-look,must,none,yes,spread to fit; Dawn and Dusk drop below 380 px
+Sun ring centred in the free map area beside the panel,scout-look,should,TPE,yes,cancelled padding ease now retried
+Photo pins calm at city zoom,scout-look,should,Locationscout / PhotoPills,yes,"GeoJSON clusters, tap to zoom; dots below z13"
+Map labels don't show through the tab bar on phones,scout-look,should,Sunlitt,yes,near-opaque on Scout under 640 px
+Scale bar clear of labels on phones,scout-look,could,none,yes,hidden while the sheet peeks
+Empty state shows kept spots or recents,scout-look,could,TPE Library,yes,kept spots already showed; recent places added
+Light sheet over the day map,scout-look,could,Sunlitt,no,check on a device; the redesign rule says light over day
+Command palette,scout-look,could,TPE 4.8,skip,a single-user app with search already; low value
+First-person view,scout-look,should,TPE 4.0 / ShadowMap,yes,built in round 1
+Cross-device sync of plans,scout-look,could,TPE 4.4 / Sunlitt,skip,needs accounts; out by decision
+High-quality building and tree datasets,scout-look,could,ShadowMap,skip,licensed data
+Searching a large external library by colour,archive-colour,could,Cosmos / Art Palette,skip,their content

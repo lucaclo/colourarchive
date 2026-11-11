@@ -40,11 +40,11 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       </a>
       <h1 class="zn-title">Magazine</h1>
       <div class="zn-tools">
-        <div class="zn-seg" role="radiogroup" aria-label="Pages" id="zn-format">
+        <div class="zn-seg" data-seg role="radiogroup" aria-label="Pages" id="zn-format">
           <button type="button" role="radio" data-format="8" aria-checked="true" aria-label="8 pages, one sheet" title="8 pages, one sheet">8 pp</button>
           <button type="button" role="radio" data-format="16" aria-checked="false" aria-label="16 pages, two sheets" title="16 pages, two sheets nested" data-cmdk="Sixteen pages" data-cmdk-keywords="16, two sheets">16 pp</button>
         </div>
-        <div class="zn-seg" role="radiogroup" aria-label="Paper size" id="zn-paper">
+        <div class="zn-seg" data-seg role="radiogroup" aria-label="Paper size" id="zn-paper">
           <button type="button" role="radio" data-paper="letter" aria-checked="false">Letter</button>
           <button type="button" role="radio" data-paper="a4" aria-checked="true">A4</button>
           <button type="button" role="radio" data-paper="a3" aria-checked="false">A3</button>
@@ -90,7 +90,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   <!-- Flip through it as a reader would, or see the sheet as it prints. -->
   <dialog class="zn-dialog zn-viewer" id="zn-viewer" aria-label="Preview">
     <header class="zn-dhead">
-      <div class="zn-seg" role="radiogroup" aria-label="Show" id="zn-viewmode">
+      <div class="zn-seg" data-seg role="radiogroup" aria-label="Show" id="zn-viewmode">
         <button type="button" role="radio" data-mode="pages" aria-checked="true">Pages</button>
         <button type="button" role="radio" data-mode="sheet" aria-checked="false">The sheet</button>
       </div>
@@ -190,7 +190,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   <dialog class="zn-dialog zn-pal" id="zn-pal" aria-labelledby="zn-pal-title">
     <header class="zn-dhead">
       <h2 id="zn-pal-title">Colour combinations</h2>
-      <div class="zn-seg" role="radiogroup" aria-label="Show" id="zn-palmode">
+      <div class="zn-seg" data-seg role="radiogroup" aria-label="Show" id="zn-palmode">
         <button type="button" role="radio" data-mode="photos" aria-checked="true">For your photos</button>
         <button type="button" role="radio" data-mode="all" aria-checked="false">The whole book</button>
       </div>
@@ -199,7 +199,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     <div class="zn-palbody">
       <div class="zn-palphotos" id="zn-palphotos"></div>
       <div class="zn-palcount" id="zn-palcount" hidden>
-        <div class="zn-seg" role="radiogroup" aria-label="Colours in a combination">
+        <div class="zn-seg" data-seg role="radiogroup" aria-label="Colours in a combination">
           <button type="button" role="radio" data-count="0" aria-checked="true">All</button>
           <button type="button" role="radio" data-count="2" aria-checked="false">Two</button>
           <button type="button" role="radio" data-count="3" aria-checked="false">Three</button>
@@ -246,37 +246,40 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   }
   .zn-back svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; }
   .zn-back:hover { color: var(--fg); }
-  .zn-title { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.6rem; line-height: 1; }
+  .zn-title { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: var(--t-title-2); line-height: 1; }
   .zn-tools { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 
   /* :global — the edit panel's segmented controls are built at runtime and
      never carry Astro's scoping attribute. */
-  :global(.zn .zn-seg), .zn-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 2px; }
+  /* The app's segmented control (global.css › [data-seg]): a pill track
+     with a gliding thumb. These were square boxes with a white fill, the one
+     page in the app that drew its controls another way. */
   :global(.zn .zn-seg button), .zn-seg button {
-    appearance: none; border: 0; background: none; color: var(--secondary); cursor: pointer;
-    font: inherit; font-size: var(--t-footnote); min-height: 2.5rem; padding: 0 0.85rem;
+    appearance: none; border: 0; background: none; color: var(--secondary); cursor: pointer; border-radius: var(--r-pill);
+    font: inherit; font-size: var(--t-footnote); font-weight: 500; min-height: 2.25rem; padding: 0 0.9rem;
   }
-  :global(.zn .zn-seg button + button), .zn-seg button + button { border-left: 1px solid var(--rule); }
-  :global(.zn .zn-seg button[aria-checked='true']), .zn-seg button[aria-checked='true'] { background: var(--fg); color: var(--bg); }
+  :global(.zn .zn-seg button:hover), .zn-seg button:hover { color: var(--fg); }
+  :global(.zn .zn-seg button[aria-checked='true']), .zn-seg button[aria-checked='true'] { background: var(--fill-active); color: var(--fg); }
   .zn-btn {
     appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
-    min-height: 2.5rem; padding: 0 1rem; border-radius: 2px; cursor: pointer;
+    min-height: 2.5rem; padding: 0 1.1rem; border-radius: var(--r-pill); cursor: pointer;
     font: inherit; font-size: var(--t-footnote); font-weight: 500;
-    background: none; color: var(--fg); border: 1px solid var(--rule);
-    transition: background 140ms var(--ease), border-color 140ms var(--ease), transform 110ms ease-out;
+    background: var(--fill); color: var(--fg); border: 0;
+    transition: background 140ms var(--ease);
   }
-  .zn-btn:hover { border-color: var(--fg); }
-  .zn-btn:active { transform: scale(0.97); }
+  .zn-btn:hover { background: var(--fill-hover); }
   .zn-btn:disabled { opacity: 0.45; cursor: default; }
-  .zn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .zn-primary { background: var(--fg); color: var(--bg); font-weight: 600; }
   .zn-primary:hover { background: color-mix(in oklab, var(--fg) 86%, var(--bg)); }
+  /* Secondary actions in the foot: quiet pills, like every other
+     secondary action (they were underlined italic words). */
   .zn-textbtn {
-    appearance: none; background: none; border: 0; padding: 0; cursor: pointer; min-height: var(--hit);
-    font-family: var(--font-display); font-style: italic; font-size: var(--t-note); color: var(--secondary);
-    text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 5px;
+    appearance: none; background: transparent; border: 0; padding: 0 0.95rem; cursor: pointer; min-height: var(--hit);
+    border-radius: var(--r-pill); font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500; color: var(--secondary);
+    transition: background 140ms var(--ease), color 140ms var(--ease);
   }
-  .zn-textbtn:hover { color: var(--fg); text-decoration-color: currentColor; }
-  .zn-quiet { color: var(--muted); }
+  .zn-textbtn:hover { color: var(--fg); background: var(--fill); }
+  .zn-quiet { color: var(--muted); margin-left: auto; }
 
   /* ── Rail ──────────────────────────────────────────────────────────── */
   /* contain: size, so a long rail (sixteen pages is nine thumbnails) scrolls
@@ -375,11 +378,15 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-edit :global(.zn-grouphead:focus-visible) { outline: 2px solid var(--fg); outline-offset: 2px; }
   .zn-edit :global(.zn-groupnow) { font-family: var(--font-ui); font-style: normal; font-size: var(--t-footnote); color: var(--muted); }
   .zn-edit :global(.zn-chips) { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  /* Typeface specimens as chips: each set in its own face, so the choice is
+     made by eye. Rounded and filled like the app's other chips; the chosen
+     one gets the paper fill. */
   .zn-edit :global(.zn-chips button) {
-    appearance: none; min-height: 2.25rem; padding: 0 0.75rem; cursor: pointer; font-size: 0.95rem;
-    background: none; color: var(--secondary); border: 1px solid var(--rule); border-radius: 2px;
+    appearance: none; cursor: pointer; min-height: 2.5rem; padding: 0 1rem; border-radius: var(--r-sm);
+    background: var(--fill); color: var(--secondary); border: 1px solid transparent; font-size: 1rem;
+    transition: background 140ms var(--ease), color 140ms var(--ease), border-color 140ms var(--ease);
   }
-  .zn-edit :global(.zn-chips button:hover) { border-color: var(--fg); color: var(--fg); }
+  .zn-edit :global(.zn-chips button:hover) { background: var(--fill-hover); color: var(--fg); }
   .zn-edit :global(.zn-chips button[aria-checked='true']) { background: var(--fg); color: var(--bg); border-color: var(--fg); }
   .zn-edit :global(.zn-ink) { display: flex; gap: 0.5rem; }
   .zn-edit :global(.zn-ink button) {
@@ -395,14 +402,15 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-edit :global(.zn-midlabel) { font-family: var(--font-display); font-style: italic; font-size: var(--t-caption); color: var(--muted); margin-top: -0.35rem; }
 
   .zn-foot {
-    grid-area: foot; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 1.4rem;
-    padding: 0.5rem var(--edge) 0.8rem; border-top: 1px solid var(--separator);
+    grid-area: foot; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.3rem;
+    padding: 0.5rem calc(var(--edge) - 0.95rem) 0.8rem; border-top: 1px solid var(--separator);
   }
   .zn-note { margin-left: auto; font-size: var(--t-caption); color: var(--muted); }
 
   /* ── Dialogs ───────────────────────────────────────────────────────── */
   .zn-dialog {
-    border: 1px solid var(--rule); border-radius: 2px; padding: 0; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--glass-edge); border-radius: var(--r-lg); padding: 0; color: var(--fg); background: var(--bg);
+    box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.8);
     max-width: min(60rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); width: 100%;
   }
   .zn-dialog::backdrop { background: rgb(0 0 0 / 0.72); }
@@ -429,7 +437,6 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     transition: transform 110ms ease-out, opacity 140ms;
   }
   .zn-pickgrid :global(button:hover) { opacity: 0.85; }
-  .zn-pickgrid :global(button:active) { transform: scale(0.97); }
   .zn-pickgrid :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   .zn-viewer { max-width: none; max-height: none; width: 100vw; height: 100dvh; border: 0; background: #0b0a09; }
@@ -500,7 +507,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   #zn-wheelhex:focus-visible { outline: none; border-bottom-color: var(--fg); }
   .zn-wheelchip { display: inline-block; width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 1px solid var(--rule); flex: 0 0 auto; }
   .zn-wheelside { min-width: 0; display: grid; align-content: start; gap: 0.5rem; }
-  .zn-wheelsub { margin: 0.3rem 0 0; font-family: var(--font-label); font-size: var(--t-caption); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .zn-wheelsub { margin: 0.3rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .zn-wada {
     appearance: none; display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; cursor: pointer; text-align: left;
     background: none; color: var(--fg); border: 1px solid var(--rule); border-radius: 2px; font: inherit;
@@ -547,7 +554,8 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-toast {
     position: fixed; left: 50%; bottom: calc(var(--tabbar-space) + 0.6rem); transform: translateX(-50%); z-index: 50;
     margin: 0; padding: 0.7rem 1rem; max-width: calc(100vw - 2rem); background: var(--fg); color: var(--bg);
-    font-size: var(--t-footnote); border-radius: 2px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.6);
+    font-size: var(--t-footnote); border-radius: var(--r-pill); box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.6);
+    animation: popIn 300ms var(--spring-move) both;
   }
 
   @media (max-width: 1100px) {
@@ -574,6 +582,13 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     .zn-note { margin-left: 0; width: 100%; }
     .zn-nav { position: absolute; bottom: 1.2rem; }
     #zn-prev { left: 1.2rem; } #zn-next { right: 1.2rem; }
+  }
+  /* A phone: the photo well goes above the fields, so the title and the
+     eight typeface chips get the full width instead of a 280px column. */
+  @media (max-width: 560px) {
+    .zn-edit :global(.zn-cover) { grid-template-columns: minmax(0, 1fr); }
+    .zn-edit :global(.zn-cover > .zn-wellcol) { flex-direction: row; align-items: end; justify-content: flex-start; gap: 0.8rem; }
+    .zn-edit :global(.zn-cover .zn-well) { width: 6.5rem; }
   }
   @media (prefers-reduced-motion: reduce) {
     .zn-btn, .zn-pickgrid :global(button) { transition: none; }
@@ -896,7 +911,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   };
   const seg = (name: string, label: string, value: string, options: [string, string, string?][]) => `
     <div class="zn-ctl"><span>${label}</span>
-      <div class="zn-seg" role="radiogroup" aria-label="${label}">
+      <div class="zn-seg" data-seg role="radiogroup" aria-label="${label}">
         ${options.map(([v, text, icon]) => `<button type="button" role="radio" data-set="${name}" data-value="${v}" aria-checked="${v === value}" ${icon ? `aria-label="${text}" title="${text}"` : ''}>${icon ? `<svg viewBox="0 0 24 24">${icon}</svg>` : text}</button>`).join('')}
       </div>
     </div>`;
@@ -1318,8 +1333,9 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     const ctx = sizeCanvas(viewCanvas, w, h);
     const sheets = sheetsFor(doc.format);
     viewSheet = Math.min(viewSheet, sheets - 1);
-    if (sheet) drawSheet(ctx, doc, w, h, screenOpts(false), true, viewSheet);
-    else drawSlide(ctx, slides()[viewAt], w, h, screenOpts(false), false);
+    const opts = { ...screenOpts(false), untitled: true };
+    if (sheet) drawSheet(ctx, doc, w, h, opts, true, viewSheet);
+    else drawSlide(ctx, slides()[viewAt], w, h, opts, false);
     const which = sheets > 1 ? `${viewSheet === 0 ? 'Outside' : 'Inside'} sheet, ` : '';
     $('zn-viewlabel').textContent = sheet ? `${which}${PAPER[doc.paper].label}, as it prints` : slides()[viewAt].label;
     $('zn-viewnote').textContent = sheet

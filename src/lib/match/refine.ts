@@ -3,6 +3,7 @@ import type { Calibration } from './calibration';
 import { keepMonotone } from './curve';
 import { atPointStage, POINT_NEUTRAL, prepareLr, proHsv, srgbEncode, type LrTables } from './lr-model';
 import { closeness, encodedLevel, simulate, targetFromAnalysis, type Closeness, type Measured, type SimTarget } from './simulate';
+import { asMonochrome, type Monochrome } from './monochrome';
 import type { MatchSolution } from './solve';
 import { decodeSample, type DecodedSample } from './stats-core';
 import { HSL_BANDS, type PhotoAnalysis, type RegionKey } from './types';
@@ -546,6 +547,7 @@ export function refineSolution(
   mine: PhotoAnalysis,
   tables: LrTables,
   cal?: Calibration,
+  mono?: Monochrome | null,
 ): MatchSolution {
   if (!mine.sample) return solution;
   const sample = decodeSample(mine.sample);
@@ -558,14 +560,22 @@ export function refineSolution(
   const fromFull = refine(solution.faithful, target, mine, sample, tables, { cal });
   const fromRestrained = refine(solution.restrained, target, mine, sample, tables, { cal });
   const best = fromRestrained.total < fromFull.total ? { ...fromRestrained, before: fromFull.before } : fromFull;
-  const faithful = withPointColors(best, target, mine, sample, tables, cal);
-  const restrained = solution.restrainedIntent
+  // A monochrome reference: no swatches (there is no colour to steer), the
+  // answer held grey before anything is measured, so the prediction is of
+  // what the preset will actually do. See monochrome.ts.
+  const faithful = mono
+    ? (() => {
+        const adj = asMonochrome(best.adj, mono);
+        return { ...best, adj, after: closeness(simulate(adj, sample, tables, cal), target) };
+      })()
+    : withPointColors(best, target, mine, sample, tables, cal);
+  const restrained = solution.restrainedIntent && !mono
     ? refine(solution.restrained, solution.restrainedIntent, mine, sample, tables, { restrained: true, cal })
     : null;
   // The restrained solution takes the same swatches, held back as everything
   // else in it is — skin furthest of all.
   const swatched = new Set(faithful.adj.pointColors.map((p) => p.region));
-  const restrainedBase = restrained?.adj ?? solution.restrained;
+  const restrainedBase = mono ? asMonochrome(restrained?.adj ?? solution.restrained, mono) : (restrained?.adj ?? solution.restrained);
   const restrainedAdj = {
     ...restrainedBase,
     masks: restrainedBase.masks.filter((m) => !(m.kind === 'manual' && swatched.has(m.region))),

@@ -349,7 +349,10 @@ export async function loadKeptMatches(): Promise<void> {
 async function sweepOrphanedCacheDirs(): Promise<void> {
   let entries: string[];
   try {
-    entries = await fs.readdir(MATCH_CACHE_DIR);
+    // Folders only: `looks.json` (the archive's look signatures, looks.ts)
+    // lives here too, and sweeping it as an "orphan" threw the whole cache
+    // away on every restart.
+    entries = (await fs.readdir(MATCH_CACHE_DIR, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
   } catch {
     return;
   }

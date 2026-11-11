@@ -261,6 +261,39 @@ export function buildSkyline(
       continue;
     }
 
+    // The highest this building can possibly stand in the sky is its roof seen
+    // over the nearest point of its box. If every bin its box spans is already at least
+    // that high, its walls cannot raise one — skip the trigonometry. Exact, not
+    // an approximation: a building skipped here would not have touched a bin.
+    // Over a dense city most of what is within reach is hidden behind what is
+    // nearer, and this was most of the cost of a hotspot's day (0.7 s a pan).
+    if (!(west <= 0 && east >= 0 && south <= 0 && north >= 0)) {
+      // Nearest point of the box, not the nearest corner: a wall's middle can
+      // be closer than either end, and the bound has to be an upper one.
+      const dx = west > 0 ? west : east < 0 ? -east : 0;
+      const dy = south > 0 ? south : north < 0 ? -north : 0;
+      const ceiling = Math.atan2(building.height, Math.hypot(dx, dy)) * RAD;
+      const c1 = bearingOf(west, south);
+      const c2 = bearingOf(west, north);
+      const c3 = bearingOf(east, south);
+      const c4 = bearingOf(east, north);
+      // The box's arc as seen from outside it is under 180°, so its corners'
+      // bearings, unwrapped about the first, bracket it.
+      const unwrap = (b: number) => (b - c1 > 180 ? b - 360 : b - c1 < -180 ? b + 360 : b);
+      const lo = Math.min(c1, unwrap(c2), unwrap(c3), unwrap(c4));
+      const hi = Math.max(c1, unwrap(c2), unwrap(c3), unwrap(c4));
+      let canRaise = false;
+      const firstBin = Math.floor(lo / stepDeg) - 3;
+      const lastBin = Math.ceil(hi / stepDeg) + 3;
+      for (let k = firstBin; k <= lastBin; k++) {
+        if (altitudes[((k % bins) + bins) % bins] < ceiling) {
+          canRaise = true;
+          break;
+        }
+      }
+      if (!canRaise) continue;
+    }
+
     let touched = false;
     for (let i = 0; i < points.length; i++) {
       const a = points[i];

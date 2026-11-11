@@ -79,6 +79,15 @@ describe('readableTitle', () => {
     assert.equal(readableTitle('Hkstarferry'), 'Hkstarferry');
     assert.equal(readableTitle('AoS McDull statue'), 'AoS McDull statue');
   });
+
+  it('drops the author handle, a trailing date and the country', () => {
+    assert.equal(readableTitle("St Paul's Cathedral Nave, London, UK - Diliff.jpg", 'Diliff'), "St Paul's Cathedral Nave, London");
+    assert.equal(readableTitle('London Thames Sunset panorama - Feb 2008.jpg', 'Diliff'), 'London Thames Sunset panorama');
+    assert.equal(readableTitle('The Maughan Library - 2017-09-16-3.jpg', 'Colin'), 'The Maughan Library');
+    assert.equal(readableTitle('City of London - 3, Middle Temple Lane Ec4 - 2025-09-23 17-10-22 001.jpg'), 'City of London - 3, Middle Temple Lane Ec4');
+    // A dash that is part of the title stays.
+    assert.equal(readableTitle("St Paul's Cathedral Dome from One New Change - Square Crop.jpg", 'Colin'), "St Paul's Cathedral Dome from One New Change - Square Crop");
+  });
 });
 
 describe('isAfterDark', () => {

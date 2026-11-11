@@ -61,7 +61,7 @@ export async function addInspiration(buf: Buffer, name: string, source: string):
  * once: that's the picture the page says it is about. Anything else, or a
  * page without one, is an error that says which.
  */
-export async function fetchImageFromUrl(url: string): Promise<{ buf: Buffer; name: string }> {
+export async function fetchImageFromUrl(url: string): Promise<{ buf: Buffer; name: string; html?: string }> {
   const get = async (u: string) => {
     await assertPublicHttpUrl(u);
     let res: Response;
@@ -83,9 +83,10 @@ export async function fetchImageFromUrl(url: string): Promise<{ buf: Buffer; nam
   };
   let res = await get(url);
   let at = url;
+  let html: string | undefined;
   const type = res.headers.get('content-type') || '';
   if (type.startsWith('text/html')) {
-    const html = (await res.text()).slice(0, 400_000);
+    html = (await res.text()).slice(0, 400_000);
     const meta = html.match(/<meta[^>]+(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image)["'][^>]*>/i)?.[0];
     const content = meta?.match(/content=["']([^"']+)["']/i)?.[1]?.replace(/&amp;/g, '&');
     if (!content) throw new Error('That page has no picture to take. Share the image itself instead.');
@@ -95,7 +96,8 @@ export async function fetchImageFromUrl(url: string): Promise<{ buf: Buffer; nam
   if (!(res.headers.get('content-type') || '').startsWith('image/')) throw new Error('That link is not an image.');
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length > MAX_FETCH_BYTES) throw new Error('That file is too big.');
-  return { buf, name: nameOf(at) };
+  // The page comes back too: it may say who made the picture (credit.ts).
+  return { buf, name: nameOf(at), html };
 }
 
 /** A shared link is fetched by the Mac, so it must not reach the Mac's own network. */

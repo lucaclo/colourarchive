@@ -35,6 +35,17 @@ export const MANIFEST_PATH = kept('src', 'data', 'manifest.json');
 export const INSPIRATION_DIR = DATA_ROOT ? path.join(DATA_ROOT, 'Inspiration') : path.join(ROOT, 'inspiration');
 export const INSPIRATION_STORE = kept('src', 'data', 'inspiration.json');
 export const INSPIRATION_MANIFEST = kept('src', 'data', 'inspiration.manifest.json');
+// Photographers you follow from the inspiration board: who they are, where
+// their public work lives, what you pinned or passed, and which reference is
+// whose. A taste graph is personal and the repo is public, so it is gitignored
+// like the photo locations.
+export const PHOTOGRAPHERS_PATH = kept('photographers.json');
+// Their public work and its measurements, re-fetchable at any time.
+export const PHOTOGRAPHER_CACHE_DIR = kept('.photographer-cache');
+// Your own Instagram connection for reading professional accounts' posts
+// (photographers/instagram-api.ts): an access token and an app secret, so
+// private and gitignored.
+export const INSTAGRAM_PATH = kept('instagram.json');
 export const OVERRIDES_PATH = kept('photos.overrides.json');
 // Where each photograph was taken, placed by hand in Scout. Deliberately NOT
 // in OVERRIDES_PATH and git-ignored: the repository is public, and a push

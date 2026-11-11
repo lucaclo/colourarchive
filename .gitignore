@@ -15,6 +15,10 @@ photos.shared.json
 photos.places-dismissed.json
 photos.sky-readings.json
 photos.rolls.json
+# Photographers you follow, and their cached public work — private
+photographers.json
+instagram.json
+.photographer-cache/
 
 # Local Netlify folder
 .netlify
@@ -31,7 +35,9 @@ certs/
 
 # Source imagery — kept out of git, synced separately
 photos/
-inspiration/
+# Anchored: unanchored, this also hid src/pages/inspiration/ and
+# src/pages/api/inspiration/ from git.
+/inspiration/
 
 # macOS
 .DS_Store
@@ -43,3 +49,14 @@ inspiration/
 desktop/build/
 desktop/dist/
 desktop/.public/
+
+# Design-audit screenshots (contain archive photos; the repo is public)
+/design-shots/
+
+# Replica screenshots and exports (contain archive photos; the repo is public)
+/replica/**/*.png
+/replica/**/*.jpg
+/replica/**/*.webp
+/replica/**/*.pdf
+# Third-party reference images
+/Fan-Ho-1.avif

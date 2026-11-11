@@ -249,7 +249,11 @@ export function directionalIntensity(altitude: number, theme: BasemapTheme = 'da
   // shaded wall at 22% — chocolate brown. The pastel map keeps shaded faces
   // between half and two-thirds lit, the way skylight actually fills them,
   // and still rakes harder at dawn than at noon.
-  if (theme === 'light') return 0.32 + 0.2 * clamp01(1 - altitude / 25);
+  // 0.32 was set when the pastel buildings were tan; on today's near-white
+  // ones it left walls within a few levels of their roofs, and a block of the
+  // City read as one pale mass with its setbacks gone. 0.44 puts a shaded
+  // wall around two-thirds lit — still skylight, not brown.
+  if (theme === 'light') return 0.44 + 0.2 * clamp01(1 - altitude / 25);
   return 0.42 + 0.36 * clamp01(1 - altitude / 25);
 }
 
@@ -331,7 +335,8 @@ export function lightPosition(azimuth: number, altitude: number): [number, numbe
 export interface PaintOverride {
   layerId: string;
   property: string;
-  value: string | number;
+  /** A colour, a number, or a style expression (zoom-dependent values). */
+  value: string | number | unknown[];
 }
 
 interface MinimalLayer {
@@ -489,11 +494,13 @@ const PASTEL = {
   boundary: ['#b9b5ae', '#4a5062'],
   label: ['#5d6168', '#aab1be'],
   placeLabel: ['#2b2e33', '#d8dce4'],
-  waterLabel: ['#4f7fa8', '#7f9fc4'],
+  waterLabel: ['#33618c', '#8fb0d4'],
   halo: ['#ffffff', '#12161f'],
 } as const satisfies Record<string, Pair>;
 
 const mixHex = ([day, night]: Pair, t: number) => hex(mix(rgb(night), rgb(day), t));
+/** Water names on the zoomed-out globe, whose ocean the wash keeps pale. */
+const WATER_LABEL_GLOBE = PASTEL.waterLabel[0];
 
 /**
  * Paint overrides for the light style at a given sun altitude. Driven off the
@@ -541,18 +548,87 @@ export function pastelOverrides(layers: MinimalLayer[], altitude: number): Paint
       else if (/trunk|primary|secondary|tertiary|link/i.test(id)) push(id, 'line-color', PASTEL.roadMajor);
       else if (/path|pedestrian/i.test(id)) push(id, 'line-color', PASTEL.path);
       else push(id, 'line-color', PASTEL.road);
+    } else if (source === 'transportation' && type === 'fill') {
+      // Pedestrian areas, bridge decks among them: flat paper, not the stock
+      // hatch (see `pastelUnpatterned`).
+      push(id, 'fill-color', PASTEL.path);
     } else if (source === 'building' && type === 'fill') {
       push(id, 'fill-color', PASTEL.building);
       push(id, 'fill-outline-color', PASTEL.buildingEdge);
     } else if (source === 'boundary' && type === 'line') {
       push(id, 'line-color', PASTEL.boundary);
+    } else if (type === 'symbol' && /water/i.test(id)) {
+      // Ocean and sea names sit on water, never on a mixed ground, so they
+      // need no halo: a white outline on blue was the heavy, hard-to-read
+      // part. Zoomed out the globe's wash keeps the ocean pale whatever the
+      // hour, so they stay dark blue there and take the hour's colour as
+      // you zoom in to where the water itself darkens at night.
+      out.push({ layerId: id, property: 'text-color', value: ['interpolate', ['linear'], ['zoom'], 3, WATER_LABEL_GLOBE, 6, mixHex(PASTEL.waterLabel, t)] });
+      out.push({ layerId: id, property: 'text-halo-width', value: 0 });
     } else if (type === 'symbol') {
-      const pair = /water/i.test(id) ? PASTEL.waterLabel : source === 'place' ? PASTEL.placeLabel : PASTEL.label;
+      const pair = source === 'place' ? PASTEL.placeLabel : PASTEL.label;
       push(id, 'text-color', pair, textT);
       push(id, 'text-halo-color', PASTEL.halo, textT);
     }
   }
   return out;
+}
+
+/**
+ * Paint for the satellite hybrid: the light style's roads and labels over the
+ * imagery, quieted the way the pastel map quiets them over paper.
+ *
+ * Over a photograph the stock palette is at its loudest — saturated yellow
+ * trunk roads and orange casings drawn across rooftops — and every one of
+ * those lines competes with the arc, the rays and the shadows, which are the
+ * content. So roads become thin white lines whose opacity follows their rank,
+ * casings go, footprint fills go (the roofs are in the picture), and labels
+ * turn white on a dark halo, which is legible on any ground the imagery has.
+ */
+export function satelliteOverrides(layers: MinimalLayer[]): Array<{ layerId: string; property: string; value: string | number }> {
+  const out: Array<{ layerId: string; property: string; value: string | number }> = [];
+  const push = (layerId: string, property: string, value: string | number) => out.push({ layerId, property, value });
+  for (const layer of layers) {
+    const { id, type } = layer;
+    const source = layer['source-layer'];
+    if (source === 'transportation' && type === 'line') {
+      if (/casing/i.test(id)) {
+        push(id, 'line-opacity', 0);
+        continue;
+      }
+      push(id, 'line-color', '#ffffff');
+      if (/rail|hatching/i.test(id)) push(id, 'line-opacity', 0.3);
+      else if (/path|pedestrian|track/i.test(id)) push(id, 'line-opacity', 0.26);
+      else if (/motorway|trunk|primary|secondary|tertiary/i.test(id)) push(id, 'line-opacity', 0.62);
+      else push(id, 'line-opacity', 0.42);
+    } else if (source === 'building' && type === 'fill') {
+      push(id, 'fill-opacity', 0);
+    } else if (source === 'boundary' && type === 'line') {
+      push(id, 'line-color', '#ffffff');
+      push(id, 'line-opacity', 0.45);
+    } else if ((source === 'water' || source === 'waterway') && type === 'line') {
+      push(id, 'line-opacity', 0);
+    } else if (type === 'symbol') {
+      push(id, 'text-color', /water/i.test(id) ? '#d6e8f7' : '#ffffff');
+      push(id, 'text-halo-color', 'rgba(8, 10, 14, 0.78)');
+      push(id, 'text-halo-width', 1.3);
+    }
+  }
+  return out;
+}
+
+/**
+ * Place labels that should carry one name rather than two scripts.
+ *
+ * The style prints the Latin name over the local one ("Libya" above its
+ * Arabic), which on the welcome globe doubled every country and set Sri
+ * Lanka in a local fallback face. The chrome around the map is English, and
+ * a muted map should say a place once.
+ */
+export const ONE_NAME: unknown = ['coalesce', ['get', 'name_en'], ['get', 'name:en'], ['get', 'name:latin'], ['get', 'name']];
+
+export function placeLabelLayers(layers: MinimalLayer[]): string[] {
+  return layers.filter((l) => l.type === 'symbol' && l['source-layer'] === 'place').map((l) => l.id);
 }
 
 /**
@@ -567,6 +643,16 @@ export function pastelHidden(layers: MinimalLayer[]): string[] {
     .filter((l) => l.type === 'symbol')
     .filter((l) => /shield|one_way|poi_r20|poi_r7|poi_transit/i.test(l.id))
     .map((l) => l.id);
+}
+
+/**
+ * Fills the pastel map draws flat instead of with the stock hatch. The
+ * pedestrian-area pattern turned into diagonal moiré at eye level, where
+ * a bridge deck fills the lower half of the screen at a grazing angle, and
+ * on a flat paper map a hatch was one more texture competing with the light.
+ */
+export function pastelUnpatterned(layers: MinimalLayer[]): string[] {
+  return layers.filter((l) => l.type === 'fill' && l['source-layer'] === 'transportation').map((l) => l.id);
 }
 
 /** POI layers kept for their names, with the icon itself taken off. */

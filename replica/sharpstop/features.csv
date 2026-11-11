@@ -1,0 +1,34 @@
+feature,area,priority,original,clone,notes
+Side-view depth-of-field diagram with sharp zone,Scout frame,should,yes,partial,depthOfField exists as text only
+Plain one-line DoF answer ("Sharp from 1.8 m to infinity"),Scout frame,should,yes,partial,note text exists; not the short answer first
+One-tap hyperfocal,Scout frame,should,yes,no,hyperfocalDistanceMm exists; no control; focus is a fixed list
+Front/back split explained,Scout frame,could,yes,no,
+Circle of confusion per sensor as a stated print standard,Scout + Book,should,yes,partial,pixel-pitch CoC; standard never named; Book knows print size
+Focus stacking plan (fewest shots with overlap),Scout,should,yes,no,
+Stacked-zone diagram,Scout,should,yes,no,
+Field checklist with big targets,Scout,could,yes,no,
+Share plan as text,Scout,could,yes,partial,Scout shares links
+Core up in full darkness window,Scout astro,must,yes,yes,galactic.ts coreTimes/coreNight
+Moon illumination,Scout astro,must,yes,yes,moon.ts
+Direction to face,Scout astro,must,yes,yes,core fold
+Three best core nights in next 30 days,Scout astro,should,yes,no,coreNight is per chosen night only
+NPF rule with pixel pitch,Scout astro,must,yes,yes,astrophoto.ts (measured not fitted)
+500 rule shown for comparison,Scout astro,could,yes,partial,mentioned in module notes
+Night log,Scout,could,yes,yes,visits
+ND shutter from stops,Scout exposure,must,yes,yes,exposure.ts
+Optical density and ND factor display,Scout exposure,could,yes,no,
+Warning past 30 minutes,Scout exposure,should,yes,no,
+Film reciprocity (not in SharpStop),Scout exposure,should,no,no,the archive shoots film
+Field of view at a subject distance,Scout frame,could,yes,partial,cone and FOV angles; no width x height at distance
+Person figure to scale,Scout frame/AR,could,yes,no,monolith slab exists
+Saved kit of bodies and lenses,Scout,must,yes,no,EXIF already lists every body and lens
+Six sensor formats each with own CoC,Scout,should,yes,partial,SENSORS table exists
+Hyperfocal card PDF per lens,Scout/print,could,yes,no,pdf-pages.ts exists
+Glossary,Scout,could,yes,partial,infotips per control
+Metres or feet,Scout,could,yes,no,metric only
+Amber-on-black night-vision theme,Scout,should,yes,no,
+"Offline, no account, no ads",all,must,yes,yes,
+Custom places in their own time zone,Scout,must,yes,yes,kept spots
+Tonight plan banner,Scout,should,yes,yes,go-tonight
+Localisation (FR DE JA KO),all,skip,yes,no,out of scope for a personal archive
+Rating prompt after a usable result,all,skip,yes,no,App Store concern

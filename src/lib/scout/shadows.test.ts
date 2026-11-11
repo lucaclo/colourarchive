@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  terrainReach,
   BoundsGrid,
   boundsOverlap,
   buildingHeight,
@@ -726,5 +727,25 @@ describe('a precomputed hull is the same answer, not a cheaper one', () => {
       25,
     );
     assert.deepEqual(withHulls, without);
+  });
+});
+
+describe('terrainReach', () => {
+  const base = { originLon: 114.19, originLat: 22.27, baseM: 50, heightM: 120, bearingDeg: 90, tanAlt: Math.tan((10 * Math.PI) / 180), capM: 2000, stepM: 10 };
+  const metresEast = (lon: number) => (lon - 114.19) * 111_320 * Math.cos((22.27 * Math.PI) / 180);
+
+  it('is null on flat ground', () => {
+    assert.equal(terrainReach({ ...base, ground: () => 50 }), null);
+  });
+
+  it('stops a shadow where a 1-in-3 slope meets the ray, about 240 m out', () => {
+    const d = terrainReach({ ...base, ground: (lon) => 50 + Math.max(0, metresEast(lon)) / 3 })!;
+    // 120 − d·tan10° = d/3  →  d = 120 / (1/3 + 0.1763) ≈ 235.5
+    assert.ok(Math.abs(d - 235.5) < 2, `${d}`);
+  });
+
+  it('finds the near face of a ridge to the metre, whatever the step', () => {
+    const d = terrainReach({ ...base, stepM: 40, ground: (lon) => (Math.abs(metresEast(lon) - 300) < 25 ? 400 : 50) })!;
+    assert.ok(d > 273 && d <= 276, `${d}`);
   });
 });

@@ -1,0 +1,14 @@
+feature,area,priority,original,clone,notes
+Spline tone curve matching Lightroom's natural cubic spline,Match engine,must,yes,yes,G1; verified against Lightroom exports
+Curve saturation lift (RGB tone in Melissa) modelled,Match engine,must,yes,yes,G2
+Pixel-level simulation of the preset before answering,Match engine,must,yes,yes,G3; Deep Preset / RAWmakase parity idea
+Measured Colour Mixer / Saturation / Vibrance response,Match engine,must,yes,yes,G4; RAWmakase tables (MIT)
+Measured Colour Grading response with Blending/Balance,Match engine,must,yes,yes,G4
+Lightroom stage order (mixer before grading),Match engine,must,yes,yes,G5
+Exposure as linear-light gain,Match engine,should,yes,yes,G6
+Preview renders the same model as the solver,Match preview,must,yes,yes,preview is the evidence
+Predicted closeness number (ΔE) shown honestly,Match result,should,no,yes,G7; nobody publishes this
+Composition-aware tone targets,Match engine,should,partial,yes,G8
+Similarity-weighted multiple references,Match result,could,yes,yes,Capture One Match Look
+Accuracy benchmark script with before/after numbers,Match tooling,must,no,yes,proves the round
+Point Color swatches for colour-defined regions in the preset,Match engine,should,yes,yes,skin/foliage/water had no automatic mask

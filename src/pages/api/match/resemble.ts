@@ -8,6 +8,8 @@ import { INSPIRATION_DIR, PHOTOS_DIR, imgUrl } from '../../../lib/paths';
 import { looksFor, measureLook, photoLookRequest } from '../../../lib/match/looks';
 import { TOO_FAR, describeParts, rankResemblance, trimSignature } from '../../../lib/match/resemble';
 import { averageRegions } from '../../../lib/match/group';
+import { monochromeOf } from '../../../lib/match/monochrome';
+import type { PhotoAnalysis } from '../../../lib/match/types';
 import type { Photo } from '../../../lib/types';
 import type { LookSignature } from '../../../lib/match/resemble';
 
@@ -65,7 +67,14 @@ export const GET: APIRoute = async ({ url }) => {
             averageRegions(signatures.map((s) => s.regions)),
           );
 
-    const ranked = rankResemblance(reference, archiveLooks.signatures, {
+    // A black-and-white reference is only "graded like" another black-and-
+    // white photograph. Ranked against everything, the nearest tone curves
+    // belonged to a red taxi and a green hillside, which no one would call
+    // the same grade.
+    const monoOf = (sig: LookSignature) => monochromeOf({ regions: sig.regions } as PhotoAnalysis);
+    const monochrome = monoOf(reference);
+    const pool = monochrome ? archiveLooks.signatures.filter((sig) => monoOf(sig)) : archiveLooks.signatures;
+    const ranked = rankResemblance(reference, pool, {
       limit,
       maxDistance: TOO_FAR,
     });
@@ -80,6 +89,7 @@ export const GET: APIRoute = async ({ url }) => {
       archiveSize: archive.length,
       measuredNow: archiveLooks.measured,
       unreadable: archiveLooks.failed.length,
+      monochrome,
       matches: ranked
         .map((r) => {
           const photo = byId.get(r.id);

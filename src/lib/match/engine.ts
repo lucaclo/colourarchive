@@ -1,6 +1,7 @@
 import type { Calibration } from './calibration';
 import { composeReference } from './composition';
 import type { LrTables } from './lr-model';
+import { asMonochrome, monochromeOf } from './monochrome';
 import { refineSolution } from './refine';
 import { solveMatch, type MatchSolution, type WeightedReference } from './solve';
 import { mergeReferences } from './solve';
@@ -39,7 +40,26 @@ export function solveAndRefine(
   const composed = list.length === 1 ? composedEach[0] : null;
 
   let solution = solveMatch(reference, mine, { calibration: opts.calibration });
-  if (opts.tables) solution = refineSolution(solution, reference, mine, opts.tables, opts.calibration);
+  // Black-and-white and toned references get a grey answer, held there
+  // through refinement rather than argued down to it — see monochrome.ts.
+  const mono = monochromeOf(reference);
+  if (mono) {
+    solution = {
+      ...solution,
+      faithful: asMonochrome(solution.faithful, mono),
+      restrained: asMonochrome(solution.restrained, mono),
+      restrainedIntent: undefined,
+    };
+    solution.notes.unshift({
+      severity: 'info',
+      panel: 'Overall',
+      text:
+        mono === 'mono'
+          ? 'The reference is black and white, so the preset takes the colour out (Saturation −100) and matches its tones. The Colour Mixer’s luminance sets how each colour turns grey.'
+          : 'The reference is a toned black and white, so the preset takes the colour out (Saturation −100) and puts its tint back with Colour Grading.',
+    });
+  }
+  if (opts.tables) solution = refineSolution(solution, reference, mine, opts.tables, opts.calibration, mono);
 
   if (composed && composed.mismatch >= 0.2) {
     const d = composed.differences[0];

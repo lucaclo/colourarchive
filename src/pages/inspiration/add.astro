@@ -1,0 +1,67 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { addInspiration, fetchImageFromUrl } from '../../lib/inspiration';
+import { autoCredit } from '../../lib/photographers/credit';
+import { creditLabel } from '../../lib/photographers/kinds';
+
+// Save to the board from the iPad's share sheet. An Apple Shortcut that
+// receives a link opens this page with ?url= (see README, "Saving from the
+// share sheet"); the Mac fetches it, follows a page link to its picture, and
+// adds it like the board's own "Paste a link" does. A Shortcut that receives
+// an image posts it to /api/inspiration/add instead.
+export const prerender = false;
+
+const url = Astro.url.searchParams.get('url')?.trim() || '';
+const source = Astro.url.searchParams.get('source')?.trim() || '';
+let state: 'added' | 'already' | 'error' | 'empty' = 'empty';
+let message = '';
+let thumb = '';
+let by: { id: string; name: string } | null = null;
+// Only a navigation the person started (a Shortcut's "Open URLs" arrives as
+// `none`) or this site itself: another page must not be able to add to the
+// board by embedding this URL. Browsers too old to send the header are let through.
+const site = Astro.request.headers.get('sec-fetch-site');
+const trusted = site === null || site === 'none' || site === 'same-origin';
+if (url && !trusted) {
+  state = 'error';
+  message = 'Open this from the share sheet, not from another site.';
+} else if (url) {
+  try {
+    if (!/^https?:\/\//i.test(url)) throw new Error('That is not a web link.');
+    const { buf, name, html } = await fetchImageFromUrl(url);
+    const { photo, existed } = await addInspiration(buf, name, source || url);
+    if (photo && !existed) by = await autoCredit(photo.id, { url, html, buf, typed: source });
+    state = existed ? 'already' : 'added';
+    thumb = photo?.derivatives[0]?.avif ?? '';
+  } catch (err) {
+    state = 'error';
+    message = err instanceof Error ? err.message : String(err);
+  }
+}
+---
+
+<Layout title="Add to the board — Colour Archive" tab="inspiration">
+  <main class="share-add">
+    <h1 class="visually-hidden">Add to the board</h1>
+    {thumb && <img src={thumb} alt="" class="share-thumb" />}
+    <p class="share-line" role="status">
+      {state === 'added' && 'Added to the board'}
+      {state === 'already' && 'Already on the board'}
+      {state === 'error' && message}
+      {state === 'empty' && 'Nothing was shared.'}
+    </p>
+    {by && <a href={`/inspiration?ph=${encodeURIComponent(by.id)}`} class="share-open share-by">More by {creditLabel(by.name)}</a>}
+    <a href="/inspiration" class="share-open">Open the board</a>
+  </main>
+</Layout>
+
+<style>
+  .share-add {
+    min-height: 70svh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--sp-4); padding: var(--sp-6) var(--edge); text-align: center; font-family: var(--font-ui);
+  }
+  .share-thumb { width: min(60vw, 18rem); border-radius: var(--r-sm); box-shadow: 0 20px 40px -20px rgb(0 0 0 / 0.7); }
+  .share-line { font-family: var(--font-display); font-style: italic; font-size: 1.4rem; margin: 0; color: var(--fg); max-width: 30rem; }
+  .share-open { color: var(--fg); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; font-size: var(--t-body); }
+  .share-by { font-family: var(--font-note); font-style: italic; font-size: 1.1rem; }
+</style>

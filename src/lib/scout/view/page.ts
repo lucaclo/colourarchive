@@ -52,9 +52,13 @@ import {
   BUILDING_EDGE_COLOUR,
   contrastOverrides,
   pastelHidden,
+  pastelUnpatterned,
   pastelIconless,
   pastelMix,
   pastelOverrides,
+  placeLabelLayers,
+  ONE_NAME,
+  satelliteOverrides,
   treeColours,
   daylightWash,
   directionalIntensity,
@@ -110,6 +114,7 @@ import {
   boundsOverlap,
   buildingHeight,
   castPrisms,
+  terrainReach,
   castShadow,
   castShadows,
   convexHull,
@@ -208,7 +213,6 @@ import { bracketingSolstices, seasonEvents, seasonName } from '../almanac';
 import {
   buildBuildingGrid,
   buildSkyline,
-  isSunlit,
   lightWindows,
   mergeHorizon,
   nearbyBuildings,
@@ -218,7 +222,7 @@ import {
   type LightWindow,
   type Skyline,
 } from '../skyline';
-import { compareSpots, describeLighting, litMinutesAhead } from '../lighting';
+import { compareSpots, litMinutesAhead } from '../lighting';
 import {
   elevationAt,
   terrainFacets,
@@ -261,7 +265,6 @@ import {
   APERTURES,
   FOCAL_LENGTHS,
   SENSORS,
-  checkFraming,
   depthOfField,
   describeLens,
   describeFrameSize,
@@ -272,7 +275,6 @@ import {
   frameAxis,
   frameOffsetToSky,
   frameWedge,
-  frameWidthAt,
   sensorByKey,
   type Orientation,
   type SkyTarget,
@@ -322,7 +324,7 @@ import {
 import { WIDTH, inkColour, liftColour, rgbOf } from './palette';
 import { buildingFill, DRAWN_IN_3D, shadowDarkness, shadowFade, windowStyle } from './shading';
 import { mappedTreesIn } from './tree-client';
-import { scatterTrees, treeParts, type ScatterArea, type Tree } from '../trees';
+import { scatterTrees, treeJitter, treeParts, type ScatterArea, type Tree } from '../trees';
 import { bearingLabel, formatCoords, moonDiscPath, shadowCaveat } from './format';
 import {
   SPOTS_KEY,
@@ -340,6 +342,7 @@ import { pace } from './pacing';
 import type { AlignmentPanel, HorizonReading } from './alignment-panel';
 import { createGapPanel } from './gap-panel';
 import { createMineLayer } from './mine';
+import { initToolTabs } from './tool-tabs';
 import type { ColourGap } from '../../gaps';
 import { createTidePanel, type TideApiResponse } from './tide-panel';
 import type { GoTonightPanel, GoTonightPair } from './go-tonight-panel';
@@ -856,12 +859,25 @@ export async function startScout(): Promise<void> {
     // The space round the globe is only worth its memory while it shows.
     if (spaceView) {
       const m = map;
+      /* Up close MapLibre's globe can leave a strip of the canvas unpainted
+         along the bottom edge (it measured 30 px by 970 under the tab bar at
+         z12 with the sidebar's padding), and the haze's navy showed through
+         as a black bar. While the globe fills the view the haze takes the
+         land colour instead, so a gap reads as ground. Not while the night
+         dims the ground: that look is the navy showing through on purpose. */
+      const hazeBox = haze instanceof HTMLElement ? haze : null;
       const check = () => {
         const box = m.getContainer();
-        spaceView.setVisible(!globeFillsView(m.getZoom(), box.clientWidth, box.clientHeight));
+        const fills = globeFillsView(m.getZoom(), box.clientWidth, box.clientHeight);
+        spaceView.setVisible(!fills);
+        if (!hazeBox) return;
+        const ground = fills && m.getLayer('background') ? m.getPaintProperty('background', 'background-color') : null;
+        const opacity = ground ? m.getPaintProperty('background', 'background-opacity') : null;
+        hazeBox.style.backgroundColor = typeof ground === 'string' && (opacity == null || opacity === 1) ? ground : '';
       };
       m.on('zoomend', check);
       m.on('resize', check);
+      m.on('styledata', check);
       check();
     }
   }
@@ -925,6 +941,13 @@ export async function startScout(): Promise<void> {
         // this page never fires there — which is correct behaviour and makes
         // the page impossible to measure from an automated browser without it.
         tick: () => runFrame(),
+        // How many gathered buildings have a shadow stopped by rising ground,
+        // and the terrain relief under them — see `measureReach`.
+        reach: () => ({
+          stopped: castable.filter((b) => b.reachM != null).length,
+          of: castable.length,
+          relief: terrainShadows?.state().field ? reliefUnder(terrainShadows.state().field!) : null,
+        }),
         setMinute: (value: number) => setMinute(value),
         // The sightline ring, which is also the alignment finder's aim. Placing
         // it is a drag on the map, and a drag is the gesture an automated
@@ -1171,28 +1194,63 @@ export async function startScout(): Promise<void> {
    * the view still wants it.
    */
   /**
-   * The floating chrome takes its tone from the map under it, as Liquid Glass
-   * does (HIG `liquid-glass.md`: small controls adapt light or dark to the
-   * content beneath). Pale paper gets light glass; the dark style and imagery
-   * get dark. Keyed off the basemap for the same reason the map's own inks
-   * are — `theme()` calls satellite light, and imagery is not.
+   * The floating chrome is dark glass over every basemap, so the Layers panel,
+   * the map buttons and the tab bar match the black sheet beside them. Only
+   * the map's own tone still follows the basemap.
    */
   function applyGlass(mix = glassMix) {
     glassMix = mix;
     const stageEl = document.querySelector<HTMLElement>('.scout-stage');
-    // On the pastel map the glass follows the ground into the night: light
-    // over paper, dark once the map is more dark than light.
     if (!stageEl) return;
-    // Night vision wants dark chrome whatever the map (issue #157).
-    stageEl.dataset.glass = basemap === 'light' && mix >= 0.5 && !nightVisionOn() ? 'light' : 'dark';
+    stageEl.dataset.glass = 'dark';
     // What the map looks like right now: the pastel style is paper by day
     // and dark at night, and only paper wants inverting for night vision.
     stageEl.dataset.mapTone = basemap === 'satellite' ? 'imagery' : basemap === 'light' && mix >= 0.5 ? 'paper' : 'dark';
   }
 
+  /** The stylesheet the map holds; satellite shares the light one. */
+  let loadedStyle: string = STYLES.light;
+
   function swapStyle() {
     applyGlass();
     if (!map) return;
+    const wanted = STYLES[basemap === 'dark' ? 'dark' : 'light'];
+    // Light and satellite are the same stylesheet with imagery slid under it,
+    // so moving between them is a layer, not a style: instant, and none of the
+    // half-loaded window in which terrain and markers crash the renderer.
+    if (wanted === loadedStyle) {
+      // Not loaded yet: its own `style.load` installs whichever is wanted.
+      if (!styleReady) return;
+      if (basemap === 'satellite') installSatellite(map);
+      else {
+        uninstallSatellite(map);
+        for (const id of pastelIconless(map.getStyle().layers ?? [])) {
+          try {
+            map.setPaintProperty(id, 'icon-opacity', 0);
+          } catch {
+            /* no icon on this one */
+          }
+        }
+        applyPastel(current()?.altitude ?? WELCOME_ALTITUDE, true);
+      }
+      applyGlass();
+      // The shadow's tint depends on the basemap (see applySunLight).
+      invalidate({ sky: true });
+      map.triggerRepaint();
+      return;
+    }
+    loadedStyle = wanted;
+    // Imagery tiles still queued when their source is torn down trip a bug in
+    // MapLibre's image queue (an abort controller read after it was deleted).
+    if (map.getSource(SATELLITE_SOURCE)) {
+      try {
+        if (map.getLayer('scout-satellite')) map.removeLayer('scout-satellite');
+        map.removeSource(SATELLITE_SOURCE);
+      } catch {
+        /* already gone */
+      }
+    }
+    satelliteSaved.clear();
     styleReady = false;
     try {
       map.setTerrain(null);
@@ -1235,6 +1293,7 @@ export async function startScout(): Promise<void> {
           lib: maplibregl,
           map: () => map,
           notify: (text) => notify(text),
+          hotspotsOn: () => shown.photos,
           scoutAt: (at) => {
             if (!centre) placeFirstSpotAt(at);
             else {
@@ -1573,7 +1632,10 @@ export async function startScout(): Promise<void> {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: [] },
       cluster: true,
-      clusterRadius: 44,
+      // Wide enough that two 34px badges can't touch: at 44 they overlapped
+      // ("83" over "44" by Tower Bridge), and more so once the map tilts and
+      // the far side's spacing shrinks on screen.
+      clusterRadius: 64,
       clusterMaxZoom: 15,
       clusterProperties: { total: ['+', ['get', 'count']] },
     });
@@ -1620,6 +1682,10 @@ export async function startScout(): Promise<void> {
         'text-field': ['to-string', ['get', 'count']],
         'text-size': 11,
         'text-allow-overlap': true,
+        // The map's own face, which the tile server actually has. Left to
+        // MapLibre's default stack it asked for Open Sans, got 404s for every
+        // glyph range, and drew the digits in a local fallback font.
+        'text-font': ['Noto Sans Bold'],
       },
       paint: { 'text-color': '#08121c' },
     });
@@ -1629,7 +1695,9 @@ export async function startScout(): Promise<void> {
       source: PHOTO_SOURCE,
       filter: grouped,
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['get', 'total'], 1, 12, 10, 15, 60, 20, 200, 24],
+        // Capped well below the old 24 px: on a phone a 160-photo bubble was
+        // 48 px across, sitting on the pin and burying the labels around it.
+        'circle-radius': ['interpolate', ['linear'], ['get', 'total'], 1, 10, 10, 12, 60, 15, 200, 17],
         'circle-color': '#f4efe6',
         'circle-opacity': 0.95,
         'circle-stroke-width': 1.5,
@@ -1645,6 +1713,10 @@ export async function startScout(): Promise<void> {
         'text-field': ['to-string', ['get', 'total']],
         'text-size': 11,
         'text-allow-overlap': true,
+        // The map's own face, which the tile server actually has. Left to
+        // MapLibre's default stack it asked for Open Sans, got 404s for every
+        // glyph range, and drew the digits in a local fallback font.
+        'text-font': ['Noto Sans Bold'],
       },
       paint: { 'text-color': '#08121c' },
     });
@@ -1689,6 +1761,10 @@ export async function startScout(): Promise<void> {
         'text-field': ['to-string', ['get', 'order']],
         'text-size': 12,
         'text-allow-overlap': true,
+        // The map's own face, which the tile server actually has. Left to
+        // MapLibre's default stack it asked for Open Sans, got 404s for every
+        // glyph range, and drew the digits in a local fallback font.
+        'text-font': ['Noto Sans Bold'],
       },
       paint: { 'text-color': '#08121c' },
     });
@@ -1700,9 +1776,18 @@ export async function startScout(): Promise<void> {
       ? contrastOverrides(map.getStyle().layers ?? [])
       : []) {
       try {
-        map.setPaintProperty(layerId, property, value);
+        map.setPaintProperty(layerId, property, value as never);
       } catch {
         /* a layer the style no longer has is not worth failing over */
+      }
+    }
+
+    // One name a place, not two scripts — see `ONE_NAME`.
+    for (const id of placeLabelLayers(map.getStyle().layers ?? [])) {
+      try {
+        map.setLayoutProperty(id, 'text-field', ONE_NAME as never);
+      } catch {
+        /* not a text layer after all */
       }
     }
 
@@ -1713,6 +1798,7 @@ export async function startScout(): Promise<void> {
     if (basemap === 'light') {
       const styleLayers = map.getStyle().layers ?? [];
       for (const id of pastelHidden(styleLayers)) map.setLayoutProperty(id, 'visibility', 'none');
+      for (const id of pastelUnpatterned(styleLayers)) map.setPaintProperty(id, 'fill-pattern', undefined);
       for (const id of pastelIconless(styleLayers)) {
         try {
           map.setPaintProperty(id, 'icon-opacity', 0);
@@ -1822,7 +1908,7 @@ export async function startScout(): Promise<void> {
           filter: ['==', ['get', 'part'], part],
           layout: { visibility: shown.trees ? 'visible' : 'none' },
           paint: {
-            'fill-extrusion-color': part === 'crown' ? treeColours(WELCOME_ALTITUDE).crown : treeColours(WELCOME_ALTITUDE).trunk,
+            'fill-extrusion-color': (part === 'crown' ? shadedLeaves(treeColours(WELCOME_ALTITUDE).crown) : treeColours(WELCOME_ALTITUDE).trunk) as never,
             'fill-extrusion-base': ['get', 'base'],
             'fill-extrusion-height': ['get', 'top'],
             'fill-extrusion-opacity': 1,
@@ -2041,6 +2127,62 @@ export async function startScout(): Promise<void> {
         }
       }
     }
+    // The same quiet the paper map has: no shields, arrows or shop icons, and
+    // roads and labels re-inked for a photograph. What each property was is
+    // kept, so going back to paper restores it without reloading the style.
+    for (const id of pastelHidden(layers)) {
+      try {
+        instance.setLayoutProperty(id, 'visibility', 'none');
+      } catch {
+        /* not in this style */
+      }
+    }
+    const paint = [
+      ...satelliteOverrides(layers),
+      ...pastelIconless(layers).map((layerId) => ({ layerId, property: 'icon-opacity', value: 0 })),
+    ];
+    for (const { layerId, property, value } of paint) {
+      const key = `${layerId}|${property}`;
+      try {
+        if (!satelliteSaved.has(key)) satelliteSaved.set(key, instance.getPaintProperty(layerId, property));
+        instance.setPaintProperty(layerId, property, value as never);
+      } catch {
+        /* a property this layer type does not take */
+      }
+    }
+  }
+
+  /** What `installSatellite` re-inked, as it was, keyed `layer|property`. */
+  const satelliteSaved = new Map<string, unknown>();
+
+  /**
+   * Back to paper without a new style: the imagery out, the ground fills back,
+   * the paint the hybrid changed put back as it was, and the pastel palette
+   * laid over it again. A `setStyle` here would tear down and rebuild every
+   * source and layer on the page to get back to the stylesheet it already has.
+   */
+  function uninstallSatellite(instance: MapLibreMap) {
+    if (instance.getLayer('scout-satellite')) instance.removeLayer('scout-satellite');
+    if (instance.getSource(SATELLITE_SOURCE)) instance.removeSource(SATELLITE_SOURCE);
+    for (const layer of instance.getStyle().layers ?? []) {
+      const source = sourceLayerOf(layer);
+      if (source && GROUND_LAYERS.has(source) && layer.type === 'fill') {
+        try {
+          instance.setLayoutProperty(layer.id, 'visibility', 'visible');
+        } catch {
+          /* gone from the style already */
+        }
+      }
+    }
+    for (const [key, value] of satelliteSaved) {
+      const [layerId, property] = key.split('|');
+      try {
+        instance.setPaintProperty(layerId, property, value as never);
+      } catch {
+        /* gone from the style already */
+      }
+    }
+    satelliteSaved.clear();
   }
 
   /* ── Drawing ─────────────────────────────────────────────────────────── */
@@ -2294,71 +2436,6 @@ export async function startScout(): Promise<void> {
         ],
       });
     }
-  }
-
-  /**
-   * Where the sun and the moon fall relative to the picture.
-   *
-   * Kept out of `drawFrame` because it is a different kind of statement and
-   * updates on a different clock: the wedge moves when you turn the camera, this
-   * moves every minute of the slider.
-   */
-  function renderFraming() {
-    const box = $<HTMLElement>('framing');
-    const now = current();
-    if (!shown.frame || !centre || !now) {
-      box.hidden = true;
-      return;
-    }
-    box.hidden = false;
-
-    const sensor = sensorByKey(lens.sensor) ?? SENSORS[0];
-    const fov = currentFov();
-    const aim = { bearing: lens.bearing, tiltDeg: lens.tiltDeg };
-    $('framing-lens').textContent = `${describeLens(sensor, lens.focalLengthMm, fov)} · ${compassPoint(lens.bearing)} ${Math.round(lens.bearing)}°${lens.tiltDeg ? `, ${lens.tiltDeg > 0 ? '+' : ''}${lens.tiltDeg}° tilt` : ''}`;
-
-    const sun = checkFraming({ azimuth: now.azimuth, altitude: now.altitude }, aim, fov);
-    // Below the horizon the framing arithmetic still runs and still answers, and
-    // the answer is worthless — you cannot photograph a sun that has set. Say
-    // that instead of the geometry.
-    $('framing-sun').textContent =
-      now.altitude <= -0.833
-        ? `Sun ${Math.round(Math.abs(sun.horizontalOffsetDeg))}° ${sun.horizontalOffsetDeg >= 0 ? 'right' : 'left'} of the aim, and below the horizon.`
-        : `Sun: ${sun.note}`;
-
-    // The join, for the pin. Two things this page already knows separately —
-    // where the sun is relative to the aim, and whether the sun reaches here at
-    // all — and the answer a photographer wants is the pair of them together.
-    // It lives here rather than in the spot box because it needs an aim, and
-    // the aim is a thing you set with the lens; asserting a direction from a
-    // bearing nobody chose would be the same fabrication `lighting.ts` refuses
-    // for a Commons photograph.
-    const litHere = spotWindows.length
-      ? Boolean(skyline && isSunlit(skyline, now.azimuth, now.altitude))
-      : false;
-    const verdict = describeLighting({
-      aimBearing: lens.bearing,
-      sunAzimuth: now.azimuth,
-      sunAltitude: now.altitude,
-      lit: litHere,
-    });
-    // A spot with no windows computed has not been found to be in shade, so
-    // say nothing rather than say "in shadow".
-    $('framing-light').textContent =
-      !spotWindows.length && now.altitude > 0
-        ? ''
-        : `Subject at this aim: ${verdict.note}.`;
-
-    const moon = moonSamples[Math.min(moonSamples.length - 1, Math.max(0, minute))];
-    $('framing-moon').textContent =
-      moon && moon.altitude > 0 && shown.moonPath
-        ? `Moon: ${checkFraming({ azimuth: moon.azimuth, altitude: moon.altitude }, aim, fov).note}`
-        : '';
-
-    // What the frame actually covers out at the ring, which is the number that
-    // decides whether the whole hill fits.
-    const acrossM = frameWidthAt(fov, radiusKm * 1000);
-    $('framing-width').textContent = `Across ${formatDistance(radiusKm * 1000)} out, the frame covers ${formatDistance(acrossM)}.`;
   }
 
   /* ── The line of sight ─────────────────────────────────────────────────
@@ -3189,6 +3266,30 @@ export async function startScout(): Promise<void> {
    * a deliberate *look* rather than a measurement of anything. Also the fallback
    * before a place is chosen, when there is no air to speak of.
    */
+  /**
+   * The sun's colour as a hillshade highlight: part of the way to white and
+   * half transparent. Opaque, an evening beam laid over every west-facing
+   * slope came out as a mauve-brown stain across the Alps that read as a
+   * rendering fault — the warmth belongs on the slope, not instead of it.
+   */
+  /**
+   * The crown colour, a touch lighter or darker per tree by its `shade`
+   * property — one canopy, not one green stamped across a park.
+   */
+  function shadedLeaves(colour: string): unknown {
+    const m = colour.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+    if (!m) return colour;
+    const channel = (h: string) => ['min', 255, ['*', parseInt(h, 16), ['coalesce', ['get', 'shade'], 1]]];
+    return ['rgba', channel(m[1]), channel(m[2]), channel(m[3]), 1];
+  }
+
+  function softHighlight(colour: string): string {
+    const m = colour.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+    if (!m) return colour;
+    const [r, g, b] = [m[1], m[2], m[3]].map((h) => Math.round(parseInt(h, 16) * 0.6 + 255 * 0.4));
+    return `rgba(${r}, ${g}, ${b}, 0.5)`;
+  }
+
   function sunPaintColour(altitude: number, air: ReturnType<typeof atmosphereNow> | null): string {
     return altitude > 0 && air ? beamColour(altitude, air) : sunlightColour(altitude);
   }
@@ -3206,7 +3307,7 @@ export async function startScout(): Promise<void> {
     lastPastel = mixNow;
     for (const { layerId, property, value } of pastelOverrides(map.getStyle().layers ?? [], altitude)) {
       try {
-        map.setPaintProperty(layerId, property, value);
+        map.setPaintProperty(layerId, property, value as never);
       } catch {
         /* a layer the style no longer has is not worth failing over */
       }
@@ -3264,7 +3365,7 @@ export async function startScout(): Promise<void> {
     applyPastel(centre ? altitude : WELCOME_ALTITUDE);
 
     set('scout-hillshade', 'hillshade-illumination-direction', Math.round(azimuth) % 360);
-    set('scout-hillshade', 'hillshade-highlight-color', sunPaintColour(altitude, air));
+    set('scout-hillshade', 'hillshade-highlight-color', softHighlight(sunPaintColour(altitude, air)));
     set('scout-hillshade', 'hillshade-shadow-color', shadowColour(altitude));
     // Deeper relief when the sun is low and raking, flat when it is overhead or
     // gone — the same reason the buildings' side-lighting peaks at dawn.
@@ -3279,13 +3380,16 @@ export async function startScout(): Promise<void> {
     // The custom layer holds the same ramp as a uniform. A shadow at dawn is a
     // different colour from one at noon, and that has to survive the change of
     // renderer or the two draw visibly different pictures.
-    shadowLayer.tint = rgbOf(shadowColour(altitude));
+    // Over a photograph the shadow darkens what is there. The paper map's
+    // coloured shadow, lifted for 3D, is a mid grey-blue — lighter than dark
+    // vegetation, so on satellite it read as bands of fog, not shade.
+    shadowLayer.tint = basemap === 'satellite' ? [0.02, 0.025, 0.04] : rgbOf(shadowColour(altitude));
     shadowLayer.opacity = cloudScale();
     set('scout-slab-shadow', 'fill-opacity', 0.55 * cloudScale());
     set('scout-buildings', 'fill-extrusion-color', buildingFill(altitude, themeOf(basemap)));
     windowLayer.style = windowStyle(altitude, themeOf(basemap));
     const leaves = treeColours(altitude);
-    set('scout-tree-crowns', 'fill-extrusion-color', leaves.crown);
+    set('scout-tree-crowns', 'fill-extrusion-color', shadedLeaves(leaves.crown));
     set('scout-tree-trunks', 'fill-extrusion-color', leaves.trunk);
     applySky(altitude, air);
   }
@@ -3347,13 +3451,27 @@ export async function startScout(): Promise<void> {
     return ['interpolate', ['linear'], ['zoom'], 0, boosted, 4, baseOpacity];
   }
 
+  /**
+   * The distance haze. It was the sky of a 2° sun at every hour — a dusk
+   * brown — so in 3D every daytime ridge and the sky above it went mauve.
+   * Low sun keeps that warm tone; as the sun climbs the haze follows the real
+   * sky and pales toward white, the way air does over distance by day.
+   */
+  function fogColour(altitude: number): string {
+    const base = skyColour(altitude);
+    const k = Math.max(0, Math.min(1, (altitude - 2) / 10)) * 0.6;
+    const m = base.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+    if (!m || k === 0) return base;
+    return `#${[m[1], m[2], m[3]].map((h) => Math.round(parseInt(h, 16) * (1 - k) + 236 * k).toString(16).padStart(2, '0')).join('')}`;
+  }
+
   function applySky(altitude: number, air: ReturnType<typeof atmosphereNow> | null) {
     if (!map) return;
     try {
       map.setSky({
         'sky-color': skyColour(altitude),
         'horizon-color': sunPaintColour(altitude, air),
-        'fog-color': skyColour(Math.min(altitude, 2)),
+        'fog-color': fogColour(altitude),
         'sky-horizon-blend': 0.55,
         'horizon-fog-blend': 0.55,
         'fog-ground-blend': 0.08,
@@ -3377,7 +3495,7 @@ export async function startScout(): Promise<void> {
    * the blocker depth map — because both used to derive it per building per
    * frame. See `ShadowOptions.hull`.
    */
-  let castable: Array<{ ring: Ring; height: number; base?: number; estimated: boolean; hull?: Ring; bbox?: Bounds }> = [];
+  let castable: Array<{ ring: Ring; height: number; base?: number; estimated: boolean; hull?: Ring; bbox?: Bounds; reachM?: number }> = [];
   /**
    * The box `castable` was collected from.
    *
@@ -3544,10 +3662,15 @@ export async function startScout(): Promise<void> {
     const blockers: typeof treeBlockers = [];
     for (const tree of trees) {
       const parts = treeParts(tree);
-      for (const { ring, base, top, part } of parts) {
+      // Untagged mapped trees are drawn varied; their shadows stay at the
+      // default they were measured with. See `treeParts`.
+      const vary = !tree.heightKnown && !tree.estimated;
+      const drawn = vary ? treeParts(tree, { vary }) : parts;
+      const shade = Math.round(treeJitter(tree).shade * 1000) / 1000;
+      for (const { ring, base, top, part } of drawn) {
         features.push({
           type: 'Feature',
-          properties: { part, base, top, estimated: tree.estimated },
+          properties: { part, base, top, estimated: tree.estimated, shade },
           geometry: { type: 'Polygon', coordinates: [ring] },
         });
       }
@@ -3587,7 +3710,7 @@ export async function startScout(): Promise<void> {
       return;
     }
 
-    let features: GeoJSON.Feature[] = [];
+    let features: GeoJSON.Feature[];
     try {
       features = map.querySourceFeatures('openmaptiles', { sourceLayer: 'building' });
     } catch {
@@ -3730,7 +3853,9 @@ export async function startScout(): Promise<void> {
    * by reference so that re-gathering invalidates it on its own, and the two
    * numbers that decide where a shadow lands.
    */
-  let lastCast: { set: typeof castable; trees: typeof treeBlockers; azimuth: number; ratio: number } | null = null;
+  let lastCast: { set: typeof castable; trees: typeof treeBlockers; azimuth: number; ratio: number; field?: unknown } | null = null;
+  /** Wall curtains were skipped mid-gesture and are due once it ends. */
+  let wallsOwed = false;
 
   /** Cast the gathered set at the sun of the moment. Cheap enough for a frame. */
   function castCurrentShadows() {
@@ -3765,8 +3890,14 @@ export async function startScout(): Promise<void> {
       lastCast &&
       lastCast.set === castable &&
       lastCast.trees === treeBlockers &&
+      // The ground a shadow can run into (see `measureReach`) arrives later
+      // than the buildings do.
+      lastCast.field === (terrainShadows?.state().field ?? null) &&
       Math.abs(now.azimuth - lastCast.azimuth) < 0.1 &&
-      Math.abs(ratio - lastCast.ratio) < 0.005 * lastCast.ratio
+      Math.abs(ratio - lastCast.ratio) < 0.005 * lastCast.ratio &&
+      // Walls held back during a gesture are owed once it ends, even when the
+      // sun has not moved far enough since to recast anything else.
+      !(wallsOwed && !timeIsMoving())
     ) {
       return;
     }
@@ -3774,6 +3905,7 @@ export async function startScout(): Promise<void> {
     const options = { maxLengthM: maxShadowLength(now.altitude) };
 
     if (glShadows) {
+      if (buildingsCast) measureReach(now.azimuth, now.altitude, options.maxLengthM);
       const result = castPrisms(buildingsCast ? castable : [], now.azimuth, now.altitude, options);
       const geometry = new ShadowGeometry(projectFlat);
       // Issue #51's wall curtains bbox-prune every building against every
@@ -3850,7 +3982,16 @@ export async function startScout(): Promise<void> {
       // sixteen million comparisons a frame in central London (95 ms a slider
       // minute). The grid hands each building only the shadows near it, and
       // the tie-break below keeps the answer the same as the full scan.
-      if (result.prisms.length && buildingsCast) {
+      // Only in 3D: the curtains shade walls, and 2D hides the walls they
+      // would shade — tilted, they stood up as translucent towers with the
+      // streets showing through. And not mid-gesture: matching every building
+      // against every nearby shadow was a fifth of a scrub's frame, for bands
+      // that shift by a few pixels a minute. The last set stays up while the
+      // slider moves and is brought up to date the moment it stops.
+      const wallsWanted = view === '3d' && result.prisms.length > 0 && buildingsCast;
+      const wallsNow = wallsWanted && !timeIsMoving();
+      wallsOwed = wallsWanted && !wallsNow;
+      if (wallsNow) {
         const near = new BoundsGrid(prismInfo.map((p) => p.bounds));
         for (const building of castable) {
           if (!(building.height > 0) || !building.hull || !building.bbox) continue;
@@ -3886,7 +4027,7 @@ export async function startScout(): Promise<void> {
 
       ensureBlockers();
       shadowLayer.setShadows(geometry.shadowVertices());
-      shadowLayer.setWalls(geometry.wallVertices());
+      if (!wallsOwed) shadowLayer.setWalls(geometry.wallVertices());
       map.triggerRepaint();
       shadowStats.cast = result.cast;
       shadowStats.longestM = result.longestM;
@@ -3897,7 +4038,7 @@ export async function startScout(): Promise<void> {
       shadowStats.longestM = result.longestM;
     }
 
-    lastCast = { set: castable, trees: treeBlockers, azimuth: now.azimuth, ratio };
+    lastCast = { set: castable, trees: treeBlockers, azimuth: now.azimuth, ratio, field: terrainShadows?.state().field ?? null };
   }
 
   const EMPTY_GEOMETRY = new Float32Array(0);
@@ -3921,10 +4062,102 @@ export async function startScout(): Promise<void> {
    * covers the point, with nothing else about how they use elevation
    * changing.
    */
+  /**
+   * Where each building's shadow meets rising ground, onto `castable`.
+   *
+   * Only where the ground under the gathered buildings has real relief —
+   * London's City is a few metres either way and skips this outright. Up a
+   * hillside a shadow ends where the slope rises to meet the line from the
+   * roof to the sun (see `terrainReach`); without this, tilted views showed
+   * Tai Hang's towers throwing kilometre-long sheets up Mount Butler.
+   */
+  function measureReach(azimuth: number, altitude: number, capM: number) {
+    const field = terrainShadows?.state().field ?? null;
+    const relief = field ? reliefUnder(field) : 0;
+    if (relief < 4) {
+      for (const b of castable) b.reachM = undefined;
+      return;
+    }
+    const rad = Math.PI / 180;
+    const bearing = shadowBearing(azimuth);
+    const east = Math.sin(bearing * rad);
+    const north = Math.cos(bearing * rad);
+    const tanAlt = Math.tan(altitude * rad);
+    const cell = field!.scaleM[field!.scaleM.length >> 1] || 20;
+    const stepM = Math.max(8, cell) * (timeIsMoving() ? 2 : 1);
+    const ground = (lon: number, lat: number) => {
+      const global = (lo: number, la: number) => (elevationAt(field!, lo, la) ?? null);
+      return elevationWithOverride(demUploads, global, lon, lat) ?? 0;
+    };
+    for (const b of castable) {
+      if (!(b.height > 0)) continue;
+      // From the footprint's down-sun corner, which is where castShadow's
+      // length is measured from too.
+      const outline = b.hull ?? b.ring;
+      let origin = outline[0];
+      let best = -Infinity;
+      for (const v of outline) {
+        const a = v[0] * east * Math.cos(v[1] * rad) + v[1] * north;
+        if (a > best) { best = a; origin = v; }
+      }
+      const reach = terrainReach({
+        originLon: origin[0],
+        originLat: origin[1],
+        baseM: groundElevationAt(b.ring[0][0], b.ring[0][1]),
+        heightM: b.height,
+        bearingDeg: bearing,
+        tanAlt,
+        capM,
+        stepM,
+        ground,
+      });
+      b.reachM = reach ?? undefined;
+    }
+  }
+
+  /** Elevation range under the gathered buildings, metres; per field and box. */
+  let reliefKey: { field: unknown; box: unknown } | null = null;
+  let reliefM = 0;
+  function reliefUnder(field: HeightField): number {
+    if (reliefKey && reliefKey.field === field && reliefKey.box === castableBox) return reliefM;
+    reliefKey = { field, box: castableBox };
+    const box = castableBox;
+    if (!box) return (reliefM = 0);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i <= 24; i++) {
+      for (let j = 0; j <= 24; j++) {
+        const e = elevationAt(field, box.west + ((box.east - box.west) * i) / 24, box.south + ((box.north - box.south) * j) / 24);
+        if (e == null) continue;
+        if (e < lo) lo = e;
+        if (e > hi) hi = e;
+      }
+    }
+    return (reliefM = hi > lo ? hi - lo : 0);
+  }
+
+  const elevationMemo = new Map<number, number>();
+  let elevationMemoField: unknown = null;
+  let elevationMemoDem: unknown = null;
   function groundElevationAt(lon: number, lat: number): number {
     const field = terrainShadows?.state().field;
+    // Memoised on a grid of about a metre, and only for as long as the ground
+    // it was read from: half of every shadow's vertices are the building's own
+    // footprint, which never moves, and a slider minute was re-reading every
+    // one of them from the DEM — two fifths of the cast.
+    if (field !== elevationMemoField || demUploads !== elevationMemoDem) {
+      elevationMemo.clear();
+      elevationMemoField = field;
+      elevationMemoDem = demUploads;
+    }
+    const key = Math.round(lon * 1e5) * 4e7 + Math.round(lat * 1e5);
+    const known = elevationMemo.get(key);
+    if (known !== undefined) return known;
     const global = (lo: number, la: number) => (field ? (elevationAt(field, lo, la) ?? null) : null);
-    return elevationWithOverride(demUploads, global, lon, lat) ?? 0;
+    const metres = elevationWithOverride(demUploads, global, lon, lat) ?? 0;
+    if (elevationMemo.size > 400_000) elevationMemo.clear();
+    elevationMemo.set(key, metres);
+    return metres;
   }
 
   /** What the blocker buffer was last built from. */
@@ -4166,6 +4399,16 @@ export async function startScout(): Promise<void> {
    * each tile one takeaway, the detail behind a tap. It only reads what
    * the slider minute already has, so scrubbing stays a lookup.
    */
+  /** A sky thick enough that "lit" is geometry, not light: 70% cover or
+   *  more, or a low deck in front of the sun, at the slider's minute. */
+  function overcastNow(): boolean {
+    const instant = currentInstant();
+    const hour = weather && instant ? hourAt(weather, instant) : null;
+    if (!hour) return false;
+    const structure = cloudStructure(hour);
+    return (structure?.blocking ?? hour.cloudCover ?? 0) >= 70 || Boolean(structure?.flat);
+  }
+
   function renderGlance() {
     const now = current();
     const instant = currentInstant();
@@ -4222,7 +4465,11 @@ export async function startScout(): Promise<void> {
       set('tile-here-s', '');
       return;
     }
-    set('tile-here-v', now.altitude <= 0 || here.belowHorizon ? 'No sun' : here.lit ? 'In sun' : 'In shade');
+    // The geometry says lit; a thick sky says there'll be no sun to speak of.
+    // At 70% cover or more (or a low deck in front of the sun) the pin is
+    // "Open to the sun": true either way, and not a promise of shadows.
+    const overcast = overcastNow();
+    set('tile-here-v', now.altitude <= 0 || here.belowHorizon ? 'No sun' : here.lit ? (overcast ? 'Open to sun' : 'In sun') : 'In shade');
     const change = nextChange(spotWindows, lookup);
     set(
       'tile-here-s',
@@ -4536,7 +4783,9 @@ export async function startScout(): Promise<void> {
         console.info('Scout: Flickr is skipped because FLICKR_API_KEY is not set.');
       }
       const partial = answered;
-      if (!hotspots.length) photos.textContent = `nothing found${partial}`;
+      // With Commons off (the default), an empty place usually means none of
+      // your photographers has been here, which is worth saying as such.
+      if (!hotspots.length) photos.textContent = shown.commons ? `nothing found${partial}` : `none by your photographers${partial} · Commons off`;
       else {
         const total = hotspots.reduce((n, spot) => n + spot.count, 0);
         photos.textContent = `${total} in ${hotspots.length} spot${hotspots.length === 1 ? '' : 's'}${partial}`;
@@ -5205,10 +5454,6 @@ export async function startScout(): Promise<void> {
     }
     if (todo.dome) updateDome();
     if (todo.shadows) recastShadows();
-    // The framing readout is the one thing here that changes with *both* the
-    // time and the lens, so it is rebuilt whenever either flag is up rather
-    // than being given a flag of its own.
-    if (todo.live || todo.sky) renderFraming();
   }
 
   /**
@@ -5561,7 +5806,6 @@ export async function startScout(): Promise<void> {
     drawSlab();
     placeTarget();
     drawFrame();
-    renderFraming();
     // The sightline is only *drawn* here — solving it needs a height field that
     // `refreshTerrain` below has not fetched yet, so the answer arrives with the
     // next settle rather than being computed against whatever field is stale.
@@ -5821,7 +6065,7 @@ export async function startScout(): Promise<void> {
    *  `needsKey` marks the one honest reason a source can be unreachable
    *  without being broken: no API key configured for this deployment. */
   interface TierStatus {
-    accolade: 'featured' | 'quality' | 'valued' | 'contest' | 'flickr' | 'notable';
+    accolade: 'featured' | 'quality' | 'valued' | 'contest' | 'flickr' | 'notable' | 'favourites';
     ok: boolean;
     needsKey?: boolean;
   }
@@ -5910,13 +6154,13 @@ export async function startScout(): Promise<void> {
    * photograph hotspots, and the day plan's stops — so none of them can end up
    * describing the same coordinate differently. Costs about a millisecond.
    */
-  function dayLightAt(at: LatLon, samples: SunSample[]): SpotLight {
+  function dayLightAt(at: LatLon, samples: SunSample[], aroundGiven?: ReturnType<typeof nearbyBuildings>): SpotLight {
     // From `buildingGrid` rather than `nearby`: `nearby` is filtered to
     // 1.5 km of the *pin*, and a spot 2 km away needs its own neighbours, not
     // the pin's. The grid turns that per-hotspot lookup into a handful of
     // cells instead of a scan of every building `castable` holds — see
     // `buildingGrid`'s own comment.
-    const around = buildingGrid ? nearbyBuildings(buildingGrid, at, SKYLINE_RADIUS_M) : [];
+    const around = aroundGiven ?? (buildingGrid ? nearbyBuildings(buildingGrid, at, SKYLINE_RADIUS_M) : []);
     let profile = buildSkyline(at, around);
     const field = terrainShadows?.state().field;
     if (field) {
@@ -5952,8 +6196,32 @@ export async function startScout(): Promise<void> {
     spotLightKey = key;
 
     const samples = day.samples.slice(0, 1440);
-    spotLights = hotspots.map((spot) => dayLightAt(spot.at, samples));
+    // Each hotspot is remembered by the buildings actually around it. A pan
+    // that changes the gathered set used to recompute every hotspot's whole
+    // day — 1.2 s on the main thread at the end of a pan across the City —
+    // when the new street was within reach of only a few of them.
+    const fieldId = field ? (fieldIds.get(field) ?? fieldIds.set(field, ++fieldCount).get(field)!) : 0;
+    if (spotLightMemoDate !== isoDate) {
+      spotLightMemo.clear();
+      spotLightMemoDate = isoDate;
+    }
+    spotLights = hotspots.map((spot) => {
+      const around = buildingGrid ? nearbyBuildings(buildingGrid, spot.at, SKYLINE_RADIUS_M) : [];
+      let sig = around.length;
+      for (const b of around) sig = (sig * 31 + Math.round(b.ring[0][0] * 1e6) + Math.round(b.ring[0][1] * 1e6) + Math.round(b.height * 10)) % 2_147_483_647;
+      const memoKey = `${spot.id}|${fieldId}|${sig}|${buildingsCover(spot.at)}`;
+      const known = spotLightMemo.get(memoKey);
+      if (known) return known;
+      const light = dayLightAt(spot.at, samples, around);
+      spotLightMemo.set(memoKey, light);
+      return light;
+    });
+    if (spotLightMemo.size > 2000) spotLightMemo.clear();
   }
+  const spotLightMemo = new Map<string, SpotLight>();
+  let spotLightMemoDate = '';
+  const fieldIds = new WeakMap<object, number>();
+  let fieldCount = 0;
 
   /* ── Shared from the archive ────────────────────────────────────────────
      Photos shared from the lightbox, as a hotspot source: baked into the
@@ -6006,7 +6274,7 @@ export async function startScout(): Promise<void> {
     // The scouting radius is not part of this: photographs are always looked
     // for within walking distance of the pin, so changing the ring does not
     // invalidate them.
-    const key = `${at.lat.toFixed(5)},${at.lon.toFixed(5)}`;
+    const key = `${at.lat.toFixed(5)},${at.lon.toFixed(5)},${shown.commons}`;
     if (key === photoKey) return;
     photoKey = key;
 
@@ -6015,9 +6283,13 @@ export async function startScout(): Promise<void> {
     renderFacts();
     try {
       const found = STATIC
-        ? await fetchPhotosDirect(at, PHOTO_SEARCH_RADIUS_M)
+        ? shown.commons
+          ? await fetchPhotosDirect(at, PHOTO_SEARCH_RADIUS_M)
+          // The published site has no private favourites to read, and Commons
+          // is opt-in: only the archive's shared photos are left.
+          : { hotspots: [], tiers: [] }
         : await fetch(
-            `/api/scout/photos?lat=${at.lat}&lon=${at.lon}&radius=${PHOTO_SEARCH_RADIUS_M}`,
+            `/api/scout/photos?lat=${at.lat}&lon=${at.lon}&radius=${PHOTO_SEARCH_RADIUS_M}${shown.commons ? '&commons=1' : ''}`,
           )
             .then((response) => response.json())
             .then((data) =>
@@ -6151,7 +6423,9 @@ export async function startScout(): Promise<void> {
     if (lit) {
       // "Lit until 20:14" is the number you act on; "lit" alone is not, because
       // the whole question is whether it will still be lit when you get there.
-      return { text: until ? `lit until ${until}` : 'lit', state: 'lit' };
+      // Under a heavy sky it is open to the sun rather than in it.
+      const word = overcastNow() ? 'open to sun' : 'lit';
+      return { text: until ? `${word} until ${until}` : word, state: 'lit' };
     }
     return { text: until ? `shaded, lit ${until}` : 'in shadow', state: 'shaded' };
   }
@@ -6221,7 +6495,7 @@ export async function startScout(): Promise<void> {
     // Then the first photo with a real title; camera and upload file names
     // ("IMG_4021", "13-08-hongkong-Ralf-10") are not names.
     for (const photo of spot.photos) {
-      const title = readableTitle(photo.title);
+      const title = readableTitle(photo.title, photo.author);
       if (title) return title;
     }
     return 'Photo spot';
@@ -6426,7 +6700,7 @@ export async function startScout(): Promise<void> {
     const token = ++exposureToken;
     // The archive's own shared photos aren't on Commons or Flickr to ask.
     const requests = spot.photos.filter((p) => p.source !== ARCHIVE_SOURCE).slice(0, 24).map((p) => ({ source: p.source, id: p.id }));
-    let settings: Record<string, ExposureSettings> = {};
+    let settings: Record<string, ExposureSettings>;
     try {
       settings = STATIC
         ? await fetchExposureDirect(requests)
@@ -6618,6 +6892,34 @@ export async function startScout(): Promise<void> {
 
   /* ── Controls ────────────────────────────────────────────────────────── */
 
+  /**
+   * Terrain on or off, never while a style is half-loaded.
+   *
+   * MapLibre's terrain depth pass reads `style.projection.shaderPreludeCode`
+   * unguarded, and between two styles there is no projection. Any frame or
+   * marker move in that window throws from inside the renderer — and an
+   * exception there leaves its task queue marked as running, so every frame
+   * after it throws too and the map simply stops drawing for the session.
+   * Turning terrain *off* is always safe; turning it on waits for
+   * `style.load`, whose handler calls `applyView` again.
+   */
+  function setTerrainSafely(on: boolean) {
+    if (!map) return;
+    // The exact thing the depth pass dereferences, rather than `isStyleLoaded`,
+    // which also waits for every GeoJSON source and so is still false inside
+    // the very `style.load` handler that wants terrain back.
+    const projection = (map as unknown as { style?: { projection?: unknown } }).style?.projection;
+    if (on && (!styleReady || !projection)) return;
+    try {
+      map.setTerrain(on ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
+    } catch {
+      /* terrain unsupported — the rest still works */
+    }
+  }
+
+  /** True while a tilt gesture is turning 2D into 3D. */
+  let tiltPromoting = false;
+
   function applyView() {
     if (!map || !styleReady) return;
     const three = view === '3d';
@@ -6632,18 +6934,19 @@ export async function startScout(): Promise<void> {
     // — the button stayed pressed, but the map looked like night mode had
     // never turned on.
     if (!freeLookCleanup) {
-      try {
-        map.setTerrain(three ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
-      } catch {
-        /* terrain unsupported — the rest still works */
-      }
-      map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
+      setTerrainSafely(three);
+      // A tilt gesture that promoted 2D to 3D is already choosing its own
+      // pitch; easing to 55° under the person's fingers would fight them.
+      if (!tiltPromoting) map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
     }
     // Turning terrain on and off moves the ground the dome stands on — in 2D
     // the ground *is* the plane at zero, in 3D it is the exaggerated DEM — so
     // the day's geometry has to be rebuilt against the new base.
     domeStatic = null;
-    invalidate({ dome: true });
+    // Wall curtains exist in 3D only, which is decided inside the cast, so it
+    // has to run again.
+    lastCast = null;
+    invalidate({ dome: true, shadows: true });
     try {
       map.setLayoutProperty('scout-buildings', 'visibility', three ? 'visible' : 'none');
       if (map.getLayer('scout-windows')) {
@@ -6699,6 +7002,23 @@ export async function startScout(): Promise<void> {
     save();
   });
 
+  // Tilting the flat map is asking for 3D, as two-finger tilt is in Maps. Left
+  // as a bare pitch it showed 2D's ground-only shadows standing up with no
+  // buildings in them. Only a person's gesture promotes; a camera move made by
+  // the page itself (a fly-in, free-look) carries no original event.
+  map?.on('pitchstart', (event: { originalEvent?: Event }) => {
+    if (view !== '2d' || !event.originalEvent || freeLookCleanup || eyeView) return;
+    view = '3d';
+    for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+    tiltPromoting = true;
+    try {
+      applyView();
+    } finally {
+      tiltPromoting = false;
+    }
+    save();
+  });
+
   on('baseseg', 'click', (event) => {
     const button = (event.target as HTMLElement).closest('button');
     const next = button?.dataset.base as Basemap | undefined;
@@ -6739,7 +7059,6 @@ export async function startScout(): Promise<void> {
       if (key === 'stars' && shown.stars) void ensureStarsLoaded();
       if (key === 'frame') {
         drawFrame();
-        renderFraming();
         // The core's framing is gated on this toggle, so it appears and
         // disappears with it.
         refreshCoreLens();
@@ -6761,8 +7080,10 @@ export async function startScout(): Promise<void> {
           closePhotoSheet();
           renderBest();
         }
+        mineLayer?.syncHotspots();
         void loadPhotos();
       }
+      if (key === 'commons') void loadPhotos();
       domeStatic = null;
       invalidate({ dome: true });
       save();
@@ -6916,6 +7237,10 @@ export async function startScout(): Promise<void> {
     requestAnimationFrame(() => (fold ? $(fold) : group).scrollIntoView({ block: 'start', behavior: reducedMotion?.matches ? 'auto' : 'smooth' }));
   }
 
+  // Depth of field, field of view, the stack, long exposure and time-lapse
+  // share one Tools fold, one tool at a time.
+  initToolTabs({ reveal: (el) => openCameraGroup(el.id) });
+
   /* ── Depth of field, drawn ──────────────────────────────────────────────
      Issue #150. The answer first ("3.4 m to ∞"), the real split either side
      of the focus, and a side view on a log axis. Only the focus moves this
@@ -6927,6 +7252,25 @@ export async function startScout(): Promise<void> {
     return el;
   };
   let tickUnits = '';
+
+  /** The distance scale under a side view: ticks and labels below the ground,
+   *  and faint grid lines above it at the labelled marks. */
+  function drawAxis(ticksId: string, gridId: string) {
+    const ticks = axisTicks(distanceUnits());
+    $(ticksId).replaceChildren(
+      ...ticks.flatMap((t) => [
+        svgEl('line', { class: 'dof-tick', x1: t.x, x2: t.x, y1: 84, y2: t.label ? 89 : 87 }),
+        ...(t.label ? [Object.assign(svgEl('text', { class: 'dof-tick-label', x: t.x, y: 101 }), { textContent: t.label })] : []),
+      ]),
+    );
+    $(gridId).replaceChildren(
+      ...ticks.filter((t) => t.label).map((t) => svgEl('line', { class: 'dof-grid', x1: t.x, x2: t.x, y1: 22, y2: 84 })),
+    );
+  }
+
+  /** The side views' optical axis, and the front of the lens drawn on it. */
+  const AXIS_Y = 48;
+  const LENS_X = 28.3;
 
   /** The lens's depth of field at its focus, in the chosen standard. */
   function currentDof() {
@@ -6964,29 +7308,53 @@ export async function startScout(): Promise<void> {
     // Ticks follow the units, so they are only rebuilt when those change.
     if (tickUnits !== distanceUnits()) {
       tickUnits = distanceUnits();
-      $('dof-ticks').replaceChildren(
-        ...axisTicks(distanceUnits()).flatMap((t) => [
-          svgEl('line', { class: 'dof-tick', x1: t.x, x2: t.x, y1: 72, y2: t.label ? 77 : 75 }),
-          ...(t.label ? [Object.assign(svgEl('text', { class: 'dof-tick-label', x: t.x, y: 89 }), { textContent: t.label })] : []),
-        ]),
-      );
+      drawAxis('dof-ticks', 'dof-grid');
     }
     const zone = zoneX(dof.nearM, dof.farM);
     const zoneRect = $('dof-zone');
     zoneRect.setAttribute('x', String(zone.x));
     zoneRect.setAttribute('width', String(zone.width));
-    const fx = String(distanceX(focus));
-    for (const id of ['dof-focus']) {
-      $(id).setAttribute('x1', fx);
-      $(id).setAttribute('x2', fx);
+    const nearX = zone.x;
+    const farX = zone.x + zone.width;
+    // Brackets at the two limits, opening onto the sharp band.
+    $('dof-near').setAttribute('d', `M${nearX + 3.5} 30H${nearX}V66H${nearX + 3.5}`);
+    $('dof-far').setAttribute('d', `M${farX - 3.5} 30H${farX}V66H${farX - 3.5}`);
+    const nearText = formatLength(dof.nearM);
+    const farText = Number.isFinite(dof.farM) ? formatLength(dof.farM) : '∞';
+    const clampX = (x: number) => Math.min(304, Math.max(16, x));
+    const nearLabel = $('dof-near-label');
+    const farLabel = $('dof-far-label');
+    // Too close to label apart: one label, both numbers, over the middle.
+    if (farX - nearX < 52) {
+      nearLabel.textContent = `${nearText} – ${farText}`;
+      nearLabel.setAttribute('x', String(clampX((nearX + farX) / 2)));
+      farLabel.textContent = '';
+    } else {
+      nearLabel.textContent = nearText;
+      nearLabel.setAttribute('x', String(clampX(nearX)));
+      farLabel.textContent = farText;
+      farLabel.setAttribute('x', String(clampX(farX)));
     }
+
+    const fxNum = Math.max(LENS_X + 6, distanceX(focus));
+    const fx = String(fxNum);
+    // The cone: the lens's opening closing to a point at the focus and opening
+    // again past it. Schematic on the log axis, but the blur grows the right way.
+    const aperture = 5.2;
+    const spread = Math.min(26, (aperture * (312 - fxNum)) / (fxNum - LENS_X));
+    $('dof-cone').setAttribute(
+      'd',
+      `M${LENS_X} ${AXIS_Y - aperture}L${fx} ${AXIS_Y}L312 ${AXIS_Y - spread}V${AXIS_Y + spread}L${fx} ${AXIS_Y}L${LENS_X} ${AXIS_Y + aperture}Z`,
+    );
+    $('dof-focus').setAttribute('x1', fx);
+    $('dof-focus').setAttribute('x2', fx);
     $('dof-focus-dot').setAttribute('cx', fx);
     const hx = String(distanceX(dof.hyperfocalM));
     $('dof-h').setAttribute('x1', hx);
     $('dof-h').setAttribute('x2', hx);
-    $('dof-h-label').setAttribute('x', hx);
+    $('dof-h-label').setAttribute('x', String(Number(hx) + 3));
     // Beside the focus line the H would sit on its dot; the line marks it then.
-    $('dof-h-label').toggleAttribute('hidden', Math.abs(Number(hx) - Number(fx)) < 9);
+    $('dof-h-label').toggleAttribute('hidden', Math.abs(Number(hx) - fxNum) < 9);
 
     const hyper = $<HTMLButtonElement>('dof-hyper');
     const atHyper = dofSplit(dof, focus).situation === 'at-hyperfocal';
@@ -7019,23 +7387,29 @@ export async function startScout(): Promise<void> {
     if (document.activeElement !== slider) slider.value = String(Math.min(999, focusToSlider(d)));
     slider.setAttribute('aria-valuetext', formatLength(d));
 
-    // Fit the frame's own shape into the drawing.
-    const box = { w: 300, h: 130 };
+    // Fit the frame's own shape into the drawing, leaving room on the right
+    // for its height and underneath for its width.
+    const box = { w: 248, h: 128 };
     const aspect = size.widthM / size.heightM;
     const w = Math.min(box.w, box.h * aspect);
     const h = w / aspect;
-    const x = (320 - w) / 2;
-    const y = (150 - h) / 2;
-    for (const id of ['fov-frame', 'fov-clip-rect']) {
+    const x = (320 - w - 44) / 2 + 4;
+    const y = 6;
+    const setRect = (id: string, rx: number, ry: number, rw: number, rh: number) => {
       const r = $(id);
-      r.setAttribute('x', String(x));
-      r.setAttribute('y', String(y));
-      r.setAttribute('width', String(w));
-      r.setAttribute('height', String(h));
-    }
+      r.setAttribute('x', String(rx));
+      r.setAttribute('y', String(ry));
+      r.setAttribute('width', String(Math.max(0, rw)));
+      r.setAttribute('height', String(Math.max(0, rh)));
+    };
+    setRect('fov-frame', x, y, w, h);
+    setRect('fov-clip-rect', x, y, w, h);
     const perM = h / size.heightM;
+    const cx = x + w / 2;
     const horizonY = y + h / 2;
     const groundY = horizonY + CAMERA_HEIGHT_M * perM;
+    setRect('fov-sky', x, y, w, horizonY - y);
+    setRect('fov-earth', x, horizonY, w, y + h - horizonY);
     const line = (id: string, ly: number) => {
       const el = $(id);
       el.setAttribute('x1', String(x));
@@ -7045,12 +7419,67 @@ export async function startScout(): Promise<void> {
     };
     line('fov-horizon', horizonY);
     line('fov-ground', groundY);
+
+    // The ground in perspective. Lines a fixed step apart sideways run to the
+    // vanishing point; rows sit at fractions and multiples of the subject's
+    // distance, each where a level camera 1.5 m up would see it.
+    const raw = 30 / perM;
+    const p10 = 10 ** Math.floor(Math.log10(raw));
+    const step = (raw / p10 < 1.5 ? 1 : raw / p10 < 3.5 ? 2 : raw / p10 < 7.5 ? 5 : 10) * p10;
+    const near = 0.05; // the closest row drawn, as a fraction of the distance
+    const runs: string[] = [];
+    for (let k = -14; k <= 14; k++) {
+      const farX = cx + (k * step * perM) / near;
+      runs.push(`M${cx} ${horizonY}L${farX} ${horizonY + (CAMERA_HEIGHT_M * perM) / near}`);
+    }
+    for (const f of [0.25, 0.5, 2, 4, 8]) {
+      const ry = horizonY + (CAMERA_HEIGHT_M * perM) / f;
+      if (ry < y + h) runs.push(`M${x} ${ry}H${x + w}`);
+    }
+    $('fov-grid').replaceChildren(svgEl('path', { d: runs.join('') }));
+    $('fov-thirds').replaceChildren(
+      svgEl('path', { d: `M${x + w / 3} ${y}v${h}M${x + (2 * w) / 3} ${y}v${h}M${x} ${y + h / 3}h${w}M${x} ${y + (2 * h) / 3}h${w}` }),
+    );
+    // Viewfinder corners just outside the frame, and its centre point.
+    const c = 9;
+    const o = 4;
+    const [l, t, r, b] = [x - o, y - o, x + w + o, y + h + o];
+    $('fov-corners').setAttribute(
+      'd',
+      `M${l} ${t + c}V${t}H${l + c}M${r - c} ${t}H${r}V${t + c}M${r} ${b - c}V${b}H${r - c}M${l + c} ${b}H${l}V${b - c}`,
+    );
+    $('fov-centre').setAttribute('d', `M${cx - 4} ${horizonY}h8M${cx} ${horizonY - 4}v8`);
+
     const personPx = PERSON_HEIGHT_M * perM;
     const tiny = personPx < 4;
-    $('fov-person').setAttribute('transform', tiny ? 'scale(0)' : `translate(${320 / 2} ${groundY}) scale(${personPx})`);
+    $('fov-person').setAttribute('transform', tiny ? 'scale(0)' : `translate(${cx} ${groundY}) scale(${personPx})`);
     const speck = $('fov-speck');
-    speck.setAttribute('cx', tiny ? String(320 / 2) : '-10');
+    speck.setAttribute('cx', tiny ? String(cx) : '-10');
     speck.setAttribute('cy', tiny ? String(Math.min(groundY, y + h) - 2) : '-10');
+
+    // The person's height beside them, when there is room to read it.
+    const headY = groundY - personPx;
+    const scaleFits = personPx >= 26 && groundY <= y + h && headY >= y;
+    const sx = cx + personPx * 0.2 + 6;
+    $('fov-scale-line').setAttribute('d', scaleFits ? `M${sx - 2.5} ${groundY}h5M${sx} ${groundY}V${headY}M${sx - 2.5} ${headY}h5` : '');
+    const scaleLabel = $('fov-scale-label');
+    scaleLabel.textContent = scaleFits ? formatLength(PERSON_HEIGHT_M) : '';
+    scaleLabel.setAttribute('x', String(sx + 4));
+    scaleLabel.setAttribute('y', String((groundY + headY) / 2 + 3.5));
+
+    // The frame's own size, dimensioned like a drawing.
+    const wy = y + h + 12;
+    $('fov-w-line').setAttribute('d', `M${x} ${wy - 3}v6M${x} ${wy}H${x + w}M${x + w} ${wy - 3}v6`);
+    const wLabel = $('fov-w-label');
+    wLabel.textContent = formatLength(size.widthM);
+    wLabel.setAttribute('x', String(cx));
+    wLabel.setAttribute('y', String(wy + 14));
+    const hx = x + w + 12;
+    $('fov-h-line').setAttribute('d', `M${hx - 3} ${y}h6M${hx} ${y}V${y + h}M${hx - 3} ${y + h}h6`);
+    const hLabel = $('fov-h-label');
+    hLabel.textContent = formatLength(size.heightM);
+    hLabel.setAttribute('x', String(hx + 6));
+    hLabel.setAttribute('y', String(y + h / 2 + 4));
     $<HTMLButtonElement>('fov-use-focus').hidden = Math.abs(lens.focusDistanceM - d) / d < 0.02 || lens.focusDistanceM >= FOCUS_INFINITY_M;
   }
 
@@ -7169,26 +7598,29 @@ export async function startScout(): Promise<void> {
 
     if (stackTickUnits !== distanceUnits()) {
       stackTickUnits = distanceUnits();
-      $('stack-ticks').replaceChildren(
-        ...axisTicks(distanceUnits()).flatMap((t) => [
-          svgEl('line', { class: 'dof-tick', x1: t.x, x2: t.x, y1: 72, y2: t.label ? 77 : 75 }),
-          ...(t.label ? [Object.assign(svgEl('text', { class: 'dof-tick-label', x: t.x, y: 89 }), { textContent: t.label })] : []),
-        ]),
-      );
+      drawAxis('stack-ticks', 'stack-grid');
     }
-    // Alternate two tones so neighbouring zones and their overlap read apart,
-    // and step each a little higher so the overlaps show.
+    // Two lanes either side of the axis, alternating, so neighbouring zones and
+    // their overlaps read apart. Each frame's focus is a dot in its zone,
+    // carrying its number from the shot list while the numbers have room.
+    const lastLabel = [-Infinity, -Infinity];
     $('stack-zones').replaceChildren(
       ...plan.frames.flatMap((fr, i) => {
         const z = zoneX(fr.nearM, fr.farM);
-        const top = 34 + (i % 2) * 6;
+        const top = i % 2 ? 50 : 30;
         const fx = distanceX(fr.focusM);
+        const numbered = n <= 12 && fx - lastLabel[i % 2] >= 13;
+        if (numbered) lastLabel[i % 2] = fx;
         return [
-          svgEl('rect', { class: `dof-stack-zone ${i % 2 ? 'even' : 'odd'}`, x: z.x, y: top, width: z.width, height: 72 - top }),
-          svgEl('line', { class: 'dof-stack-focus', x1: fx, x2: fx, y1: top - 6, y2: 72 }),
+          svgEl('rect', { class: `dof-stack-zone ${i % 2 ? 'even' : 'odd'}`, x: z.x, y: top, width: z.width, height: 16, rx: 2 }),
+          svgEl('circle', { class: 'dof-stack-dot', cx: fx, cy: top + 8, r: numbered ? 5.5 : 2.4 }),
+          ...(numbered ? [Object.assign(svgEl('text', { class: 'dof-stack-n', x: fx, y: top + 10.8 }), { textContent: String(i + 1) })] : []),
         ];
       }),
     );
+    const coverA = distanceX(plan.frames[0]?.nearM ?? nearM);
+    const coverB = distanceX(plan.frames[n - 1]?.farM ?? farM);
+    $('stack-cover').setAttribute('d', `M${coverA} 71v6M${coverA} 74H${coverB}M${coverB} 71v6`);
 
     const key = stackKey(plan);
     const ticks = (readTicks()[key] ?? []).slice(0, n);
@@ -7275,7 +7707,6 @@ export async function startScout(): Promise<void> {
     $('frame-lens').textContent = describeLens(sensor, lens.focalLengthMm, currentFov());
     renderDof();
     drawFrame();
-    renderFraming();
     // The core fold prints two answers about this lens, and both go stale the
     // moment it is turned or changed.
     refreshCoreLens();
@@ -8244,11 +8675,7 @@ export async function startScout(): Promise<void> {
     // — so putting terrain back to match it is correct either way: it is
     // either the final state, or `applyView()` turns it off again once the
     // view itself reverts to 2D.
-    try {
-      map.setTerrain(view === '3d' ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
-    } catch {
-      /* no terrain to put back, or none to take off */
-    }
+    setTerrainSafely(view === '3d');
     map.dragPan.enable();
     map.dragRotate.enable();
     map.scrollZoom.enable();
@@ -8362,7 +8789,6 @@ export async function startScout(): Promise<void> {
     applyVisibility();
     rebuildCore();
     drawFrame();
-    renderFraming();
     // The static half of the dome (the horizon ring, the sun/moon/core arcs,
     // the hour beads) is cached and does not itself depend on `shown.stars`
     // any more — the radius is `domeRadiusFor(radiusKm * 1000)` either way.
@@ -8785,12 +9211,17 @@ export async function startScout(): Promise<void> {
   } catch {
     /* offered at most once anyway */
   }
+  const nightContext = () =>
+    $('night-button').getAttribute('aria-pressed') === 'true' ||
+    ['fold-core', 'fold-aurora', 'fold-meteor', 'fold-twilight'].some((id) => $<HTMLDetailsElement>(id).open && $<HTMLDetailsElement>('group-night').open);
   function maybeOfferNightVision() {
+    // The offer belongs to the night view it was made in: once that's put
+    // away (Milky Way off, the night folds shut) it goes too, rather than
+    // sitting over a daytime map saying it's dark.
+    const offer = $<HTMLElement>('nv-offer');
+    if (!offer.hidden && !nightContext()) offer.hidden = true;
     if (nvOffered || nightVisionOn() || !centre) return;
-    const nightFoldOpen =
-      $('night-button').getAttribute('aria-pressed') === 'true' ||
-      ['fold-core', 'fold-aurora', 'fold-meteor', 'fold-twilight'].some((id) => $<HTMLDetailsElement>(id).open && $<HTMLDetailsElement>('group-night').open);
-    if (!nightFoldOpen) return;
+    if (!nightContext()) return;
     if (sunPosition(centre.lat, centre.lon, new Date()).altitude > SUN_ALTITUDE.astronomical) return;
     nvOffered = true;
     try {
@@ -8804,6 +9235,7 @@ export async function startScout(): Promise<void> {
     $<HTMLDetailsElement>(id).addEventListener('toggle', maybeOfferNightVision);
   }
   setInterval(maybeOfferNightVision, 60_000);
+  new MutationObserver(maybeOfferNightVision).observe($('night-button'), { attributes: true, attributeFilter: ['aria-pressed'] });
   on('nv-offer-on', 'click', () => {
     setNightVision(true);
     showNightVision();
@@ -9011,7 +9443,10 @@ export async function startScout(): Promise<void> {
     // you chose to keep.
     const recents = recentPlaces.filter((r) => indexOfSpot(keptSpots, r) === -1).slice(0, RECENT_SHOWN);
     const empty = !searchBox.query() && searchBox.isOpen();
-    $<HTMLElement>('locate-row').hidden = !empty || !('geolocation' in navigator);
+    const canLocate = 'geolocation' in navigator;
+    $<HTMLElement>('locate-row').hidden = !empty || !canLocate;
+    // With a place in the field, the row folds into an icon at its end.
+    $<HTMLElement>('locate-icon').hidden = empty || !searchBox.isOpen() || !canLocate;
     const wanted = (keptSpots.length > 0 || recents.length > 0) && empty;
     box.hidden = !wanted;
     if (!wanted) return;
@@ -9452,6 +9887,9 @@ export async function startScout(): Promise<void> {
     return arViewPromise;
   }
   on('ar-open', 'click', () => void ensureArView().then((view) => view.open()));
+  // It needs a compass and a rear camera, which a Mac has neither of: offer it
+  // only on touch devices, where it can work.
+  $<HTMLElement>('ar-open').hidden = navigator.maxTouchPoints === 0;
 
   /* ── The notebook ───────────────────────────────────────────────────────
      Everything you worked out at a spot that the arithmetic cannot: the note,
@@ -10179,14 +10617,20 @@ export async function startScout(): Promise<void> {
   });
 
   // Use my location: one fix, then the same path as a tapped first spot.
-  on('locate-row', 'click', () => {
-    const button = $<HTMLButtonElement>('locate-row');
+  // The row says how it is going in its own words; the icon has none, so a
+  // failure there goes to the corner note.
+  on('locate-row', 'click', () => locate());
+  on('locate-icon', 'click', () => locate());
+  function locate() {
+    const row = $<HTMLButtonElement>('locate-row');
+    const icon = $<HTMLButtonElement>('locate-icon');
     const say = $('locate-say');
-    button.disabled = true;
+    const fromRow = !row.hidden;
+    row.disabled = icon.disabled = true;
     say.textContent = 'Finding you…';
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        button.disabled = false;
+        row.disabled = icon.disabled = false;
         say.textContent = 'Use my location';
         const at = { lat: position.coords.latitude, lon: position.coords.longitude };
         searchBox.closeResults();
@@ -10196,13 +10640,18 @@ export async function startScout(): Promise<void> {
       },
       () => {
         // Quiet, in place: the row says why, then goes back to normal.
-        button.disabled = false;
+        row.disabled = icon.disabled = false;
+        if (!fromRow) {
+          say.textContent = 'Use my location';
+          notify('Location isn’t available');
+          return;
+        }
         say.textContent = 'Location isn’t available';
         setTimeout(() => (say.textContent = 'Use my location'), 4000);
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
     );
-  });
+  }
 
   on('recent-list', 'click', (event) => {
     const row = (event.target as HTMLElement).closest<HTMLElement>('[data-recent]');
@@ -11306,7 +11755,20 @@ export async function startScout(): Promise<void> {
       }
       ro.observe(stage);
     }
-    new MutationObserver(resettle).observe(dock, { attributes: true, attributeFilter: ['hidden'], subtree: true });
+    // Only what can change the peek: the sheet and the time bar, or the dock's
+    // own children. Readouts deeper in the body toggle `hidden` on every
+    // minute of a scrub, and each one cost a layout measuring a sheet whose
+    // height they cannot move. One re-settle a frame at most.
+    const peekParts = ['sheet', 'timebar'].map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+    let resettleQueued = 0;
+    new MutationObserver((records) => {
+      const relevant = records.some((r) => r.target.parentElement === dock || peekParts.some((part) => part.contains(r.target)));
+      if (!relevant || resettleQueued) return;
+      resettleQueued = requestAnimationFrame(() => {
+        resettleQueued = 0;
+        resettle();
+      });
+    }).observe(dock, { attributes: true, attributeFilter: ['hidden'], subtree: true });
     wideQuery.addEventListener('change', () => applySidebar());
     // The sheet clips rather than scrolls (its body is the scroller), but a
     // clipped box can still be scrolled by focus — a control below the fold

@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ url }) => {
       // and a 200 km radius would be somebody else's bandwidth.
       radiusM: Math.min(PHOTO_SEARCH_RADIUS_M, Number.isFinite(radiusM) ? radiusM : PHOTO_SEARCH_RADIUS_M),
       limit: MAX_PHOTOS,
-    });
+    }, { commons: url.searchParams.get('commons') === '1' });
     // Photographs, wherever they came from, do not move and their licences
     // do not change, so a reload should not pay for this again.
     return json(

@@ -17,7 +17,24 @@ export function photoName(file: string): string {
   // `temp_image_<UUID>`.
   if (/^temp[_-]?image[_-]?[0-9a-f-]{20,}$/i.test(s)) return '';
   if ((s.match(/\d/g)?.length ?? 0) >= 12 && !/[a-z]{3,}/i.test(s)) return '';
-  return s;
+  return unslug(s);
+}
+
+/**
+ * A web slug back into words: `approaching-shadow-hong-kong-by-fan-ho` was
+ * printed as it came, as the title of a match. Only names that are plainly a
+ * slug — three or more words of letters joined by hyphens or underscores —
+ * so `pantheon-2`, `trip-2024` and camera names are left exactly as they are.
+ * A trailing "by Somebody" is the credit, and a credit is a name.
+ */
+function unslug(s: string): string {
+  const words = s.split(/[-_]+/).filter(Boolean);
+  if (words.length < 3 || !words.every((w) => /^[a-z]+$/i.test(w))) return s;
+  const by = words.lastIndexOf('by');
+  const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+  const title = (by > 0 ? words.slice(0, by) : words).join(' ');
+  const sentence = cap(title);
+  return by > 0 && by < words.length - 1 ? `${sentence} by ${words.slice(by + 1).map(cap).join(' ')}` : sentence;
 }
 
 /** "DSC01234 in the look of DSC06160", falling back to plain words. */

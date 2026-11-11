@@ -330,7 +330,7 @@ export function createDomeLayer(id: string): DomeLayer {
       }
 
       gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       // Drawn over the buildings rather than through them: the path is a piece
       // of notation about the sky, not an object standing in the street.
       gl.disable(gl.DEPTH_TEST);
@@ -384,7 +384,7 @@ export function createDomeLayer(id: string): DomeLayer {
         gl.uniform1f(p.uniforms.u_halo, 1);
         gl.drawArrays(gl.POINTS, 0, count);
 
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.uniform1f(p.uniforms.u_halo, 0);
         gl.drawArrays(gl.POINTS, 0, count);
 

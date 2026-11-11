@@ -27,6 +27,7 @@ import { refineSolution } from '../src/lib/match/refine';
 import { closeness, simulate, targetFromAnalysis, type Closeness } from '../src/lib/match/simulate';
 import { solveMatch } from '../src/lib/match/solve';
 import { solveAndRefine } from '../src/lib/match/engine';
+import { monochromeOf } from '../src/lib/match/monochrome';
 import { segmentRegions } from '../src/lib/match/regions';
 import { decodeSample, measureRegionsFromPixels } from '../src/lib/match/stats-core';
 import { ANALYSIS_VERSION, HSL_BANDS, NO_MASKS, type PhotoAnalysis, type RgbImage } from '../src/lib/match/types';
@@ -246,7 +247,7 @@ async function main() {
       images.set(key, graded);
       // The reference is a DIFFERENT crop of the graded photo — its right
       // 60% — so content doesn't line up pixel for pixel, as in real use.
-      run('synthetic', await analyse(graded, key), mine, old?.(key, file), truth);
+      { const refA = await analyse(graded, key); if (process.env.MONO_DEBUG) { const gg = refA.regions.global!; console.log('MONO', key.slice(-30), monochromeOf(refA), gg.C.mean.toFixed(4), gg.C.sd.toFixed(4), (Math.hypot(gg.ab.a, gg.ab.b) / gg.C.mean).toFixed(2), 'sat', truth.saturation.toFixed(0)); } run('synthetic', refA, mine, old?.(key, file), truth); }
     }
   }
   for (let i = 0; i < Math.min(insp.length, PHOTOS * 2); i++) {

@@ -38,6 +38,8 @@ export interface MinePorts {
   /** Make this the place being scouted. */
   scoutAt(at: LatLon): void;
   notify(text: string): void;
+  /** The Photo hotspots layer toggle; off, your pins go with it. */
+  hotspotsOn(): boolean;
 }
 
 export interface MineLayer {
@@ -46,6 +48,8 @@ export interface MineLayer {
   attach(): void;
   /** True if the tap was a placement and must go no further. */
   consumeClick(at: LatLon): boolean;
+  /** Call when the Photo hotspots toggle changes. */
+  syncHotspots(): void;
 }
 
 export function createMineLayer(ports: MinePorts): MineLayer {
@@ -55,6 +59,8 @@ export function createMineLayer(ports: MinePorts): MineLayer {
   const markers = new Map<string, Marker>();
   let popup: Popup | null = null;
 
+  // Your own switch and the Photo hotspots layer both have to be on.
+  const visible = () => shown && ports.hotspotsOn();
   const byId = (id: string) => photos.find((p) => p.id === id);
   const located = () => photos.filter((p) => p.lat !== undefined);
 
@@ -218,7 +224,8 @@ export function createMineLayer(ports: MinePorts): MineLayer {
       : 'The archive is empty.';
     const showButton = $<HTMLButtonElement>('mine-show');
     showButton.setAttribute('aria-pressed', String(shown));
-    showButton.textContent = shown ? 'Shown on map' : 'Hidden';
+    showButton.disabled = !ports.hotspotsOn();
+    showButton.textContent = !ports.hotspotsOn() ? 'Off with Photo hotspots' : shown ? 'Shown on map' : 'Hidden';
     $<HTMLButtonElement>('mine-fit').disabled = placed === 0;
 
     const unplaced = photos.filter((p) => p.lat === undefined);
@@ -259,7 +266,7 @@ export function createMineLayer(ports: MinePorts): MineLayer {
       // A private window: the choice lasts this visit only.
     }
     renderFold();
-    if (shown) markDirty();
+    if (visible()) markDirty();
     else refreshMarkers();
   });
 
@@ -376,15 +383,15 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     source?.setData(mineFeatures(photos));
     // `setData` re-clusters in a worker; the render hook below redraws when
     // done. Hiding is immediate, though, and does not need to wait for it.
-    if (!shown) refreshMarkers();
+    if (!visible()) refreshMarkers();
     else markDirty();
   }
 
   function refreshMarkers() {
     const map = ports.map();
     if (!map) return;
-    if (!shown || !map.getSource(MINE_SOURCE) || !map.isSourceLoaded(MINE_SOURCE)) {
-      if (!shown) {
+    if (!visible() || !map.getSource(MINE_SOURCE) || !map.isSourceLoaded(MINE_SOURCE)) {
+      if (!visible()) {
         for (const marker of markers.values()) marker.remove();
         markers.clear();
       }
@@ -523,7 +530,15 @@ export function createMineLayer(ports: MinePorts): MineLayer {
     refreshMarkers();
   });
 
-  return { attach, consumeClick };
+  function syncHotspots() {
+    // The fold is only up once the list has loaded.
+    if (!$<HTMLElement>('fold-mine').hidden) renderFold();
+    popup?.remove();
+    if (visible()) markDirty();
+    else refreshMarkers();
+  }
+
+  return { attach, consumeClick, syncHotspots };
 }
 
 /** Lazy only in the fold's grid. Inside a MapLibre marker or popup the

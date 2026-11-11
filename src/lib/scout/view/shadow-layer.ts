@@ -788,7 +788,12 @@ export function createShadowLayer(id: string, onReady?: (ready: boolean) => void
       gl.viewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
       gl.disable(gl.DEPTH_TEST);
       gl.blendEquation(gl.FUNC_ADD);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      // Colour over the map, but the canvas's own alpha only ever goes up.
+      // A plain SRC_ALPHA blend wrote a·a into the alpha channel, so every
+      // shadowed pixel left the WebGL canvas part-transparent and the page
+      // behind the map showed through: shadows came out *lighter* than the
+      // ground — fog bands over satellite, a washed-out coat on paper.
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
       gl.useProgram(compositeProgram.program);
       gl.activeTexture(gl.TEXTURE0);

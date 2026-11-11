@@ -223,7 +223,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     {(showMediumToggle || showGenreDrop) && (
       <div class="tb-group">
         {showMediumToggle && (
-          <nav class="view-toggle" id="view-toggle" aria-label="Medium">
+          <nav class="view-toggle" id="view-toggle" aria-label="Medium" data-seg>
             <button type="button" data-view="all" aria-pressed="true">All</button>
             <button type="button" data-view="digital">Digital</button>
             <button type="button" data-view="film">Film</button>
@@ -232,28 +232,42 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
         {showMediumToggle && showGenreDrop && <span class="tb-sep" aria-hidden="true" />}
         {showGenreDrop && (
           <div class="genre-drop" id="genre-drop">
-            <button type="button" class="genre-btn" id="genre-btn" aria-haspopup="listbox" aria-expanded="false">
-              <span id="genre-current">All genres</span>
+            <button type="button" class="genre-btn" id="genre-btn" aria-haspopup="true" aria-expanded="false" title={STATIC ? 'Genres' : 'Search and genres (/)'}>
+              {/* Search lives in this menu, so the button says so: without the
+                  glass the field was findable only through ⌘K, and a phone
+                  has no ⌘K. */}
+              {!STATIC && <svg class="genre-glass" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>}
+              <span id="genre-current">Genres</span>
               <svg class="genre-caret" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <ul class="genre-menu" id="genre-menu" role="listbox" aria-label="Genre" hidden>
-              <li role="option" data-genre="all" aria-selected="true" tabindex="-1">All genres</li>
-              {presentGenres.map((g) => (
-                <li
-                  role="option"
-                  data-genre={g}
-                  data-label={GENRE_LABEL[g]}
-                  data-count-all={genreCounts[g]}
-                  data-count-film={genreCountsByMedium.film[g]}
-                  data-count-digital={genreCountsByMedium.digital[g]}
-                  aria-selected="false"
-                  tabindex="-1"
-                >
-                  <span class="genre-name">{GENRE_LABEL[g]}</span>
-                  <span class="genre-count" data-genre-count></span>
-                </li>
-              ))}
-            </ul>
+            <div class="genre-menu" id="genre-menu" hidden>
+              {!STATIC && (
+                <div class="genre-search">
+                  <div class="search-box" id="search-box">
+                    <svg class="search-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <input type="search" id="search-input" data-cmdk="Search by description" data-cmdk-always data-cmdk-keywords="find, text" placeholder="Search the archive" aria-label="Search the archive by description" autocomplete="off" />
+                  </div>
+                </div>
+              )}
+              <ul class="genre-list" role="listbox" aria-label="Genre">
+                <li role="option" data-genre="all" aria-selected="true" tabindex="-1">All genres</li>
+                {presentGenres.map((g) => (
+                  <li
+                    role="option"
+                    data-genre={g}
+                    data-label={GENRE_LABEL[g]}
+                    data-count-all={genreCounts[g]}
+                    data-count-film={genreCountsByMedium.film[g]}
+                    data-count-digital={genreCountsByMedium.digital[g]}
+                    aria-selected="false"
+                    tabindex="-1"
+                  >
+                    <span class="genre-name">{GENRE_LABEL[g]}</span>
+                    <span class="genre-count" data-genre-count></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
       </div>
@@ -263,7 +277,9 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
         <ColourFilter items=".archive .frame" suggest={manifest.chapters.map((ch) => ({ name: ch.name, hex: oklchToHex(ch.oklch) }))} />
       </div>
     )}
-    {!STATIC && hasPhotos && (
+    {/* Search lives in the Genres menu; it only gets its own capsule when
+        there's no menu to hold it (an archive with a single genre). */}
+    {!STATIC && hasPhotos && !showGenreDrop && (
       <div class="tb-group tb-search">
         <div class="search-box" id="search-box">
           <svg class="search-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -271,17 +287,17 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
         </div>
       </div>
     )}
-    <span class="topbar-right">
+    {/* Phones only: Overview, Get the app and Insights fold behind one
+        button, so the bar keeps to one row instead of a second row of
+        three bare icons. */}
+    <button type="button" class="tb-more" id="tb-more" aria-expanded="false" aria-controls="tb-actions" aria-label="More" title="More">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18.5" cy="12" r="1.5"/></svg>
+    </button>
+    <span class="topbar-right tb-group tb-actions" id="tb-actions">
       {hasPhotos && (
         <button type="button" class="tb-button" id="overview-btn" data-cmdk="Overview" data-cmdk-keywords="grid, zoom out" aria-pressed="false" aria-label="Overview" title="Overview — or pinch out">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
           <span class="tb-label">Overview</span>
-        </button>
-      )}
-      {hasPhotos && (
-        <button type="button" class="tb-button" id="clock-btn" data-cmdk="Colour clock" data-cmdk-keywords="frame, ambient, light, stand" aria-label="Colour clock" title="Colour clock: the archive follows the light outside">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg>
-          <span class="tb-label">Clock</span>
         </button>
       )}
       <a class="tb-button tb-get" id="get-app" href="/get" aria-label="Get the app" title="Get the app">
@@ -309,7 +325,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
 
   <section class="cover">
     <p class="cover-kicker">
-      {hasPhotos ? `${manifest.count} · ${manifest.chapters.length} chapter${manifest.chapters.length === 1 ? '' : 's'}` : 'In colour'}
+      {hasPhotos ? `${manifest.count} photograph${manifest.count === 1 ? '' : 's'} · ${manifest.chapters.length} chapter${manifest.chapters.length === 1 ? '' : 's'}` : 'In colour'}
     </p>
     <h1>{SITE_TITLE}</h1>
     {hasPhotos && (
@@ -510,7 +526,6 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           <button class="lb-tool" id="lb-play" data-cmdk="Slideshow" data-cmdk-keywords="play" aria-label="Play slideshow" title="Play slideshow" aria-pressed="false">
             <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path class="tri" d="M5 3.2v9.6l8-4.8z" fill="currentColor"/><g class="pause" fill="currentColor"><rect x="4.4" y="3.4" width="2.6" height="9.2" rx="0.6"/><rect x="9" y="3.4" width="2.6" height="9.2" rx="0.6"/></g></svg>
           </button>
-          <button class="lb-tool" id="lb-clock" aria-label="Colour clock" title="Colour clock: the archive follows the light outside"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/></svg></button>
           <button class="lb-tool" id="lb-info" data-cmdk="Photo details" data-cmdk-keywords="info, exif" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-similar" data-cmdk="Similar photos" data-cmdk-keywords="like this" aria-label="More like this in your archive" title="More like this in your archive">Similar</button>}
           <a class="lb-tool lb-text" id="lb-plan" href="/scout" data-cmdk="Plan this shot again" data-cmdk-keywords="scout, lens, same light, again" title="Plan this shot again in Scout: its lens, its place, the next time the light stands there" hidden>Plan again</a>
@@ -593,14 +608,20 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           <section>
             <h3>Colour</h3>
             <ul class="stat">
-              {manifest.chapters.map((ch) => (
+              {manifest.chapters.map((ch) => {
+                // Shown on near-black, a dark chapter colour (Deep Yellow's
+                // olive) all but vanished: lifted to a readable lightness for
+                // display only, hue and chroma kept.
+                const shown = oklchCss({ ...ch.oklch, L: Math.max(ch.oklch.L, 0.5) });
+                return (
                 <li>
-                  <span class="sw" style={`background:${oklchCss(ch.oklch)}`} />
+                  <span class="sw" style={`background:${shown}`} />
                   <span class="lbl">{ch.name}</span>
-                  <span class="barwrap"><span class="bar" data-w={(ch.photos.length / insights.maxChapter) * 100} style={`background:${oklchCss(ch.oklch)}`} /></span>
+                  <span class="barwrap"><span class="bar" data-w={(ch.photos.length / insights.maxChapter) * 100} style={`background:${shown}`} /></span>
                   <span class="num">{ch.photos.length}</span>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
 
@@ -718,7 +739,6 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     font-family: var(--font-ui); font-size: var(--t-body); font-weight: 600; text-decoration: none;
     transition: transform 110ms ease-out;
   }
-  .cover-start-cta:active { transform: scale(0.96); }
   .cover-start-cta:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
   .cover-start-note { margin: 0; color: var(--muted); font-size: var(--t-caption); }
 
@@ -883,7 +903,10 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   let lastY = window.scrollY;
   scrollTasks.push((y) => {
     if (Math.abs(y - lastY) < 4) return;           // ignore rubber-band jitter
-    bar.classList.toggle('hidden', y > lastY && y > 90);
+    // Overview keeps the bar: it holds the way back out (the pressed
+    // Overview button), and a grid you scroll around in is not reading.
+    const overview = document.querySelector('.archive')?.classList.contains('overview');
+    bar.classList.toggle('hidden', !overview && y > lastY && y > 90);
     lastY = y;
   });
 
@@ -1226,6 +1249,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     const anchor = frameNear(focusX, focusY);
     const before = anchor?.getBoundingClientRect().top;
     archive.classList.toggle('overview', lvl !== 'read');
+    if (lvl !== 'read') document.getElementById('topbar')?.classList.remove('hidden');
     archive.classList.toggle('strips', lvl === 'strips');
     if (cols) archive.style.setProperty('--ocols', String(cols));
     shownLevel = lvl; shownCols = cols;
@@ -1743,11 +1767,26 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   // byKeyboard: focus lands on Close, ready for the next key. From a tap or a
   // deep link it lands on the viewer itself — Chromium otherwise rings the
   // Close button on every photo you open, which reads as a selected state.
+  // On a phone the action bar scrolls; a fade at its right end says there's
+  // more (Share, Chapter) for as long as there is.
+  const lbTools = lb.querySelector('.lb-tools');
+  const markToolsEnd = () => {
+    if (!lbTools) return;
+    lbTools.classList.toggle('more-right', lbTools.scrollWidth - lbTools.clientWidth - lbTools.scrollLeft > 2);
+  };
+  lbTools?.addEventListener('scroll', markToolsEnd, { passive: true });
+  if (lbTools) {
+    new ResizeObserver(markToolsEnd).observe(lbTools);
+    // Plan again and Same roll come and go photo by photo.
+    new MutationObserver(markToolsEnd).observe(lbTools, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  }
+
   function openLightbox(frame, byKeyboard = false) {
     const i = frames.indexOf(frame);
     if (i < 0) return;
     showAt(i);
     lb.hidden = false;
+    requestAnimationFrame(markToolsEnd);
     // Measure the thumbnail before the scroll lock can nudge the layout.
     const flew = flyIn(frame);
     lockScroll();
@@ -2169,7 +2208,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   const jumpChapter = (dir) => {
     const y = window.scrollY + 4;
     const tops = gaps.map((g) => g.offsetTop);
-    let target = null;
+    let target;
     if (dir > 0) target = tops.find((t) => t > y + 8);
     else { const prev = tops.filter((t) => t < y - 8); target = prev.length ? prev[prev.length - 1] : 0; }
     if (target == null) return;
@@ -2303,6 +2342,22 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     }, 200);
   };
   document.getElementById('insights-btn')?.addEventListener('click', openInsights);
+
+  // The phone's "More" menu (the three are a plain capsule on wider screens).
+  const tbMore = document.getElementById('tb-more');
+  const tbActions = document.getElementById('tb-actions');
+  const setMore = (open) => {
+    tbActions?.classList.toggle('open', open);
+    tbMore?.setAttribute('aria-expanded', String(open));
+  };
+  tbMore?.addEventListener('click', () => setMore(!tbActions.classList.contains('open')));
+  tbActions?.addEventListener('click', (e) => { if (e.target.closest('.tb-button')) setMore(false); });
+  document.addEventListener('click', (e) => {
+    if (tbActions?.classList.contains('open') && !tbActions.contains(e.target) && !tbMore.contains(e.target)) setMore(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && tbActions?.classList.contains('open')) { setMore(false); tbMore.focus(); }
+  });
   document.getElementById('insights-close')?.addEventListener('click', closeInsights);
   insightsEl?.addEventListener('click', (e) => { if (e.target === insightsEl) closeInsights(); });
 
@@ -2449,7 +2504,25 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     if (textTray) renderTextTray(textTray);
     else if (colourTray) renderTray(colourTray.ranked, colourTray.colours);
     else renderTray(null);
+    placeTray();
   }
+  // The genre menu drops over the row the tray sits in, and its glass shows
+  // the photos through it. While the menu is open the tray steps down to sit
+  // just under it, so answers to a search typed there stay in view.
+  function placeTray() {
+    if (!tray) return;
+    const menu = document.getElementById('genre-menu');
+    const drop = document.getElementById('genre-drop');
+    if (tray.hidden || !menu || menu.hidden || !drop) { tray.style.translate = ''; return; }
+    const shift = parseFloat(tray.style.translate.split(' ')[1]) || 0;
+    // offsetTop/offsetHeight ignore the menu's opening scale, so this is
+    // where it ends up rather than where it is mid-animation.
+    const menuBottom = drop.getBoundingClientRect().top + menu.offsetTop + menu.offsetHeight;
+    const gap = 8;
+    const down = Math.max(0, menuBottom + gap - (tray.getBoundingClientRect().top - shift));
+    tray.style.translate = down ? `0 ${down}px` : '';
+  }
+  addEventListener('resize', () => placeTray());
   function renderTextTray({ q, matches }) {
     if (!tray) return;
     tray.hidden = false;
@@ -2461,9 +2534,15 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     const handle = document.createElementNS(glass.namespaceURI, 'path');
     handle.setAttribute('d', 'M10.5 10.5L14 14');
     glass.append(ring, handle);
-    trayDots.replaceChildren(glass);
+    // The query itself, beside the glass: a strip of photos alone doesn't say
+    // what was asked, and Clear is always there to take the search away.
+    const said = document.createElement('span');
+    said.className = 'cf-tray-q';
+    said.textContent = q;
+    said.title = q;
+    trayDots.replaceChildren(glass, said);
     trayCount.textContent = String(matches.length);
-    trayClear.hidden = matches.length > 0;
+    trayClear.hidden = false;
     trayList.setAttribute('aria-label', `Best matches for ${q}`);
     if (!matches.length) {
       const none = document.createElement('p');
@@ -2573,11 +2652,13 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     if (!genreMenu) return;
     genreMenu.hidden = false; genreBtn?.setAttribute('aria-expanded', 'true'); genreDrop?.classList.add('open');
     requestAnimationFrame(() => genreMenu.classList.add('show'));
+    placeTray();
   };
   const closeGenre = () => {
     if (!genreMenu || genreMenu.hidden) return;
     genreMenu.classList.remove('show'); genreBtn?.setAttribute('aria-expanded', 'false'); genreDrop?.classList.remove('open');
-    setTimeout(() => { genreMenu.hidden = true; }, 160);
+    setTimeout(() => { genreMenu.hidden = true; placeTray(); }, 160);
+    if (tray) tray.style.translate = '';
   };
   // How many photos each genre actually has under the medium filter already
   // active — filled in from the data-count-* attributes each <li> carries
@@ -2600,7 +2681,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
       archiveEl.classList.remove('genre-all', 'genre-street', 'genre-portrait', 'genre-landscape', 'genre-architecture');
       archiveEl.classList.add('genre-' + g);
     }
-    if (genreCurrent) genreCurrent.textContent = g === 'all' ? 'All genres' : label;
+    if (genreCurrent) genreCurrent.textContent = g === 'all' ? 'Genres' : label;
     genreMenu?.querySelectorAll('[data-genre]').forEach((li) =>
       li.setAttribute('aria-selected', String(li.dataset.genre === g)));
     layoutAll();      // repack visible frames into tight columns
@@ -2620,6 +2701,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   document.addEventListener('click', (e) => {
     if (genreDrop && !genreDrop.contains(e.target)) closeGenre();
   });
+  // ⌘K and `/` reach the search field inside the closed menu: open it first.
+  genreDrop?.addEventListener('cmdk-reveal', () => { if (genreMenu?.hidden) openGenre(); });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && genreMenu && !genreMenu.hidden) { closeGenre(); genreBtn?.focus(); }
   });
@@ -2645,6 +2728,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   }
   async function runSearch(q) {
     const token = ++searchToken;
+    // A query hides inside the closed menu, so its button carries a dot.
+    genreDrop?.classList.toggle('searching', Boolean(q));
     if (!q) { searchBusy(false); textTray = null; paintTray(); applySearchIds(null); return; }
     searchBusy(true);
     let data;
@@ -2662,6 +2747,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     paintTray();
     relayout(() => applySearchIds(ids));
   }
+  // Enter puts the menu away so the answers in the row below it show.
+  searchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && genreDrop?.contains(searchInput)) closeGenre(); });
   searchInput?.addEventListener('input', (e) => {
     clearTimeout(searchTimer);
     const q = e.target.value.trim();
@@ -2781,42 +2868,21 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
 </script>
 
 <script>
-  // Once the app is installed, the top bar's "Get the app" opens it instead:
-  // in a browser tab, a link to the archive would only reload the tab.
-  // Inside the app window there is nothing to get, so it goes.
-  import { inAppWindow, installedElsewhere, OPEN_IN_APP } from '../lib/install';
+  // Once the app is installed there is nothing left to get, so the top bar's
+  // "Get the app" goes: in the app window, and in a browser tab that knows
+  // the app is installed.
+  import { inAppWindow, installedElsewhere, rememberInstall } from '../lib/install';
   const getApp = document.getElementById('get-app') as HTMLAnchorElement | null;
-  if (getApp && inAppWindow()) getApp.remove();
-  else if (getApp) {
+  if (inAppWindow()) {
+    rememberInstall();
+    getApp?.remove();
+  } else if (getApp) {
     installedElsewhere().then((yes) => {
-      if (!yes) return;
-      getApp.href = OPEN_IN_APP;
-      getApp.setAttribute('aria-label', 'Open in app');
-      getApp.title = 'Open in app';
-      getApp.querySelector('.tb-label')!.textContent = 'Open in app';
+      if (yes) getApp.remove();
+    });
+    window.addEventListener('appinstalled', () => {
+      rememberInstall();
+      getApp.remove();
     });
   }
-</script>
-
-<script>
-  // Issue #145: the colour clock, from the top bar or beside Slideshow.
-  import { openColourClock, type ClockPhoto } from '../lib/clock-view';
-  import { paletteLightness } from '../lib/colour-clock';
-
-  function clockPhotos(): ClockPhoto[] {
-    return [...document.querySelectorAll<HTMLElement>('.archive .frame')].map((f) => ({
-      id: f.dataset.id || '',
-      key: f.dataset.key || '',
-      L: paletteLightness(f.dataset.swatches || '', Number((f.dataset.oklch || '').match(/L ([\d.]+)/)?.[1] ?? 0.5)),
-      src: f.dataset.full || '',
-      caption: f.getAttribute('aria-label') || '',
-    })).filter((p) => p.src);
-  }
-  const start = () => {
-    // Out of the lightbox first, so its own keys and timers stand down.
-    if (!document.getElementById('lightbox')?.hidden) document.getElementById('lb-close')?.click();
-    openColourClock(clockPhotos());
-  };
-  document.getElementById('clock-btn')?.addEventListener('click', start);
-  document.getElementById('lb-clock')?.addEventListener('click', start);
 </script>

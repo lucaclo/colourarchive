@@ -1,0 +1,42 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+// A wrong address. The likeliest way here is an old shared Scout link or a
+// photo deep link from before a rename, so the page says so plainly and
+// offers the two ways back in. No tab bar: none of its tabs is where you are.
+export const prerender = true;
+---
+
+<Layout title="Not found — Colour Archive" description="This page isn’t in the archive.">
+  <main class="nf">
+    <p class="nf-code">404</p>
+    <h1>Nothing here</h1>
+    <p class="nf-lede">This address isn’t part of the archive. It may be an old link, or it may have been typed slightly wrong.</p>
+    <nav class="nf-links" aria-label="Ways back">
+      <a class="btn btn-primary" href="/">Go to the Archive</a>
+      <a class="btn btn-ghost" href="/scout">Open Scout</a>
+    </nav>
+  </main>
+</Layout>
+
+<style>
+  .nf {
+    min-height: 100svh;
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    max-width: 34rem; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + var(--sp-5)) var(--sp-5) calc(env(safe-area-inset-bottom) + var(--sp-5));
+    font-family: var(--font-ui);
+  }
+  .nf-code {
+    margin: 0 0 var(--sp-2);
+    font-family: var(--font-data, var(--font-ui)); font-size: var(--t-footnote);
+    letter-spacing: 0.08em; color: var(--muted);
+  }
+  h1 {
+    margin: 0 0 var(--sp-3);
+    font-family: var(--font-display); font-style: italic; font-weight: 400;
+    font-size: clamp(2.4rem, 8vw, 3.6rem); line-height: 1.05;
+  }
+  .nf-lede { margin: 0 0 var(--sp-5); color: var(--muted); font-size: var(--t-body); line-height: 1.5; }
+  .nf-links { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+</style>

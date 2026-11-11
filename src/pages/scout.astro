@@ -65,7 +65,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
        bright frame (issue #157; lib/night-vision.ts). -->
   <script is:inline>try{if(localStorage.getItem('night-vision')==='1')document.documentElement.setAttribute('data-night-vision','')}catch(e){}</script>
   <main class="scout">
-    <div class="scout-stage" data-glass="light">
+    <h1 class="visually-hidden">Scout</h1>
+    <div class="scout-stage" data-glass="dark">
       <!-- Deep space round the globe; the map's canvas is clear outside it. -->
       <canvas class="scout-space scout-space-haze" id="scout-space-haze" aria-hidden="true"></canvas>
       <canvas class="scout-space" id="scout-space" aria-hidden="true"></canvas>
@@ -199,6 +200,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
               aria-controls="place-results"
               role="combobox"
             />
+            <!-- With something in the field the row below gives way to this. -->
+            <button class="locate-icon" id="locate-icon" type="button" aria-label="Use my location" title="Use my location" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+            </button>
             <ul class="results" id="place-results" role="listbox" aria-label="Places" hidden></ul>
             <!-- With the field empty: the one place you never have to type. -->
             <button class="locate-row" id="locate-row" type="button" hidden>
@@ -324,7 +329,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
               <!-- Three tiles, one takeaway each, the detail behind a tap (Apple
                    Weather's modules). One open at a time. -->
-              <div class="tiles" id="tiles">
+              <div class="tiles" id="tiles" data-seg="line">
                 <button class="tile" id="tile-sun" type="button" aria-expanded="false" aria-controls="detail-sun">
                   <span class="tile-k">Sun</span><span class="tile-v" id="tile-sun-v">—</span><span class="tile-s" id="tile-sun-s"></span>
                 </button>
@@ -398,19 +403,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
               <button class="events-all" id="events-all" type="button" aria-pressed="false">All times</button>
 
-              <!-- Where the sun falls relative to the picture, rather than
-                   relative to north. -->
-              <div class="framing" id="framing" hidden>
-                <p class="framing-head" id="framing-lens">—</p>
-                <p class="framing-line" id="framing-sun">—</p>
-                <!-- The join, for the pin: the aim above crossed with whether the
-                     light actually gets here. Only meaningful once an aim exists,
-                     which is why it lives with the lens and not with the spot. -->
-                <p class="framing-line framing-light" id="framing-light"></p>
-                <p class="framing-line framing-moon" id="framing-moon"></p>
-                <p class="framing-note" id="framing-width"></p>
-              </div>
-
               <!-- ── Best right now ────────────────────────────────────────────
                    Every hotspot near the pin, ordered by what the light is doing
                    at the minute on the slider. The order is four stated criteria
@@ -444,16 +436,16 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                    kit read off the archive (issue #153), depth of field, field of
                    view, a focus stack, and the two calculators that need no map.
                    Where the frame points stays with the frame, in Layers. -->
-              <details class="group" id="group-camera">
+              <details class="group" data-disclose id="group-camera">
                 <summary>Camera</summary>
                 <div class="kit" id="kit" role="group" aria-label="Your kit" hidden></div>
                 <div class="lensbox">
                   <div class="frame-row">
                     <label class="frame-field" for="frame-sensor"><span>Sensor</span>
-                      <select id="frame-sensor"></select>
+                      <select class="field" id="frame-sensor"></select>
                     </label>
                     <label class="frame-field" for="frame-focal"><span>Focal length</span>
-                      <select id="frame-focal"></select>
+                      <select class="field" id="frame-focal"></select>
                     </label>
                   </div>
                   <div class="frame-row">
@@ -461,10 +453,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                          pixel-sharp circle of confusion and the night's shutter
                          limit. -->
                     <label class="frame-field" for="frame-mp"><span>Resolution</span>
-                      <select id="frame-mp"></select>
+                      <select class="field" id="frame-mp"></select>
                     </label>
                     <label class="frame-field" for="frame-aperture"><span>Aperture</span>
-                      <select id="frame-aperture"></select>
+                      <select class="field" id="frame-aperture"></select>
                     </label>
                   </div>
                 </div>
@@ -472,10 +464,38 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                 <!-- Issue #158: the same numbers, on paper, for every lens above. -->
                 <a class="frame-lens-more kit-cards" id="kit-cards" href="/scout/cards" data-cmdk="Hyperfocal cards" data-cmdk-keywords="print, pdf, lens, depth of field" data-cmdk-always>Print hyperfocal cards for these lenses</a>
 
-                <details class="fold" id="fold-dof">
+                <!-- One fold for the five tools, one shown at a time. Each tool
+                     keeps its own <details> (summary hidden), so anything that
+                     opens or checks a fold by id still works; the tabs keep
+                     exactly one open. See view/tool-tabs.ts. -->
+                <details class="fold tool-fold" data-disclose id="fold-tools">
+                  <summary>Tools</summary>
+                  <div class="tool-tabs" id="tool-tabs" role="tablist" aria-label="Tool">
+                    <button type="button" role="tab" id="tool-tab-dof" data-fold="fold-dof" data-cmdk="Depth of field" data-cmdk-keywords="sharp, hyperfocal, focus" data-cmdk-always aria-controls="fold-dof" aria-selected="false" tabindex="-1">
+                      <svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="ti-fill" x="8.5" y="6.5" width="9" height="11" /><path d="M10.5 6.5h-2v11h2M15.5 6.5h2v11h-2" /><path d="M2.5 9.6 13 12 2.5 14.4M13 12l8.5-2.1M13 12l8.5 2.1" opacity="0.7" /><circle class="ti-dot" cx="13" cy="12" r="1.4" /></svg>
+                      <span>Depth of field</span>
+                    </button>
+                    <button type="button" role="tab" id="tool-tab-fov" data-fold="fold-fov" data-cmdk="Field of view" data-cmdk-keywords="frame size, person, scale" data-cmdk-always aria-controls="fold-fov" aria-selected="false" tabindex="-1">
+                      <svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5.5A1.5 1.5 0 0 1 4.5 4H7M17 4h2.5A1.5 1.5 0 0 1 21 5.5V8M21 16v2.5a1.5 1.5 0 0 1-1.5 1.5H17M7 20H4.5A1.5 1.5 0 0 1 3 18.5V16" /><circle class="ti-dot" cx="12" cy="8.6" r="1.5" /><path d="M9.6 17.2v-3.6a2.4 2.4 0 0 1 4.8 0v3.6" /></svg>
+                      <span>Field of view</span>
+                    </button>
+                    <button type="button" role="tab" id="tool-tab-stack" data-fold="fold-stack" data-cmdk="Focus stack" data-cmdk-keywords="focus stacking, shot list" data-cmdk-always aria-controls="fold-stack" aria-selected="false" tabindex="-1">
+                      <svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path class="ti-fill" d="M8.5 4.5h11l-4 6h-11z" /><path d="M8.5 4.5h11l-4 6h-11zM4.5 13.5l-1.5 2h11l4-6" /><path d="M4.5 17.5l-1.5 2h11l4-6" /></svg>
+                      <span>Focus stack</span>
+                    </button>
+                    <button type="button" role="tab" id="tool-tab-nd" data-fold="fold-nd" data-cmdk="Long exposure" data-cmdk-keywords="nd filter, shutter, reciprocity" data-cmdk-always aria-controls="fold-nd" aria-selected="false" tabindex="-1">
+                      <svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path class="ti-fill" d="M12 3.5a8.5 8.5 0 0 1 0 17z" /><path d="M12 7.5V12l3 2" /><circle class="ti-dot" cx="12" cy="12" r="1.1" /></svg>
+                      <span>Long exposure</span>
+                    </button>
+                    <button type="button" role="tab" id="tool-tab-timelapse" data-fold="fold-timelapse" data-cmdk="Time-lapse" data-cmdk-keywords="interval, frames, clip" data-cmdk-always aria-controls="fold-timelapse" aria-selected="false" tabindex="-1">
+                      <svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6v2.6" transform="rotate(0 12 12)" opacity="1" /><path d="M12 3.6v2.6" transform="rotate(30 12 12)" opacity="0.92" /><path d="M12 3.6v2.6" transform="rotate(60 12 12)" opacity="0.84" /><path d="M12 3.6v2.6" transform="rotate(90 12 12)" opacity="0.76" /><path d="M12 3.6v2.6" transform="rotate(120 12 12)" opacity="0.68" /><path d="M12 3.6v2.6" transform="rotate(150 12 12)" opacity="0.6" /><path d="M12 3.6v2.6" transform="rotate(180 12 12)" opacity="0.52" /><path d="M12 3.6v2.6" transform="rotate(210 12 12)" opacity="0.44" /><path d="M12 3.6v2.6" transform="rotate(240 12 12)" opacity="0.38" /><path d="M12 3.6v2.6" transform="rotate(270 12 12)" opacity="0.32" /><path d="M12 3.6v2.6" transform="rotate(300 12 12)" opacity="0.26" /><path d="M12 3.6v2.6" transform="rotate(330 12 12)" opacity="0.2" /><path class="ti-fill-solid" d="M10.4 9.4v5.2l4.3-2.6z" /></svg>
+                      <span>Time-lapse</span>
+                    </button>
+                  </div>
+                <details class="fold tool-pane" id="fold-dof" role="tabpanel" aria-labelledby="tool-tab-dof">
                   <summary>Depth of field</summary>
                   <!-- Issue #151: which standard of sharp, named and one tap away. -->
-                  <div class="seg seg-wide dof-standard" id="dof-standard" role="group" aria-label="Sharp enough for">
+                  <div class="seg seg-wide dof-standard" data-seg id="dof-standard" role="group" aria-label="Sharp enough for">
                     <button type="button" data-standard="print" class="on" aria-pressed="true">For print</button>
                     <button type="button" data-standard="pixel" aria-pressed="false">Pixel-sharp</button>
                   </div>
@@ -490,19 +510,31 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                       <button class="infotip" id="dof-more" type="button" aria-label="Depth of field in full" data-term="depth-of-field" data-tip="">i</button>
                     </p>
                     <p class="dof-split" id="dof-split"></p>
-                    <svg class="dof-chart" id="dof-chart" viewBox="0 0 320 96" aria-hidden="true">
-                      <rect class="dof-zone" id="dof-zone" x="0" y="34" width="0" height="38" />
-                      <line class="dof-ground" x1="0" y1="72" x2="320" y2="72" />
+                    <svg class="dof-chart" id="dof-chart" viewBox="0 0 320 112" aria-hidden="true">
+                      <g id="dof-grid"></g>
+                      <!-- Light from the lens closing to the focus and opening past it:
+                           the blur grows either side, and the band is where it is
+                           still small enough to read as sharp. -->
+                      <path class="dof-cone" id="dof-cone" d="" />
+                      <rect class="dof-zone" id="dof-zone" x="0" y="30" width="0" height="36" rx="2" />
+                      <path class="dof-limit" id="dof-near" d="" />
+                      <path class="dof-limit" id="dof-far" d="" />
+                      <text class="dof-limit-label" id="dof-near-label" x="0" y="20"></text>
+                      <text class="dof-limit-label" id="dof-far-label" x="0" y="20"></text>
+                      <line class="dof-axis" x1="28" y1="48" x2="312" y2="48" />
+                      <line class="dof-ground" x1="0" y1="84" x2="320" y2="84" />
                       <g id="dof-ticks"></g>
-                      <line class="dof-h" id="dof-h" x1="-10" y1="34" x2="-10" y2="72" />
-                      <text class="dof-h-label" id="dof-h-label" x="-10" y="29">H</text>
-                      <line class="dof-focus" id="dof-focus" x1="-10" y1="22" x2="-10" y2="72" />
-                      <circle class="dof-focus-dot" id="dof-focus-dot" cx="-10" cy="22" r="2.4" />
-                      <!-- The camera, side on. -->
-                      <g class="dof-camera" transform="translate(4 58)">
-                        <rect x="0" y="0" width="17" height="12" rx="2" />
-                        <rect x="17" y="3" width="5" height="6" rx="1" />
-                        <rect x="4" y="-2.5" width="6" height="3" rx="1" />
+                      <line class="dof-h" id="dof-h" x1="-10" y1="30" x2="-10" y2="84" />
+                      <text class="dof-h-label" id="dof-h-label" x="-10" y="80">H</text>
+                      <line class="dof-focus" id="dof-focus" x1="-10" y1="26" x2="-10" y2="84" />
+                      <circle class="dof-focus-dot" id="dof-focus-dot" cx="-10" cy="48" r="3.2" />
+                      <!-- The camera, side on: body, prism, lens barrel and its focus ring. -->
+                      <g class="dof-camera" transform="translate(2 48)">
+                        <path class="cam-body" d="M0 -6.5a2.5 2.5 0 0 1 2.5-2.5h2.2l1.6-2.6h4.4l1.6 2.6h1.2a2.5 2.5 0 0 1 2.5 2.5v13a2.5 2.5 0 0 1-2.5 2.5h-11a2.5 2.5 0 0 1-2.5-2.5z" />
+                        <circle class="cam-dial" cx="4" cy="-4.6" r="1" />
+                        <rect class="cam-lens" x="16" y="-6.5" width="8.5" height="13" rx="1.2" />
+                        <path class="cam-ribs" d="M18.6 -6.5v13M20.4 -6.5v13M22.2 -6.5v13" />
+                        <rect class="cam-front" x="24.5" y="-5.2" width="1.8" height="10.4" rx="0.7" />
                       </g>
                     </svg>
                     <label class="slab-row" for="frame-focus">
@@ -517,20 +549,52 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                 <!-- Issue #156: how big the frame is where the subject stands,
                      and a person in it to scale, seen from a level camera at
                      eye height (so the horizon runs through the middle). -->
-                <details class="fold" id="fold-fov">
+                <details class="fold tool-pane" id="fold-fov" role="tabpanel" aria-labelledby="tool-tab-fov">
                   <summary>Field of view</summary>
                   <div class="fov">
-                    <svg class="fov-chart" id="fov-chart" viewBox="0 0 320 150" aria-hidden="true">
-                      <defs><clipPath id="fov-clip"><rect id="fov-clip-rect" x="0" y="0" width="0" height="0" /></clipPath></defs>
-                      <rect class="fov-frame" id="fov-frame" x="0" y="0" width="0" height="0" />
+                    <svg class="fov-chart" id="fov-chart" viewBox="0 0 320 176" aria-hidden="true">
+                      <defs>
+                        <clipPath id="fov-clip"><rect id="fov-clip-rect" x="0" y="0" width="0" height="0" /></clipPath>
+                        <linearGradient id="fov-sky-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#7f93b8" stop-opacity="0.08" />
+                          <stop offset="1" stop-color="#c9d4e6" stop-opacity="0.2" />
+                        </linearGradient>
+                        <linearGradient id="fov-earth-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#b3a58c" stop-opacity="0.2" />
+                          <stop offset="1" stop-color="#b3a58c" stop-opacity="0.06" />
+                        </linearGradient>
+                      </defs>
                       <g clip-path="url(#fov-clip)">
+                        <rect class="fov-sky" id="fov-sky" x="0" y="0" width="0" height="0" />
+                        <rect class="fov-earth" id="fov-earth" x="0" y="0" width="0" height="0" />
+                        <!-- The ground in perspective: lines running away to the
+                             vanishing point, and rows at fixed fractions of the
+                             subject's distance. -->
+                        <g id="fov-grid" class="fov-grid"></g>
+                        <g id="fov-thirds" class="fov-thirds"></g>
                         <line class="fov-horizon" id="fov-horizon" x1="0" y1="0" x2="0" y2="0" />
                         <line class="fov-ground" id="fov-ground" x1="0" y1="0" x2="0" y2="0" />
                         <!-- A standing figure, 1 unit tall, feet at the origin. -->
                         <g id="fov-person" class="fov-person">
-                          <circle cx="0" cy="-0.92" r="0.075" />
-                          <path d="M-0.11 -0.82 h0.22 l0.03 0.4 h-0.05 l-0.025 0.42 h-0.065 l-0.01 -0.3 l-0.01 0.3 h-0.065 l-0.025 -0.42 h-0.05 z" />
+                          <ellipse class="fov-person-shadow" cx="0.02" cy="0" rx="0.17" ry="0.022" />
+                          <circle cx="0" cy="-0.905" r="0.082" />
+                          <path d="M-0.04 -0.815h0.08q0.08 0.005 0.085 0.055l0.015 0.29q0.001 0.03 -0.02 0.03h-0.015l-0.01 -0.22 -0.005 0.19 -0.015 0.47h-0.055l-0.015 -0.43h-0.01l-0.015 0.43h-0.055l-0.015 -0.47 -0.005 -0.19 -0.01 0.22h-0.015q-0.021 0 -0.02 -0.03l0.015 -0.29q0.005 -0.05 0.085 -0.055z" />
                         </g>
+                      </g>
+                      <rect class="fov-frame" id="fov-frame" x="0" y="0" width="0" height="0" />
+                      <path class="fov-corners" id="fov-corners" d="" />
+                      <path class="fov-centre" id="fov-centre" d="" />
+                      <!-- The person's height, measured beside them. -->
+                      <g id="fov-scale" class="fov-dim">
+                        <path id="fov-scale-line" d="" />
+                        <text id="fov-scale-label" x="0" y="0"></text>
+                      </g>
+                      <!-- The frame's width and height where the subject stands. -->
+                      <g class="fov-dim">
+                        <path id="fov-w-line" d="" />
+                        <text id="fov-w-label" class="fov-dim-label" x="0" y="0" text-anchor="middle"></text>
+                        <path id="fov-h-line" d="" />
+                        <text id="fov-h-label" class="fov-dim-label" x="0" y="0"></text>
                       </g>
                       <circle class="fov-speck" id="fov-speck" cx="-10" cy="-10" r="2" />
                     </svg>
@@ -547,10 +611,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                 <!-- Issue #152: the fewest frames that hold the near and the far
                      sharp, the nearest point read off the terrain at the bottom
                      of the frame, and a shot list to tick off on site. -->
-                <details class="fold" id="fold-stack">
+                <details class="fold tool-pane" id="fold-stack" role="tabpanel" aria-labelledby="tool-tab-stack">
                   <summary>Focus stack</summary>
                   <div class="stack">
-                    <div class="seg seg-wide dof-standard" id="stack-standard" role="group" aria-label="Sharp enough for">
+                    <div class="seg seg-wide dof-standard" data-seg id="stack-standard" role="group" aria-label="Sharp enough for">
                       <button type="button" data-standard="print" aria-pressed="false">For print</button>
                       <button type="button" data-standard="pixel" class="on" aria-pressed="true">Pixel-sharp</button>
                     </div>
@@ -568,14 +632,22 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     <input id="stack-far" type="range" min="0" max="1000" step="1" value="1000" />
                     <p class="dof-answer stack-count" id="stack-count">—</p>
                     <p class="dof-split" id="stack-line"></p>
-                    <svg class="dof-chart" id="stack-chart" viewBox="0 0 320 96" aria-hidden="true">
+                    <svg class="dof-chart" id="stack-chart" viewBox="0 0 320 112" aria-hidden="true">
+                      <g id="stack-grid"></g>
+                      <line class="dof-axis" x1="28" y1="48" x2="312" y2="48" />
                       <g id="stack-zones"></g>
-                      <line class="dof-ground" x1="0" y1="72" x2="320" y2="72" />
+                      <!-- What the frames hold between them, merged: one unbroken
+                           run from the nearest point to the farthest. -->
+                      <path class="stack-cover" id="stack-cover" d="" />
+                      <line class="dof-ground" x1="0" y1="84" x2="320" y2="84" />
                       <g id="stack-ticks"></g>
-                      <g class="dof-camera" transform="translate(4 58)">
-                        <rect x="0" y="0" width="17" height="12" rx="2" />
-                        <rect x="17" y="3" width="5" height="6" rx="1" />
-                        <rect x="4" y="-2.5" width="6" height="3" rx="1" />
+                      <!-- The camera, side on: body, prism, lens barrel and its focus ring. -->
+                      <g class="dof-camera" transform="translate(2 48)">
+                        <path class="cam-body" d="M0 -6.5a2.5 2.5 0 0 1 2.5-2.5h2.2l1.6-2.6h4.4l1.6 2.6h1.2a2.5 2.5 0 0 1 2.5 2.5v13a2.5 2.5 0 0 1-2.5 2.5h-11a2.5 2.5 0 0 1-2.5-2.5z" />
+                        <circle class="cam-dial" cx="4" cy="-4.6" r="1" />
+                        <rect class="cam-lens" x="16" y="-6.5" width="8.5" height="13" rx="1.2" />
+                        <path class="cam-ribs" d="M18.6 -6.5v13M20.4 -6.5v13M22.2 -6.5v13" />
+                        <rect class="cam-front" x="24.5" y="-5.2" width="1.8" height="10.4" rx="0.7" />
                       </g>
                     </svg>
                     <ol class="stack-list" id="stack-list" aria-label="Shot list"></ol>
@@ -586,15 +658,15 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                   </div>
                 </details>
 
-                <details class="fold" id="fold-nd">
+                <details class="fold tool-pane" id="fold-nd" role="tabpanel" aria-labelledby="tool-tab-nd">
                   <summary>Long exposure</summary>
                   <div class="slab">
                     <div class="frame-row">
                       <label class="frame-field" for="nd-base"><span>Base shutter</span>
-                        <select id="nd-base"></select>
+                        <select class="field" id="nd-base"></select>
                       </label>
                       <label class="frame-field" for="nd-filter"><span>ND filter<button class="infotip" type="button" aria-label="How filters are marked" data-term="nd" data-tip={tip('nd')}>i</button></span>
-                        <select id="nd-filter"></select>
+                        <select class="field" id="nd-filter"></select>
                       </label>
                     </div>
                     <!-- Issue #155: whichever way the filter is marked. -->
@@ -602,7 +674,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                       <input id="nd-ring" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="ND400, 2.7 or 9 stops" />
                     </label>
                     <label class="frame-field nd-film" for="nd-film"><span>Film<button class="infotip" type="button" aria-label="What reciprocity failure is" data-term="reciprocity" data-tip={tip('reciprocity')}>i</button></span>
-                      <select id="nd-film"></select>
+                      <select class="field" id="nd-film"></select>
                     </label>
                     <p class="dof-answer nd-time" id="nd-time">—</p>
                     <p class="dof-split" id="nd-result">—</p>
@@ -613,7 +685,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                   </div>
                 </details>
 
-                <details class="fold" id="fold-timelapse">
+                <details class="fold tool-pane" id="fold-timelapse" role="tabpanel" aria-labelledby="tool-tab-timelapse">
                   <summary>Time-lapse</summary>
                   <div class="slab">
                     <label class="slab-row" for="tl-length">
@@ -623,10 +695,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     <input id="tl-length" type="range" min="1" max="60" step="1" value="10" />
                     <div class="frame-row">
                       <label class="frame-field" for="tl-fps"><span>Frame rate</span>
-                        <select id="tl-fps"></select>
+                        <select class="field" id="tl-fps"></select>
                       </label>
                       <label class="frame-field" for="tl-interval"><span>Shooting interval</span>
-                        <select id="tl-interval"></select>
+                        <select class="field" id="tl-interval"></select>
                       </label>
                     </div>
                     <label class="slab-row" for="tl-photosize">
@@ -637,16 +709,17 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     <p class="slab-note" id="tl-result">—</p>
                   </div>
                 </details>
+                </details>
               </details>
 
-              <details class="group" id="group-night">
+              <details class="group" data-disclose id="group-night">
                 <summary>Night sky</summary>
-                <details class="fold" id="fold-twilight">
+                <details class="fold" data-disclose id="fold-twilight">
                   <summary>Twilight</summary>
                   <ul class="events events-sub" id="twilight"></ul>
                 </details>
 
-                <details class="fold" id="fold-moon">
+                <details class="fold" data-disclose id="fold-moon">
                   <summary>Moon</summary>
                   <div class="moon">
                     <svg class="moon-disc" id="moon-disc" viewBox="-13 -13 26 26" aria-hidden="true">
@@ -667,7 +740,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      it has to be above the horizon, the sky has to be astronomically
                      dark and the moon has to be down, all at once. Each line is one
                      of those conditions, so a refusal says which one failed. -->
-                <details class="fold" id="fold-core">
+                <details class="fold" data-disclose id="fold-core">
                   <summary>Milky Way core</summary>
                   <p class="core-line" id="core-times">—</p>
                   <p class="core-line" id="core-window">—</p>
@@ -705,30 +778,30 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      is always a reading of *right now* — NOAA's feeds here are
                      observations, not a forecast, so unlike everything else in
                      this panel it does not follow the slider or the date picker. -->
-                <details class="fold" id="fold-aurora">
+                <details class="fold" data-disclose id="fold-aurora">
                   <summary>Aurora</summary>
                   <p class="core-line" id="aurora-line">—</p>
                   <p class="core-note" id="aurora-note"></p>
                   <p class="core-note" id="aurora-space"></p>
                   <p class="core-note" id="aurora-stale"></p>
-                  <button class="ghost" id="aurora-refresh" type="button">Check now</button>
+                  <button class="btn btn-sm ghost" id="aurora-refresh" type="button">Check now</button>
                   <p class="core-caveat">Live, not a forecast.</p>
                 </details>
 
                 <!-- Meteor showers: the busiest active that night, else the next
                      peak, with the radiant's hours and the moon. Follows the date. -->
-                <details class="fold" id="fold-meteor">
+                <details class="fold" data-disclose id="fold-meteor">
                   <summary>Meteor showers</summary>
                   <p class="core-line" id="meteor-line">—</p>
                   <p class="core-note" id="meteor-when"></p>
                   <p class="core-note" id="meteor-moon"></p>
-                  <button class="ghost" id="meteor-go" type="button" hidden>Go to the best hour</button>
+                  <button class="btn btn-sm ghost" id="meteor-go" type="button" hidden>Go to the best hour</button>
                   <dl class="meteor-list" id="meteor-list"></dl>
                   <p class="core-caveat">One observer, whole sky. A lens sees fewer.</p>
                 </details>
               </details>
 
-              <details class="group" id="group-plan">
+              <details class="group" data-disclose id="group-plan">
                 <summary>Plan</summary>
                 <!-- ── The alignment finder ──────────────────────────────────────
                      The one question this page could answer for a moment but never
@@ -737,16 +810,16 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      is something pointed at rather than a number typed; the height
                      it has to reach is the real skyline on that bearing rather than
                      the flat horizon every other planner matches against. -->
-                <details class="fold" id="fold-align">
+                <details class="fold" data-disclose id="fold-align">
                   <summary>Behind a target</summary>
                   <div class="align">
                     <div class="align-controls">
-                      <div class="seg" id="align-body">
+                      <div class="seg" data-seg id="align-body">
                         <button type="button" data-body="sun" class="on">Sun</button>
                         <button type="button" data-body="moon">Moon</button>
                       </div>
-                      <button class="ghost" id="align-run" type="button">Find dates</button>
-                      <button class="ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">Add to calendar</button>
+                      <button class="btn btn-sm ghost" id="align-run" type="button">Find dates</button>
+                      <button class="btn btn-sm ghost" id="align-ics" type="button" disabled title="Every date below that meets, as a downloadable calendar file">Add to calendar</button>
                     </div>
                     <p class="align-basis" id="align-basis">—</p>
                     <ol class="align-list" id="align-list"></ol>
@@ -767,10 +840,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      sky actually open) never looked at each other until now. One
                      line: which kept spot, if any, is both due soon and currently
                      forecast clear. -->
-                <details class="fold" id="fold-tonight">
+                <details class="fold" data-disclose id="fold-tonight">
                   <summary>Go tonight</summary>
                   <div class="tonight">
-                    <button class="ghost" id="tonight-run" type="button">Check tonight</button>
+                    <button class="btn btn-sm ghost" id="tonight-run" type="button">Check tonight</button>
                     <div class="tonight-pick" id="tonight-pick"></div>
                     <p id="tonight-note"></p>
                   </div>
@@ -783,7 +856,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      them by geography. Pick two to six kept spots and the solver in
                      `itinerary.ts` orders them exhaustively — reporting whatever it
                      could not fit rather than quietly leaving it out. -->
-                <details class="fold" id="fold-plan" hidden>
+                <details class="fold" data-disclose id="fold-plan" hidden>
                   <summary>Day plan</summary>
                   <div class="plan">
                     <p class="plan-help" id="plan-help">Choose two to six kept spots.</p>
@@ -792,7 +865,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     <p class="plan-total" id="plan-total"></p>
                     <ul class="plan-trouble" id="plan-trouble"></ul>
                     <p class="plan-assume" id="plan-assume"></p>
-                    <button class="ghost" id="plan-copy" type="button" hidden>Copy the day</button>
+                    <button class="btn btn-sm ghost" id="plan-copy" type="button" hidden>Copy the day</button>
                     <p class="note-say" id="plan-say"></p>
                   </div>
                 </details>
@@ -808,7 +881,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      Hidden by default — shown only once that check comes back
                      coastal, or honestly blocked on a missing API key. See
                      `tide-panel.ts`'s header for the three states in full. -->
-                <details class="fold" id="fold-tide" hidden>
+                <details class="fold" data-disclose id="fold-tide" hidden>
                   <summary>Tide</summary>
                   <div class="tide-strip" id="tide-strip" hidden></div>
                   <ul class="events events-sub" id="tide-events"></ul>
@@ -816,20 +889,20 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                 </details>
               </details>
 
-              <details class="group" id="group-yours">
+              <details class="group" data-disclose id="group-yours">
                 <summary>Yours</summary>
                 <!-- ── Your photos ───────────────────────────────────────────────
                      Where the archive's own photographs were taken — GPS when a
                      file has it, otherwise placed by hand here. Mac-only: the
                      locations are private (see `scout/mine.ts`), so the static
                      publish never shows this fold. Owned by `view/mine.ts`. -->
-                <details class="fold" id="fold-mine" hidden>
+                <details class="fold" data-disclose id="fold-mine" hidden>
                   <summary>Your photos</summary>
                   <div class="mine">
                     <p class="mine-count" id="mine-count">Loading…</p>
                     <div class="mine-controls">
-                      <button class="ghost" id="mine-show" type="button" aria-pressed="true">Shown on map</button>
-                      <button class="ghost" id="mine-fit" type="button">Zoom to all</button>
+                      <button class="btn btn-sm ghost" id="mine-show" type="button" aria-pressed="true">Shown on map</button>
+                      <button class="btn btn-sm ghost" id="mine-fit" type="button">Zoom to all</button>
                     </div>
                     <!-- Issue #139: places read off the iPhone photos taken at the
                          same time, one tap to accept. Placing by hand (#149) is
@@ -854,15 +927,15 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      engine when *here* would produce it. The gap list itself is
                      baked at build time from the manifest — see `gap-data` below
                      — only the search against the place on screen runs live. -->
-                <details class="fold" id="fold-gaps">
+                <details class="fold" data-disclose id="fold-gaps">
                   <summary>Missing colours</summary>
                   <div class="gaps">
                     <div class="gap-controls">
-                      <button class="ghost" id="gap-run" type="button">Find opportunities</button>
+                      <button class="btn btn-sm ghost" id="gap-run" type="button">Find opportunities</button>
                       <!-- Issue #67: weighs the dates above against this week's
                            forecast and re-ranks by confirmed-soonest. A separate
                            press because it is a separate fetch. -->
-                      <button class="ghost" id="gap-weather" type="button" disabled>Check weather</button>
+                      <button class="btn btn-sm ghost" id="gap-weather" type="button" disabled>Check weather</button>
                     </div>
                     <ol class="gap-list" id="gap-list"></ol>
                     <p id="gap-note"></p>
@@ -873,7 +946,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                      Only for a kept spot. A place you are passing through does not
                      need a note, and a note with nowhere to live would be lost the
                      moment the pin moved — so the star is what opens this. -->
-                <details class="fold" id="fold-note" hidden>
+                <details class="fold" data-disclose id="fold-note" hidden>
                   <summary>Notebook</summary>
                   <div class="note">
                     <textarea
@@ -900,7 +973,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                         placeholder="Link a reference photograph"
                         aria-label="Reference photograph URL"
                       />
-                      <button class="ghost" id="note-add" type="button">Add</button>
+                      <button class="btn btn-sm ghost" id="note-add" type="button">Add</button>
                     </div>
                     <p class="note-say" id="note-say"></p>
 
@@ -937,7 +1010,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                         placeholder="What does it show? e.g. “sun clears the ridge here”"
                         aria-label="What this photo is evidence of"
                       />
-                      <button class="ghost" id="proof-add" type="button">Add proof</button>
+                      <button class="btn btn-sm ghost" id="proof-add" type="button">Add proof</button>
                     </div>
                     <p class="note-say" id="proof-say"></p>
                     <button class="wide" id="proof-copy-link" type="button">Copy a link with these proofs</button>
@@ -972,7 +1045,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                         placeholder="What actually happened? (optional)"
                         aria-label="What happened on this visit"
                       />
-                      <button class="ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider — set it to a past photo's own capture time to log a reconstruction instead of today">Log this visit</button>
+                      <button class="btn btn-sm ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider — set it to a past photo's own capture time to log a reconstruction instead of today">Log this visit</button>
                     </div>
                     <p class="note-say" id="visit-say"></p>
 
@@ -990,14 +1063,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                         accept=".tif,.tiff,image/tiff"
                         aria-label="Upload a GeoTIFF elevation survey"
                       />
-                      <button class="ghost" id="dem-add" type="button">Upload</button>
+                      <button class="btn btn-sm ghost" id="dem-add" type="button">Upload</button>
                     </div>
                     <p class="note-say" id="dem-say"></p>
                   </div>
                 </details>
               </details>
 
-              <details class="group" id="group-about">
+              <details class="group" data-disclose id="group-about">
                 <summary>About this view</summary>
                 <dl class="facts">
                   <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
@@ -1006,7 +1079,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                   <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow right now. With the sun low, a whole city can be in range, so it stops at the 4,000 tallest and tells you when it has.">i</button></dt><dd id="f-buildings">—</dd></div>
                   <div><dt>Trees<button class="infotip" type="button" aria-label="What this means" data-tip="Trees from OpenStreetMap where someone has surveyed them, plus guessed ones in parks and woods where nobody has. Guessed trees cast lighter shadows and never count towards the light windows or the hotspot ranking.">i</button></dt><dd id="f-trees">—</dd></div>
               <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin is in the shadow of a hill or ridge, using the same elevation data as the map's terrain shading. The grid size it was read at is shown too.">i</button></dt><dd id="f-landform">—</dd></div>
-                  <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Reviewed photographs from Wikimedia Commons (and Flickr, if there's a key), grouped into hotspots near here. It's a sample, not every photo ever taken here. Anything by a photographer on the notable list is marked and goes to the top.">i</button></dt><dd id="f-photos">—</dd></div>
+                  <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Photos shared from your archive and geotagged work by photographers you've favourited, grouped into hotspots near here (plus Flickr if there's a key, and Wikimedia Commons if you turn it on in Layers). It's a sample, not every photo ever taken here.">i</button></dt><dd id="f-photos">—</dd></div>
                   <div>
                     <dt>Light<button class="infotip" type="button" aria-label="What this means" data-term="light" data-tip={tip('light')}>i</button></dt>
                     <dd id="f-light">
@@ -1034,7 +1107,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
       <!-- ── Top right: view controls ────────────────────────────────────── -->
       <div class="tools" id="tools" hidden>
-        <div class="seg" id="viewseg">
+        <div class="seg" data-seg id="viewseg">
           <button type="button" data-view="2d" class="on">2D</button>
           <button type="button" data-view="3d">3D</button>
         </div>
@@ -1080,12 +1153,12 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
            layer. -->
       <div class="layers night-panel" id="night-panel" hidden>
         <p class="layers-head">Milky Way</p>
-        <label class="toggle"><input type="checkbox" id="t-stars-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Stars &amp; constellations</span></label>
-        <label class="toggle"><input type="checkbox" id="t-core-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Milky Way arc</span></label>
-        <label class="toggle"><input type="checkbox" id="t-moonpath-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Moon path</span></label>
-        <label class="toggle"><input type="checkbox" id="t-solstice-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Solstice paths</span></label>
-        <label class="toggle"><input type="checkbox" id="t-frame-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Frame</span></label>
-        <label class="toggle"><input type="checkbox" id="t-monolith-night" /><span class="toggle-box" aria-hidden="true"></span> <span>Monolith</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-stars-night" /> <span>Stars &amp; constellations</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-core-night" /> <span>Milky Way arc</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-moonpath-night" /> <span>Moon path</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-solstice-night" /> <span>Solstice paths</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-frame-night" /> <span>Frame</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-monolith-night" /> <span>Monolith</span></label>
       </div>
 
       <!-- A tapped star's own small card — positioned at the tap itself, not
@@ -1098,43 +1171,44 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
       <div class="layers" id="layers" hidden>
         <p class="layers-head">Basemap</p>
-        <div class="seg seg-wide" id="baseseg">
+        <div class="seg seg-wide" data-seg id="baseseg">
           <button type="button" data-base="light" class="on">Light</button>
           <button type="button" data-base="dark">Dark</button>
           <button type="button" data-base="satellite">Satellite</button>
         </div>
         <!-- Issue #159: every length on the page, in one unit. -->
         <p class="layers-head">Units</p>
-        <div class="seg seg-wide" id="unitseg">
+        <div class="seg seg-wide" data-seg id="unitseg">
           <button type="button" data-units="m" class="on" aria-pressed="true" data-cmdk="Use metres" data-cmdk-keywords="units, metric, km" data-cmdk-always>Metres</button>
           <button type="button" data-units="ft" aria-pressed="false" data-cmdk="Use feet" data-cmdk-keywords="units, imperial, miles" data-cmdk-always>Feet</button>
         </div>
         <!-- Issue #157: amber on black, for working in the dark. -->
-        <label class="toggle"><input type="checkbox" id="t-nightvision" data-cmdk="Night vision" data-cmdk-keywords="red, amber, dark, astro, night mode" data-cmdk-always /><span class="toggle-box" aria-hidden="true"></span> <span>Night vision</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-nightvision" data-cmdk="Night vision" data-cmdk-keywords="red, amber, dark, astro, night mode" data-cmdk-always /> <span>Night vision</span></label>
         <p class="layers-head">Show</p>
-        <label class="toggle"><input type="checkbox" id="t-buildings" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Building shadows</span></label>
-        <label class="toggle"><input type="checkbox" id="t-trees" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Trees</span></label>
-        <label class="toggle"><input type="checkbox" id="t-landform" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Landform shadows</span></label>
-        <label class="toggle"><input type="checkbox" id="t-hillshade" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Hillshade</span></label>
-        <label class="toggle"><input type="checkbox" id="t-sunpath" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Sun path</span></label>
-        <label class="toggle"><input type="checkbox" id="t-moonpath" /><span class="toggle-box" aria-hidden="true"></span> <span>Moon path</span></label>
-        <label class="toggle"><input type="checkbox" id="t-solstice" /><span class="toggle-box" aria-hidden="true"></span> <span>Solstice paths</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-buildings" checked /> <span>Building shadows</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-trees" checked /> <span>Trees</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-landform" checked /> <span>Landform shadows</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-hillshade" checked /> <span>Hillshade</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-sunpath" checked /> <span>Sun path</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-moonpath" /> <span>Moon path</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-solstice" /> <span>Solstice paths</span></label>
         <!-- "arc", not "core": this draws the path across the sky dome and
              nothing else. It shared its name with the panel section that holds
              all the text, so ticking it looked like it had done nothing. -->
-        <label class="toggle"><input type="checkbox" id="t-core" /><span class="toggle-box" aria-hidden="true"></span> <span>Milky Way arc</span></label>
-        <label class="toggle"><input type="checkbox" id="t-stars" /><span class="toggle-box" aria-hidden="true"></span> <span>Stars &amp; constellations</span></label>
-        <label class="toggle"><input type="checkbox" id="t-monolith" /><span class="toggle-box" aria-hidden="true"></span> <span>Monolith</span></label>
-        <label class="toggle"><input type="checkbox" id="t-photos" checked /><span class="toggle-box" aria-hidden="true"></span> <span>Photo hotspots</span></label>
-        <label class="toggle"><input type="checkbox" id="t-frame" /><span class="toggle-box" aria-hidden="true"></span> <span>Frame</span></label>
-        <label class="toggle"><input type="checkbox" id="t-sight" /><span class="toggle-box" aria-hidden="true"></span> <span>Line of sight</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-core" /> <span>Milky Way arc</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-stars" /> <span>Stars &amp; constellations</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-monolith" /> <span>Monolith</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-photos" checked /> <span>Photo hotspots</span></label>
+        <label class="toggle toggle-sub"><input type="checkbox" class="switch" id="t-commons" /> <span>Include Wikimedia Commons</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-frame" /> <span>Frame</span></label>
+        <label class="toggle"><input type="checkbox" class="switch" id="t-sight" /> <span>Line of sight</span></label>
 
         <!-- The lens. The wedge on the map is where the frame lands on the
              ground; the answer that needs it is whether the sun is *in* the
              picture, which no bearing readout can tell you without a focal
              length. -->
         <div class="slab" id="framebox" hidden>
-          <div class="seg seg-wide" id="frameorient">
+          <div class="seg seg-wide" data-seg id="frameorient">
             <button type="button" data-orient="landscape" class="on">Landscape</button>
             <button type="button" data-orient="portrait">Portrait</button>
           </div>
@@ -1198,10 +1272,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
              instead of something only visible live. Frame-by-frame canvas
              capture, not new rendering: every frame is exactly what the
              scrubber would have shown standing on it by hand. -->
-        <details class="fold" id="fold-sweep">
+        <details class="fold" data-disclose id="fold-sweep">
           <summary>Export a light sweep</summary>
           <div class="slab">
-            <div class="seg" id="sweep-span">
+            <div class="seg" data-seg id="sweep-span">
               <button type="button" data-span="day" class="on">This day</button>
               <button type="button" data-span="season">Solstice to solstice</button>
             </div>
@@ -1211,7 +1285,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
             </label>
             <input id="sweep-length" type="range" min="4" max="30" step="1" value="6" />
             <label class="frame-field" for="sweep-fps"><span>Frame rate</span>
-              <select id="sweep-fps"></select>
+              <select class="field" id="sweep-fps"></select>
             </label>
             <button class="wide" id="sweep-run" type="button">Render and download</button>
             <p class="slab-note" id="sweep-note"></p>
@@ -1233,9 +1307,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
            thirty times. -->
       <div class="monthgrid" id="monthgrid" hidden role="dialog" aria-modal="true" aria-label="The month, hour by hour">
         <div class="mg-head">
-          <button class="chip chip-step" id="mg-back" type="button" aria-label="The month before">−</button>
+          <button class="chip chip-step" id="mg-back" type="button" aria-label="The month before">‹</button>
           <p class="mg-title" id="mg-title">—</p>
-          <button class="chip chip-step" id="mg-forward" type="button" aria-label="The month after">+</button>
+          <button class="chip chip-step" id="mg-forward" type="button" aria-label="The month after">›</button>
           <button class="mg-close" id="mg-close" type="button" aria-label="Close">×</button>
         </div>
         <div class="mg-scroll">
@@ -1294,10 +1368,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
         </div>
         <ul class="photo-grid" id="photo-grid"></ul>
         <p class="photos-note">
-          Peer-reviewed photographs from Wikimedia Commons, ranked photographs from Flickr
-          when a key is configured, and any photograph — from either — by someone on the
-          curated list of named photographers, marked and ranked above the rest, plus
-          photographs shared from this archive. Each is its author's, under the licence shown.
+          Photographs shared from this archive, geotagged work by the photographers you've
+          favourited and by the curated list of named photographers, ranked Flickr photographs
+          when a key is configured, and Wikimedia Commons when it's on in Layers. Each is its
+          author's, under the licence shown.
         </p>
       </div>
 
@@ -1351,6 +1425,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
+    /* A layer switched on glows in the sun's own amber: on this page, on
+       means light. */
+    --switch-on: #c1863c;
     --stage-top: 3.4rem;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     /* The fallback includes the tab bar, because the measured value does: the
@@ -1661,6 +1738,11 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     overflow: hidden;
   }
   .glossary[open] { display: flex; flex-direction: column; }
+  /* On a phone the glossary stops short of the tab bar instead of running
+     under its faded glass. */
+  @media (max-width: 640px) {
+    .glossary { max-height: calc(100dvh - var(--tabbar-space, 5rem) - 2rem); margin-top: 1rem; }
+  }
   .glossary::backdrop { background: color-mix(in oklab, #000 40%, transparent); }
   .glossary-head {
     display: flex;
@@ -1910,41 +1992,12 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
   /* ── The frame, and the line of sight ─────────────────────────────────── */
 
-  .framing,
   .sightline {
     margin: 0.7rem 0 0;
     padding-top: 0.6rem;
     border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
   }
-  .framing[hidden],
   .sightline[hidden] { display: none; }
-  .framing-head {
-    margin: 0 0 0.3rem;
-    font-family: var(--font-ui);
-    font-size: 0.6875rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-weight: 600;
-  }
-  .framing-line {
-    margin: 0 0 0.25rem;
-    font-size: var(--t-caption);
-    line-height: 1.5;
-    color: var(--fg);
-  }
-  .framing-line:empty { display: none; }
-  .framing-note {
-    margin: 0.25rem 0 0;
-    font-family: var(--font-ui);
-    font-size: 0.6875rem;
-    line-height: 1.5;
-    color: var(--muted);
-  }
-  .framing-note:empty { display: none; }
-  /* The verdict is the answer the lens row exists to produce, so it carries the
-     sun's own colour rather than the body colour of the lines above it. */
-  .framing-light { color: #f0b866; }
 
   /* ── Best right now ───────────────────────────────────────────────────── */
 
@@ -1993,7 +2046,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     background: color-mix(in oklab, var(--border) 40%, transparent);
     outline: none;
   }
-  .best-list :global(li:active) { transform: scale(0.98); }
   .best-list :global(.best-rank) {
     font-family: var(--font-label);
     font-size: 0.6875rem;
@@ -2010,6 +2062,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   }
   .best-list :global(.best-where) {
     display: block;
+    /* The name keeps to one line; the facts under it wrap rather than lose
+       "terrain only" to an ellipsis. */
+    white-space: normal;
     font-family: var(--font-ui);
     font-size: 0.6875rem;
     color: var(--muted);
@@ -2081,7 +2136,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     background: color-mix(in oklab, var(--border) 40%, transparent);
     outline: none;
   }
-  .align-list :global(.align-row:active) { transform: scale(0.98); }
   .align-list :global(.align-when) { font-size: var(--t-caption); line-height: 1.3; }
   .align-list :global(.align-what) {
     font-family: var(--font-ui);
@@ -2153,7 +2207,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     background: color-mix(in oklab, var(--accent-mix) 34%, transparent);
     outline: none;
   }
-  .tonight :global(.tonight-row:active) { transform: scale(0.98); }
   .tonight :global(.tonight-head) { font-size: var(--t-caption); line-height: 1.3; }
   .tonight :global(.tonight-detail) {
     font-family: var(--font-ui);
@@ -2247,6 +2300,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     cursor: pointer;
     position: relative;
   }
+  /* Zoomed out a pin shrinks to 22px; its target doesn't. */
+  .scout-map :global(.mine-pin)::after { content: ''; position: absolute; inset: -6px; }
   .scout-map :global(.mine-pin img) {
     width: 100%;
     height: 100%;
@@ -2579,7 +2634,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   }
   .events :global(button:disabled) { cursor: default; opacity: 0.45; }
   .events :global(button:not(:disabled):hover) { background: color-mix(in oklab, var(--fg) 7%, transparent); }
-  .events :global(button:not(:disabled):active) { transform: scale(0.98); }
   .events :global(.ev-label) { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .events :global(.ev-time) {
     font-family: var(--font-label);
@@ -2643,7 +2697,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     padding: 0 0.3rem;
     transition: transform 110ms ease-out;
   }
-  .mg-close:active { transform: scale(0.9); }
   .mg-scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
   /* The rows share whatever height there is: a month is a fixed number of rows,
      so letting them stretch fills the panel on a laptop without making them
@@ -2814,24 +2867,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     font: inherit;
     font-size: var(--t-caption);
     color: var(--fg);
-    background: color-mix(in oklab, var(--bg) 78%, var(--fg) 6%);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.35rem 0.5rem;
+    background: var(--fill);
+    border: 1px solid var(--separator);
+    border-radius: var(--r-sm);
+    padding: 0.35rem 0.7rem;
+    transition: border-color 160ms var(--ease), box-shadow 260ms var(--ease);
   }
-  #note-add, #visit-log, #dem-add, #proof-add {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--fg);
-    font-family: var(--font-ui);
-    font-size: var(--t-caption);
-    padding: 0 0.7rem;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: transform 110ms ease-out;
-  }
-  #note-add:active, #visit-log:active, #dem-add:active, #proof-add:active { transform: scale(0.95); }
+  .note-url:focus-visible { outline: none; border-color: color-mix(in oklab, var(--accent-mix) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-mix) 18%, transparent); }
+  /* Add, Add proof, Log this visit, Upload are `.btn .btn-sm` pills. */
   /* A datetime-local field reads its own width from the UA — it never needs
      the full flex share a URL field does. */
   .proof-when { flex: 0 0 auto; width: auto; }
@@ -2938,7 +2981,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .moon-lit { fill: #e8e4dc; }
   .moon-rim { fill: none; stroke: color-mix(in oklab, var(--fg) 30%, transparent); stroke-width: 0.75; }
   .moon-text { min-width: 0; }
-  .moon-phase { margin: 0; font-family: var(--font-label); font-size: var(--t-footnote); color: var(--fg); }
+  .moon-phase { margin: 0; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg); }
   .moon-line {
     margin: 0.15rem 0 0;
     font-family: var(--font-ui);
@@ -3136,7 +3179,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     transition: color 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease), transform 110ms ease-out;
   }
   button.chip:hover { border-color: var(--accent-mix); }
-  button.chip:active { transform: scale(0.96); }
   /* Actions (Today, Play, Now) read as buttons: title case, semibold — not
      the tracked caps that made them look like more readouts beside the clock. */
   .chip-strong { font-size: var(--t-footnote); font-weight: 600; }
@@ -3188,7 +3230,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     text-decoration: none;
     transition: color 140ms, background 140ms, transform 110ms ease-out;
   }
-  .seg button:active, .seg a:active { transform: scale(0.96); }
   .seg button.on { color: var(--bg); background: var(--fg); }
   .seg button:not(.on):hover { color: var(--fg); }
   /* The nav's own links (Archive/Inspiration) — everywhere else in the app,
@@ -3212,7 +3253,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     transition: color 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease), transform 110ms ease-out;
   }
   .round:hover { border-color: var(--accent-mix); }
-  .round:active { transform: scale(0.92); }
   .round svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   /* Held down, in the same violet the core's arc is drawn in — the button and
      the mark it puts on the map have to read as the same thing. */
@@ -3288,43 +3328,27 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     color: var(--muted);
     font-weight: 600;
   }
+  /* A layer that turns on and off is a switch (global `input.switch`), on
+     the right of its name the way a settings list reads, and the whole row
+     is the target. These were 15px hollow squares that read as a form's
+     checkboxes, not as things that switch the map. */
   .toggle {
     display: flex;
+    flex-direction: row-reverse;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.32rem 0;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.36rem 0;
     min-height: 34px;
     font-family: var(--font-ui);
     font-size: var(--t-caption);
     color: var(--fg);
     cursor: pointer;
   }
-  /* A native checkbox, kept for focus and screen readers, just clipped to
-     nothing — `.toggle-box` is what actually gets seen and drawn on. Filled
-     square for on, hollow for off: the same idiom `.seg button.on` already
-     uses, rather than a checkmark glyph this page has no other use for. */
-  .toggle input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-  .toggle-box {
-    flex: none;
-    width: 15px;
-    height: 15px;
-    border: 1px solid var(--muted);
-    border-radius: 2px;
-    transition: border-color 140ms var(--ease), background 140ms var(--ease);
-  }
-  .toggle:hover .toggle-box { border-color: var(--accent-mix); }
-  .toggle input:checked + .toggle-box { background: var(--fg); border-color: var(--fg); }
-  .toggle input:focus-visible + .toggle-box { outline: 2px solid var(--fg); outline-offset: 2px; }
+  /* A refinement of the row above it (Commons under Photo hotspots). */
+  .toggle-sub { padding-left: 0.9rem; color: var(--muted); }
+  #layers:has(#t-photos:not(:checked)) .toggle-sub { opacity: 0.45; }
+  .toggle:hover input.switch:not(:checked) { background: color-mix(in oklab, var(--fg) 24%, transparent); }
 
   .slab { margin: 0.4rem 0 0.6rem; padding: 0.5rem 0 0; border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
   .slab[hidden] { display: none; }
@@ -3354,16 +3378,66 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
   .frame-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
   .frame-field { flex: 1; display: grid; gap: 0.2rem; font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); }
+  /* The well itself is the global `select.field`; only its size is set here. */
   .frame-field select {
     width: 100%;
-    padding: 0.3rem 0.35rem;
-    font: inherit;
+    min-height: 34px;
+    padding: 0.3rem 2rem 0.3rem 0.7rem;
+    font-family: var(--font-ui);
     font-size: var(--t-caption);
-    color: var(--fg);
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 5px;
+    background-position: right 0.65rem center;
   }
+
+  /* ── Tools: one fold, five tabs, one tool at a time ──────────────────────
+     A segmented row (HIG segmented-controls: equal widths, no more than five,
+     labels under the images). The panes are <details> whose summaries the
+     tabs replace. */
+  .tool-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2px;
+    margin: 0.2rem 0 0.9rem;
+    padding: 3px;
+    border-radius: 14px;
+    background: var(--fill);
+  }
+  .tool-tabs button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.3rem;
+    min-height: 64px;
+    padding: 0.55rem 0.15rem 0.45rem;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+    transition: color 140ms, background 160ms, transform 110ms ease-out;
+  }
+  .tool-tabs button:hover { color: var(--fg); }
+  .tool-tabs button:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .tool-tabs button[aria-selected='true'] { color: var(--bg); background: var(--fg); }
+  .tool-icon {
+    width: 24px;
+    height: 24px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .tool-icon .ti-fill { fill: currentColor; fill-opacity: 0.3; stroke: none; }
+  .tool-icon .ti-dot, .tool-icon .ti-fill-solid { fill: currentColor; stroke: none; }
+  .group .fold.tool-pane > summary { display: none; }
+  #ar-open[hidden] { display: none; }
+  .group .tool-pane { margin: 0; }
 
   /* ── Depth of field, drawn (issue #150) ──────────────────────────────── */
   .dof { padding: 0.15rem 0 0.4rem; }
@@ -3390,26 +3464,54 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .dof-answer .infotip { align-self: center; }
   .dof-split { margin: 0.15rem 0 0.4rem; font-family: var(--font-ui); font-size: var(--t-caption); line-height: 1.5; color: var(--secondary); }
   .dof-split:empty { display: none; }
-  .dof-chart { display: block; width: 100%; height: auto; margin: 0.2rem 0 0.5rem; overflow: visible; }
-  .dof-zone { fill: color-mix(in oklab, #f0b866 20%, transparent); stroke: #f0b866; stroke-width: 1; }
+  .dof-chart { display: block; width: 100%; height: auto; margin: 0.4rem 0 0.5rem; overflow: visible; }
   .dof input[type='range'] { width: 100%; margin: 0; accent-color: var(--fg); }
-  .dof-chart :global(.dof-stack-zone) { stroke-width: 1; }
-  .dof-chart :global(.dof-stack-zone.odd) { fill: color-mix(in oklab, #f0b866 30%, transparent); stroke: #f0b866; }
-  .dof-chart :global(.dof-stack-zone.even) { fill: color-mix(in oklab, #9aa7ff 26%, transparent); stroke: #9aa7ff; }
-  .dof-chart :global(.dof-stack-focus) { stroke: var(--fg); stroke-width: 1; opacity: 0.7; }
+  /* One amber for what is sharp, used nowhere else in the drawing. */
+  .dof-zone { fill: color-mix(in oklab, #f0b866 17%, transparent); stroke: none; }
+  .dof-limit { fill: none; stroke: #f0b866; stroke-width: 1.5; stroke-linejoin: round; }
+  .dof-limit-label {
+    fill: #f0b866;
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-anchor: middle;
+  }
+  .dof-cone { fill: color-mix(in oklab, var(--fg) 6%, transparent); stroke: color-mix(in oklab, var(--fg) 34%, transparent); stroke-width: 0.75; stroke-linejoin: round; }
+  .dof-axis { stroke: color-mix(in oklab, var(--fg) 22%, transparent); stroke-width: 0.75; stroke-dasharray: 1.5 2.5; }
+  .dof-chart :global(.dof-grid) { stroke: color-mix(in oklab, var(--fg) 7%, transparent); stroke-width: 1; }
   .dof-ground { stroke: color-mix(in oklab, var(--fg) 45%, transparent); stroke-width: 1; }
   .dof-chart :global(.dof-tick) { stroke: color-mix(in oklab, var(--fg) 35%, transparent); stroke-width: 1; }
   .dof-chart :global(.dof-tick-label) {
     fill: var(--secondary);
     font-family: var(--font-ui);
     font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
     text-anchor: middle;
   }
-  .dof-h { stroke: var(--secondary); stroke-width: 1; stroke-dasharray: 2.5 2.5; }
-  .dof-h-label { fill: var(--secondary); font-family: var(--font-ui); font-size: 10.5px; text-anchor: middle; }
-  .dof-focus { stroke: var(--fg); stroke-width: 1.5; }
-  .dof-focus-dot { fill: var(--fg); }
-  .dof-camera { fill: var(--fg); }
+  .dof-h { stroke: var(--secondary); stroke-width: 1; stroke-dasharray: 2 2.5; }
+  .dof-h-label { fill: var(--secondary); font-family: var(--font-ui); font-size: 10px; font-weight: 600; }
+  .dof-focus { stroke: var(--fg); stroke-width: 1.25; }
+  .dof-focus-dot { fill: var(--fg); stroke: var(--bg); stroke-width: 1.5; paint-order: stroke; }
+  .dof-camera .cam-body { fill: var(--fg); }
+  .dof-camera .cam-dial { fill: var(--bg); }
+  .dof-camera .cam-lens { fill: color-mix(in oklab, var(--fg) 72%, var(--bg)); }
+  .dof-camera .cam-ribs { stroke: var(--bg); stroke-width: 0.7; opacity: 0.55; }
+  .dof-camera .cam-front { fill: #9aa7ff; }
+  /* Focus stack zones: amber and blue alternate, each frame's focus a dot. */
+  .dof-chart :global(.dof-stack-zone) { stroke-width: 1; }
+  .dof-chart :global(.dof-stack-zone.odd) { fill: color-mix(in oklab, #f0b866 24%, transparent); stroke: color-mix(in oklab, #f0b866 80%, transparent); }
+  .dof-chart :global(.dof-stack-zone.even) { fill: color-mix(in oklab, #9aa7ff 24%, transparent); stroke: color-mix(in oklab, #9aa7ff 80%, transparent); }
+  .dof-chart :global(.dof-stack-dot) { fill: var(--fg); stroke: var(--bg); stroke-width: 1; paint-order: stroke; }
+  .dof-chart :global(.dof-stack-n) {
+    fill: var(--bg);
+    font-family: var(--font-ui);
+    font-size: 8px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-anchor: middle;
+  }
+  .stack-cover { fill: none; stroke: #f0b866; stroke-width: 1.5; stroke-linecap: round; }
   .dof-hyper { margin-top: 0.6rem; }
   .dof-h-label[hidden] { display: none; }
   .dof-hyper[aria-pressed='true'] { border-color: #f0b866; color: #f0b866; }
@@ -3417,12 +3519,28 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
   /* ── Field of view to scale (issue #156) ─────────────────────────────── */
   .fov { padding: 0.15rem 0 0.4rem; }
-  .fov-chart { display: block; width: 100%; height: auto; margin: 0.1rem 0 0.4rem; }
-  .fov-frame { fill: color-mix(in oklab, var(--fg) 5%, transparent); stroke: var(--fg); stroke-width: 1.2; }
-  .fov-horizon { stroke: color-mix(in oklab, var(--fg) 30%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
-  .fov-ground { stroke: color-mix(in oklab, var(--fg) 55%, transparent); stroke-width: 1; }
+  .fov-chart { display: block; width: 100%; height: auto; margin: 0.1rem 0 0.4rem; overflow: visible; }
+  .fov-sky { fill: url(#fov-sky-fill); }
+  .fov-earth { fill: url(#fov-earth-fill); }
+  .fov-chart :global(.fov-grid path) { fill: none; stroke: color-mix(in oklab, var(--fg) 13%, transparent); stroke-width: 0.75; }
+  .fov-chart :global(.fov-thirds path) { fill: none; stroke: color-mix(in oklab, var(--fg) 9%, transparent); stroke-width: 0.75; stroke-dasharray: 2 3; }
+  .fov-frame { fill: none; stroke: color-mix(in oklab, var(--fg) 55%, transparent); stroke-width: 1; }
+  .fov-corners { fill: none; stroke: var(--fg); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .fov-centre { fill: none; stroke: color-mix(in oklab, var(--fg) 55%, transparent); stroke-width: 1; }
+  .fov-horizon { stroke: color-mix(in oklab, var(--fg) 38%, transparent); stroke-width: 1; stroke-dasharray: 3 3; }
+  .fov-ground { stroke: color-mix(in oklab, #f0b866 55%, transparent); stroke-width: 1; }
   .fov-person { fill: #f0b866; }
+  .fov-person-shadow { fill: rgb(0 0 0 / 0.45); }
   .fov-speck { fill: #f0b866; }
+  .fov-dim path { fill: none; stroke: var(--secondary); stroke-width: 1; stroke-linecap: round; }
+  .fov-dim text {
+    fill: var(--secondary);
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  #fov-scale path { stroke: #f0b866; }
+  #fov-scale text { fill: #f0b866; font-weight: 600; }
   .fov input[type='range'] { width: 100%; margin: 0; accent-color: var(--fg); }
   .fov-use-focus { margin-top: 0.3rem; }
 
@@ -3481,7 +3599,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border-radius: 6px;
   }
   .core-ahead-list :global(button:hover) { background: color-mix(in oklab, var(--fg) 7%, transparent); }
-  .core-ahead-list :global(button:active) { transform: scale(0.98); }
   .core-ahead-list :global(.ca-date) { font-size: var(--t-footnote); font-weight: 600; }
   .core-ahead-list :global(.ca-time) { font-size: var(--t-footnote); font-variant-numeric: tabular-nums; color: #b9a6ff; }
   .core-ahead-list :global(.ca-detail) { grid-column: 1 / -1; font-size: var(--t-caption); color: var(--secondary); }
@@ -3502,7 +3619,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border-radius: 5px;
   }
   .nd-ring input[aria-invalid='true'] { border-color: #e0603a; }
-  .nd-film select { width: 100%; padding: 0.3rem 0.35rem; font: inherit; font-size: var(--t-caption); color: var(--fg); background: transparent; border: 1px solid var(--border); border-radius: 5px; }
+  .nd-film select { width: 100%; min-height: 34px; padding: 0.3rem 2rem 0.3rem 0.7rem; font-family: var(--font-ui); font-size: var(--t-caption); background-position: right 0.65rem center; }
   .nd-time { margin-top: 0.4rem; }
   .nd-film-line:empty { display: none; }
   .nd-notes { margin: 0.2rem 0 0.6rem; padding: 0 0 0 0.6rem; list-style: none; border-left: 1px solid #f0b866; }
@@ -3545,7 +3662,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     cursor: pointer;
     transition: color 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease), transform 110ms ease-out;
   }
-  .kit :global(.kit-chip:active) { transform: scale(0.96); }
   .kit :global(.kit-chip:focus-visible) { outline: 2px solid var(--fg); outline-offset: 2px; }
   .kit :global(.kit-chip:hover) { color: var(--fg); border-color: color-mix(in oklab, var(--fg) 45%, transparent); }
   .kit :global(.kit-chip.on) { color: var(--bg); background: var(--fg); border-color: var(--fg); }
@@ -3555,38 +3671,50 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .frame-aims { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .frame-lensrow { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin: 0.35rem 0 0.4rem; }
   .frame-lensrow .slab-note { margin: 0; }
+  /* Small secondary actions ("Lens and focus", "A person, 1.75 m", the
+     hyperfocal cards): a small quiet pill, not underlined text pretending to
+     be a link. It keeps its fill at rest, because on touch there is no hover
+     to say it can be tapped. */
   .frame-lens-more {
     flex: none;
-    padding: 0.3rem 0;
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0.3rem 0.8rem;
     border: 0;
-    background: none;
-    font-family: var(--font-note);
-    font-style: italic;
+    border-radius: var(--r-pill);
+    background: var(--fill);
+    font-family: var(--font-ui);
     font-size: var(--t-caption);
     color: var(--secondary);
-    text-decoration: underline;
-    text-underline-offset: 3px;
+    text-decoration: none;
     cursor: pointer;
+    transition: background 160ms var(--ease), color 160ms var(--ease);
   }
-  .frame-lens-more:hover { color: var(--fg); }
+  .frame-lens-more:hover { color: var(--fg); background: var(--fill-hover); }
+  .frame-lens-more:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 0; }
   .frame-aims .chip { flex: 1; }
 
+  /* A full-width action in the sheet: the app's quiet fill pill (`.btn`),
+     stretched to the column. Was a hairline 8px box, the last of its kind. */
   .wide {
     display: block;
     width: 100%;
-    padding: 0.5rem;
+    padding: 0.5rem 1rem;
     min-height: 36px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--fill);
+    border: 1px solid transparent;
+    border-radius: var(--r-pill);
     color: var(--fg);
     font-family: var(--font-ui);
-    font-size: var(--t-caption);
+    font-size: var(--t-footnote);
+    font-weight: 500;
     cursor: pointer;
-    transition: border-color 160ms var(--ease), transform 110ms ease-out;
+    transition: background 160ms var(--ease), color 160ms var(--ease);
   }
-  .wide:hover { border-color: var(--accent-mix); }
-  .wide:active { transform: scale(0.98); }
+  .wide:hover { background: var(--fill-hover); }
+  .wide:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+  .wide:disabled { opacity: 0.45; cursor: default; }
 
   /* ── Bottom sheet ─────────────────────────────────────────────────────── */
 
@@ -3626,18 +3754,33 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
   .searchbox { position: relative; margin-top: 0.5rem; }
   .searchbox[hidden] { display: none; }
+  /* The app's text well (`.field`): filled, rounded, the accent ring on
+     focus. Was the last outlined box with a white edge. */
   .searchbox input {
     width: 100%;
-    background: color-mix(in oklab, var(--bg) 70%, transparent);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--fill);
+    border: 1px solid var(--separator);
+    border-radius: var(--r-sm);
     color: var(--fg);
     font-family: var(--font-ui);
     font-size: 0.82rem;
-    padding: 0.6rem 0.7rem;
+    padding: 0.6rem 0.8rem;
     min-height: 40px;
+    transition: border-color 160ms var(--ease), background 160ms var(--ease), box-shadow 260ms var(--ease);
   }
-  .searchbox input:focus-visible { outline: none; border-color: var(--accent-mix); }
+  .searchbox input:hover { background: var(--fill-hover); }
+  .searchbox input:focus-visible { outline: none; border-color: color-mix(in oklab, var(--accent-mix) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-mix) 18%, transparent); }
+  .searchbox:has(.locate-icon:not([hidden])) input { padding-right: 2.6rem; }
+  .locate-icon {
+    position: absolute; top: 0; right: 0; width: 40px; height: 40px;
+    display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px;
+    background: none; color: var(--secondary); cursor: pointer;
+  }
+  .locate-icon[hidden] { display: none; }
+  .locate-icon:hover { color: var(--fg); }
+  .locate-icon:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
+  .locate-icon:disabled { color: var(--muted); cursor: default; }
+  .locate-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .searchbox input::-webkit-search-cancel-button { filter: invert(1); opacity: 0.4; }
 
   .radiusbox { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.5rem; padding: 0 0.2rem; }
@@ -3685,7 +3828,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .results :global(li:last-child) { border-bottom: 0; }
   .results :global(li:hover),
   .results :global(li[aria-selected='true']) { background: color-mix(in oklab, var(--fg) 8%, transparent); }
-  .results :global(li:active) { transform: scale(0.98); }
   .results :global(.pin) {
     flex: none;
     width: 14px;
@@ -3811,7 +3953,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     font-size: var(--t-caption);
     transition: transform 110ms ease-out;
   }
-  .toast-do:active { transform: scale(0.94); }
 
   /* ── Photo hotspots ───────────────────────────────────────────────────── */
 
@@ -4039,7 +4180,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 110ms ease-out;
   }
   .seasons :global(button:hover) { border-color: var(--accent-mix); }
-  .seasons :global(button:active) { transform: scale(0.98); }
   .seasons :global(.se-when) { color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* ── Time ─────────────────────────────────────────────────────────────── */
@@ -4187,8 +4327,19 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     font-family: var(--font-label);
     font-size: 0.6875rem;
   }
+  /* The folded credit's ⓘ: MapLibre draws it as a black disc with its own
+     glyph, the one control on the map not in the app's glass. Same material
+     as the round buttons, same edge. */
+  .scout-map :global(.maplibregl-ctrl-attrib.maplibregl-compact) {
+    border-radius: 999px; border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    background-color: color-mix(in oklab, var(--bg) 86%, #000);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2); backdrop-filter: blur(20px) saturate(1.2);
+  }
+  .scout-map :global(.maplibregl-ctrl-attrib-button) { filter: invert(1) opacity(0.75); background-color: transparent; }
   .scout-map :global(.maplibregl-ctrl-attrib a) { color: var(--muted); }
-  .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: calc(5.2rem + var(--tabbar-space)); }
+  /* In the corner, level with the tab bar (which is centred, so the corner
+     is free): 5.2rem over the tab bar left them floating at mid-right. */
+  .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: calc(var(--tabbar-inset) + env(safe-area-inset-bottom, 0px)); right: 0.35rem; }
   /* The box's width is the distance it measures, so zoomed out to the globe
      "3000 km" outgrew it and was cut. It only does that where a scale bar is
      a rough figure anyway, so there the box grows to fit its words. */
@@ -4307,7 +4458,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     /* Everything you drag or tap in these two blocks, at a thumb's size. The
        range inputs are the ones that matter — a 4px-tall track on glass is a
        coin toss, and the aim slider is the control this feature turns on. */
-    .frame-field select { min-height: 40px; padding: 0.5rem 0.5rem; }
+    .frame-field select { min-height: 40px; padding: 0.5rem 2rem 0.5rem 0.7rem; }
     .frame-aims .chip { min-height: 38px; }
     #framebox input[type='range'],
     #sightbox input[type='range'] { min-height: 34px; }
@@ -4502,38 +4653,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     .scout-stage { --stage-top: calc(var(--safe-top) + 0.75rem); }
   }
 
-  /* ── Adaptive glass ───────────────────────────────────────────────────────
-     Over the pale day map, dark glass reads as black stickers on paper. The
-     tokens are re-declared on body so the tab bar turns with the rest — every
-     derived token has to be re-declared too, since each was resolved against
-     the dark --bg at :root and would otherwise keep that value. */
-  :global(body:has(.scout-stage[data-glass='light'])) {
-    --bg: #f5f3ef;
-    --fg: #1b1a18;
-    --muted: #625e58;       /* 5.9:1 on --bg */
-    --secondary: #46433e;
-    --border: rgb(0 0 0 / 0.1);
-    --accent: var(--fg);
-    --accent-mix: color-mix(in oklab, var(--accent) 45%, var(--fg));
-    --accent-hair: color-mix(in oklab, var(--accent) 30%, var(--hair));
-    --hair: color-mix(in oklab, var(--fg) 12%, transparent);
-    --surface-1: color-mix(in oklab, var(--fg) 4%, var(--bg));
-    --surface-2: color-mix(in oklab, var(--fg) 7%, var(--bg));
-    --surface-3: color-mix(in oklab, var(--fg) 11%, var(--bg));
-    --fill: color-mix(in oklab, var(--fg) 7%, transparent);
-    --fill-hover: color-mix(in oklab, var(--fg) 11%, transparent);
-    --fill-active: color-mix(in oklab, var(--fg) 16%, transparent);
-    --separator: color-mix(in oklab, var(--fg) 10%, transparent);
-    --rule: color-mix(in oklab, var(--fg) 16%, transparent);
-    --leader: color-mix(in oklab, var(--fg) 30%, transparent);
-    --mark: color-mix(in oklab, var(--fg) 55%, transparent);
-    --glass-bg: color-mix(in oklab, var(--bg) 62%, transparent);
-    --glass-bg-strong: color-mix(in oklab, var(--bg) 84%, transparent);
-    --glass-edge: rgb(255 255 255 / 0.7);
-    --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 10px 30px -10px rgb(0 0 0 / 0.28),
-      0 1px 4px rgb(0 0 0 / 0.12);
-    color-scheme: light;
-  }
   /* Reduce Transparency gets a solid surface, not a thinner blur. */
   @media (prefers-reduced-transparency: reduce) {
     #dock, #tools .seg, #tools .round { background: var(--bg) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
@@ -4562,11 +4681,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   }
   .scout-stage.dock-dragging #dock { transition: none; }
 
-  /* The sidebar, in black. Its own dark tokens, re-declared here so every
-     control inside turns with it while the rest of the page keeps the light
-     glass; each derived token is restated, since it resolves where it's
-     declared. Solid rather than see-through: a black sheet over a pale map
-     reads as a deliberate panel, a smoky one as a stain. */
+  /* The sidebar, in black: solid where the rest of the chrome is dark glass.
+     Its tokens are restated here, each derived one too, since a token resolves
+     where it's declared. Solid rather than see-through: a black sheet over a
+     pale map reads as a deliberate panel, a smoky one as a stain. */
   #dock {
     --bg: #000;
     --fg: #ece9e3;
@@ -4730,6 +4848,13 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border: 0;
     box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35);
   }
+  /* Collapsed on a phone, the sheet stops at the scrub strip, which cut the
+     jump labels under it in half. They fade out at peek and back in as the
+     sheet rises, so the collapsed sheet ends cleanly. */
+  @media (max-width: 820px) {
+    #dock .jumps { transition: opacity 240ms var(--ease); }
+    #dock[data-detent='peek'] .jumps { opacity: 0; pointer-events: none; }
+  }
   #dock .jumps {
     margin: 0.55rem -0.75rem 0;
     padding-inline: 0.75rem;
@@ -4882,7 +5007,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
       transition: left 420ms var(--sheet-curve), transform 110ms ease-out, background 160ms var(--ease);
     }
     .dock-toggle:hover { background: var(--glass-bg-strong); }
-    .dock-toggle:active { transform: scale(0.92); }
     .dock-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
     .scout-stage[data-sidebar='hidden'] .dock-toggle { left: 0.9rem; }
 
@@ -4938,7 +5062,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      tiles become a two-column ledger with dotted leaders, the weather pill
      becomes a ruled line, and the cautionary notes read as margin notes.
      Map controls and the numbers themselves are unchanged. */
-  .framing-head, .best-head, .layers-head, .kept-head, .mg-title, .facts dt {
+  .best-head, .layers-head, .kept-head, .mg-title, .facts dt {
     font-family: var(--font-note); font-style: italic; font-weight: 500;
     font-size: var(--t-note); letter-spacing: 0; text-transform: none;
     color: var(--fg);
@@ -4988,11 +5112,19 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .core-caveat { font-family: var(--font-note); font-style: italic; }
   .fold summary { list-style: none; display: flex; align-items: baseline; gap: 0.4rem; }
   .fold summary::-webkit-details-marker { display: none; }
-  .fold summary::after {
-    content: '+'; margin-left: auto; font-family: var(--font-ui); font-style: normal;
-    color: var(--muted); transition: transform 160ms var(--ease);
+  /* The plus is drawn, not typed: its bar is the summary's own background
+     and its upright stroke is ::after, which turns flat on open, so plus
+     becomes minus by rotating rather than swapping glyphs. */
+  .fold summary, .group > summary {
+    background: linear-gradient(var(--muted), var(--muted)) no-repeat right center / 11px 1.5px;
+    background-origin: content-box;
   }
-  .fold[open] > summary::after { content: '−'; }
+  .fold summary::after, .group > summary::after {
+    content: ''; align-self: center; flex: 0 0 auto; width: 11px; height: 11px; margin-left: auto;
+    background: linear-gradient(var(--muted), var(--muted)) no-repeat center / 1.5px 11px;
+    transition: rotate 420ms var(--spring-move);
+  }
+  .fold[open] > summary::after, .group[open] > summary::after { rotate: 90deg; }
 
   /* ── Round 3: the answer first ─────────────────────────────────────────
      One headline, three tiles, the detail behind a tap, then four groups.
@@ -5025,12 +5157,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .tile:first-child { padding-left: 0; }
   @media (hover: hover) { .tile:hover { background: color-mix(in oklab, var(--fg) 5%, transparent); } }
   .tile:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
-  /* The open tile is underlined in the sun's colour, like a tab. */
-  .tile[aria-expanded='true']::after {
-    content: ''; position: absolute; left: 0.6rem; right: 0.6rem; bottom: -1px; height: 2px;
-    background: #c1863c;
-  }
-  .tile:first-child[aria-expanded='true']::after { left: 0; }
+  /* The open tile is underlined in the sun's colour, like a tab, and the
+     line slides from tile to tile (`data-seg="line"`, lib/ui/segments.ts)
+     rather than blinking out of one and into the next. */
+  .tiles :global(.seg-thumb) { background: linear-gradient(to top, #c1863c 2px, transparent 2px); }
   .tile-k { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
   .tile-v {
     font-family: var(--font-ui); font-size: var(--t-body); color: var(--fg);
@@ -5053,14 +5183,18 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .events :global(.ev-label) {
     font-family: var(--font-ui); font-style: normal; font-size: var(--t-footnote); color: var(--secondary);
   }
+  /* "All times", "All 8", "Glossary": a small quiet pill, so it reads as
+     tappable on touch where there is no hover, and "All times" (a toggle)
+     shows it is held down while it is. */
   .events-all {
-    display: inline-flex; align-items: center; min-height: 32px; padding: 0;
-    background: none; border: 0; cursor: pointer;
-    font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted);
-    text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
-    transition: color 160ms var(--ease), text-decoration-color 160ms var(--ease);
+    display: inline-flex; align-items: center; min-height: 30px; padding: 0.3rem 0.8rem;
+    background: var(--fill); border: 0; border-radius: var(--r-pill); cursor: pointer;
+    font-family: var(--font-ui); font-size: var(--t-caption); color: var(--secondary);
+    transition: color 160ms var(--ease), background 160ms var(--ease);
   }
-  .events-all:hover, .events-all:focus-visible { color: var(--fg); text-decoration-color: currentColor; }
+  .events-all:hover { color: var(--fg); background: var(--fill-hover); }
+  .events-all:focus-visible { color: var(--fg); outline: 2px solid var(--accent-mix); outline-offset: 0; }
+  .events-all[aria-pressed='true'] { color: var(--fg); background: var(--fill-active); }
   .best .events-all { margin-top: 0.1rem; }
 
   .group { margin-top: 0.1rem; }
@@ -5070,10 +5204,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     font-family: var(--font-note); font-style: italic; font-size: 1.05rem; color: var(--fg);
   }
   .group > summary::-webkit-details-marker { display: none; }
-  .group > summary::after {
-    content: '+'; margin-left: auto; font-family: var(--font-ui); font-style: normal; color: var(--muted);
-  }
-  .group[open] > summary::after { content: '−'; }
   .group > summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
   /* Inside a group the folds are second level: smaller, in the UI face,
      no rule of their own. */
@@ -5107,7 +5237,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      measured from what is inside it, so shrinking the contents is what lowers
      it. Touch targets follow the phone's --hit (global.css). */
   @media (max-width: 640px) {
-    .dock-grabber { height: 16px; }
+    .dock-grabber { height: 16px; position: relative; }
+    /* 16px keeps the peek low; the target still reaches 26. */
+    .dock-grabber::after { content: ''; position: absolute; inset: -6px 0 -4px; }
     .dock-grabber span { width: 32px; height: 4px; }
     #dock .sheet { padding: 0 0.6rem 0.25rem; }
     #dock .sheet-name { font-size: 0.9375rem; }
@@ -5127,8 +5259,15 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      spread across the width at a tighter pad, and below the width that
      holds all seven, Dawn and Dusk go (the strip itself still shows them). */
   #timebar { container-type: inline-size; }
-  #dock .jumps { justify-content: space-between; margin-inline: 0; padding-inline: 0; overflow-x: visible; }
-  #dock .jumps button { padding-inline: 0.15rem; font-size: var(--t-footnote); }
+  /* Grouped in the middle as small pills, not spread edge to edge: spread
+     evenly under the day bar they read as its axis labels, and Sunrise sat a
+     quarter of the way along while the sunrise itself was somewhere else. */
+  #dock .jumps { justify-content: center; gap: 0.25rem; margin-inline: 0; padding-inline: 0; overflow-x: visible; flex-wrap: wrap; }
+  #dock .jumps button {
+    padding-inline: 0.6rem; font-size: var(--t-footnote); min-height: 28px;
+    border-radius: var(--r-pill); background: var(--fill);
+  }
+  #dock .jumps button:hover:not(:disabled) { background: var(--fill-hover); text-decoration-color: transparent; }
   @container (max-width: 380px) {
     #dock .jumps [data-jump='civilDawn'], #dock .jumps [data-jump='civilDusk'] { display: none; }
   }
@@ -5149,6 +5288,38 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   /* The data credit, folded to its ⓘ on every width (page.ts) and set in
      the interface face rather than the data mono. */
   .scout-map :global(.maplibregl-ctrl-attrib) { font-family: var(--font-ui); color: var(--secondary); }
+
+  /* ── Round 2: the map's own controls, and targets a finger can find ───────
+     The scale bar was MapLibre's white box with a #333 10px label, the one
+     light-styled control beside the dark glass. Same material as the round
+     buttons now, label in the UI face at 11px. */
+  .scout-map :global(.maplibregl-ctrl-scale) {
+    background: color-mix(in oklab, var(--bg) 82%, transparent);
+    border: 1px solid var(--glass-edge);
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+    color: color-mix(in oklab, var(--fg) 82%, transparent);
+    font: 500 0.6875rem/1.4 var(--font-ui);
+    padding: 0 0.4rem 0.1rem;
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  }
+  /* Meta lines under "Best right now" were cut mid-word ("terrain onl"). */
+  .best-list :global(.best-where) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The ⓘ stays a 13px glyph; its target does not. */
+  .infotip::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
+  @media (pointer: coarse) { .infotip::before { inset: -12px; } }
+  /* The cursor ring over the sheet and the map buttons: small, so it never
+     sits on the label it is pointing at. */
+  :global(body:has(#dock:hover, #layers:hover, #tools:hover, #night-panel:hover, .edge:hover) .cursor-ring.hover) { width: 18px; height: 18px; background: transparent; }
+  @media (max-width: 640px) {
+    /* The phone floor is 36px (phone-compact-chrome). The sheet's own chips
+       had been pulled to 30 to shorten it, but these rows live under the
+       peek, so the floor costs the collapsed sheet nothing. */
+    #dock .chip, #dock .jumps button, .events-all, .kit :global(.kit-chip), #dock :global(.btn-sm), #dock .frame-lens-more { min-height: var(--hit); }
+    /* A 16px grabber looks right and is a guess to hit. */
+    .dock-grabber { position: relative; }
+    .dock-grabber::before { content: ''; position: absolute; inset: -10px 0; }
+  }
 </style>
 
 <script>

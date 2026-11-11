@@ -59,7 +59,7 @@ const BATCH = 50;
  * share one type, rather than two structurally-identical ones drifting apart.
  */
 export interface TierStatus {
-  accolade: Accolade | 'flickr' | 'notable';
+  accolade: Accolade | 'flickr' | 'notable' | 'favourites';
   ok: boolean;
   needsKey?: boolean;
 }

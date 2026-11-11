@@ -56,10 +56,12 @@ const accent = chapters[0]
                 <p class="bv-index">Chapter {roman(ci)}</p>
                 <h2>{ch.name}</h2>
               </div>
-              <div class="bv-grid">
-                {ch.photos.map((p) => (
+              <div class="bv-grid" data-reveal>
+                {ch.photos.map((p, pi) => (
                   <figure class="bv-frame" style={`aspect-ratio:${p.width}/${p.height}`}>
-                    <a href={p.derivatives[p.derivatives.length - 1]?.avif ?? p.derivatives[0].avif} target="_blank" rel="noopener noreferrer">
+                    {/* The image is decorative to a screen reader (there's no
+                        caption to read); the link says what it opens. */}
+                    <a href={p.derivatives[p.derivatives.length - 1]?.avif ?? p.derivatives[0].avif} target="_blank" rel="noopener noreferrer" aria-label={`${ch.name}, photo ${pi + 1} of ${ch.photos.length}, full size`}>
                       <img src={p.derivatives[0].avif} alt="" loading="lazy" />
                     </a>
                   </figure>
@@ -75,12 +77,12 @@ const accent = chapters[0]
 
 <style>
   .bv-head { max-width: 60rem; margin: 0 auto; padding: 9vh 6vw 4vh; text-align: center; }
-  .bv-kicker { font-family: var(--font-label); font-size: 0.68rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .bv-kicker { font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--secondary); margin: 0; }
   .bv-head h1 {
     font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
     font-size: clamp(2.4rem, 6vw, 4rem); margin: 0.3rem 0 0.6rem; line-height: 1;
   }
-  .bv-sub { font-family: var(--font-label); font-size: 0.76rem; color: var(--muted); margin: 0; }
+  .bv-sub { font-family: var(--font-data); font-size: var(--t-footnote); color: var(--muted); margin: 0; }
   .bv-empty { text-align: center; color: var(--muted); padding: 4rem 0; }
 
   .bv-main { max-width: 84rem; margin: 0 auto; padding: 0 0 10vh; }
@@ -89,7 +91,7 @@ const accent = chapters[0]
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem;
     padding: 3.4rem 6vw; text-align: center; margin-bottom: 1.2rem;
   }
-  .bv-index { font-family: var(--font-label); font-size: 0.64rem; letter-spacing: 0.24em; text-transform: uppercase; opacity: 0.75; margin: 0; }
+  .bv-index { font-family: var(--font-note); font-style: italic; font-size: 1.05rem; margin: 0 0 0.3rem; }
   .bv-divider h2 {
     font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
     font-size: clamp(1.8rem, 4.5vw, 3rem); margin: 0; line-height: 1;

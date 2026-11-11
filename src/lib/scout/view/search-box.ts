@@ -201,19 +201,27 @@ export function createSearchBox(ports: SearchBoxPorts): SearchBox {
     const open = box().hidden;
     box().hidden = !open;
     $('search-button').setAttribute('aria-expanded', String(open));
-    if (open) placeInput.focus();
-    else closeResults();
+    // Selected, not just focused: the field still holds the place you are at,
+    // and typing a new one appended to it ("LondonKyoto", no such place).
+    if (open) {
+      placeInput.focus();
+      placeInput.select();
+    } else closeResults();
     ports.onQueryChanged();
   });
 
   return {
     query: () => placeInput.value.trim(),
+    // Both tell the page, so the kept and recent lists follow what is in the
+    // field however it got there, not only when typed.
     setQuery: (text: string) => {
       placeInput.value = text;
+      ports.onQueryChanged();
     },
     isOpen: () => !box().hidden,
     show: () => {
       box().hidden = false;
+      ports.onQueryChanged();
     },
     hide: () => {
       box().hidden = true;

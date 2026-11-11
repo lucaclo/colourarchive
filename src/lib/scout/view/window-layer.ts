@@ -402,7 +402,7 @@ export function createWindowLayer(id: string): WindowLayer {
 
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.clearColor(previousClearColour[0], previousClearColour[1], previousClearColour[2], previousClearColour[3]);
       gl.clearDepth(previousClearDepth);
       gl.depthFunc(previousDepthFunc);

@@ -47,6 +47,8 @@ export interface Shown {
   solstice: boolean;
   monolith: boolean;
   photos: boolean;
+  /** Wikimedia Commons as a hotspot source: a reference layer, off by default. */
+  commons: boolean;
   frame: boolean;
   sight: boolean;
   /** The catalogue sky: stars, their constellations, and the galactic plane. */
@@ -65,6 +67,7 @@ export const defaultShown = (): Shown => ({
   solstice: false,
   monolith: false,
   photos: true,
+  commons: false,
   frame: false,
   sight: false,
   stars: false,
@@ -98,6 +101,7 @@ export const LAYER_TOGGLES: ReadonlyArray<readonly [id: string, key: keyof Shown
   ['t-solstice', 'solstice'],
   ['t-monolith', 'monolith'],
   ['t-photos', 'photos'],
+  ['t-commons', 'commons'],
   ['t-frame', 'frame'],
   ['t-sight', 'sight'],
   ['t-stars', 'stars'],

@@ -1,7 +1,7 @@
 /**
  * Night vision (issue #157): the screen in dim amber-red on black, so a
- * glance at it doesn't undo twenty minutes of dark adaptation. Used by Scout
- * and by the colour clock (#145), remembered on the device.
+ * glance at it doesn't undo twenty minutes of dark adaptation. Used by Scout,
+ * remembered on the device.
  *
  * The page can't turn the screen down, so the palette carries it. Rather than
  * recolour every element (the map draws in WebGL, and a dozen inks are
@@ -46,7 +46,7 @@ export function bindNightVisionPeek(): void {
   const end = () => document.documentElement.removeAttribute('data-nv-peek');
   document.addEventListener('pointerdown', (event) => {
     if (!nightVisionOn()) return;
-    if ((event.target as Element | null)?.closest?.('img, .cclock')) document.documentElement.setAttribute('data-nv-peek', '');
+    if ((event.target as Element | null)?.closest?.('img')) document.documentElement.setAttribute('data-nv-peek', '');
   });
   document.addEventListener('pointerup', end);
   document.addEventListener('pointercancel', end);

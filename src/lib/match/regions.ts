@@ -173,8 +173,8 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
       if (group) unionInto(ensure(group.key), seg.mask.data as Uint8Array);
     }
     timings.scene = (Date.now() - t0) / 1000;
-  } catch (e: any) {
-    warnings.push(`Scene segmentation unavailable (${e?.message ?? 'unknown error'}). Sky, foliage, water, buildings and ground were not measured.`);
+  } catch (e) {
+    warnings.push(`Scene segmentation unavailable (${e instanceof Error ? e.message : 'unknown error'}). Sky, foliage, water, buildings and ground were not measured.`);
   }
 
   // --- People -----------------------------------------------------------------
@@ -187,8 +187,8 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
       if (group) unionInto(ensure(group.key), seg.mask.data as Uint8Array);
     }
     timings.people = (Date.now() - t0) / 1000;
-  } catch (e: any) {
-    warnings.push(`Human parsing unavailable (${e?.message ?? 'unknown error'}). Skin, hair and clothing were not measured separately.`);
+  } catch (e) {
+    warnings.push(`Human parsing unavailable (${e instanceof Error ? e.message : 'unknown error'}). Skin, hair and clothing were not measured separately.`);
   }
 
   // --- Subject matte ----------------------------------------------------------
@@ -211,7 +211,7 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
     raw.subject = subject;
     raw.background = background;
     timings.matte = (Date.now() - t0) / 1000;
-  } catch (e: any) {
+  } catch (e) {
     // Fall back to the scene model's person class — worse than a real matte,
     // but far better than having no subject/background split at all.
     if (personHint) {
@@ -221,7 +221,7 @@ export async function segmentRegions(imagePath: string): Promise<RegionMasks> {
       raw.background = background;
       warnings.push('Subject matte unavailable; fell back to the scene model’s person class for subject/background.');
     } else {
-      warnings.push(`Subject matte unavailable (${e?.message ?? 'unknown error'}). Subject and background were not measured separately.`);
+      warnings.push(`Subject matte unavailable (${e instanceof Error ? e.message : 'unknown error'}). Subject and background were not measured separately.`);
     }
   }
 

@@ -62,6 +62,7 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
     display: flex; justify-content: center; align-items: flex-start;
     padding: 14vh 1rem 1rem;
     background: color-mix(in oklab, #000 38%, transparent);
+    animation: vtFadeIn 200ms var(--ease) both;
   }
   .cmdk[hidden] { display: none; }
   .cmdk-sheet {
@@ -71,6 +72,7 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
     border: 1px solid var(--glass-edge); border-radius: var(--r-md, 14px);
     box-shadow: var(--glass-shadow), 0 24px 60px rgb(0 0 0 / 0.45);
     overflow: hidden;
+    transform-origin: top center; animation: popIn 300ms var(--spring-move) both;
   }
   .cmdk-input {
     width: 100%; box-sizing: border-box;
@@ -89,8 +91,12 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
     display: flex; align-items: center; gap: 0.65rem;
     padding: 0.55rem 0.75rem; border-radius: 8px; cursor: pointer;
     font-family: var(--font-ui); font-size: var(--t-body, 0.95rem); color: var(--fg);
+    transition: background 120ms var(--ease), padding 220ms var(--spring-move);
   }
-  .cmdk-list :global(.cmdk-item[aria-selected='true']) { background: var(--surface-3); }
+  /* The chosen row is filled and nudged in a few pixels: moving through
+     the list with the arrows reads as something travelling down it. */
+  .cmdk-list :global(.cmdk-item[aria-selected='true']) { background: color-mix(in oklab, var(--accent-mix) 12%, var(--surface-3)); padding-left: 1rem; }
+  @media (prefers-reduced-motion: reduce) { .cmdk-list :global(.cmdk-item) { transition: none; } }
   .cmdk-list :global(.cmdk-sw) {
     width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: 0 0 auto;
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 18%, transparent);
@@ -231,6 +237,9 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
     close();
     if (c.action) {
       const el = document.querySelector<HTMLElement>(`[data-cmdk-id="${CSS.escape(c.action)}"]`);
+      // A field inside a closed menu (the archive's search) asks its page to
+      // open the menu first.
+      el?.dispatchEvent(new CustomEvent('cmdk-reveal', { bubbles: true }));
       if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName) && !['checkbox', 'radio'].includes((el as HTMLInputElement).type)) el.focus();
       else el?.click();
       return;
@@ -289,6 +298,7 @@ const commands = [...pages.filter((p) => !(STATIC && p.server)).map(({ server: _
         // Enter does. Anywhere else it opens the palette.
         const search = document.getElementById('search-input') as HTMLInputElement | null;
         e.preventDefault();
+        search?.dispatchEvent(new CustomEvent('cmdk-reveal', { bubbles: true }));
         if (search && search.offsetParent !== null) {
           search.focus();
           search.select();

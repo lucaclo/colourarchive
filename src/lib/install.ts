@@ -83,11 +83,34 @@ export const OPEN_IN_APP = 'web+colour:open';
  * treated as no.
  */
 export async function installedElsewhere(): Promise<boolean> {
+  if (installSeen()) return true;
   const nav = navigator as Navigator & { getInstalledRelatedApps?: () => Promise<{ platform: string }[]> };
   if (!nav.getInstalledRelatedApps) return false;
   try {
     return (await nav.getInstalledRelatedApps()).some((a) => a.platform === 'webapp');
   } catch {
     return false;
+  }
+}
+
+/* The install, remembered. The installed web app shares this browser's
+   storage, so the browser's own install event, or the app window having been
+   opened once, marks it for the tabs too, where getInstalledRelatedApps
+   can't answer (Safari, Firefox) or hasn't caught up. */
+const INSTALLED_KEY = 'app-installed';
+
+function installSeen(): boolean {
+  try {
+    return localStorage.getItem(INSTALLED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function rememberInstall(): void {
+  try {
+    localStorage.setItem(INSTALLED_KEY, '1');
+  } catch {
+    /* storage blocked: the tab simply keeps offering it */
   }
 }

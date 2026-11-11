@@ -53,9 +53,14 @@ const accent = manifest.chapters[0]
     {/* The archive comes first (round 4, as Inspiration in round 3): adding
         sits behind one button, and dropping anywhere on the page or pasting
         adds too. The big drop zone is only the empty archive's first screen. */}
-    <header class="ingest-head">
-      <h1>Add &amp; remove</h1>
-      <button class="ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import">Add photos</button>
+    <header class="page-head ingest-head">
+      <div class="ph-titles">
+        <h1>Add &amp; remove</h1>
+        <span class="ph-count manage-count" id="manage-count">{allPhotos.length}</span>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-primary ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add photos</button>
+      </div>
     </header>
 
     <form id="form" class="drop" aria-label="Upload photographs" hidden={allPhotos.length > 0}>
@@ -95,32 +100,32 @@ const accent = manifest.chapters[0]
     {/* Rendered even when empty, so photos added in this session can drop
         straight into it without a page reload. */}
     <section class="manage" id="manage" hidden={allPhotos.length === 0} data-choices={JSON.stringify(choices)}>
+      {/* One toolbar row: the order, the search, and the edge filter. The
+          page title above already says this is the archive. */}
+      <h2 class="visually-hidden">In the archive</h2>
       <div class="manage-top">
-        <h2 class="manage-head">
-          In the archive <span class="manage-count" id="manage-count">{allPhotos.length}</span>
-        </h2>
         {/* Newest first puts the last import where you'd check it (Immich's
             Recently added); Colour is the archive's own order. */}
-        <div class="manage-order" id="manage-order" role="group" aria-label="Order">
+        <div class="manage-order" id="manage-order" role="group" aria-label="Order" data-seg>
           <button type="button" data-order="colour" aria-pressed="true" data-cmdk="Order by colour">Colour</button>
           <button type="button" data-order="newest" aria-pressed="false" data-cmdk="Newest first" data-cmdk-keywords="recent, latest">Newest</button>
         </div>
+        <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
+          <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
+        </div>
+        {/* Issue #106: the photos standing on a chapter edge are the ones worth
+            checking by eye, so they can be pulled out of the grid on their own. */}
+        <button type="button" class="edge-filter" id="edge-filter" aria-pressed="false" hidden={onEdge === 0}>
+          <span class="edge-mark" aria-hidden="true">≈</span> On a chapter edge <span class="edge-count" id="edge-count">{onEdge}</span>
+        </button>
       </div>
       {lastImport && (
         <p class="manage-inbox" id="manage-inbox" data-ids={lastImport.ids.join(' ')} hidden>
           {lastImport.count} added from the inbox, {importDay}
         </p>
       )}
-      <div class="search-box manage-search" id="manage-search-box" hidden={allPhotos.length === 0}>
-        <svg class="search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <input type="search" id="manage-search-input" placeholder="Search" aria-label="Search the archive by description" autocomplete="off" />
-      </div>
       <p class="manage-none" id="manage-none" role="status" hidden></p>
-      {/* Issue #106: the photos standing on a chapter edge are the ones worth
-          checking by eye, so they can be pulled out of the grid on their own. */}
-      <button type="button" class="edge-filter" id="edge-filter" aria-pressed="false" hidden={onEdge === 0}>
-        <span class="edge-mark" aria-hidden="true">≈</span> On a chapter edge <span class="edge-count" id="edge-count">{onEdge}</span>
-      </button>
       <div class="bulk-bar" id="bulk-bar" hidden>
         <span class="bulk-count" id="bulk-count">0 selected</span>
         <div class="bulk-actions">
@@ -142,7 +147,7 @@ const accent = manifest.chapters[0]
           <button type="button" class="bulk-btn bulk-clear" id="bulk-clear">Clear</button>
         </div>
       </div>
-      <div class="grid" id="grid">
+      <div class="grid" id="grid" data-reveal>
         {allPhotos.map((p) => (
           <figure class="cell" data-id={p.id} data-added={p.addedAt ?? ''} data-medium={p.medium} data-genre={p.genre ?? ''} data-auto={p.auto} data-base={p.base} data-edge={p.edge} data-file={p.filename}>
             <img src={p.placeholder} data-src={p.derivatives[0].avif} alt="" loading="lazy" />
@@ -161,25 +166,9 @@ const accent = manifest.chapters[0]
 <style>
   /* No topbar above this any more (the tab bar carries navigation), so the
      page opens on its own title; the foot clears the tab bar. */
-  .ingest { max-width: 62rem; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 4.5rem) 6vw calc(var(--tabbar-space) + 4rem); }
-  .kicker { font-size: var(--t-caption); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0; }
-  .ingest-head h1 {
-    font-family: var(--font-display); font-weight: var(--title-weight); font-style: var(--title-style);
-    font-size: clamp(2.2rem, 5.5vw, 3.8rem); letter-spacing: var(--title-tracking);
-    margin: 0.3rem 0 2.4rem; line-height: 1;
-  }
+  .ingest { max-width: 62rem; margin: 0 auto; padding: 0 6vw calc(var(--tabbar-space) + 4rem); }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.4rem; max-width: 40rem; }
 
-  .ingest-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
-  .ingest-addbtn {
-    appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
-    min-height: 2.5rem; padding: 0 1.2rem; background: var(--fg); color: var(--bg);
-    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600;
-    transition: transform 110ms ease-out, opacity 140ms; flex: 0 0 auto;
-  }
-  .ingest-addbtn:active { transform: scale(0.96); }
-  .ingest-addbtn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
-  @media (max-width: 640px) { .ingest-addbtn { min-height: var(--hit); } }
   .drop[hidden] { display: none; }
   .drop-veil {
     position: fixed; inset: 0.8rem; z-index: 80; display: grid; place-items: center; pointer-events: none;
@@ -205,7 +194,6 @@ const accent = manifest.chapters[0]
     border-color: var(--rule); --mark: var(--fg);
     background-color: color-mix(in oklab, var(--fg) 3%, transparent);
   }
-  .drop-inner:active { transform: scale(0.995); }
   .drop-title { font-family: var(--font-display); font-style: var(--title-style); font-size: 1.6rem; margin: 0 0 0.5rem; }
   .drop-sub { color: var(--secondary); font-size: var(--t-footnote); margin: 0; }
   .drop-note { font-size: var(--t-caption); margin-top: 0.5rem; opacity: 0.7; }
@@ -223,7 +211,6 @@ const accent = manifest.chapters[0]
     border-bottom: 1px solid transparent; transition: color 180ms, border-color 180ms, transform 110ms ease-out;
   }
   .cancel:hover { color: var(--accent-mix); border-bottom-color: currentColor; }
-  .cancel:active { transform: scale(0.94); }
 
   /* The result rows and the manage cells are built in JS, so they never carry
      Astro's scope attribute — these rules have to be global or they simply do
@@ -239,7 +226,7 @@ const accent = manifest.chapters[0]
   @media (prefers-reduced-motion: reduce) { :global(.results li) { animation: none; } }
   :global(.results .sw) { width: 1.1rem; height: 1.1rem; border-radius: 50%; flex: 0 0 auto; border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); }
   :global(.results .fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  :global(.results .ch) { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: var(--t-caption); }
+  :global(.results .ch) { color: var(--muted); font-size: var(--t-caption); }
   :global(.results .skip) { color: var(--muted); font-style: italic; }
   :global(.results .err) { color: #e0603a; }
   /* Issue #61 — a chapter-fit verdict, on its own line under the row it
@@ -250,7 +237,7 @@ const accent = manifest.chapters[0]
 
   .manage { margin-top: 0.8rem; }
   .drop:not([hidden]) ~ .manage { margin-top: 4rem; }
-  .manage-top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .manage-top { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-4); }
   .manage-inbox { margin: 0 0 0.8rem; font-size: var(--t-footnote); color: var(--secondary); }
   .manage-inbox::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); margin-right: 0.5rem; vertical-align: 0.1em; }
   :global(.cell.from-inbox)::after { content: ''; position: absolute; top: 6px; left: 6px; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.35); pointer-events: none; }
@@ -282,25 +269,23 @@ const accent = manifest.chapters[0]
   .inbox-note-name { color: var(--fg); word-break: break-all; }
   .inbox-note-where { color: var(--muted); }
 
-  .manage-order { display: inline-flex; gap: 0.15rem; padding: 3px; border-radius: var(--r-pill); background: var(--fill); }
   .manage-order button {
     appearance: none; border: 0; cursor: pointer; border-radius: var(--r-pill);
-    min-height: 2rem; padding: 0 0.85rem; background: transparent; color: var(--secondary);
-    font-family: var(--font-ui); font-size: var(--t-caption);
+    min-height: calc(var(--hit) - 6px); padding: 0 0.95rem; background: transparent; color: var(--secondary);
+    font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
   }
   /* The same pressed state as Book's List / Spreads: surface-3 on a fill
      track was 3% apart, so which order was on could hardly be seen. */
   .manage-order button[aria-pressed='true'] { background: var(--fill-active); color: var(--fg); font-weight: 600; }
   .manage-order button:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
-  .manage-head { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: 1.7rem; margin: 0 0 0.3rem; display: flex; align-items: baseline; gap: 0.6rem; }
-  .manage-count { font-family: var(--font-label); font-size: 0.9rem; color: var(--muted); }
   .manage-note { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.4rem; }
   .manage-note code { font-size: 0.92em; }
   /* A field you can see: bare text and a glass read as a label, not a box. */
-  .manage-search { margin: 0.4rem 0 1rem; width: fit-content; border: 1px solid var(--separator); background: var(--surface-1); }
+  .manage-search { flex: 1 1 14rem; max-width: 22rem; min-height: var(--hit); border: 1px solid var(--separator); background: var(--fill); }
+  .manage-search[hidden] { display: none; }
   .manage-none { margin: 0 0 1rem; color: var(--secondary); font-size: var(--t-footnote); }
   .manage-search:focus-within { border-color: color-mix(in oklab, var(--fg) 30%, transparent); }
-  .manage-search input { width: 14rem; }
+  .manage-search input { width: 100%; font-size: var(--t-body); align-self: stretch; }
 
   .bulk-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
@@ -391,24 +376,6 @@ const accent = manifest.chapters[0]
   }
   :global(.cell:hover .cell-remove), :global(.cell:focus-within .cell-remove) { opacity: 1; }
   :global(.cell-remove:hover) { background: color-mix(in oklab, #c0392b 82%, transparent); }
-  /* Removed · Undo — built at runtime, so :global. Sits just above the tab bar. */
-  :global(.undo-bar) {
-    position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
-    bottom: calc(var(--tabbar-space) + 0.5rem);
-    display: flex; align-items: center; gap: 0.9rem;
-    padding: 0.35rem 0.4rem 0.35rem 1rem; border-radius: var(--r-pill);
-    background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-    box-shadow: var(--glass-shadow); border: 1px solid var(--glass-edge);
-    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg);
-  }
-  :global(.undo-bar[hidden]) { display: none; }
-  :global(.undo-btn) {
-    appearance: none; border: 0; cursor: pointer; min-height: 32px; padding: 0 0.9rem;
-    border-radius: var(--r-pill); background: var(--fg); color: var(--bg);
-    font: inherit; font-weight: 600;
-  }
-  :global(.undo-btn[hidden]) { display: none; }
-  :global(.cell-remove:active) { transform: scale(0.88); }
   :global(.cell-medium) {
     position: absolute; left: 6px; bottom: 6px; z-index: 2;
     border: 0; cursor: pointer; border-radius: 999px;
@@ -421,7 +388,6 @@ const accent = manifest.chapters[0]
   :global(.cell[data-medium='film'] .cell-medium) { background: color-mix(in oklab, #b08968 78%, #000); }
   :global(.cell[data-medium='digital'] .cell-medium) { background: color-mix(in oklab, #4a6fa5 78%, #000); }
   :global(.cell-medium:hover) { filter: brightness(1.2); }
-  :global(.cell-medium:active) { transform: scale(0.94); }
   :global(.cell-genre) {
     position: absolute; left: 6px; top: 6px; z-index: 2; max-width: calc(100% - 12px);
     border: 0; cursor: pointer; border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -433,10 +399,6 @@ const accent = manifest.chapters[0]
   }
   :global(.cell[data-genre=''] .cell-genre) { color: color-mix(in oklab, #fff 60%, transparent); }
   :global(.cell-genre:hover) { filter: brightness(1.2); }
-  :global(.cell-genre:active) { transform: scale(0.94); }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.cell-remove:active), :global(.cell-medium:active), :global(.cell-genre:active) { transform: none; }
-  }
 
   /* Round 3: quiet tiles, as on the Book page. At rest only the photograph;
      the ×, medium, genre and chapter appear on hover or focus, and on touch
@@ -483,7 +445,7 @@ const accent = manifest.chapters[0]
   :global(.cell.moved .cell-ch-name)::after { content: ' ✎'; letter-spacing: 0; opacity: 0.8; }
   .edge-filter {
     appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
-    margin: -0.4rem 0 1rem; min-height: 2.25rem; padding: 0 0.95rem;
+    margin: 0; min-height: var(--hit); padding: 0 1rem;
     border: 1px solid var(--separator); border-radius: var(--r-pill); background: var(--surface-1); color: var(--fg);
     font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
     transition: background 140ms, border-color 140ms;
@@ -491,7 +453,8 @@ const accent = manifest.chapters[0]
   .edge-filter:hover { background: var(--fill-hover); }
   .edge-filter[aria-pressed='true'] { border-color: #f0b54a; background: color-mix(in oklab, #f0b54a 14%, transparent); }
   .edge-mark { color: #f0b54a; }
-  .edge-count { font-family: var(--font-label); color: var(--muted); }
+  .edge-count { font-family: var(--font-data); color: var(--muted); }
+  .edge-filter[hidden] { display: none; }
   :global(.grid.edge-only .cell:not(.on-edge):not(.just-moved)) { display: none; }
 
   /* A new arrival's placement: the photos it now sits among, and the way to

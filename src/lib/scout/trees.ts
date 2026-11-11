@@ -225,9 +225,18 @@ export function crownRing(tree: { lon: number; lat: number }, radiusM: number, s
  * — a wide lower mass and a narrower top — which is enough, at map scale, to
  * read as a rounded tree rather than a green column.
  */
-export function treeParts(tree: Tree): Array<{ ring: Ring; base: number; top: number; part: 'trunk' | 'crown' }> {
-  const h = tree.heightM;
-  const r = tree.crownM / 2;
+export function treeParts(
+  tree: Tree,
+  { vary = false }: { vary?: boolean } = {},
+): Array<{ ring: Ring; base: number; top: number; part: 'trunk' | 'crown' }> {
+  // A mapped tree with nothing tagged gets the default size, so a park of
+  // them drew as one stamped tree repeated. `vary` gives each its own height
+  // and crown, a little either side of the default, from its own position —
+  // stable between loads. For drawing only: its shadow is still cast from the
+  // honest default (see the caller), not from a size made up to look nice.
+  const jitter = vary ? treeJitter(tree) : { height: 1, crown: 1 };
+  const h = tree.heightM * jitter.height;
+  const r = (tree.crownM / 2) * jitter.crown;
   const trunkTop = Math.max(1.5, h * 0.3);
   const shoulder = trunkTop + (h - trunkTop) * 0.62;
   const turn = (((tree.lon * 1e5 + tree.lat * 1e5) % 45) + 45) % 45;
@@ -236,4 +245,22 @@ export function treeParts(tree: Tree): Array<{ ring: Ring; base: number; top: nu
     { ring: crownRing(tree, r, 8, turn), base: trunkTop, top: shoulder, part: 'crown' },
     { ring: crownRing(tree, r * 0.66, 8, turn + 22.5), base: shoulder, top: h, part: 'crown' },
   ];
+}
+
+/** Deterministic 0–1 from a tree's position. */
+function positionHash(tree: { lon: number; lat: number }, salt: number): number {
+  const v = Math.sin(tree.lon * 12_989.8 + tree.lat * 78_233.1 + salt * 37.7) * 43_758.5453;
+  return v - Math.floor(v);
+}
+
+/**
+ * How far one tree's drawing departs from the default: height ±15%, crown
+ * ±18%, and a lightness for its leaves ±7%, all from its own position.
+ */
+export function treeJitter(tree: { lon: number; lat: number }): { height: number; crown: number; shade: number } {
+  return {
+    height: 0.85 + 0.3 * positionHash(tree, 1),
+    crown: 0.82 + 0.36 * positionHash(tree, 2),
+    shade: 0.93 + 0.14 * positionHash(tree, 3),
+  };
 }

@@ -35,11 +35,11 @@ const len = (m: number) => formatLength(m, 'm');
       </a>
       <h1 class="hc-title">Hyperfocal cards</h1>
       <div class="hc-tools">
-        <div class="hc-seg" id="hc-units" role="group" aria-label="Units">
+        <div class="hc-seg" data-seg id="hc-units" role="group" aria-label="Units">
           <button type="button" data-units="m" aria-pressed="true">Metres</button>
           <button type="button" data-units="ft" aria-pressed="false">Feet</button>
         </div>
-        <div class="hc-seg" id="hc-paper" role="group" aria-label="Paper">
+        <div class="hc-seg" data-seg id="hc-paper" role="group" aria-label="Paper">
           <button type="button" data-paper="a4" aria-pressed="true">A4</button>
           <button type="button" data-paper="letter" aria-pressed="false">Letter</button>
         </div>
@@ -86,13 +86,11 @@ const len = (m: number) => formatLength(m, 'm');
   .hc-back { display: inline-flex; align-items: center; gap: 0.2rem; min-height: 44px; color: var(--secondary); text-decoration: none; font: 500 var(--t-footnote) var(--font-ui); }
   .hc-back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
   .hc-back:hover { color: var(--fg); }
-  .hc-title { flex: 1; margin: 0; font-family: var(--font-note); font-style: italic; font-weight: 400; font-size: 1.6rem; }
+  .hc-title { flex: 1; margin: 0; font-family: var(--font-note); font-style: italic; font-weight: 500; font-size: var(--t-title-2); }
   .hc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
-  .hc-seg { display: flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
-  .hc-seg button { min-height: 36px; padding: 0 0.85rem; border: 0; background: none; color: var(--secondary); font: 500 var(--t-footnote) var(--font-ui); cursor: pointer; }
-  .hc-seg button[aria-pressed='true'] { background: var(--fg); color: var(--bg); }
+  .hc-seg button { min-height: 36px; padding: 0 0.95rem; border: 0; border-radius: 999px; background: none; color: var(--secondary); font: 500 var(--t-footnote) var(--font-ui); cursor: pointer; }
+  .hc-seg button[aria-pressed='true'] { background: var(--fill-active); color: var(--fg); }
   .hc-print { min-height: 36px; padding: 0 1rem; border: 1px solid var(--fg); border-radius: 999px; background: var(--fg); color: var(--bg); font: 600 var(--t-footnote) var(--font-ui); cursor: pointer; }
-  .hc-print:active, .hc-seg button:active { transform: scale(0.97); }
   .hc-empty { color: var(--secondary); font-family: var(--font-ui); }
 
   /* The sheet: paper, cards at their real size, cut lines between them. */

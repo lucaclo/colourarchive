@@ -16,6 +16,9 @@ export interface RenderOpts {
   image: (ref: PhotoRef) => CanvasImageSource | null;
   /** Editor hints (empty-page prompts, a ghost title). Never printed. */
   hints: boolean;
+  /** On-screen preview: an untitled cover says "Untitled", faintly, rather
+   *  than reading as a page that failed to draw. Never printed. */
+  untitled?: boolean;
 }
 
 const PAPER_TONE = toneOf('white').hex;
@@ -264,8 +267,8 @@ function drawCoverPage(ctx: Ctx, doc: ZineDoc, page: PageDoc, text: CoverDoc, fr
   }
   if (page.photo) keyline(ctx, page, box.x, box.y, box.w, box.h, u);
   const f = fontOf(doc.font);
-  const ghost = front && o.hints && !text.title.trim();
-  const title = (ghost ? 'Name your zine' : text.title).trim();
+  const ghost = front && (o.hints || o.untitled) && !text.title.trim();
+  const title = (ghost ? (o.hints ? 'Name your zine' : 'Untitled') : text.title).trim();
   const m = u * 9;
   const maxW = w - m * 2;
   const lines: Line[] = [];

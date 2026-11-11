@@ -1,16 +1,86 @@
 {
-  "generatedAt": "2026-10-09T17:40:31.022Z",
+  "generatedAt": "2026-11-08T21:25:43.364Z",
   "count": 13,
   "chapters": [
     {
       "key": "achromatic",
       "name": "Ash",
       "oklch": {
-        "L": 0.61,
+        "L": 0.572,
         "C": 0,
         "H": 0
       },
       "photos": [
+        {
+          "id": "9c8bbaf0eab03262",
+          "filename": "approaching-shadow-hong-kong-by-fan-ho.9c8bbaf0eab03262.webp",
+          "ext": "webp",
+          "width": 1600,
+          "height": 2126,
+          "bytes": 291798,
+          "oklch": {
+            "L": 0.534,
+            "C": 0,
+            "H": 0
+          },
+          "palette": [
+            {
+              "L": 0.777,
+              "C": 0.006,
+              "H": 129,
+              "share": 0.279
+            },
+            {
+              "L": 0.211,
+              "C": 0.004,
+              "H": 165,
+              "share": 0.221
+            },
+            {
+              "L": 0.298,
+              "C": 0.005,
+              "H": 145,
+              "share": 0.22
+            },
+            {
+              "L": 0.847,
+              "C": 0.003,
+              "H": 128,
+              "share": 0.134
+            },
+            {
+              "L": 0.613,
+              "C": 0.008,
+              "H": 132,
+              "share": 0.086
+            },
+            {
+              "L": 0.474,
+              "C": 0.007,
+              "H": 138,
+              "share": 0.062
+            }
+          ],
+          "autoChapter": "achromatic",
+          "chapter": "achromatic",
+          "autoMedium": "film",
+          "medium": "film",
+          "autoGenre": "architecture",
+          "genre": "architecture",
+          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAACwBACdASoYACAAPtlepE2oJaOsN/qoAYAbCWkAAOhXS17gCWHKwh0Fc1GN+mQAAPa8ec5SLht1f7jNGS9tqaELt/lf4I9lneSY3FrImd/tYtyGfaWo4AAA",
+          "derivatives": [
+            {
+              "width": 640,
+              "avif": "/img/9c8bbaf0eab03262-640.avif"
+            },
+            {
+              "width": 1280,
+              "avif": "/img/9c8bbaf0eab03262-1280.avif"
+            }
+          ],
+          "exif": {},
+          "addedAt": "2026-11-08T21:25:43.359Z"
+        },
         {
           "id": "b4490759aa4afe19",
           "filename": "DSC06160.b4490759aa4afe19.jpg",
@@ -390,9 +460,9 @@
       "key": "orange",
       "name": "Orange",
       "oklch": {
-        "L": 0.679,
-        "C": 0.054,
-        "H": 78.5
+        "L": 0.637,
+        "C": 0.065,
+        "H": 72.1
       },
       "photos": [
         {
@@ -744,87 +814,70 @@
           ]
         },
         {
-          "id": "47428f4538360e9c",
-          "filename": "DSC06792.47428f4538360e9c.jpg",
-          "ext": "jpg",
-          "width": 2048,
-          "height": 1153,
-          "bytes": 1007669,
+          "id": "1adaf557fb6801ff",
+          "filename": "Fan-Ho-1.1adaf557fb6801ff.avif",
+          "ext": "avif",
+          "width": 1100,
+          "height": 834,
+          "bytes": 42653,
           "oklch": {
-            "L": 0.68,
-            "C": 0.072,
-            "H": 101.5
+            "L": 0.55,
+            "C": 0.041,
+            "H": 88.5
           },
+          "palette": [
+            {
+              "L": 0.277,
+              "C": 0.025,
+              "H": 94,
+              "share": 0.239
+            },
+            {
+              "L": 0.353,
+              "C": 0.033,
+              "H": 93,
+              "share": 0.19
+            },
+            {
+              "L": 0.965,
+              "C": 0.01,
+              "H": 87,
+              "share": 0.181
+            },
+            {
+              "L": 0.804,
+              "C": 0.033,
+              "H": 87,
+              "share": 0.171
+            },
+            {
+              "L": 0.621,
+              "C": 0.044,
+              "H": 87,
+              "share": 0.115
+            },
+            {
+              "L": 0.471,
+              "C": 0.042,
+              "H": 88,
+              "share": 0.103
+            }
+          ],
           "autoChapter": "yellow",
           "chapter": "yellow",
-          "autoMedium": "digital",
-          "medium": "digital",
+          "autoMedium": "film",
+          "medium": "film",
           "autoGenre": "street",
           "genre": "street",
-          "placeholder": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAwCdASoYAA4APu1mqk2ppaQiMAgBMB2JZQCdABtHxb2xEb/18YIAAP4H7xVMqbxa2R0NsP7NcsAzo0zd6bQ7W8Ji6MxSjlQMwT2NVVja6xkz/XUU72VOZZmo7b4fAAA=",
+          "placeholder": "data:image/webp;base64,UklGRogAAABXRUJQVlA4IHwAAADwBACdASoYABIAPu1qrlCppaQiqAqpMB2JZwCo9BEJqCI5DlJG6BxgIRlU/RpIKgAA/ujMnxMIBqBIis4ZCIUDSCpzefsiUFrLB3ClnfNACqHFU/ekW+p1rd8wulFQj23luclXyW4FqsSaDf0PP7BRm76TvUBdXS/+VAAA",
           "derivatives": [
             {
               "width": 640,
-              "avif": "/img/47428f4538360e9c-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/47428f4538360e9c-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/47428f4538360e9c-2000.avif"
+              "avif": "/img/1adaf557fb6801ff-640.avif"
             }
           ],
-          "exif": {
-            "capturedAt": "2026-09-07T15:33:46.000Z",
-            "camera": "SONY ILCE-7CM2",
-            "lens": "FE 35mm F2.8 ZA",
-            "focalLength": "35mm",
-            "aperture": "f/9",
-            "shutter": "1/13s",
-            "iso": 50,
-            "software": "Adobe Lightroom 9.5.1 (Macintosh)"
-          },
-          "addedAt": "2026-09-10T16:04:57.724Z",
-          "palette": [
-            {
-              "L": 0.976,
-              "C": 0.005,
-              "H": 95,
-              "share": 0.27
-            },
-            {
-              "L": 0.426,
-              "C": 0.01,
-              "H": 74,
-              "share": 0.221
-            },
-            {
-              "L": 0.543,
-              "C": 0.036,
-              "H": 83,
-              "share": 0.185
-            },
-            {
-              "L": 0.253,
-              "C": 0.012,
-              "H": 56,
-              "share": 0.125
-            },
-            {
-              "L": 0.691,
-              "C": 0.01,
-              "H": 78,
-              "share": 0.121
-            },
-            {
-              "L": 0.774,
-              "C": 0.059,
-              "H": 92,
-              "share": 0.079
-            }
-          ]
+          "exif": {},
+          "addedAt": "2026-11-08T21:24:36.352Z"
         },
         {
           "id": "a7c5e21fa101fcda",
@@ -897,88 +950,6 @@
               "C": 0.049,
               "H": 137,
               "share": 0.045
-            }
-          ]
-        },
-        {
-          "id": "c97ef78d4ee1dafa",
-          "filename": "R0000586.c97ef78d4ee1dafa.jpg",
-          "ext": "jpg",
-          "width": 6000,
-          "height": 4000,
-          "bytes": 12104678,
-          "oklch": {
-            "L": 0.84,
-            "C": 0.058,
-            "H": 227.9
-          },
-          "autoChapter": "blue",
-          "chapter": "blue",
-          "autoMedium": "digital",
-          "medium": "digital",
-          "autoGenre": "architecture",
-          "genre": "architecture",
-          "placeholder": "data:image/webp;base64,UklGRmQAAABXRUJQVlA4IFgAAADwAwCdASoYABAAPu1qrU8ppiQiMAgBMB2JQBOgBFSg2xLw5oZSddJgAP6Uy12MoHQCWRRSpv5SSfFuVxGkIcttOtqTKiJXLKam0rcmn/nii9JQAKaGKKAA",
-          "derivatives": [
-            {
-              "width": 640,
-              "avif": "/img/c97ef78d4ee1dafa-640.avif"
-            },
-            {
-              "width": 1280,
-              "avif": "/img/c97ef78d4ee1dafa-1280.avif"
-            },
-            {
-              "width": 2000,
-              "avif": "/img/c97ef78d4ee1dafa-2000.avif"
-            }
-          ],
-          "exif": {
-            "capturedAt": "2026-09-21T18:09:07.000Z",
-            "camera": "RICOH IMAGING COMPANY, LTD.   RICOH GR IIIx",
-            "focalLength": "26mm",
-            "aperture": "f/8",
-            "shutter": "1/25s",
-            "iso": 100,
-            "software": "RICOH GR IIIx Ver. 1.60      "
-          },
-          "addedAt": "2026-09-22T12:15:56.230Z",
-          "palette": [
-            {
-              "L": 0.167,
-              "C": 0.01,
-              "H": 145,
-              "share": 0.261
-            },
-            {
-              "L": 0.877,
-              "C": 0.057,
-              "H": 226,
-              "share": 0.258
-            },
-            {
-              "L": 0.276,
-              "C": 0.025,
-              "H": 138,
-              "share": 0.155
-            },
-            {
-              "L": 0.505,
-              "C": 0.028,
-              "H": 196,
-              "share": 0.123
-            },
-            {
-              "L": 0.757,
-              "C": 0.023,
-              "H": 167,
-              "share": 0.107
-            },
-            {
-              "L": 0.406,
-              "C": 0.045,
-              "H": 126,
-              "share": 0.096
             }
           ]
         }

@@ -148,6 +148,10 @@ html, body { margin: 0; padding: 0; }
   --t-footnote: 0.8125rem;   /* 13 — controls, nav, secondary rows */
   --t-body: 0.9375rem;       /* 15 — body copy, list rows, fields */
   --t-headline: 1.0625rem;   /* 17 — panel headings, primary actions */
+  /* Display steps, Fraunces italic only: a page's own name, and the line a
+     section or a collapsed page bar carries. */
+  --t-title-1: clamp(2.4rem, 6vw, 4.5rem);
+  --t-title-2: 1.5rem;
 
   /* --- Surfaces: three raised tiers over the ground, plus translucent fills
      for controls that sit on photographs or on colour. ------------------- */
@@ -161,8 +165,12 @@ html, body { margin: 0; padding: 0; }
 
   /* --- Glass: the one floating material (tab bar, toolbars, menus, sheets).
      Only ever on the functional layer above content, never in it. ------- */
-  --glass-bg: color-mix(in oklab, var(--bg) 58%, transparent);
-  --glass-bg-strong: color-mix(in oklab, var(--bg) 80%, transparent);
+  /* Was 58%: over Scout's pale basemap the composite came out ≈#6b6966 and
+     the inactive tab labels measured 2.2:1. At 82% the same labels clear
+     5:1 over white, and over the darkest photograph the bar still reads as
+     glass rather than a slab, because the blur and edge carry the material. */
+  --glass-bg: color-mix(in oklab, var(--bg) 82%, transparent);
+  --glass-bg-strong: color-mix(in oklab, var(--bg) 90%, transparent);
   --glass-edge: color-mix(in oklab, var(--fg) 14%, transparent);
   --glass-blur: blur(24px) saturate(1.6);
   --glass-shadow: inset 0 1px 0 color-mix(in oklab, #fff 9%, transparent),
@@ -188,6 +196,13 @@ html, body { margin: 0; padding: 0; }
      photo lifting out of the grid. Falls back to --ease where linear() isn't
      supported (Safari < 17.2). */
   --spring-move: var(--ease);
+  /* Press: how far a control gives under a finger, and the spring it comes
+     back on. The release curve is a looser spring (ζ 0.68, ~5% overshoot)
+     than --spring-move, so a let-go reads as a small bounce rather than a
+     glide. Played by src/lib/ui/press.ts through the `scale` property, which
+     composes with whatever `transform` an element already has. */
+  --press: 0.96;
+  --spring-press: var(--spring);
 
   /* --- Tab bar: every page reserves this much at the foot of the screen so
      nothing it owns lands underneath the floating bar. ------------------ */
@@ -260,6 +275,8 @@ html, body { margin: 0; padding: 0; }
   :root {
     --spring-move: linear(0, 0.03, 0.103, 0.2, 0.308, 0.416, 0.519, 0.613, 0.695, 0.766, 0.825, 0.873,
       0.911, 0.941, 0.964, 0.98, 0.992, 1.001, 1.006, 1.009, 1.011, 1.011, 1.011, 1.01, 1);
+    --spring-press: linear(0, 0.032, 0.112, 0.22, 0.342, 0.466, 0.584, 0.691, 0.784, 0.861, 0.923, 0.971, 1.006,
+      1.03, 1.044, 1.052, 1.054, 1.053, 1.048, 1.042, 1.036, 1.029, 1.023, 1.017, 1.012, 1.008, 1.004, 1.002, 1);
   }
 }
 
@@ -312,8 +329,6 @@ body {
   min-height: var(--hit); padding: 0 1.2rem; border-radius: var(--r-pill);
   transition: transform 110ms ease-out;
 }
-.archive-empty-clear:active { transform: scale(0.96); }
-@media (prefers-reduced-motion: reduce) { .archive-empty-clear:active { transform: none; } }
 
 /* Collage: a full-bleed masonry wall per chapter. Photographs are never
    cropped — tiles take their natural aspect and flow into balanced columns,
@@ -515,36 +530,35 @@ body {
   opacity: 0.35;
 }
 .chapter-index {
-  font-family: var(--font-label);
-  font-size: var(--label-size);
-  letter-spacing: var(--label-track);
-  text-transform: uppercase;
-  /* Full strength: the ink is already chosen for contrast against the
-     chapter's colour (readableInk). At 0.8 these 12px labels measured
-     3.4–4.3:1 on Ash, Camel, Yellow, Teal and Blue — under AA's 4.5. */
-  margin: 0 0 1.4rem;
-  font-weight: 500;
+  /* Written in, not stamped on: the notebook's sentence-case italic, the
+     same voice as the cover's kicker (it was tracked mono capitals). Full
+     strength: the ink is already chosen for contrast against the chapter's
+     colour (readableInk). */
+  font-family: var(--font-note); font-style: italic; font-weight: 500;
+  font-size: clamp(1rem, 1.6vw, 1.25rem); letter-spacing: 0;
+  margin: 0 0 0.9rem;
 }
 /* Real data, not decoration, in the room the marquee used to fill — how much
    of the archive this chapter actually is. */
 .chapter-count {
-  font-family: var(--font-label);
-  font-size: var(--label-size);
-  letter-spacing: var(--label-track);
-  text-transform: uppercase;
+  font-family: var(--font-data);
+  font-size: var(--t-footnote);
+  letter-spacing: 0;
   margin: 0.9rem 0 0;
   font-weight: 500;
 }
 /* The chapter's palette — its own photographs' dominant colours, in the
    order they follow. A preview of the wall below, drawn from real data. */
+/* Struck as one band, like the cover's spectrum, rather than a row of
+   chips: the chapter's colours in the order its photographs follow. */
 .chapter-palette {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;
-  list-style: none; margin: 1.5rem 0 0; padding: 0; max-width: 20rem;
+  display: flex; width: min(16rem, 70vw); height: 6px; gap: 0;
+  list-style: none; margin: 1.4rem 0 0; padding: 0;
+  border-radius: 999px; overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in oklab, currentColor 18%, transparent);
+  transform-origin: left center;
 }
-.chapter-palette li {
-  width: 14px; height: 14px; border-radius: 4px;
-  box-shadow: 0 0 0 1px color-mix(in oklab, currentColor 22%, transparent);
-}
+.chapter-palette li { flex: 1 1 0; height: 100%; }
 /* Chapter entrance: title, index and count rise in the instant the gap itself
    scrolls into view (see the IntersectionObserver in index.astro), rather
    than the divider simply appearing static and already-coloured. The 0%
@@ -555,30 +569,65 @@ body {
 @keyframes chapterIndexIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes chapterTitleIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes chapterCountIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes paletteIn { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes paletteIn { from { opacity: 0; transform: scaleX(0); } to { opacity: 1; transform: none; } }
 .chapter-gap.enter .chapter-index { animation: chapterIndexIn 300ms var(--ease) both; }
 .chapter-gap.enter .chapter-title { animation: chapterTitleIn 300ms var(--ease) 40ms both; }
 .chapter-gap.enter .chapter-count { animation: chapterCountIn 300ms var(--ease) 80ms both; }
-/* The swatches set down one after another, left to right — the chapter's
-   colours arriving in the order its photographs will. */
-.chapter-gap.enter .chapter-palette li { animation: paletteIn 160ms var(--spring) both; }
-.chapter-gap.enter .chapter-palette li:nth-child(1) { animation-delay: 60ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(2) { animation-delay: 70ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(3) { animation-delay: 80ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(4) { animation-delay: 90ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(5) { animation-delay: 100ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(6) { animation-delay: 110ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(7) { animation-delay: 120ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(8) { animation-delay: 130ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(9) { animation-delay: 140ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(10) { animation-delay: 150ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(11) { animation-delay: 160ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(12) { animation-delay: 170ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(13) { animation-delay: 180ms; }
-.chapter-gap.enter .chapter-palette li:nth-child(14) { animation-delay: 190ms; }
+/* The band is struck left to right, the chapter's colours arriving in the
+   order its photographs will. */
+.chapter-gap.enter .chapter-palette { animation: paletteIn 620ms var(--ease) 120ms both; }
 @media (prefers-reduced-motion: reduce) {
   .chapter-gap.enter .chapter-index, .chapter-gap.enter .chapter-title,
-  .chapter-gap.enter .chapter-count, .chapter-gap.enter .chapter-palette li { animation: none; }
+  .chapter-gap.enter .chapter-count, .chapter-gap.enter .chapter-palette { animation: none; }
+}
+
+/* As an opener scrolls away its title drifts up a little faster than the
+   page: a parallax of a few percent, so the colour field reads as a plane
+   behind the type rather than a printed block. `translate` only, so it never
+   meets the entrance's `transform`. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .chapter-gap .chapter-index {
+      animation: chapterDrift linear both, chapterTitleOut linear both; animation-timeline: view(), view(); animation-range: exit 0% exit 100%, exit -110px exit -30px;
+    }
+    .chapter-gap .chapter-count { animation: chapterTitleOut linear both; animation-timeline: view(); animation-range: exit -110px exit -30px; }
+    .chapter-gap .chapter-palette { animation: chapterTitleOut linear both; animation-timeline: view(); animation-range: exit -110px exit -30px; }
+    .chapter-gap.enter .chapter-count { animation: chapterCountIn 300ms var(--ease) 80ms both, chapterTitleOut linear both; animation-timeline: auto, view(); animation-range: normal, exit -110px exit -30px; }
+    .chapter-gap.enter .chapter-palette { animation: paletteIn 620ms var(--ease) 120ms both, chapterTitleOut linear both; animation-timeline: auto, view(); animation-range: normal, exit -110px exit -30px; }
+    /* The title also fades as it nears the fixed top bar, from 110px short of
+       the top: at 130px it otherwise slid under the wordmark and peeked out
+       round the capsules. `opacity` only, a third animation of its own. */
+    .chapter-gap .chapter-title {
+      animation: chapterDrift linear both, chapterTitleOut linear both; animation-timeline: view(), view(); animation-range: exit 0% exit 100%, exit -110px exit 35%;
+    }
+    .chapter-gap.enter .chapter-index { animation: chapterIndexIn 300ms var(--ease) both, chapterDrift linear both, chapterTitleOut linear both; animation-timeline: auto, view(), view(); animation-range: normal, exit 0% exit 100%, exit -110px exit -30px; }
+    .chapter-gap.enter .chapter-title { animation: chapterTitleIn 300ms var(--ease) 40ms both, chapterDrift linear both, chapterTitleOut linear both; animation-timeline: auto, view(), view(); animation-range: normal, exit 0% exit 100%, exit -110px exit 35%; }
+    .archive.overview .chapter-gap * { animation: none !important; }
+  }
+}
+@keyframes chapterDrift { to { translate: 0 -9vh; } }
+@keyframes chapterTitleOut { to { opacity: 0; } }
+
+/* Wide screens: an editorial split. The name sits large at the foot of the
+   colour field, flush left, with what it holds (count, palette) answering
+   it on the right — the field becomes a page with a title on it, not a
+   banner with a caption in the middle. */
+@media (min-width: 820px) {
+  .archive:not(.overview) .chapter-gap {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto;
+    align-content: end; align-items: end; column-gap: var(--sp-7);
+    padding: 16vh var(--edge) 9vh;
+  }
+  .archive:not(.overview) .chapter-index { grid-column: 1; grid-row: 1; }
+  .archive:not(.overview) .chapter-title {
+    grid-column: 1; grid-row: 2; text-align: left; max-width: none;
+    font-size: calc(clamp(4rem, 9vw, 8.5rem) * (0.88 + 0.12 * var(--chapter-weight, 1)));
+    line-height: 0.92;
+  }
+  .archive:not(.overview) .chapter-title::after { display: none; }
+  .archive:not(.overview) .chapter-count, .archive:not(.overview) .chapter-palette { grid-column: 2; }
+  .archive:not(.overview) .chapter-count { grid-row: 1; align-self: end; margin: 0 0 0.7rem; justify-self: end; }
+  .archive:not(.overview) .chapter-palette { grid-row: 2; align-self: end; justify-self: end; margin: 0 0 0.6rem; transform-origin: right center; }
 }
 .chapter-swatch {
   display: var(--swatch-display);
@@ -723,6 +772,21 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
   transition: background var(--dur-fast) var(--ease), transform 120ms ease-out;
 }
 .tb-button:hover { background: var(--glass-bg-strong); }
+/* Overview, Get the app and Insights are one toolbar, so they share one
+   capsule (they were three loose ones, and on a phone three stranded circles
+   on a row of their own). Inside it each is a plain segment that fills on
+   hover, like the filters opposite. */
+.tb-actions { gap: 2px; }
+.tb-more { display: none; }
+.tb-actions .tb-button {
+  min-height: 2.25rem; background: transparent; border: 0; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--secondary);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.tb-actions .tb-button:hover { background: var(--fill); color: var(--fg); }
+.tb-actions .tb-button[aria-pressed='true'] { background: var(--fill-active); color: var(--fg); }
+/* The medium toggle already sits on the capsule; it needs no track of its own. */
+.view-toggle[data-seg] { background: transparent; padding: 0; }
 .tb-get { text-decoration: none; }
 /* Already the app: nothing left to get. */
 @media (display-mode: standalone), (display-mode: minimal-ui), (display-mode: window-controls-overlay) {
@@ -735,13 +799,6 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
    network request it triggers) has had a chance to respond. iOS needs a
    touch listener present somewhere in the document for :active to fire at
    all — see the shim in Layout.astro. */
-.topbar .brand:active, .tb-button:active,
-.view-toggle button:active, .genre-btn:active { transform: scale(0.96); }
-.genre-menu li:active { transform: scale(0.98); }
-@media (prefers-reduced-motion: reduce) {
-  .topbar .brand:active, .tb-button:active,
-  .view-toggle button:active, .genre-btn:active, .genre-menu li:active { transform: none; }
-}
 
 /* --- Tab bar: the app's navigation, the same on every page ---------------
    See components/TabBar.astro. A floating glass capsule at the foot of the
@@ -782,6 +839,10 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
   transition: opacity var(--dur-fast) var(--ease);
 }
 .tab:hover { color: var(--fg); background: var(--fill); }
+/* With a pointer the icon lifts toward it a pixel and settles back on the
+   spring: the bar answers before you click. */
+.tab svg { transition: translate 360ms var(--spring-press), stroke-width var(--dur-fast) var(--ease); }
+@media (hover: hover) and (pointer: fine) { .tab:hover svg { translate: 0 -1.5px; } }
 /* The current section: filled, full-strength, and tinted a breath toward
    whatever chapter colour the page is carrying. */
 .tab[aria-current='page'] { color: var(--fg); }
@@ -805,7 +866,6 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 }
 .tabbar-add:hover { background: var(--glass-bg-strong); }
 .tabbar-add[aria-current='page'] { background: color-mix(in oklab, var(--accent-mix) 22%, var(--glass-bg-strong)); }
-.tab:active, .tabbar-add:active { transform: scale(0.94); }
 .tab:focus-visible, .tabbar-add:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 
 /* --- Moving between sections -----------------------------------------------
@@ -857,7 +917,6 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate(-50%, 140%); }
 @media (prefers-reduced-motion: reduce) {
   .tabbar, .tabbar-tabs, .tab, .tabbar-add { transition: none; }
-  .tab:active, .tabbar-add:active { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .tabbar-tabs, .tabbar-add { background: var(--surface-2); }
@@ -880,12 +939,23 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 }
 .insights[hidden] { display: none; }
 .insights.show { opacity: 1; transition-duration: 320ms; transition-timing-function: var(--ease); }
-.insights-inner { max-width: 44rem; width: 100%; padding: 9vh 8vw 12vh; }
-.insights-inner h2 { font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: clamp(2rem, 5vw, 3rem); margin: 0; }
-.insights-sub { font-family: var(--font-ui); color: var(--secondary); font-size: var(--t-body); margin: 0.5rem 0 2.4rem; }
-.insights section { margin-bottom: 1.25rem; padding: 1.1rem 1.25rem 1.25rem; background: var(--surface-1); border: 1px solid var(--separator); border-radius: var(--r-md); }
-.insights h3 { font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600; color: var(--secondary); margin: 0 0 0.8rem; }
-.insights h3 .only { border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; margin-left: 6px; font-size: 0.85em; letter-spacing: 0.1em; }
+/* A page of the notebook, not a settings sheet: the title and the way out
+   on one line, then each finding under a hairline with its name pencilled
+   in (it was a stack of boxed cards). Two columns where there's room. */
+.insights-inner {
+  max-width: 62rem; width: 100%; padding: 8vh var(--edge) 12vh;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-7); align-items: start;
+}
+.insights-inner > :not(.insights-close, h2, .insights-sub) { grid-column: 1 / -1; }
+.insights-inner h2 { grid-column: 1; grid-row: 1; font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight); font-size: var(--t-title-1); line-height: 1; margin: 0; }
+.insights-sub { grid-column: 1 / -1; grid-row: 2; font-family: var(--font-data); color: var(--secondary); font-size: var(--t-footnote); margin: 0.9rem 0 2.6rem; }
+.insights section { margin: 0; padding: 1.3rem 0 1.8rem; border-top: 1px solid var(--rule); }
+.insights h3 { font-family: var(--font-note); font-style: italic; font-size: 1.15rem; font-weight: 500; color: var(--fg); margin: 0 0 1rem; }
+@media (min-width: 1100px) {
+  .insights-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: row dense; }
+  .insights .insights-inner > section { grid-column: auto; }
+}
+.insights h3 .only { font-family: var(--font-ui); font-style: normal; border: 1px solid var(--rule); border-radius: 999px; padding: 1px 7px; margin-left: 6px; font-size: var(--t-caption); letter-spacing: 0; color: var(--secondary); }
 .insights .stat { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .insights .stat li { display: flex; align-items: center; gap: 0.7rem; font-family: var(--font-ui); font-size: var(--t-body); min-height: 1.9rem; }
 .insights .sw { width: 0.9rem; height: 0.9rem; border-radius: 50%; flex: 0 0 auto; }
@@ -957,7 +1027,8 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .ins-drift li { display: grid; grid-template-columns: 48px 1fr; gap: 0.7rem; align-items: center; font-size: var(--t-caption); color: var(--secondary); }
 .ins-drift img { width: 48px; height: 36px; object-fit: cover; border-radius: 2px; background: var(--border); }
 .insights-close {
-  position: fixed; top: var(--edge); right: var(--edge); width: var(--hit); height: var(--hit); border-radius: 50%;
+  grid-column: -2 / -1; grid-row: 1; justify-self: end; align-self: center;
+  position: sticky; top: var(--edge); z-index: 2; width: var(--hit); height: var(--hit); border-radius: 50%;
   border: 1px solid var(--glass-edge); background: var(--glass-bg); box-shadow: var(--glass-shadow);
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   color: var(--fg); font-size: 1.2rem; cursor: pointer;
@@ -997,6 +1068,7 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .genre-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
 .genre-drop.open .genre-btn { color: var(--fg); background: var(--fill); }
 .genre-caret { transition: transform 220ms var(--ease); opacity: 0.75; }
+.genre-glass { flex: none; opacity: 0.8; margin-right: -0.1rem; }
 .genre-drop.open .genre-caret { transform: rotate(180deg); }
 .genre-menu {
   position: absolute; top: calc(100% + 0.6rem); left: 50%;
@@ -1016,6 +1088,22 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .genre-menu[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .genre-menu { transition: opacity 100ms linear; transform: translateX(-50%); }
+}
+.genre-list { margin: 0; padding: 0; list-style: none; }
+.genre-menu:has(.genre-search) { min-width: 16rem; }
+/* The open menu sits over the answers row that drops below the bar. */
+.tb-group:has(.genre-drop.open) { position: relative; z-index: 2; }
+/* Search by description heads the menu, a hairline above the genres. */
+.genre-search { padding-bottom: 0.35rem; margin-bottom: 0.35rem; border-bottom: 1px solid var(--glass-edge); }
+.genre-search .search-box { border-radius: var(--r-sm); background: var(--fill); }
+.genre-search .search-box input { width: 100%; }
+/* A search is open while the menu is shut: a dot on the button says so. */
+/* Out of the flow, so the dot arriving doesn't push the bar's next group
+   along (it shifted the colour button 11px). */
+.genre-btn { position: relative; }
+.genre-drop.searching .genre-btn::after {
+  content: ''; position: absolute; top: 5px; right: 5px;
+  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
 }
 .genre-menu li {
   font-family: var(--font-ui); font-size: var(--t-body); color: var(--fg); cursor: pointer; white-space: nowrap;
@@ -1119,6 +1207,8 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
   transform-origin: center; transition: transform 260ms var(--ease), filter 200ms var(--ease);
 }
 .cover-spectrum .cs-seg:hover::before { filter: brightness(1.3); transform: scaleY(2.6); }
+/* The strip is 7px tall; the target is 27. */
+.cover-spectrum .cs-seg::after { content: ''; position: absolute; inset: -10px 0; }
 /* Named on hover/focus, not just coloured — two adjacent hues can look the
    same shade of grey to a colour-blind visitor, and a label beats asking
    them to trust which segment their pointer is actually over. */
@@ -1185,6 +1275,8 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 }
 /* Current chapter marked; the rest recede (unless you're hovering the scrubber). */
 .spectrum:not(:hover) .spectrum-seg { opacity: 0.5; }
+/* An 8px rail; each segment's target reaches 10px either side of it. */
+.spectrum-seg::after { content: ''; position: absolute; inset: 0 -10px; }
 .spectrum:not(:hover) .spectrum-seg.active { opacity: 1; }
 .spectrum-label {
   position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%);
@@ -1288,10 +1380,6 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
    washout this scrim exists to prevent. */
 .lb-tool:hover, .lb-close:hover, .lb-nav:hover { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); background: color-mix(in oklab, #000 55%, transparent); }
 .lb-tool:focus-visible, .lb-close:focus-visible, .lb-nav:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
-.lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: scale(0.92); }
-@media (prefers-reduced-motion: reduce) {
-  .lb-tool:active, .lb-close:active, .lb-nav:active, .insights-close:active { transform: none; }
-}
 .lb-tool[aria-pressed='true'] { opacity: 1; border-color: color-mix(in oklab, var(--accent-mix) 55%, transparent); }
 /* The archive's own actions say what they do in a word: ≈, ◐ and two
    overlapping circles were guesses on touch, where there's no tooltip. Kept
@@ -1336,8 +1424,32 @@ a.lb-tool { text-decoration: none; }
 .lightbox.playing #lb-play .pause { display: block; }
 .lb-tools {
   position: fixed; z-index: 81; top: var(--edge); right: var(--edge);
-  display: flex; align-items: center; gap: 0.55rem;
+  display: flex; align-items: center; gap: 2px;
+  /* One capsule for the viewer's tools, the same glass as the archive's
+     toolbar, instead of seven separate discs and pills each with its own
+     scrim. The capsule is the scrim now: it keeps every label legible over a
+     blown-out sky without each button carrying its own. */
+  padding: 4px; border-radius: var(--r-pill);
 }
+/* The glass is a layer behind the row, not the row itself: backdrop-filter
+   on .lb-tools would make it the containing block for the phone's fixed
+   Close button and pull that into the bar. */
+.lb-tools::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: color-mix(in oklab, #000 55%, transparent); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
+}
+.lb-tools .lb-tool {
+  background: transparent; border-color: transparent; box-shadow: none; opacity: 1;
+  -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--secondary);
+  width: 2.4rem; height: 2.4rem;
+}
+.lb-tools .lb-tool.lb-text { width: auto; padding: 0 0.85rem; }
+.lb-tools .lb-tool:hover { background: var(--fill-hover); color: var(--fg); border-color: transparent; }
+.lb-tools .lb-tool[aria-pressed='true'], .lb-tools .lb-tool[aria-expanded='true'] { background: var(--fill-active); color: var(--fg); border-color: transparent; }
+/* Close is the way out, not a tool: set apart by a hairline. */
+.lb-tools .lb-close { margin-left: 0.4rem; color: var(--fg); }
+.lb-tools .lb-close::before { content: ''; position: absolute; left: -0.3rem; top: 22%; bottom: 22%; width: 1px; background: var(--separator); }
 /* Position in the sequence — the one number worth showing. */
 /* Same washout risk as the tool buttons opposite it (a tall photo can sit
    right behind it too) — the same scrim, shaped as a pill instead of a
@@ -1345,11 +1457,13 @@ a.lb-tool { text-decoration: none; }
 .lb-count {
   position: fixed; z-index: 81; top: var(--edge); left: var(--edge);
   font-family: var(--font-data); font-size: var(--t-caption); letter-spacing: 0.06em;
-  color: var(--secondary); line-height: 46px; padding: 0 0.9rem; border-radius: 999px;
-  background: color-mix(in oklab, #000 45%, transparent);
-  /* Same scrim, same fix as .lb-tool above — it would read as inconsistent
-     glass right next to it otherwise. */
-  -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
+  color: var(--secondary); line-height: 44px; padding: 0 0.9rem; border-radius: 999px;
+  /* The tool capsule's own material, edge and all: without the hairline
+     edge, a lighter scrim and a softer blur read as a smudge on the photo
+     rather than a control. */
+  background: color-mix(in oklab, #000 55%, transparent);
+  border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
 }
 /* Slideshow: a hairline crossing the foot of the screen, one pass per photo,
    so a running show is visible without a label announcing itself. */
@@ -1371,8 +1485,8 @@ a.lb-tool { text-decoration: none; }
   position: fixed; z-index: 81; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
   transform: translate(-50%, 4px);
   width: max-content; max-width: min(90vw, 56rem); text-align: center;
-  font-family: var(--font-label); font-size: var(--t-footnote); letter-spacing: 0.02em; line-height: 1.6; color: var(--fg);
-  padding: 0.3rem 0.95rem; border-radius: var(--r-md);
+  font-family: var(--font-ui); font-size: var(--t-footnote); letter-spacing: 0; line-height: 1.6; color: var(--fg);
+  padding: 0.4rem 1rem 0.5rem; border-radius: var(--r-md);
   background: color-mix(in oklab, #000 45%, transparent);
   -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
   opacity: 0; visibility: hidden; pointer-events: none;
@@ -1471,6 +1585,7 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .topbar { flex-wrap: wrap; row-gap: var(--sp-2); }
   .tb-button .tb-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .tb-button { padding: 0; width: var(--hit); justify-content: center; }
+  .tb-actions .tb-button { width: 2.6rem; }
 }
 
 /* ===== Mobile ============================================================= */
@@ -1489,6 +1604,24 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .tb-button { padding: 0; width: var(--hit); justify-content: center; }
   .view-toggle button, .genre-btn { padding: 0 0.7rem; }
   .tb-search { flex: 1 1 12rem; min-width: 0; order: 3; }
+  /* Overview / Get the app / Insights: a menu behind "More", with names. */
+  .tb-more {
+    display: inline-flex; align-items: center; justify-content: center; order: 4; margin-left: auto;
+    appearance: none; cursor: pointer; width: var(--hit); height: var(--hit); padding: 0; color: var(--fg);
+    border-radius: var(--r-pill); background: var(--glass-bg); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  }
+  .tb-more svg { width: 17px; height: 17px; fill: currentColor; }
+  .tb-more[aria-expanded='true'] { background: var(--glass-bg-strong); }
+  .topbar .tb-actions {
+    position: absolute; top: calc(100% - 0.3rem); right: 0.6rem; order: 5;
+    flex-direction: column; align-items: stretch; padding: 0.3rem; border-radius: var(--r-md);
+    background: var(--glass-bg-strong);
+  }
+  .topbar .tb-actions:not(.open) { display: none; }
+  .topbar .tb-actions.open { animation: popIn 220ms var(--spring-move) both; transform-origin: top right; }
+  .topbar .tb-actions .tb-button { width: auto; justify-content: flex-start; padding: 0 1rem 0 0.75rem; min-height: var(--hit); }
+  .topbar .tb-actions .tb-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
   .tb-search .search-box { flex: 1; }
   .search-box input { width: 100%; font-size: 16px; }   /* 16px: iOS won't zoom the page on focus */
   .wide-only { display: none; }
@@ -1499,8 +1632,11 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .cover-kicker::before, .cover-kicker::after { width: 1.2rem; }
   .cover-spectrum { width: 82vw; }
 
-  /* Chapter dividers: a touch less air so they don't feel empty on a phone. */
+  /* Chapter dividers: a touch less air so they don't feel empty on a phone,
+     and a title big enough to own the colour field it sits in. */
   .chapter-gap { padding: 9vh var(--edge); }
+  .chapter-title { font-size: calc(clamp(3rem, 15vw, 4.6rem) * (0.9 + 0.1 * var(--chapter-weight, 1))); line-height: 0.98; }
+  .chapter-title::after { margin-top: 1.2rem; }
 
   /* Lightbox on a phone, laid out the way Photos is: where you are and the
      way out stay at the top, the actions sit in a bar at the foot where the
@@ -1513,11 +1649,30 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
     /* Five words and two symbols are wider than a small phone: the bar
        scrolls rather than squeezing or wrapping them, centred while it fits.
        The close is fixed, so it isn't clipped by the scroll. */
-    overflow-x: auto; padding: 0 var(--edge); scrollbar-width: none;
+    overflow-x: auto; scrollbar-width: none;
+    /* The capsule spans the foot and its row scrolls; the ends fade so a
+       cut-off "Chapter" reads as more to the right, not as clipped. */
+    left: var(--edge); right: var(--edge); justify-content: flex-start;
   }
+  /* The row scrolls on a phone, and a glass layer pinned to the scroller
+     would stay behind while the buttons slid off it, so here each button
+     carries its own scrim again. */
+  .lb-tools::before { display: none; }
+  .lb-tools .lb-tool { background: color-mix(in oklab, #000 55%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .lb-tools .lb-close::before { display: none; }
   .lb-tools::-webkit-scrollbar { display: none; }
   .lb-tools > * { flex: none; }
   .lb-tools .lb-close { position: fixed; top: var(--edge); right: var(--edge); }
+  /* The fade at the right end, saying "more this way". Not a mask on the
+     row: that would mask the fixed Close too. A sticky last child instead,
+     overlapping the row's end, and gone once the row is scrolled there. */
+  .lb-tools::after {
+    content: ''; flex: none; position: sticky; right: 0; z-index: 1;
+    width: 36px; margin-left: -36px; align-self: stretch; pointer-events: none;
+    background: linear-gradient(to right, transparent, #000 85%);
+    opacity: 0; transition: opacity 160ms var(--ease);
+  }
+  .lb-tools.more-right::after { opacity: 1; }
   .lb-count { line-height: var(--hit); }
   .lb-stage, .lb-stage img { max-width: 100vw; max-height: 72vh; }
   .lb-caption {
@@ -1554,8 +1709,7 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .spectrum-label { display: none; }
 
   /* Insights: full-width, comfortable. */
-  .insights-inner { padding: 6.5rem 1.2rem 10vh; }
-  .insights-inner h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
+  .insights-inner { padding: calc(env(safe-area-inset-top, 0px) + 1.4rem) 1.2rem 10vh; column-gap: var(--sp-4); }
   .insights .lbl { min-width: 4.5rem; }
   .insights .barwrap { flex: 1.2 1 auto; }
 }
@@ -1642,12 +1796,13 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
 
   .tab { min-width: 3.7rem; padding: 0 var(--sp-2); gap: 1px; }
   .tab svg, .tabbar-add svg { width: 19px; height: 19px; }
-  .tab-label { font-size: 0.5625rem; }
+  .tab-label { font-size: 0.6875rem; letter-spacing: 0; }   /* 11px: the HIG floor; 9px was under it */
   .tabbar.compact .tab { min-width: 2.9rem; }
   .tabbar.compact .tab svg { width: 18px; height: 18px; }
 
   .tb-group { padding: 3px; }
-  .view-toggle button, .genre-btn, .search-box { min-height: 1.85rem; }
+  .view-toggle button, .genre-btn, .search-box, .tb-actions .tb-button { min-height: 1.85rem; }
+  .tb-actions .tb-button { width: 2.3rem; }
   .view-toggle button, .genre-btn { padding: 0 0.6rem; }
   .tb-button svg, .genre-btn svg.tb-icon { width: 15px; height: 15px; }
   /* The capsule already makes the 36px target; the field inside it needn't. */
@@ -1704,10 +1859,11 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   background: var(--glass-bg-strong); border: 1px solid var(--glass-edge);
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   animation: cf-tray-in 180ms var(--spring);
+  transition: translate 220ms var(--spring);
 }
 .cf-tray[hidden] { display: none; }
 @keyframes cf-tray-in { from { opacity: 0; transform: translateY(-6px); } }
-@media (prefers-reduced-motion: reduce) { .cf-tray { animation-name: cf-tray-fade; } @keyframes cf-tray-fade { from { opacity: 0; } } }
+@media (prefers-reduced-motion: reduce) { .cf-tray { animation-name: cf-tray-fade; transition: none; } @keyframes cf-tray-fade { from { opacity: 0; } } }
 .cf-tray-head { flex: 0 0 auto; display: grid; justify-items: center; gap: var(--sp-1); }
 .cf-tray-dots { display: flex; gap: 3px; }
 .cf-tray-dots span { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1px var(--glass-edge); }
@@ -1732,7 +1888,12 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
 .cf-tray-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; }
 .cf-tray-item:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; border-radius: var(--r-xs); }
 .cf-tray-item:hover img { filter: brightness(1.08); }
-.cf-tray-glass { width: 14px; height: 14px; fill: none; stroke: var(--secondary); stroke-width: 1.6; stroke-linecap: round; }
+.cf-tray-glass { flex: none; width: 14px; height: 14px; fill: none; stroke: var(--secondary); stroke-width: 1.6; stroke-linecap: round; }
+.cf-tray-dots:has(.cf-tray-q) { align-items: center; gap: 5px; max-width: 8rem; }
+.cf-tray-q {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 600; color: var(--fg);
+}
 .cf-tray-none { flex: 1 1 auto; min-width: 0; margin: 0; align-self: center; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary); white-space: normal; }
 /* No answer: the sentence says it, so the 0 above it goes, Clear sits beside
    the glass, and the fade meant for a scrolling row of photos comes off. */
@@ -1743,28 +1904,6 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .cf-tray { padding: var(--sp-1) var(--sp-2); gap: var(--sp-2); }
   .cf-tray-item img { height: 56px; }
 }
-
-/* --- Colour clock (issue #145) -------------------------------------------- */
-.cclock { position: fixed; inset: 0; z-index: 1000; background: #000; cursor: none; }
-.cclock-img {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
-  opacity: 0; transition: opacity var(--fade, 4s) ease-in-out;
-}
-.cclock-img.on { opacity: 1; }
-.cclock-caption {
-  position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem); transform: translateX(-50%);
-  margin: 0; padding: 0.45rem 0.9rem; border-radius: 999px; max-width: calc(100% - 2rem);
-  font: 500 var(--t-footnote) var(--font-ui); color: #efebe4; background: rgb(0 0 0 / 0.55); text-align: center;
-}
-.cclock-caption[hidden] { display: none; }
-.cclock-nv {
-  position: absolute; right: 1rem; top: calc(env(safe-area-inset-top, 0px) + 1rem);
-  min-height: 44px; padding: 0.45rem 0.9rem; border: 0; border-radius: 999px;
-  font: 500 var(--t-footnote) var(--font-ui); color: #efebe4; background: rgb(0 0 0 / 0.55); cursor: pointer;
-}
-.cclock-nv[hidden] { display: none; }
-html.cclock-on, html.cclock-on body { overflow: hidden; }
-@media (prefers-reduced-motion: reduce) { .cclock-img { transition-duration: 1s; } }
 
 /* --- Same roll, in the lightbox (issue #146) ------------------------------ */
 .lb-roll {
@@ -1789,7 +1928,7 @@ html.cclock-on, html.cclock-on body { overflow: hidden; }
 /* ── Night vision (issue #157) ─────────────────────────────────────────────
    One layer over everything that maps what's beneath to a single dim
    amber-red: white becomes a low orange, black stays black. It covers the
-   WebGL map and every hard-coded ink alike. Dialogs and the fullscreen clock sit in the top layer,
+   WebGL map and every hard-coded ink alike. Dialogs sit in the top layer,
    above it, so they take the same filter themselves. Held on a photo,
    data-nv-peek lifts it. */
 :root { --nv-filter: grayscale(1) brightness(0.35) sepia(1) hue-rotate(-42deg) saturate(4.5) brightness(1.3); }
@@ -1805,3 +1944,290 @@ html[data-night-vision]:not([data-nv-peek]) body::after {
 html[data-night-vision]:not([data-nv-peek]) dialog[open],
 html[data-night-vision]:not([data-nv-peek]) :fullscreen { filter: var(--nv-filter); }
 html[data-night-vision] { color-scheme: dark; }
+
+/* ============================================================================
+   Design system — the four controls, and how pages move.
+   One material for each kind of control, the same on every page:
+     .btn            in-page actions (primary paper-on-ink, quiet fill, ghost, icon)
+     [data-seg]      segmented controls, with a thumb that glides (lib/ui/segments.ts)
+     .field          text entry: a filled, rounded well
+     .tb-group       floating glass capsule (defined above, with the archive toolbar)
+   Press feedback for all of them is lib/ui/press.ts.
+   ========================================================================== */
+
+.btn {
+  appearance: none; cursor: pointer; text-decoration: none; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+  min-height: var(--hit); padding: 0 1.1rem; border-radius: var(--r-pill);
+  font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500; letter-spacing: 0; line-height: 1;
+  color: var(--fg); background: var(--fill); border: 1px solid transparent;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease), translate var(--dur-med) var(--spring-move), box-shadow var(--dur-med) var(--ease);
+}
+.btn svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.btn:hover { background: var(--fill-hover); }
+.btn:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+.btn[disabled], .btn[aria-disabled='true'] { opacity: 0.45; cursor: default; }
+.btn-primary { background: var(--fg); color: var(--bg); font-weight: 600; }
+.btn-primary:hover { background: color-mix(in oklab, var(--fg) 88%, var(--accent)); }
+.btn-ghost { background: transparent; color: var(--secondary); }
+.btn-ghost:hover { background: var(--fill); color: var(--fg); }
+.btn-outline { background: transparent; border-color: var(--glass-edge); }
+.btn-outline:hover { background: var(--fill); border-color: color-mix(in oklab, var(--fg) 24%, transparent); }
+.btn-icon { padding: 0; width: var(--hit); }
+.btn-sm { min-height: 2rem; padding: 0 0.85rem; font-size: var(--t-caption); }
+/* With a pointer, a button rises a pixel toward it: the same lift a print
+   gets when it is picked up off the table. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:not([disabled]):hover { translate: 0 -1px; box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.6); }
+  .btn-ghost:hover { box-shadow: none; }
+}
+
+/* Segmented control. The track is a quiet fill; the chosen segment's
+   background is a separate thumb that slides between them. */
+[data-seg] {
+  position: relative; isolation: isolate;
+  display: inline-flex; align-items: stretch; gap: 2px;
+  padding: 3px; border-radius: var(--r-pill); background: var(--fill);
+}
+[data-seg] > :not(.seg-thumb) {
+  position: relative; z-index: 1;
+  transition: color var(--dur-med) var(--ease);
+}
+.seg-thumb {
+  position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;
+  border-radius: var(--r-pill);
+  background: color-mix(in oklab, var(--accent-mix) 16%, var(--fill-active));
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 9%, transparent), 0 2px 6px -2px rgb(0 0 0 / 0.5);
+}
+.seg-ready > .seg-thumb {
+  transition: transform 440ms var(--spring-move), width 440ms var(--spring-move), height 440ms var(--spring-move), opacity 200ms var(--ease);
+}
+/* Once the thumb is there it is the selection's background; each page's
+   own selected-background rule (written before the thumb existed, and more
+   specific because it is scoped) has to stand down. */
+[data-seg].seg-ready > :is([aria-pressed='true'], [aria-checked='true'], [aria-selected='true'], [aria-expanded='true'], .on, :has(> input:checked)) {
+  background: transparent !important; box-shadow: none !important; border-color: transparent !important;
+  color: var(--fg) !important;
+}
+@media (prefers-reduced-motion: reduce) { .seg-ready > .seg-thumb { transition: opacity 120ms linear; } }
+@media (prefers-contrast: more) { .seg-thumb { outline: 1px solid var(--fg); } }
+
+/* Text entry. */
+.field {
+  appearance: none; width: 100%; min-height: var(--hit);
+  padding: 0 0.9rem; border-radius: var(--r-sm);
+  font-family: var(--font-ui); font-size: var(--t-body); color: var(--fg);
+  background: var(--fill); border: 1px solid var(--separator);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease);
+}
+.field::placeholder { color: var(--muted); }
+.field:hover { background: var(--fill-hover); }
+.field:focus { outline: none; border-color: color-mix(in oklab, var(--accent-mix) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-mix) 18%, transparent); }
+
+/* ---- Develop on scroll ------------------------------------------------------
+   The archive's photographs resolve out of a blur as they arrive; grids
+   elsewhere (book, add & remove, the inspiration board) now do the same as
+   they scroll in, on a view timeline: pure CSS, no observers, and it runs
+   backwards if you scroll back up past them, the way a read position should.
+   Where view timelines don't exist, or motion is reduced, nothing animates
+   and everything is simply there. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-reveal] > :not(script, template) {
+      animation: developIn linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+  }
+}
+/* `from` only: the end state is whatever the element itself says, so a hover
+   lift or a filter set later still applies once it has developed. */
+@keyframes developIn {
+  from { opacity: 0; translate: 0 14px; filter: blur(5px) saturate(0.6); }
+}
+
+/* ---- Page head --------------------------------------------------------------
+   One header for every page that scrolls: the page's name large in Fraunces,
+   its count in the data face beside it, its actions on the right. As the
+   page scrolls the title folds down into a compact glass bar and the actions
+   come with it, so Print, Add and the rest are never more than a reach away.
+   lib/ui/page-head.ts measures the fold; ph-static is the no-timeline case. */
+.page-head {
+  --ph-bar: 3.5rem;
+  --ph-bar-px: 56;
+  position: sticky; top: calc(-1 * var(--ph-travel, 0px)); z-index: 40;
+  display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3) var(--sp-4);
+  padding: calc(env(safe-area-inset-top, 0px) + clamp(2rem, 7vh, 4.5rem)) 0 0.55rem;
+  margin-bottom: var(--sp-5);
+}
+.page-head.ph-static { position: relative; top: auto; }
+/* The glass fills only the strip that stays, and only once it is stuck. */
+.page-head::before {
+  content: ''; position: absolute; z-index: -1; left: 50%; bottom: 0; width: 100vw; height: var(--ph-bar);
+  translate: -50% 0;
+  background: var(--glass-bg-strong); border-bottom: 1px solid var(--separator);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  opacity: 0;
+}
+.ph-titles { display: flex; align-items: baseline; gap: 0.8rem; min-width: 0; }
+.page-head h1, .ph-title {
+  margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500;
+  font-optical-sizing: auto; font-size: var(--t-title-1); line-height: 1; letter-spacing: 0;
+  transform-origin: left bottom; white-space: nowrap;
+}
+.ph-count { font-family: var(--font-data); font-size: var(--t-footnote); color: var(--muted); white-space: nowrap; transform-origin: left bottom; }
+.ph-actions { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+@supports (animation-timeline: scroll()) {
+  .page-head:not(.ph-static)::before { animation: phGlass linear both; animation-timeline: scroll(root block); animation-range: calc(var(--ph-travel, 80px) - 24px) var(--ph-travel, 80px); }
+  .page-head:not(.ph-static) :is(h1, .ph-title) { animation: phTitle linear both; animation-timeline: scroll(root block); animation-range: 0 var(--ph-travel, 80px); }
+  .page-head:not(.ph-static) .ph-count { animation: phCount linear both; animation-timeline: scroll(root block); animation-range: 0 var(--ph-travel, 80px); }
+}
+@keyframes phGlass { to { opacity: 1; } }
+/* 4.5rem title → about 1.5rem in the bar. Scale, not font-size, so nothing
+   reflows while the page moves. */
+@keyframes phTitle { to { scale: 0.36; translate: 0 -0.2rem; } }
+@keyframes phCount { 60%, 100% { opacity: 0; } }
+@media (max-width: 640px) {
+  /* One row on a phone, always: if the actions wrapped under the title, the
+     strip that stays when the header folds would hold only the buttons and
+     the page would lose its name. Secondary actions with an icon drop to
+     the icon (the word stays for VoiceOver), and the title steps down. */
+  .page-head { --ph-bar: 3.1rem; --ph-bar-px: 50; flex-wrap: nowrap; padding-top: calc(env(safe-area-inset-top, 0px) + 1.4rem); margin-bottom: var(--sp-4); }
+  .page-head h1, .ph-title { font-size: clamp(1.85rem, 8.2vw, 2.4rem); }
+  .ph-titles { gap: 0.5rem; }
+  .ph-actions { flex-wrap: nowrap; gap: var(--sp-1); }
+  .ph-actions .btn-ghost:has(svg) { width: var(--hit); padding: 0; }
+  .ph-actions .btn-ghost:has(svg) .btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  @keyframes phTitle { to { scale: 0.72; translate: 0 -0.1rem; } }
+}
+
+/* Popovers and menus open from the control that opened them: a short scale
+   up from their anchored corner on the move spring. Set transform-origin on
+   the popover to its anchor. */
+@keyframes popIn { from { opacity: 0; scale: 0.94; translate: 0 -4px; } to { opacity: 1; scale: 1; translate: none; } }
+@media (prefers-reduced-motion: reduce) { @keyframes popIn { from { opacity: 0; } to { opacity: 1; } } }
+
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* Modal dialogs rise in on the move spring and the page dims behind them,
+   instead of both appearing in a single frame. :where() keeps this at zero
+   specificity, so a dialog with its own entrance keeps it. */
+:where(dialog[open]) { animation: popIn 320ms var(--spring-move) both; }
+:where(dialog[open])::backdrop { animation: vtFadeIn 240ms var(--ease) both; }
+
+/* ---- Switch ------------------------------------------------------------------
+   A checkbox that turns something on and off (a map layer, before/after)
+   is drawn as a switch, the control people already know means exactly that.
+   It stays a real checkbox underneath, so focus, form state and VoiceOver
+   are untouched. The thumb travels on the move spring and, held down,
+   widens toward where it is about to go. */
+input.switch {
+  appearance: none; -webkit-appearance: none;
+  position: relative; flex: 0 0 auto; margin: 0; cursor: pointer;
+  width: 34px; height: 20px; border: 0; border-radius: var(--r-pill);
+  background: var(--fill-active);
+  transition: background 220ms var(--ease), box-shadow 220ms var(--ease);
+}
+input.switch::before {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: var(--r-pill);
+  background: #f4f1ec;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45), 0 0 0 0.5px rgb(0 0 0 / 0.25);
+  transition: translate 440ms var(--spring-move), width 220ms var(--spring-move);
+}
+input.switch:checked { background: var(--switch-on, color-mix(in oklab, var(--accent-mix) 78%, var(--fg))); }
+input.switch:checked::before { translate: 14px 0; }
+input.switch:active::before { width: 20px; }
+input.switch:checked:active::before { translate: 10px 0; }
+input.switch:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+input.switch:disabled { opacity: 0.45; cursor: default; }
+@media (prefers-contrast: more) { input.switch { box-shadow: inset 0 0 0 1px var(--fg); } }
+@media (prefers-reduced-motion: reduce) { input.switch::before { transition: none; } }
+
+/* ---- Underline segments -----------------------------------------------------
+   The same gliding thumb, drawn as a 2px line under the chosen item: for
+   tab strips and tile rows, where a filled pill would be too heavy. */
+[data-seg='line'] { padding: 0; gap: 0; background: none; border-radius: 0; }
+[data-seg='line'] > .seg-thumb {
+  border-radius: 0; box-shadow: none;
+  background: linear-gradient(to top, var(--accent-mix) 2px, transparent 2px);
+}
+
+/* ---- Folds that grow --------------------------------------------------------
+   A disclosure opens by making room, so what was below it slides down
+   instead of jumping. Where the browser can't animate to `auto`, or motion
+   is reduced, it opens at once, as it always did. Opt in with
+   `data-disclose`. */
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    details[data-disclose] { interpolate-size: allow-keywords; }
+    details[data-disclose]::details-content {
+      block-size: 0; overflow: clip;
+      transition: block-size 420ms var(--spring-move), content-visibility 420ms allow-discrete;
+    }
+    details[data-disclose][open]::details-content { block-size: auto; }
+    details[data-disclose][open] > :not(summary) { animation: discloseIn 380ms var(--ease) both; }
+  }
+}
+@keyframes discloseIn { from { opacity: 0; translate: 0 -4px; } }
+
+/* ---- Range ------------------------------------------------------------------
+   A slider whose thumb is a paper disc that swells while it is held, on the
+   press spring, so the control under the finger shows it has been taken. */
+input.range {
+  appearance: none; -webkit-appearance: none;
+  height: 28px; margin: 0; background: transparent; cursor: pointer;
+}
+input.range::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-pill); background: var(--fill-active); }
+input.range::-moz-range-track { height: 4px; border-radius: var(--r-pill); background: var(--fill-active); }
+input.range::-moz-range-progress { height: 4px; border-radius: var(--r-pill); background: color-mix(in oklab, var(--fg) 55%, transparent); }
+input.range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border: 0; border-radius: 50%;
+  background: #f4f1ec; box-shadow: 0 1px 4px rgb(0 0 0 / 0.5), 0 0 0 0.5px rgb(0 0 0 / 0.25);
+  transition: scale 420ms var(--spring-press);
+}
+input.range::-moz-range-thumb {
+  width: 20px; height: 20px; border: 0; border-radius: 50%;
+  background: #f4f1ec; box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  transition: scale 420ms var(--spring-press);
+}
+input.range:active::-webkit-slider-thumb { scale: 1.22; }
+input.range:active::-moz-range-thumb { scale: 1.22; }
+input.range:focus-visible { outline: none; }
+input.range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+input.range:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+input.range:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- Select -----------------------------------------------------------------
+   A `.field` that opens a list, with a drawn chevron instead of the system's. */
+select.field, select.field:hover {
+  padding-right: 2.2rem; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23a8a49d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.8rem center; background-size: 12px;
+}
+select.field option { background: var(--surface-2, #1c1b1a); color: var(--fg); }
+
+/* Removed · Undo — Add & remove and the Inspiration board both build it at
+   runtime. Sits just above the tab bar. */
+.undo-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+  bottom: calc(var(--tabbar-space) + 0.5rem);
+  display: flex; align-items: center; gap: 0.9rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.35rem 0.4rem 0.35rem 1rem; border-radius: var(--r-pill);
+  background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow); border: 1px solid var(--glass-edge);
+  font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg);
+}
+.undo-bar[hidden] { display: none; }
+.undo-bar:has(.undo-btn[hidden]) { padding-right: 1rem; }
+.undo-btn {
+  appearance: none; border: 0; cursor: pointer; min-height: 32px; padding: 0 0.9rem;
+  border-radius: var(--r-pill); background: var(--fg); color: var(--bg);
+  font: inherit; font-weight: 600;
+}
+.undo-btn[hidden] { display: none; }

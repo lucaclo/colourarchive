@@ -1,0 +1,29 @@
+feature,area,priority,original,clone,notes
+Credit shown under every reference,credit,must,Cosmos,no,0 of 11 references have a source today
+Credit inferred from the share link / page author / EXIF Artist,credit,must,Cosmos (partial),no,"Typing fields go unused (round 9). og:title, author meta, Flickr owner, Bluesky author, Are.na source"
+One-tap "Who took these?" for uncredited references,credit,must,none,no,Groups unknown refs by look; suggests names already on the board
+Photographer as first-class record,photographers,must,Cosmos/Glass profiles,no,gitignored photographers.json
+Favourite a photographer in one tap,photographers,must,Glass/Cosmos follow,no,From any tile or lightbox credit
+Group the board by photographer,board,should,none,no,4th group-by option
+Link a profile once (Flickr/Bluesky/Are.na/Unsplash/site RSS),photographers,must,n/a,no,"IDs resolved via API, never guessed (notable.ts rule)"
+Their work: public photos not yet on the board,discovery,must,Cosmos/Glass profile,no,"Hotlinked thumbs; Pin stores the original with credit, source and licence"
+Pass / Not for me on fetched photos,discovery,should,none,no,Feeds the fingerprint as a negative
+New since last visit (finite) row,discovery,must,Glass following,no,"Caught-up end state, no infinite scroll"
+Weekly or daily web push of new work,discovery,could,Alpenglow-style nudge,no,push.ts already exists
+Instagram data-export import (saved + following),onboarding,should,none,no,"Your own data; seeds favourites ranked by saves, no typing"
+Instagram professional accounts via Business Discovery,discovery,could,n/a,no,Needs own Meta app + Professional account; tokens 60 days
+Photographer style fingerprint (grade + palette + content),similar,must,none,no,"looks.ts, palette, CLIP, DINOv2 all exist"
+Similar photographers from favourites' graph,similar,must,Savee people-to-follow (partial),no,"Bluesky follows, Flickr contacts/faves, Are.na co-channels"
+Reason line in darkroom words,similar,must,none,no,"e.g. same lifted blacks and teal shadows as X"
+Suggestion actions favourite / later / not for me,similar,should,Savee,no,
+Match a photographer's look as one preset,match,should,none,no,group.ts already matches several references
+Shoot this light: reference -> Scout plan,scout,should,none,no,"CLIP light words + measured temp/contrast -> next matching light at kept spots"
+Study card: composition + light + grade of a reference,study,could,none,no,"thirds/horizon/negative space, light direction, palette"
+Taste vs work map,insight,could,none,no,"Where your archive sits among your inspirations; loved styles you never shoot"
+Persistent sets (project boards),board,could,Cosmos clusters / Are.na channels,no,Group tray is transient today
+Near-duplicate guard when pinning,board,should,Cosmos complaint,no,DINOv2 distance on top of content hash
+Denser contact-sheet layout + shuffle,board,could,mymind shuffle,no,11 refs render as giant single tiles on iPad
+AI-image filter on discovery,discovery,could,Cosmos,no,Following named photographers mostly avoids it; flag C2PA/declared AI where present
+Infinite algorithmic feed,discovery,skip,Cosmos/Pinterest,no,What neighbours' users complain about
+Likes / follower counts,social,skip,Instagram,no,Glass users value their absence
+Scraping Instagram or Glass,discovery,skip,n/a,no,Against terms; link out instead

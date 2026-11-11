@@ -82,9 +82,19 @@ self.addEventListener('fetch', (event) => {
     // seen on the first visit, and a sprite that no longer matches the style it
     // was cut for draws the wrong icons with no error anywhere. Go to the network
     // for those and keep the cached copy for when there isn't one.
-    event.respondWith(
-      url.origin === self.location.origin ? cacheFirst(req) : networkFirst(req),
-    );
+    //
+    // Of our own, only the content-hashed build output (/_astro/) and the photo
+    // derivatives (/img/) never change under the same URL. Everything else of
+    // ours is a fixed name with changing contents — the dev server's
+    // /src/styles/global.css, the fonts, the public JSON — and cache-first
+    // pinned those too: a stale global.css from before the segmented controls'
+    // sliding thumb, paired with fresh scripts that add the thumb, left it as
+    // a plain 44px box beside Scout's 2D (an empty cell). Those go
+    // network-first like the third-party ones, still answered from the cache
+    // offline.
+    const immutable = url.origin === self.location.origin
+      && (url.pathname.startsWith('/_astro/') || url.pathname.startsWith('/img/'));
+    event.respondWith(immutable ? cacheFirst(req) : networkFirst(req));
   }
 });
 

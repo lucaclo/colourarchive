@@ -8,6 +8,7 @@ import {
   contrastOverrides,
   contrastRatio,
   pastelHidden,
+  pastelUnpatterned,
   pastelIconless,
   pastelMix,
   pastelOverrides,
@@ -419,6 +420,13 @@ describe('pastelOverrides', () => {
     assert.ok(hidden.includes('poi_r20'));
     assert.ok(!hidden.includes('poi_r1'));
     assert.deepEqual(pastelIconless(layers), ['poi_r1']);
+  });
+
+  it('draws pedestrian areas flat, not with the hatch that moirés at eye level', () => {
+    const style = [...layers, { id: 'road_area_pattern', type: 'fill', 'source-layer': 'transportation' }];
+    assert.deepEqual(pastelUnpatterned(style), ['road_area_pattern']);
+    const fill = pastelOverrides(style, 40).find((o) => o.layerId === 'road_area_pattern');
+    assert.equal(fill?.property, 'fill-color');
   });
 
   it('quantises the mix so an unchanged palette is not repainted', () => {

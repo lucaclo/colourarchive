@@ -126,6 +126,8 @@ export function photosLibraryPath(): string {
 
 export class LibraryProblem extends Error {}
 
+const PRIVATE = 'macOS keeps the Photos library private. Give Colour Archive (or Terminal, for the dev server) Full Disk Access in System Settings › Privacy & Security, then look again.';
+
 type Db = { prepare(sql: string): { all(...args: unknown[]): unknown[] }; close(): void };
 
 async function open(file: string): Promise<{ db: Db; done: () => void }> {
@@ -135,7 +137,7 @@ async function open(file: string): Promise<{ db: Db; done: () => void }> {
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') throw new LibraryProblem('There’s no Photos library on this Mac.');
-    throw new LibraryProblem('macOS keeps the Photos library private. Give Colour Archive (or Terminal, for the dev server) Full Disk Access in System Settings › Privacy & Security, then look again.');
+    throw new LibraryProblem(PRIVATE);
   }
   try {
     const db = new DatabaseSync(file, { readOnly: true }) as unknown as Db;
@@ -145,8 +147,17 @@ async function open(file: string): Promise<{ db: Db; done: () => void }> {
     // Photos holds the file open in WAL mode; a read-only open can fail on the
     // shared-memory file. Read a copy instead — never the library itself.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'colour-photos-'));
-    for (const ext of ['', '-wal', '-shm']) {
-      if (fs.existsSync(file + ext)) fs.copyFileSync(file + ext, path.join(dir, `Photos.sqlite${ext}`));
+    try {
+      for (const ext of ['', '-wal', '-shm']) {
+        if (fs.existsSync(file + ext)) fs.copyFileSync(file + ext, path.join(dir, `Photos.sqlite${ext}`));
+      }
+    } catch (err) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      // access() can pass while the copy is refused: macOS's privacy check
+      // (TCC) only bites on the read itself.
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') throw new LibraryProblem(PRIVATE);
+      throw err;
     }
     const db = new DatabaseSync(path.join(dir, 'Photos.sqlite'), { readOnly: false }) as unknown as Db;
     return { db, done: () => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
