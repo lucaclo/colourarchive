@@ -6687,6 +6687,12 @@ export async function startScout(): Promise<void> {
     );
     void loadExposure(spot);
     renderSheetLight();
+    // On a phone the photographs and an open search field cannot both fit
+    // above the sheet; the photographs are what was just asked for.
+    if (matchMedia('(max-width: 820px)').matches && searchBox.isOpen()) {
+      searchBox.hide();
+      $('search-button').setAttribute('aria-expanded', 'false');
+    }
     $<HTMLElement>('photos').hidden = false;
   }
 
@@ -6730,6 +6736,9 @@ export async function startScout(): Promise<void> {
   }
 
   on('photos-close', 'click', closePhotoSheet);
+  $('photos').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closePhotoSheet();
+  });
 
   /**
    * A date already gone, in the pin's own zone — issue #58. `lighting.ts`,

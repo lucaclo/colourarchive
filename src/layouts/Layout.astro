@@ -164,6 +164,25 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
       // photo grid, Inspiration's board and workbench, Scout's controls)
       // silently does nothing on an iPad without this one no-op listener.
       addEventListener('touchstart', () => {}, { passive: true });
+
+      // Some iOS home-screen apps (black-translucent status bar) lay the page
+      // out in a window one status bar shorter than the screen while still
+      // drawing from the very top, so everything pinned to the bottom stops
+      // short and leaves a bare strip under it. Measure the shortfall and let
+      // full-screen pages and the tab bar reach into it. Gaps bigger than a
+      // status bar are the keyboard, and are left alone.
+      (function () {
+        if (navigator.standalone !== true) return;
+        const root = document.documentElement;
+        const fit = () => {
+          const portrait = innerHeight >= innerWidth;
+          const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+          const gap = Math.round(full - innerHeight);
+          root.style.setProperty('--vgap', gap > 0 && gap <= 80 ? gap + 'px' : '0px');
+        };
+        fit();
+        addEventListener('resize', fit);
+      })();
     </script>
     <script is:inline>
       // Offline snapshot: register the service worker, then pre-cache every
