@@ -208,7 +208,9 @@ html, body { margin: 0; padding: 0; }
      nothing it owns lands underneath the floating bar. ------------------ */
   --tabbar-h: 3.5rem;
   --tabbar-inset: 0.75rem;
-  --tabbar-space: calc(var(--tabbar-h) + var(--tabbar-inset) * 2 + env(safe-area-inset-bottom, 0px));
+  /* How far the bar's foot sits above the bottom of the screen. */
+  --tabbar-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-inset));
+  --tabbar-space: calc(var(--tabbar-h) + var(--tabbar-bottom) + var(--tabbar-inset));
 
   --title-size: clamp(2rem, 5vw, 4rem);
   --title-weight: 500;
@@ -807,7 +809,7 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
    so an open photograph is never framed by chrome. */
 .tabbar {
   position: fixed; z-index: 70;
-  left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tabbar-inset) - var(--vgap, 0px));
+  left: 50%; bottom: calc(var(--tabbar-bottom) - var(--vgap, 0px));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: var(--sp-2);
   font-family: var(--font-ui);
@@ -1792,7 +1794,13 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
    and the tab bar gets slimmer to match. Text fields keep 16px type so iOS
    still won't zoom on focus. */
 @media (max-width: 640px) {
-  :root { --hit: 36px; --tabbar-h: 2.75rem; --tabbar-inset: 0.5rem; }
+  /* A slight gap, not a whole home-indicator strip plus a margin: the bar
+     sits just clear of the indicator, the way the system's own tab bars do,
+     and never touches the edge (0.6rem floor on screens without one). */
+  :root {
+    --hit: 36px; --tabbar-h: 2.75rem; --tabbar-inset: 0.5rem;
+    --tabbar-bottom: max(calc(env(safe-area-inset-bottom, 0px) * 0.45), 0.6rem);
+  }
 
   .tab { min-width: 3.7rem; padding: 0 var(--sp-2); gap: 1px; }
   .tab svg, .tabbar-add svg { width: 19px; height: 19px; }

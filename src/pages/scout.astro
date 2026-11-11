@@ -4354,7 +4354,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .scout-map :global(.maplibregl-ctrl-attrib a) { color: var(--muted); }
   /* In the corner, level with the tab bar (which is centred, so the corner
      is free): 5.2rem over the tab bar left them floating at mid-right. */
-  .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: calc(var(--tabbar-inset) + env(safe-area-inset-bottom, 0px)); right: 0.35rem; }
+  .scout-map :global(.maplibregl-ctrl-bottom-right) { bottom: var(--tabbar-bottom); right: 0.35rem; }
   /* The box's width is the distance it measures, so zoomed out to the globe
      "3000 km" outgrew it and was cut. It only does that where a scale bar is
      a rough figure anyway, so there the box grows to fit its words. */
