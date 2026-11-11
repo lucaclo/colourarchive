@@ -398,6 +398,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     background: none; color: var(--fg); border: 1px solid var(--rule); border-radius: 2px;
   }
   .zn-edit :global(.zn-icon:hover) { border-color: var(--fg); }
+  .zn-edit :global(.zn-icon:disabled) { opacity: 0.35; cursor: default; border-color: var(--rule, currentColor); }
   .zn-edit :global(.zn-icon svg) { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.7; }
   .zn-edit :global(.zn-midlabel) { font-family: var(--font-display); font-style: italic; font-size: var(--t-caption); color: var(--muted); margin-top: -0.35rem; }
 
@@ -560,7 +561,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 
   @media (max-width: 1100px) {
     .zn-edit :global(.zn-cols), .zn-edit :global(.zn-cols.one) { grid-template-columns: minmax(0, 1fr); }
-    .zn-edit :global(.zn-mid) { flex-direction: row; justify-content: center; padding-top: 0; }
+    .zn-edit :global(.zn-mid) { flex-direction: row; flex-wrap: wrap; justify-content: center; row-gap: 0.4rem; padding-top: 0; }
     .zn-edit :global(.zn-midlabel) { margin: 0 0.6rem 0 -0.3rem; }
   }
   @media (max-width: 760px) {
@@ -598,7 +599,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 <script>
   import {
     PAPER, COVER_PANEL, BACK_PANEL, pageAspect, sheetPixels, sheetPoints, slidesFor, spreadsFor, readingOrder, pageNumber, canMerge, sheetsFor,
-    type PaperId, type Slide, type ZineFormat,
+    type PaperId, type Slide, type Spread, type ZineFormat,
   } from '../../lib/zine/imposition';
   import {
     freshDoc, reviveDoc, swapPages, moveSpread, mergeSpread, splitSpread, setFit, setFormat, applyCombination, photosInDoc, isEmpty, FONTS, INKS, TONES,
@@ -908,6 +909,23 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
     merge: '<path d="M4 12h6M14 12h6M8 9l3 3-3 3M16 9l-3 3 3 3"/>',
     split: '<path d="M12 4v16M4 12h5M20 12h-5M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
+    earlier: '<path d="M15 5l-7 7 7 7"/>',
+    later: '<path d="M9 5l7 7-7 7"/>',
+  };
+  /**
+   * Move this spread one place earlier or later. Dragging in the rail does the
+   * same, but a drag is no use to a thumb on an iPhone (no HTML drag there)
+   * or to anyone who can't drag at all (WCAG 2.5.7), so the reorder is also
+   * two taps away here.
+   */
+  const moveControls = (sp: Spread) => {
+    const at = spreadsFor(doc.format).indexOf(sp);
+    const last = spreadsFor(doc.format).length - 1;
+    return `
+        <button type="button" class="zn-icon" data-act="earlier" aria-label="Move this spread earlier" title="Move earlier" ${at <= 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24">${ICON.earlier}</svg></button>
+        <span class="zn-midlabel">Earlier</span>
+        <button type="button" class="zn-icon" data-act="later" aria-label="Move this spread later" title="Move later" ${at >= last ? 'disabled' : ''}><svg viewBox="0 0 24 24">${ICON.later}</svg></button>
+        <span class="zn-midlabel">Later</span>`;
   };
   const seg = (name: string, label: string, value: string, options: [string, string, string?][]) => `
     <div class="zn-ctl"><span>${label}</span>
@@ -1052,6 +1070,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
         <div class="zn-mid">
           <button type="button" class="zn-icon" data-act="split" aria-label="Split into two pages" title="Split into two pages"><svg viewBox="0 0 24 24">${ICON.split}</svg></button>
           <span class="zn-midlabel">Split</span>
+          ${moveControls(sp)}
         </div>
       </div>`;
       return;
@@ -1063,6 +1082,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
         <span class="zn-midlabel">Swap</span>
         ${canMerge(sp) ? `<button type="button" class="zn-icon" data-act="merge" aria-label="Make one picture across both pages" title="Make one picture across both pages"><svg viewBox="0 0 24 24">${ICON.merge}</svg></button>
         <span class="zn-midlabel">Join</span>` : ''}
+        ${moveControls(sp)}
       </div>
       ${pagePanel(sp.right, 'Right page')}
     </div>`;
@@ -1113,6 +1133,17 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
       if (el.dataset.act === 'swap') swapPages(doc, s.spread);
       if (el.dataset.act === 'merge') mergeSpread(doc, s.spread);
       if (el.dataset.act === 'split') splitSpread(doc, s.spread);
+      if (el.dataset.act === 'earlier' || el.dataset.act === 'later') {
+        const from = spreadsFor(doc.format).indexOf(s.spread);
+        const to = from + (el.dataset.act === 'earlier' ? -1 : 1);
+        if (to < 0 || to >= spreadsFor(doc.format).length) return;
+        moveSpread(doc, from, to);
+        current = 1 + to;
+        changed(true);
+        // The panel was rebuilt; keep focus on the control that was used.
+        edit.querySelector<HTMLButtonElement>(`[data-act="${el.dataset.act}"]:not([disabled])`)?.focus();
+        return;
+      }
       changed(true);
     } else if (el.dataset.pick) {
       openPicker(el.dataset.pick);

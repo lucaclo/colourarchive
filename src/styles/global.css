@@ -1199,7 +1199,9 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 .cover-spectrum .cs-seg:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
 .cover-spectrum .cs-seg {
   position: relative; appearance: none; border: 0; padding: 0; margin: 0; cursor: pointer;
-  min-width: 2px;
+  /* 24px floor (WCAG 2.5.8): a six-photo chapter was a 17px sliver on a
+     phone. The proportions bend a little at the small end; they still read. */
+  min-width: 24px;
 }
 /* The swell on hover lives on a pseudo-element, not the segment. Scaling
    the segment itself scaled its name tag with it, and the label came out
@@ -1561,6 +1563,8 @@ body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
   font-variant-numeric: tabular-nums;    /* the count must not jitter as it climbs */
 }
 .offline-pill.show { opacity: 1; transform: translate(-50%, 0); }
+/* A tab whose page lives on the Mac, while the Mac can't be reached. */
+.tabbar .is-away { opacity: 0.45; }
 @media (prefers-reduced-motion: reduce) { .offline-pill { transition: opacity 120ms linear; } }
 /* Above the tab bar, on every page that has one. */
 body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
@@ -1703,11 +1707,16 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .spectrum:hover { width: auto; }
   /* Full-height tap target, hairline appearance: the mask shows only the bottom
      5px, so a thumb gets 34px to aim at without a colour bar dominating. */
+  /* At least 24px wide (WCAG 2.5.8): a chapter of two photographs was a
+     3px sliver, too thin to land on with a thumb. */
   .spectrum-seg {
-    width: auto; height: 100%; min-height: 0; min-width: 3px;
+    width: auto; height: 100%; min-height: 0; min-width: 24px;
     -webkit-mask-image: linear-gradient(to top, #000 5px, transparent 5px);
     mask-image: linear-gradient(to top, #000 5px, transparent 5px);
   }
+  /* Wide enough now on its own; the desktop's sideways reach only made
+     neighbouring chapters' targets overlap. */
+  .spectrum-seg::after { inset: 0; }
   .spectrum-label { display: none; }
 
   /* Insights: full-width, comfortable. */

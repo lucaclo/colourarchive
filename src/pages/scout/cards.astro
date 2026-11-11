@@ -50,7 +50,7 @@ const len = (m: number) => formatLength(m, 'm');
     {cards.length === 0 ? (
       <p class="hc-empty">No lenses yet: cards come from the camera and lens in your digital photos.</p>
     ) : (
-      <section class="hc-sheet" id="hc-sheet" aria-label={`${cards.length} cards`}>
+      <section class="hc-sheet" id="hc-sheet" aria-label={`${cards.length} cards`} tabindex="0">
         {cards.map((card) => (
           <article class="hc-card">
             <header class="hc-head">

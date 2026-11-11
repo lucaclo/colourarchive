@@ -2,7 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { readManifest } from '../../lib/manifest';
 import { readBookCuration, curatedChapters } from '../../lib/book';
-import { oklchCss } from '../../lib/color';
+import { oklchCss, readableInk, inkContrast, INK_LIGHT } from '../../lib/color';
 
 // The share link — issue "scoped read-only share". Deliberately its own
 // static page rather than a token/auth system: this reads only what
@@ -26,7 +26,10 @@ const curation = await readBookCuration();
 const chapters = curatedChapters(manifest.chapters, curation);
 const totalPhotos = chapters.reduce((n, ch) => n + ch.photos.length, 0);
 
-const titleFg = (L: number) => (L > 0.62 ? '#0a0a0a' : '#f6f6f4');
+// Whichever ink reads best on the chapter's colour (WCAG contrast), the same
+// choice the archive's own chapter openers make. A lightness cutoff left the
+// small "Chapter I" line under 4.5:1 on mid-tone chapters.
+const titleFg = readableInk;
 const roman = (n: number) =>
   ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI'][n] ?? String(n + 1);
 
@@ -49,11 +52,13 @@ const accent = chapters[0]
       <main class="bv-main">
         {chapters.map((ch, ci) => {
           const bg = oklchCss(ch.oklch);
-          const fg = titleFg(ch.oklch.L);
+          const fg = titleFg(ch.oklch);
+          // Small text under 4.5:1 even with the better ink: give it a backing.
+          const back = inkContrast(ch.oklch) < 4.5 ? (fg === INK_LIGHT ? 'rgb(0 0 0 / 0.3)' : 'rgb(255 255 255 / 0.35)') : '';
           return (
             <section class="bv-chapter">
               <div class="bv-divider" style={`background:${bg};color:${fg}`}>
-                <p class="bv-index">Chapter {roman(ci)}</p>
+                <p class:list={['bv-index', back && 'backed']} style={back ? `--back:${back}` : undefined}>Chapter {roman(ci)}</p>
                 <h2>{ch.name}</h2>
               </div>
               <div class="bv-grid" data-reveal>
@@ -92,6 +97,7 @@ const accent = chapters[0]
     padding: 3.4rem 6vw; text-align: center; margin-bottom: 1.2rem;
   }
   .bv-index { font-family: var(--font-note); font-style: italic; font-size: 1.05rem; margin: 0 0 0.3rem; }
+  .bv-index.backed { background: var(--back); padding: 0.05rem 0.6rem; border-radius: 999px; }
   .bv-divider h2 {
     font-family: var(--font-display); font-style: var(--title-style); font-weight: var(--title-weight);
     font-size: clamp(1.8rem, 4.5vw, 3rem); margin: 0; line-height: 1;

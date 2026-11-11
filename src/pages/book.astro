@@ -233,7 +233,7 @@ const accent = manifest.chapters[0]
                       >
                         {p.excluded ? '+' : '×'}
                       </button>
-                      <span class="book-handle" aria-hidden="true" title="Drag to reorder">⠿⠿</span>
+                      <span class="book-handle" aria-hidden="true" title="Drag to reorder, or tap here and then on the photo it should go beside">⠿⠿</span>
                       <div class="book-foot">
                         <button type="button" class="book-caption" data-note-btn={p.id} title={notes[p.id] ? 'Edit note' : 'Add a note'}>
                           {notes[p.id] && <span class="book-note-mark" aria-hidden="true">✎</span>}
@@ -438,6 +438,8 @@ const accent = manifest.chapters[0]
   }
   .book-handle:active { cursor: grabbing; }
   .book-cell.touch-dragging { opacity: 0.4; z-index: 5; }
+  .book-cell.picked { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .book-cell.picked .book-handle { background: var(--fg); color: var(--bg); }
 
   .book-undo, .book-savebar {
     position: fixed; left: 50%; transform: translateX(-50%); z-index: 40;
@@ -851,6 +853,42 @@ const accent = manifest.chapters[0]
     over.classList.add(e.clientX - rect.left < rect.width / 2 ? 'drop-before' : 'drop-after');
   });
 
+  // A drag is the one way to reorder that a thumb can't always do (WCAG
+  // 2.5.7), so the handle also works by taps: tap a photo's handle to pick it
+  // up, then tap the photo it should go beside. Tapping the handle again, or
+  // Escape, puts it down.
+  let picked = null;
+  const pdfStatus = document.getElementById('book-pdf-status');
+  function setPicked(cell) {
+    picked?.classList.remove('picked');
+    picked = cell;
+    cell?.classList.add('picked');
+    if (pdfStatus) pdfStatus.textContent = cell ? 'Picked up. Tap the photo it should go beside.' : '';
+  }
+  function placePicked(target, list) {
+    const cells = [...list.querySelectorAll('.book-cell')];
+    const from = cells.indexOf(picked);
+    const to = cells.indexOf(target);
+    target.insertAdjacentElement(to < from ? 'beforebegin' : 'afterend', picked);
+    const moved = picked;
+    setPicked(null);
+    moved.focus?.();
+    markDirty();
+  }
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && picked) setPicked(null); });
+  // Captured, so the tap places the photo instead of revealing the tile's
+  // controls (the quiet-tiles handler further down).
+  document.addEventListener('click', (e) => {
+    if (!picked) return;
+    const cell = e.target.closest('.book-cell');
+    if (!cell || cell === picked || e.target.closest('button, select, .book-handle')) return;
+    const list = picked.closest('.book-grid');
+    if (!list?.contains(cell)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    placePicked(cell, list);
+  }, true);
+
   function endDrag(e) {
     if (!ptr || e.pointerId !== ptr.pointerId) return;
     const { list, cell } = ptr;
@@ -858,7 +896,13 @@ const accent = manifest.chapters[0]
     const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.book-cell');
     clearDropMarks(list);
     ptr = null;
-    if (!over || over === cell || !list.contains(over)) return;
+    if (over === cell) {
+      if (picked && picked !== cell && list.contains(picked)) placePicked(cell, list);
+      else setPicked(picked === cell ? null : cell);
+      return;
+    }
+    if (!over || !list.contains(over)) return;
+    setPicked(null);
     const rect = over.getBoundingClientRect();
     const before = e.clientX - rect.left < rect.width / 2;
     over.insertAdjacentElement(before ? 'beforebegin' : 'afterend', cell);
@@ -1085,7 +1129,7 @@ const accent = manifest.chapters[0]
   // elsewhere hides them again. Pointers get the same through :hover.
   document.getElementById('book-chapters')?.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
-    if (target.closest('button, select')) return;
+    if (target.closest('button, select, .book-handle')) return;
     const cell = target.closest<HTMLElement>('.book-cell');
     for (const other of document.querySelectorAll('.book-cell.is-active')) {
       if (other !== cell) other.classList.remove('is-active');

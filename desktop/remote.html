@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>Phone password</title>
+<style>
+  @font-face {
+    font-family: 'Fraunces';
+    src: url('../public/fonts/fraunces-normal-500-latin.woff2') format('woff2');
+    font-weight: 500;
+  }
+  :root {
+    --bg: #100f0e; --fg: #ece9e3; --secondary: #a8a49d; --line: #2a2826;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-ui); padding: 32px 40px; }
+  h1 { font: 500 24px/1.15 'Fraunces', Georgia, serif; margin: 0 0 8px; }
+  p { margin: 0 0 18px; color: var(--secondary); }
+  label { display: block; font-size: 13px; color: var(--secondary); margin: 12px 0 5px; }
+  input { width: 100%; font: 15px var(--font-ui); color: var(--fg); background: #1a1917; border: 1px solid var(--line);
+          border-radius: 8px; padding: 9px 12px; }
+  input:focus-visible { outline: 2px solid #e0603a; outline-offset: 1px; }
+  .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  button { font: 500 14px/1 var(--font-ui); border-radius: 8px; padding: 11px 16px; cursor: pointer; border: 1px solid var(--line);
+           background: transparent; color: var(--fg); }
+  button[type='submit'] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  button:focus-visible { outline: 2px solid #e0603a; outline-offset: 2px; }
+  .note { min-height: 1.4em; margin: 12px 0 0; color: #e8a07a; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>A password for your phone</h1>
+<p>You type this on your phone to open the archive from anywhere. Setting a new one signs every phone out.</p>
+<form id="form">
+  <label for="pw">Password, at least 10 characters</label>
+  <input id="pw" type="password" autocomplete="new-password" minlength="10" required autofocus>
+  <label for="pw2">Again</label>
+  <input id="pw2" type="password" autocomplete="new-password" minlength="10" required>
+  <p class="note" id="note" role="status"></p>
+  <div class="actions">
+    <button type="button" id="cancel">Cancel</button>
+    <button type="submit">Set Password</button>
+  </div>
+</form>
+<script>
+  const note = document.getElementById('note');
+  document.getElementById('cancel').addEventListener('click', () => window.remote.cancel());
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const a = document.getElementById('pw').value;
+    const b = document.getElementById('pw2').value;
+    if (a !== b) { note.textContent = 'The two don’t match.'; return; }
+    const problem = await window.remote.setPassword(a);
+    if (problem) note.textContent = problem;
+  });
+</script>
+</body>
+</html>

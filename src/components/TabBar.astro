@@ -18,8 +18,12 @@ interface Props {
 const { current } = Astro.props;
 
 // The static publish carries only the archive and Scout — Inspiration, the
-// book editor and upload write to disk and do not exist there.
+// book editor and upload write to disk and do not exist there. When the Mac
+// can be reached from anywhere (desktop/remote-gate.mjs behind a Tailscale
+// Funnel), PUBLIC_REMOTE_URL is its address and those tabs open it instead,
+// behind its password; without one they are left out, as before.
 const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
+const REMOTE = STATIC ? (import.meta.env.PUBLIC_REMOTE_URL ?? '').replace(/\/$/, '') : '';
 
 const tabs: { id: Tab; href: string; label: string; icon: string; server?: boolean }[] = [
   {
@@ -39,24 +43,28 @@ const tabs: { id: Tab; href: string; label: string; icon: string; server?: boole
     icon: '<path d="M12 6.8C10 5.3 7.2 4.7 3.5 5v13.2c3.7-.3 6.5.3 8.5 1.8 2-1.5 4.8-2.1 8.5-1.8V5c-3.7-.3-6.5.3-8.5 1.8Z"/><path d="M12 6.8V20"/>',
   },
 ];
-const shown = tabs.filter((t) => !(STATIC && t.server));
+const shown = tabs
+  .filter((t) => !(STATIC && t.server && !REMOTE))
+  .map((t) => ({ ...t, remote: STATIC && Boolean(t.server), href: STATIC && t.server ? `${REMOTE}${t.href}` : t.href }));
 ---
 
 <nav class="tabbar" id="tabbar" aria-label="Sections">
   <div class="tabbar-tabs">
     {shown.map((t) => (
-      <a class="tab" href={t.href} aria-current={t.id === current ? 'page' : undefined} data-section={t.id}>
+      <a class="tab" href={t.href} aria-current={t.id === current ? 'page' : undefined} data-section={t.id} data-remote={t.remote ? '' : undefined}>
         {t.id === current && <span class="tab-pill" aria-hidden="true" />}
         <svg viewBox="0 0 24 24" aria-hidden="true" set:html={t.icon} />
         <span class="tab-label">{t.label}</span>
+        {t.remote && <span class="visually-hidden">, on your Mac</span>}
       </a>
     ))}
   </div>
-  {!STATIC && (
+  {(!STATIC || REMOTE) && (
     <a
       class="tabbar-add"
-      href="/upload"
-      aria-label="Add & remove photos"
+      href={`${REMOTE}/upload`}
+      data-remote={REMOTE ? '' : undefined}
+      aria-label={REMOTE ? 'Add & remove photos, on your Mac' : 'Add & remove photos'}
       title="Add & remove photos"
       aria-current={current === 'upload' ? 'page' : undefined}
     >
@@ -64,6 +72,46 @@ const shown = tabs.filter((t) => !(STATIC && t.server));
     </a>
   )}
 </nav>
+
+<script is:inline define:vars={{ REMOTE }}>
+  // On the public copy, the tabs that live on the Mac: ask it whether it is
+  // there. If not, say so quietly instead of opening a page that cannot load.
+  (function () {
+    const remote = document.querySelectorAll('#tabbar [data-remote]');
+    if (!REMOTE || !remote.length) return;
+    let away = false;
+    const ctl = new AbortController();
+    setTimeout(() => ctl.abort(), 5000);
+    fetch(`${REMOTE}/__ping`, { mode: 'cors', cache: 'no-store', signal: ctl.signal })
+      .then((r) => { away = !r.ok; })
+      .catch(() => { away = true; })
+      .finally(() => { for (const a of remote) a.classList.toggle('is-away', away); });
+    let note = null, hide = 0;
+    for (const a of remote) {
+      a.addEventListener('click', (e) => {
+        if (!away) return;
+        e.preventDefault();
+        if (!note) {
+          note = document.createElement('div');
+          note.className = 'offline-pill';
+          note.setAttribute('role', 'status');
+          note.setAttribute('aria-live', 'polite');
+          document.body.appendChild(note);
+          void note.offsetWidth;
+          note.classList.add('show');
+        }
+        // Its reason (asleep, or the app closed) is the same as the offline pill's.
+        note.textContent = 'Can’t reach your Mac right now';
+        clearTimeout(hide);
+        hide = setTimeout(() => {
+          const el = note; note = null;
+          el.classList.remove('show');
+          setTimeout(() => el.remove(), 600);
+        }, 3200);
+      });
+    }
+  })();
+</script>
 
 <script>
   // Minimise on scroll down, restore on scroll up — the bar gives the

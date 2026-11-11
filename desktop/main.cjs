@@ -11,6 +11,7 @@
 
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell, utilityProcess } = require('electron');
 const { ensureCerts, localHostName } = require('./certs.cjs');
+const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -32,6 +33,9 @@ const START_TIMEOUT_MS = 120_000;
 // home-screen app is its origin, name and port together.
 const LAN_PORT = 43443;
 const LAN_SETUP_PORT = 43280;
+// From anywhere: the gated listener a Tailscale Funnel carries to the
+// internet. Localhost only; see server.mjs and remote-gate.mjs.
+const REMOTE_PORT = 43480;
 
 const APP_ROOT = app.getAppPath();
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -40,6 +44,7 @@ const LOG_DIR = path.join(os.homedir(), 'Library', 'Logs', 'Colour Archive');
 const LOG_PATH = path.join(LOG_DIR, 'server.log');
 const DEFAULT_DATA = process.env.COLOUR_ARCHIVE_SUGGEST || path.join(app.getPath('pictures'), 'Colour Archive');
 const CERT_DIR = path.join(app.getPath('userData'), 'certs');
+const REMOTE_FILE = path.join(app.getPath('userData'), 'remote.json');
 
 let startWindow = null;
 let mainWindow = null;
@@ -51,6 +56,9 @@ let quitting = false;
 let quiet = false;
 // What the home-network side last said: null (off), 'ok', or why it failed.
 let lanState = null;
+// The same for the from-anywhere side.
+let remoteState = null;
+let passwordWindow = null;
 
 // --- Settings -----------------------------------------------------------
 
@@ -168,6 +176,16 @@ function lanEnv() {
   }
 }
 
+/** Environment for the server's gated listener, or {} when it's off. */
+function remoteEnv() {
+  const s = readSettings();
+  if (!s.remote || !fs.existsSync(REMOTE_FILE)) return {};
+  return {
+    REMOTE_PORT: String(REMOTE_PORT), REMOTE_FILE, REMOTE_HOST: s.remoteHost ?? '',
+    COLOUR_ARCHIVE_REMOTE_URL: s.remoteHost ? `https://${s.remoteHost}/` : '',
+  };
+}
+
 async function openArchive(dataDir) {
   if (!quiet) showStart({ kind: 'opening', folder: tidyPath(dataDir) });
   try {
@@ -202,6 +220,7 @@ async function openArchive(dataDir) {
       COLOUR_ARCHIVE_DATA: dataDir,
       COLOUR_ARCHIVE_MODELS: MODELS_DIR,
       ...lan,
+      ...remoteEnv(),
     },
   });
   server = child;
@@ -231,6 +250,9 @@ async function openArchive(dataDir) {
       fail(msg.message);
     } else if (msg?.type === 'lan') {
       lanState = msg.ok ? 'ok' : msg.message;
+      buildMenu();
+    } else if (msg?.type === 'remote') {
+      remoteState = msg.ok ? 'ok' : msg.message;
       buildMenu();
     }
   });
@@ -378,8 +400,167 @@ async function showIpadSetup() {
   if (response === 0) clipboard.writeText(setup);
 }
 
+// --- From anywhere: a password, then a Tailscale Funnel ----------------
+//
+// Tailscale gives this Mac a fixed https address on the internet without a
+// domain or a router change; the archive itself stays on 127.0.0.1 behind
+// remote-gate.mjs. Tailscale is the person's own install (the app from
+// tailscale.com or the App Store, signed in once), not bundled here.
+
+const gate = () => import('./remote-gate.mjs');
+
+const TAILSCALE_PATHS = [
+  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
+  '/opt/homebrew/bin/tailscale',
+  '/usr/local/bin/tailscale',
+];
+
+function tailscaleCli() {
+  return TAILSCALE_PATHS.find((p) => fs.existsSync(p)) ?? null;
+}
+
+function runTailscale(args, timeout = 30_000) {
+  const cli = tailscaleCli();
+  if (!cli) return Promise.reject(new Error('Tailscale isn’t installed.'));
+  return new Promise((resolve, reject) => {
+    execFile(cli, args, { timeout }, (err, stdout, stderr) => {
+      if (err) reject(new Error(`${stderr || stdout || err.message}`.trim()));
+      else resolve(`${stdout}`.trim());
+    });
+  });
+}
+
+/** This Mac's name on the tailnet, e.g. `my-mac.tail1234.ts.net`. */
+async function tailnetHost() {
+  const status = JSON.parse(await runTailscale(['status', '--json']));
+  const name = status?.Self?.DNSName?.replace(/\.$/, '');
+  if (!name) throw new Error('Tailscale isn’t signed in.');
+  return name;
+}
+
+function askPassword() {
+  return new Promise((resolve) => {
+    if (passwordWindow && !passwordWindow.isDestroyed()) {
+      passwordWindow.focus();
+      return resolve(false);
+    }
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      ipcMain.removeHandler('remote-password');
+      ipcMain.removeHandler('remote-cancel');
+      if (passwordWindow && !passwordWindow.isDestroyed()) passwordWindow.destroy();
+      passwordWindow = null;
+      resolve(ok);
+    };
+    ipcMain.handle('remote-password', async (_e, password) => {
+      try {
+        await (await gate()).setPassword(REMOTE_FILE, String(password ?? ''));
+        finish(true);
+        return null;
+      } catch (err) {
+        return err.message;
+      }
+    });
+    ipcMain.handle('remote-cancel', () => finish(false));
+    passwordWindow = new BrowserWindow({
+      width: 460, height: 400, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+      title: 'Phone password', backgroundColor: '#100f0e', show: false,
+      parent: mainWindow ?? undefined, modal: Boolean(mainWindow),
+      webPreferences: { preload: path.join(__dirname, 'remote-preload.cjs'), contextIsolation: true, sandbox: true },
+    });
+    passwordWindow.loadFile(path.join(__dirname, 'remote.html'));
+    passwordWindow.once('ready-to-show', () => passwordWindow?.show());
+    passwordWindow.on('closed', () => finish(false));
+  });
+}
+
+async function setRemote(on) {
+  const owner = mainWindow ?? startWindow ?? undefined;
+  if (!on) {
+    await runTailscale(['funnel', '--https=443', 'off']).catch(() => {});
+    writeSettings({ ...readSettings(), remote: false });
+    fs.rmSync(path.join(app.getPath('userData'), 'remote-host'), { force: true });
+    remoteState = null;
+    buildMenu();
+    const { dataDir } = readSettings();
+    if (dataDir && server) openArchive(dataDir);
+    return;
+  }
+  if (!tailscaleCli()) {
+    buildMenu();
+    const { response } = await dialog.showMessageBox(owner, {
+      type: 'info',
+      message: 'This needs Tailscale',
+      detail: 'Tailscale gives this Mac a private, fixed address on the internet. Install it (free), sign in once, then choose this again.',
+      buttons: ['Get Tailscale', 'Cancel'],
+      defaultId: 0,
+    });
+    if (response === 0) shell.openExternal('https://tailscale.com/download/mac');
+    return;
+  }
+  if (!fs.existsSync(REMOTE_FILE) || !(await gate()).hasPassword(REMOTE_FILE)) {
+    if (!(await askPassword())) return buildMenu();
+  }
+  let host;
+  try {
+    host = await tailnetHost();
+    await runTailscale(['funnel', '--bg', String(REMOTE_PORT)], 60_000);
+  } catch (err) {
+    buildMenu();
+    // The first time, Tailscale asks for Funnel to be allowed on the account
+    // and prints the page to do it on.
+    const link = String(err.message).match(/https:\/\/login\.tailscale\.com\/\S+/)?.[0];
+    const { response } = await dialog.showMessageBox(owner, {
+      type: 'warning',
+      message: 'Tailscale couldn’t open the address',
+      detail: link ? `Tailscale needs Funnel allowed once, on its website. Then choose this again.\n\n${link}` : String(err.message),
+      buttons: link ? ['Open Tailscale', 'Cancel'] : ['OK'],
+      defaultId: 0,
+    });
+    if (link && response === 0) shell.openExternal(link);
+    return;
+  }
+  writeSettings({ ...readSettings(), remote: true, remoteHost: host });
+  // So the next public build links its Mac-only tabs here (astro.config.mjs).
+  fs.writeFileSync(path.join(app.getPath('userData'), 'remote-host'), `${host}\n`);
+  buildMenu();
+  const { dataDir } = readSettings();
+  if (dataDir && server) openArchive(dataDir);
+  showRemoteAddress();
+}
+
+async function showRemoteAddress() {
+  const host = readSettings().remoteHost;
+  if (!host) return;
+  const url = `https://${host}/`;
+  const owner = mainWindow ?? startWindow ?? undefined;
+  const problem = remoteState && remoteState !== 'ok' ? `\n\nRight now it can’t: ${remoteState}` : '';
+  const { response } = await dialog.showMessageBox(owner, {
+    type: 'info',
+    message: 'Open this on your phone',
+    detail: `${url}\n\nSign in with your phone password, then Share › Add to Home Screen. It works anywhere while this Mac is awake with Colour Archive open.${problem}`,
+    buttons: ['Copy Address', 'Done'],
+    defaultId: 1,
+  });
+  if (response === 0) clipboard.writeText(url);
+}
+
+async function changeRemotePassword() {
+  if (await askPassword()) {
+    dialog.showMessageBox(mainWindow ?? undefined, { type: 'info', message: 'Password changed', detail: 'Every phone has been signed out and needs the new password.' });
+  }
+}
+
+async function signOutPhones() {
+  (await gate()).signOutAll(REMOTE_FILE);
+  dialog.showMessageBox(mainWindow ?? undefined, { type: 'info', message: 'Every phone is signed out', detail: 'They need the password again to open the archive.' });
+}
+
 function buildMenu() {
   const lanOn = Boolean(readSettings().lan);
+  const remoteOn = Boolean(readSettings().remote);
   const template = [
     {
       label: app.name,
@@ -393,6 +574,15 @@ function buildMenu() {
           enabled: lanOn,
           click: () => showIpadSetup(),
         },
+        { type: 'separator' },
+        { label: 'Let My Phone In From Anywhere', type: 'checkbox', checked: remoteOn, click: (item) => setRemote(item.checked) },
+        {
+          label: remoteOn && remoteState && remoteState !== 'ok' ? 'Phone Address… (not reachable)' : 'Phone Address…',
+          enabled: remoteOn,
+          click: () => showRemoteAddress(),
+        },
+        { label: 'Change Phone Password…', enabled: remoteOn, click: () => changeRemotePassword() },
+        { label: 'Sign Out All Phones', enabled: remoteOn, click: () => signOutPhones() },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },

@@ -59,7 +59,7 @@ const accent = manifest.chapters[0]
         <span class="ph-count manage-count" id="manage-count">{allPhotos.length}</span>
       </div>
       <div class="ph-actions">
-        <button class="btn btn-primary ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add photos</button>
+        <button class="btn btn-primary ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add<span class="ingest-addbtn-more"> photos</span></button>
       </div>
     </header>
 
@@ -164,6 +164,13 @@ const accent = manifest.chapters[0]
 </Layout>
 
 <style>
+  /* On a phone the title, its count and "Add photos" don't fit one row (the
+     page head never wraps there), and the count slid under the button. The
+     button says "Add"; VoiceOver still hears "Add photos". */
+  @media (max-width: 640px) {
+    .ingest-addbtn-more { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  }
+
   /* No topbar above this any more (the tab bar carries navigation), so the
      page opens on its own title; the foot clears the tab bar. */
   .ingest { max-width: 62rem; margin: 0 auto; padding: 0 6vw calc(var(--tabbar-space) + 4rem); }

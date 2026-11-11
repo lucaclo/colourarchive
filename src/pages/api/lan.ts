@@ -12,6 +12,8 @@ export const GET: APIRoute = () =>
       ok: true,
       archive: process.env.COLOUR_ARCHIVE_LAN_URL ?? null,
       setup: process.env.COLOUR_ARCHIVE_LAN_SETUP ?? null,
+      // From anywhere, behind the phone password: "Let My Phone In From Anywhere".
+      remote: process.env.COLOUR_ARCHIVE_REMOTE_URL || null,
     }),
     { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } },
   );

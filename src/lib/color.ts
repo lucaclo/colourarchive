@@ -201,3 +201,10 @@ export function readableInk(o: OKLCH): string {
   const onDark = (0.9206 + 0.05) / (bg + 0.05);    // INK_LIGHT's luminance
   return onLight >= onDark ? INK_DARK : INK_LIGHT;
 }
+
+/** The contrast `readableInk` actually reaches. On a mid-tone ground (an olive,
+ *  a camel) neither ink gets to 4.5:1, so small text there needs help. */
+export function inkContrast(o: OKLCH): number {
+  const bg = oklchLuminance(o);
+  return Math.max((bg + 0.05) / (0.0033 + 0.05), (0.9206 + 0.05) / (bg + 0.05));
+}

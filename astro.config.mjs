@@ -1,7 +1,22 @@
 import { defineConfig } from 'astro/config';
 import node from '@astrojs/node';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { publishStamp } from './src/lib/publish.ts';
+
+// The public copy links its Mac-only tabs to the Mac's from-anywhere address
+// (TabBar.astro). Written by the Mac app's "Let My Phone In From Anywhere" and
+// by `npm run remote`; an explicit PUBLIC_REMOTE_URL wins, and with neither
+// the tabs are simply left out.
+if (process.env.PUBLIC_STATIC === 'true' && !process.env.PUBLIC_REMOTE_URL) {
+  try {
+    const host = fs.readFileSync(path.join(os.homedir(), 'Library', 'Application Support', 'Colour Archive', 'remote-host'), 'utf8').trim();
+    if (/^[a-z0-9.-]+\.ts\.net$/i.test(host)) process.env.PUBLIC_REMOTE_URL = `https://${host}`;
+  } catch {
+    /* not set up: no remote tabs */
+  }
+}
 
 // HTTPS over the LAN — required so the iPad will save the archive OFFLINE.
 // iOS only lets a page cache itself (service worker) on a *secure* origin, and

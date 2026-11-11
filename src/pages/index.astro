@@ -323,11 +323,11 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     )}
   </header>
 
-  <section class="cover">
+  <section class="cover" aria-labelledby="cover-title">
     <p class="cover-kicker">
       {hasPhotos ? `${manifest.count} photograph${manifest.count === 1 ? '' : 's'} · ${manifest.chapters.length} chapter${manifest.chapters.length === 1 ? '' : 's'}` : 'In colour'}
     </p>
-    <h1>{SITE_TITLE}</h1>
+    <h1 id="cover-title">{SITE_TITLE}</h1>
     {hasPhotos && (
       <nav class="cover-spectrum" id="cover-spectrum" aria-label="Chapters">
         {manifest.chapters.map((ch, ci) => (

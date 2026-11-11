@@ -11,6 +11,11 @@
 # similar) never run on the public deployment at all — they have no auth of
 # their own, and rely entirely on this file never switching to an SSR/functions
 # publish target that would put them on the open internet.
+#
+# The full archive does reach the internet another way, deliberately: from the
+# owner's Mac, behind a password (desktop/remote-gate.mjs) and a Tailscale
+# Funnel. When that is set up, the build links its Mac-only tabs there via
+# PUBLIC_REMOTE_URL (see astro.config.mjs) — links only; nothing here serves it.
 
 [build]
   command = "PUBLIC_STATIC=true astro build"

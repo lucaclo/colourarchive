@@ -12,12 +12,16 @@
 // on (issue #138) it also serves the home network: the archive over HTTPS on
 // LAN_PORT, and a plain-HTTP setup page on LAN_SETUP_PORT that gives the iPad
 // the certificate it needs to trust the first. Nothing else is served there.
+// With "Let My Phone In From Anywhere" on, a third listener on 127.0.0.1
+// serves the archive behind a password (remote-gate.mjs) for a Tailscale
+// Funnel to carry to the internet; it never listens on the network itself.
 
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createGate } from './remote-gate.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.COLOUR_ARCHIVE_DATA;
@@ -44,6 +48,11 @@ const LAN_HOST = process.env.LAN_HOST || '';
 const TLS_KEY = process.env.LAN_TLS_KEY;
 const TLS_CERT = process.env.LAN_TLS_CERT;
 const TLS_CA = process.env.LAN_TLS_CA;
+const REMOTE_PORT = Number(process.env.REMOTE_PORT) || 0;
+const REMOTE_FILE = process.env.REMOTE_FILE || '';
+const REMOTE_HOST = process.env.REMOTE_HOST || '';
+// The public read-only site, which asks /__ping whether this Mac is up.
+const PUBLIC_SITE = 'https://colourarchive.netlify.app';
 
 // The setup page, in the archive's plain words. Inline: it has to work before
 // the iPad trusts anything this Mac serves.
@@ -114,6 +123,34 @@ function listenLan(app) {
   }
 }
 
+/** From anywhere: the archive behind its password, for the tunnel to carry. */
+function listenRemote(app) {
+  if (!REMOTE_PORT || !REMOTE_FILE) return;
+  const gated = createGate(app, {
+    file: REMOTE_FILE,
+    publicHost: REMOTE_HOST,
+    pingOrigins: [PUBLIC_SITE],
+    // The Mac window's own origin, which astro.config's allowedDomains trusts.
+    forward: { host: `127.0.0.1:${PORT}`, origin: `http://127.0.0.1:${PORT}` },
+  });
+  const remote = http.createServer((req, res) => {
+    gated(req, res).catch((err) => {
+      console.warn('[remote]', err.message);
+      if (!res.headersSent) res.writeHead(500).end();
+    });
+  });
+  remote.requestTimeout = 0;
+  remote.on('error', (err) => {
+    console.warn('[remote]', err.message);
+    tell({ type: 'remote', ok: false, message: err.code === 'EADDRINUSE' ? `Port ${REMOTE_PORT} is in use.` : String(err.message ?? err) });
+  });
+  // Localhost only: the funnel is the one way in from outside.
+  remote.listen(REMOTE_PORT, '127.0.0.1', () => {
+    console.log(`Colour Archive serving the remote gate at http://127.0.0.1:${REMOTE_PORT}/`);
+    tell({ type: 'remote', ok: true });
+  });
+}
+
 function serveImage(req, res, next) {
   const url = new URL(req.url, 'http://x');
   if (!url.pathname.startsWith('/img/')) return next();
@@ -167,6 +204,7 @@ try {
     // loops then live in this server's process.
     http.get(`http://127.0.0.1:${PORT}/api/background`, (res) => res.resume()).on('error', (err) => console.warn('[background] could not start', err.message));
     listenLan(app);
+    listenRemote(app);
   });
 } catch (err) {
   console.error(err);

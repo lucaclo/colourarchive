@@ -289,7 +289,7 @@ const accent = manifest.chapters[0]
        single reference gets the large centred image it always has; two or
        more switch to a strip so every member of the group is visible, each
        removable, an outlier from the group's own colour flagged in place. -->
-  <div class="sim" id="sim" hidden>
+  <div class="sim" id="sim" hidden data-modal role="dialog" aria-modal="true" aria-label="More like this">
     <button class="lb-close" id="sim-close" aria-label="Close">×</button>
     <div class="sim-left">
       <img id="sim-ref" alt="" />
@@ -305,7 +305,7 @@ const accent = manifest.chapters[0]
         <p class="sim-hint" id="sim-hint"></p>
       </div>
     </div>
-    <div class="sim-right">
+    <div class="sim-right" tabindex="0" aria-label="Your closest photographs">
       <h2 class="sim-title">Closest in your archive</h2>
       <div id="sim-right"></div>
     </div>
@@ -313,7 +313,7 @@ const accent = manifest.chapters[0]
 
   <!-- Style match: reference + your photo -> measured evidence, Lightroom
        values, a live preview, and an importable preset. -->
-  <div class="mx" id="mx" hidden>
+  <div class="mx" id="mx" hidden data-modal role="dialog" aria-modal="true" aria-label="Match the look">
     <header class="mx-head">
       <div>
         <p class="mx-kicker">Match the look</p>
@@ -491,7 +491,7 @@ const accent = manifest.chapters[0]
     </div>
   </div>
 
-  <div class="insp-lb" id="lb" hidden>
+  <div class="insp-lb" id="lb" hidden data-modal role="dialog" aria-modal="true" aria-label="Picture">
     <button class="lb-close" id="lb-close" aria-label="Close">×</button>
     <img id="lb-img" alt="" />
     <div class="lb-src" id="lb-src"></div>
