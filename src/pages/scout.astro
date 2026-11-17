@@ -5360,6 +5360,20 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     .dock-grabber { position: relative; }
     .dock-grabber::before { content: ''; position: absolute; inset: -10px 0; }
   }
+  /* ── Ghost buttons ── The actions inside a fold (Check now, Find dates,
+     Log this visit…): quieter than the chrome's filled pills, drawn with the
+     notebook's hairline instead of a fill. The hairline stays on touch, where
+     there is no hover to say "this is a button". A pressed toggle fills. */
+  .btn.ghost {
+    background: transparent;
+    border-color: color-mix(in oklab, var(--fg) 26%, transparent);
+    color: var(--fg);
+  }
+  .btn.ghost:hover:not(:disabled) { background: var(--fill); border-color: color-mix(in oklab, var(--fg) 40%, transparent); }
+  .btn.ghost[aria-pressed='true'] { background: var(--fill-active, var(--fill)); border-color: transparent; }
+  .btn.ghost:disabled { opacity: 0.45; cursor: default; }
+  .btn.ghost[hidden] { display: none; }
+
   /* R13-37: every tool control is 36 px to hit on touch. The tool sliders
      grow their box and keep the thin native track; the two small actions
      take the touch floor. (The ⓘ tips already reach 43 px with ::after.) */

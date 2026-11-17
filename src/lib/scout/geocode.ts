@@ -5,6 +5,10 @@ import tzLookup from 'tz-lookup';
 import { SCOUT_GEOCODE_DIR } from '../paths';
 import { sweepStaleCache } from './cache-sweep';
 import { wrapLongitude, clampLatitude } from './geo';
+import { coordinatePlace, reverseParams, searchLimit, searchParams, toPlace, toPlaces, type NominatimResult, type Place } from './nominatim';
+
+// Parsing lives in nominatim.ts so the published Scout reads answers the same way.
+export { dedupePlaces, placeKind, type Place } from './nominatim';
 
 /**
  * Turning a typed place into coordinates, via Nominatim.
@@ -28,30 +32,6 @@ const USER_AGENT = 'ColourArchiveScout/0.1 (personal photography scouting tool)'
 const MIN_INTERVAL_MS = 1100;
 
 const REQUEST_TIMEOUT_MS = 8000;
-
-export interface Place {
-  /** The bit worth reading first — "Shibuya Crossing", "Reykjavík". */
-  name: string;
-  /** The rest of the address, for telling two Springfields apart. */
-  detail: string;
-  lat: number;
-  lon: number;
-  /** What it is, in a plain word (City, Pier, Street), or '' when OSM's class
-   *  has none. `placeKind` makes it; 'point' marks a bare coordinate. */
-  kind: string;
-  /**
-   * IANA zone for the coordinates — "Asia/Tokyo", not an offset.
-   *
-   * Resolved here rather than in the browser for two reasons. The lookup table
-   * is 172KB of polygon data that has no business in the client bundle, and a
-   * *name* rather than an offset is what lets `Intl` get the DST right: scouting
-   * Tokyo in July from London is exactly the case where an offset frozen at
-   * lookup time would quietly drift an hour off by autumn.
-   */
-  timeZone: string;
-  /** [west, south, east, north] where Nominatim offers one. */
-  bounds?: [number, number, number, number];
-}
 
 /* ── Rate limiting ─────────────────────────────────────────────────────────
    A single promise chain, so concurrent callers queue behind each other rather
@@ -122,7 +102,7 @@ async function writeCache(key: string, query: string, places: Place[]): Promise<
   }
 }
 
-/* ── Parsing ───────────────────────────────────────────────────────────────── */
+/* ── Parsing (see nominatim.ts) ──────────────────────────────────────────── */
 
 /**
  * IANA zone for a coordinate. Falls back to UTC rather than throwing: a place
@@ -137,118 +117,6 @@ function safeTimeZone(lat: number, lon: number): string {
   }
 }
 
-interface NominatimResult {
-  lat: string;
-  lon: string;
-  name?: string;
-  display_name?: string;
-  type?: string;
-  category?: string;
-  addresstype?: string;
-  boundingbox?: [string, string, string, string];
-}
-
-/** OSM classes whose own name isn't a word a person would use. */
-const KIND_WORDS: Record<string, string> = {
-  'man_made/pier': 'Pier',
-  'man_made/lighthouse': 'Lighthouse',
-  'man_made/tower': 'Tower',
-  'man_made/bridge': 'Bridge',
-  'man_made/breakwater': 'Breakwater',
-  'man_made/windmill': 'Windmill',
-  'tourism/attraction': 'Attraction',
-  'tourism/viewpoint': 'Viewpoint',
-  'tourism/museum': 'Museum',
-  'tourism/gallery': 'Gallery',
-  'tourism/artwork': 'Artwork',
-  'tourism/hotel': 'Hotel',
-};
-
-/** Classes that already read as plain words, as Nominatim's `addresstype` or `type`. */
-const PLAIN_KINDS = new Set([
-  'city', 'town', 'village', 'hamlet', 'suburb', 'neighbourhood', 'quarter', 'borough',
-  'county', 'state', 'region', 'province', 'country', 'municipality', 'island', 'islet',
-  'peak', 'volcano', 'beach', 'bay', 'cliff', 'cape', 'glacier', 'valley', 'ridge',
-  'park', 'garden', 'forest', 'wood', 'lake', 'river', 'waterfall', 'reservoir',
-  'castle', 'monument', 'memorial', 'ruins', 'church', 'cathedral', 'station', 'square',
-]);
-
-/**
- * A plain word for what a search result is: Pier, not "man made". Streets are
- * Street, amenities say their type (Cafe, Library), anything else either
- * already reads as a word (City, Peak) or gets no label at all.
- */
-export function placeKind(category = '', type = '', addresstype = ''): string {
-  const word =
-    KIND_WORDS[`${category}/${type}`] ??
-    (category === 'highway' || addresstype === 'road' ? 'street' : null) ??
-    (category === 'amenity' && type ? type : null) ??
-    (PLAIN_KINDS.has(addresstype) ? addresstype : null) ??
-    (PLAIN_KINDS.has(type) ? type : null) ??
-    '';
-  const spaced = word.replace(/_/g, ' ');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-/**
- * Each place once. Nominatim can return the same pier as a way and as a node:
- * same name, same address, a point apart. A later result is dropped when it
- * has an earlier one's name and sits within 1e-4° of it, or has its name and
- * address and falls inside its bounds. The first is kept.
- */
-export function dedupePlaces(places: Place[]): Place[] {
-  const kept: Place[] = [];
-  const key = (s: string) => s.trim().toLowerCase();
-  const NEAR = 1e-4 + 1e-9; // within 1e-4°, with room for float error
-  for (const place of places) {
-    const repeat = kept.some((k) => {
-      if (key(k.name) !== key(place.name)) return false;
-      if (Math.abs(k.lat - place.lat) <= NEAR && Math.abs(k.lon - place.lon) <= NEAR) return true;
-      if (key(k.detail) !== key(place.detail) || !k.bounds) return false;
-      const [west, south, east, north] = k.bounds;
-      return place.lat >= south && place.lat <= north && place.lon >= west && place.lon <= east;
-    });
-    if (!repeat) kept.push(place);
-  }
-  return kept;
-}
-
-function toPlace(raw: NominatimResult): Place | null {
-  const lat = Number(raw.lat);
-  const lon = Number(raw.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-
-  const full = (raw.display_name ?? '').split(',').map((part) => part.trim()).filter(Boolean);
-  const name = raw.name?.trim() || full[0] || 'Unnamed place';
-  // Drop the leading element when it just repeats the name, then keep enough
-  // context to disambiguate without printing the postcode and the country code.
-  const rest = full[0] === name ? full.slice(1) : full;
-
-  const safeLat = clampLatitude(lat);
-  const safeLon = wrapLongitude(lon);
-
-  const place: Place = {
-    name,
-    detail: rest.slice(0, 3).join(', '),
-    lat: safeLat,
-    lon: safeLon,
-    kind: placeKind(raw.category, raw.type, raw.addresstype),
-    // tz-lookup covers the whole globe including ocean, but a thrown lookup
-    // should cost the time display, not the whole search result.
-    timeZone: safeTimeZone(safeLat, safeLon),
-  };
-
-  // Nominatim's boundingbox is [south, north, west, east] — not the [w,s,e,n]
-  // order everything else in this codebase uses. Reordered here, once.
-  if (raw.boundingbox?.length === 4) {
-    const [south, north, west, east] = raw.boundingbox.map(Number);
-    if ([south, north, west, east].every(Number.isFinite)) {
-      place.bounds = [west, south, east, north];
-    }
-  }
-  return place;
-}
-
 /* ── Search ────────────────────────────────────────────────────────────────── */
 
 export class GeocodeError extends Error {}
@@ -260,17 +128,13 @@ export class GeocodeError extends Error {}
 export async function searchPlaces(query: string, limit = 6): Promise<Place[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
-  const bounded = Math.min(10, Math.max(1, Math.floor(limit)));
+  const bounded = searchLimit(limit);
 
   const key = cacheKey(trimmed, bounded, SEARCH_CACHE_VERSION);
   const cached = await readCache(key);
   if (cached) return cached;
 
-  const url = new URL(ENDPOINT);
-  url.searchParams.set('q', trimmed);
-  url.searchParams.set('format', 'jsonv2');
-  url.searchParams.set('limit', String(bounded));
-  url.searchParams.set('addressdetails', '0');
+  const url = new URL(`${ENDPOINT}?${searchParams(trimmed, bounded)}`);
 
   const places = await serialise(async () => {
     const response = await fetch(url, {
@@ -280,9 +144,9 @@ export async function searchPlaces(query: string, limit = 6): Promise<Place[]> {
     if (!response.ok) {
       throw new GeocodeError(`Nominatim answered ${response.status}.`);
     }
-    const body = (await response.json()) as NominatimResult[];
+    const body: unknown = await response.json();
     if (!Array.isArray(body)) throw new GeocodeError('Nominatim sent something unexpected.');
-    return dedupePlaces(body.map(toPlace).filter((p): p is Place => p !== null));
+    return toPlaces(body, safeTimeZone);
   });
 
   await writeCache(key, trimmed, places);
@@ -309,16 +173,7 @@ export async function reverseGeocode(latitude: number, longitude: number, zoom =
   const lat = clampLatitude(latitude);
   const lon = wrapLongitude(longitude);
 
-  const format = (value: number, positive: string, negative: string) =>
-    `${Math.abs(value).toFixed(4)}°${value >= 0 ? positive : negative}`;
-  const fallback: Place = {
-    name: `${format(lat, 'N', 'S')} ${format(lon, 'E', 'W')}`,
-    detail: '',
-    lat,
-    lon,
-    kind: 'point',
-    timeZone: safeTimeZone(lat, lon),
-  };
+  const fallback: Place = coordinatePlace(lat, lon, safeTimeZone);
 
   // Five decimal places is about a metre — finer than the pin can be placed,
   // and enough that dragging back to the same spot is a cache hit.
@@ -326,13 +181,9 @@ export async function reverseGeocode(latitude: number, longitude: number, zoom =
   const cached = await readCache(key);
   if (cached?.length) return cached[0];
 
-  const url = new URL(REVERSE_ENDPOINT);
-  url.searchParams.set('lat', String(lat));
-  url.searchParams.set('lon', String(lon));
-  url.searchParams.set('format', 'jsonv2');
   // Zoom 16 is roughly "this street or this building" — the grain a person
   // dragging a pin across a city means.
-  url.searchParams.set('zoom', String(zoom));
+  const url = new URL(`${REVERSE_ENDPOINT}?${reverseParams(lat, lon, zoom)}`);
 
   try {
     const place = await serialise(async () => {
@@ -341,7 +192,7 @@ export async function reverseGeocode(latitude: number, longitude: number, zoom =
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (!response.ok) throw new GeocodeError(`Nominatim answered ${response.status}.`);
-      return toPlace((await response.json()) as NominatimResult);
+      return toPlace((await response.json()) as NominatimResult, safeTimeZone);
     });
     // Nominatim's own coordinates are the centre of whatever it matched, which
     // can be the middle of a whole suburb. The point that was asked about is the

@@ -30,10 +30,13 @@
 # Commons directly, because both allow it.
 #
 # Nominatim does not — measured: no access-control-allow-origin under any query
-# string — so place search and the dragged pin's name are the two calls that
-# still need a server. These two functions are it. They declare their own paths
-# (`/api/scout/geocode` and `/api/scout/reverse`), which are the same paths the
-# Mac serves, so the page never branches on where it is running.
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
+# string — so place search and the dragged pin's name reach it through the
+# site's own origin: two proxy rules in public/_redirects, which ship inside
+# dist/client so a Drop deploy has them too. The page reads the answer itself
+# with the parser the Mac uses (src/lib/scout/view/scout-api.ts →
+# src/lib/scout/nominatim.ts) and keeps to Nominatim's one request a second.
+#
+# There are no functions. Two used to answer `/api/scout/geocode` and
+# `/api/scout/reverse`; Netlify's upload refused them from August 2026, and a
+# proxy rule needs no upload. Keep it that way: a functions directory makes
+# every `netlify deploy` try that upload again.

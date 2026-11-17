@@ -94,11 +94,15 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   same function never runs (R13-30). Guard `cameraForBounds` and fall back to `flyTo`.
 
 ## Publishing
-- `netlify deploy` 500s/400s uploading the two Scout functions (server-side, since Aug
-  2026). Deploy static-only with `--no-build --functions <empty dir>`.
+- Netlify's upload refused the two Scout functions from Aug 2026, so there are none now:
+  the published Scout reaches Nominatim through `public/_redirects` (`/nominatim/*`,
+  200 proxy) and parses in the page. Don't add a functions directory; every
+  `netlify deploy` would try that upload again. `npm run drift` says whether the proxy
+  answers.
+- A Netlify proxy forwards the query string as is; Nominatim answers it from Netlify's
+  IPs. If it ever starts refusing, Photon (komoot) sends CORS headers and needs no proxy.
 
 ## Open
 - Tailscale isn't installed on the Mac yet, so phone-from-anywhere isn't live.
 - The installed Mac app and the `v0.1.0` release that `/get` downloads are the 19 Oct
   build, with its own drifted data copy, and nothing auto-starts a server (R13-06, D1).
-- `.ghost` buttons in Scout have no styles.

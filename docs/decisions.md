@@ -4,6 +4,10 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-17 · The published Scout searches through a same-origin proxy rule
+  (`public/_redirects`), not server functions, and reads Nominatim with the Mac's own
+  parser (`src/lib/scout/nominatim.ts`). The rule ships inside `dist/client`, so a Drop
+  deploy has search too.
 - 2026-11-16 · The zine is kept on the Mac as `zine.json` in the data folder, with device
   photos in `<data>/.archive/zine/`, so every device opens the same one (D2, R13-41).
   Saves are versioned like the book. A browser's pre-round-13 zine moves across once;
@@ -34,6 +38,8 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-17 · Scout's `.btn.ghost` (Tools-fold actions: Check now, Find dates…) is a
+  clear capsule with a 26% `--fg` hairline; hover fills, pressed loses the line.
 - 2026-11-17 · On touch, segments, tabs and small buttons answer out to their capsule's
   edge with an invisible `::after`. The drawn pill keeps its size; every control's target
   is ≥ 36 px on a phone (`node_modules/.cache/r13/phone-sweep.mts` checks).

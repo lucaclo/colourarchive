@@ -14,12 +14,17 @@
 - PR `round-13` → `main` once `verify` is green.
 - 9 files in the real archive belong to no entry: `npm run check:photos -- --orphans`.
 - Install Tailscale on the Mac, switch on "Let My Phone In From Anywhere", redeploy.
-- Style the `.ghost` buttons in Scout.
-- Round 9 ideas not yet picked up: `replica/round-9/ideas.md`.
+  Needs Luca: `brew install --cask tailscale-app` asks for his password, then sign-in,
+  and the new app build (the 19 Oct app has no such menu item).
 
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-17 · round-13 · Scout search is back on the published site: `/nominatim/*`
+  proxy in `public/_redirects`, parsed in the page by the Mac's parser
+  (`scout/nominatim.ts`); the two Netlify functions are gone, so a plain
+  `npm run deploy:site` works again. Scout `.ghost` buttons styled. Round 9 ideas: all
+  built already (#7 sky-check is #143). Deployed and checked live on a phone viewport.
 - 2026-11-17 · round-13 · Finished 3f (Scout touch sizes) and 6c (share menu); review of
   6a/6b found 3 data-loss paths (failed zine move saved a blank zine, a second browser's
   zine stranded, Restore deleting a lone original) and 9 smaller ones, all fixed with
