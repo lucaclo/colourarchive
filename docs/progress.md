@@ -11,7 +11,9 @@
 - Luca, D1 (R13-06): which data folder is the real one (repo vs `~/Pictures/Colour
   Archive`, which differ in 2 references and the photographers file); then rebuild the
   app from `main`, cut `v0.2.0` so `/get` hands it out, reinstall, Open at Login.
-- PR `round-13` → `main` once `verify` is green.
+- PR `round-13` → `main` once `verify` is green. The PR also runs the app build (no
+  release); the merge publishes the first self-updating release. Install that one by
+  hand (replaces the 19 Oct app); every later one arrives by itself.
 - 9 files in the real archive belong to no entry: `npm run check:photos -- --orphans`.
 - Install Tailscale on the Mac, switch on "Let My Phone In From Anywhere", redeploy.
   Needs Luca: `brew install --cask tailscale-app` asks for his password, then sign-in,
@@ -20,6 +22,10 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-17 · round-13 · The Mac app updates itself from GitHub releases, one per merge
+  to `main`; the app menu shows "Up to Date · Version 0.2.N". Checked end to end in
+  scratch (0.2.0 → 0.2.1, relaunch, up to date). Not yet run on GitHub; the installed
+  app (0.1.0) needs the first 0.2.x installed by hand once.
 - 2026-11-17 · round-13 · Scout search is back on the published site: `/nominatim/*`
   proxy in `public/_redirects`, parsed in the page by the Mac's parser
   (`scout/nominatim.ts`); the two Netlify functions are gone, so a plain

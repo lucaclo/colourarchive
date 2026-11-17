@@ -102,6 +102,17 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - A Netlify proxy forwards the query string as is; Nominatim answers it from Netlify's
   IPs. If it ever starts refusing, Photon (komoot) sends CORS headers and needs no proxy.
 
+## Mac app updates
+- `app.getVersion()` in a packaged app reads `Contents/Resources/app/package.json`, not
+  Info.plist. A hand-made test version needs both changed, then `codesign --force
+  --deep -s -`. `node_modules/.cache/updater/e2e.mts` does the whole round trip in scratch.
+- An app relaunched by `open` gets no environment: test copies pass `COLOUR_ARCHIVE_*`
+  through the install script (`open -n --env`), or the relaunch opens the real profile.
+- Each build is signed ad hoc, so macOS may ask again for Location, Microphone or a
+  protected folder (Desktop, Documents) after an update.
+- Until the workflow's first run, the latest release (v0.1.0) has no `latest-mac.yml`:
+  checks 404 and the menu says "Couldn’t Check for Updates".
+
 ## Open
 - Tailscale isn't installed on the Mac yet, so phone-from-anywhere isn't live.
 - The installed Mac app and the `v0.1.0` release that `/get` downloads are the 19 Oct

@@ -4,6 +4,11 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-17 · The Mac app updates itself: every merge to `main` publishes release
+  `v0.2.<run>` (`.github/workflows/app-release.yml`); the app checks 30 s after launch
+  and every 4 h, downloads in the background, and swaps on quit or "Restart to Update"
+  (`desktop/updater.cjs`, not electron-updater: unsigned). The app menu's line under
+  About says the version and whether it is the newest.
 - 2026-11-17 · The published Scout searches through a same-origin proxy rule
   (`public/_redirects`), not server functions, and reads Nominatim with the Mac's own
   parser (`src/lib/scout/nominatim.ts`). The rule ships inside `dist/client`, so a Drop

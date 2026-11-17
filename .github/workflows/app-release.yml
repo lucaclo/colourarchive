@@ -1,0 +1,74 @@
+name: Mac app release
+
+# The installed Mac app updates itself from the newest release here
+# (desktop/updater.cjs reads its latest-mac.yml), so every merge to main is
+# one. The version is package.json's major.minor plus this workflow's run
+# number: each build is newer than the last without a commit to bump it.
+# /get keeps downloading releases/latest/download/Colour-Archive-arm64.dmg.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # A pull request that touches the app builds it without releasing, so a
+  # broken build shows on the PR rather than after the merge.
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'astro.config.mjs'
+      - '.github/workflows/app-release.yml'
+
+permissions:
+  contents: write
+
+# One at a time, none cancelled: a cancelled run would leave a gap, and two at
+# once could publish an older build as latest after a newer one.
+concurrency:
+  group: app-release-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Apple silicon, the only build the app ships (arm64).
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Set version
+        id: version
+        run: |
+          V="$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')").$GITHUB_RUN_NUMBER"
+          npm version "$V" --no-git-tag-version
+          echo "v=$V" >> "$GITHUB_OUTPUT"
+
+      # Signed ad hoc ("identity": "-"), so no certificate lookup. --publish
+      # never: on CI electron-builder would otherwise upload its own draft
+      # release; the step below publishes instead.
+      - name: Build
+        run: npm run app:dist -- --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.version.outputs.v }}
+        run: |
+          gh release create "v$V" \
+            desktop/dist/Colour-Archive-arm64.dmg \
+            desktop/dist/Colour-Archive-arm64.zip \
+            desktop/dist/latest-mac.yml \
+            --target "$GITHUB_SHA" \
+            --title "Colour Archive $V for Mac" \
+            --notes "Built from ${GITHUB_SHA::7}." \
+            --latest

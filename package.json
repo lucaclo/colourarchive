@@ -1,7 +1,7 @@
 {
   "name": "colour-archive",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A colour-ordered archive of your photographs.",
   "author": "lucaclo",
@@ -100,6 +100,7 @@
       "desktop/remote-gate.mjs",
       "desktop/remote.html",
       "desktop/remote-preload.cjs",
+      "desktop/updater.cjs",
       "desktop/build/**/*",
       "public/fonts/**/*",
       "public/match-lr/**/*",
@@ -118,8 +119,15 @@
           "arch": [
             "arm64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
         }
       ],
+      "artifactName": "Colour-Archive-${arch}.${ext}",
       "category": "public.app-category.photography",
       "icon": "desktop/resources/icon.png",
       "identity": "-",
