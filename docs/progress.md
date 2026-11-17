@@ -9,11 +9,11 @@
 
 ## Next
 - Luca, D1 (R13-06): which data folder is the real one (repo vs `~/Pictures/Colour
-  Archive`, which differ in 2 references and the photographers file); then rebuild the
-  app from `main`, cut `v0.2.0` so `/get` hands it out, reinstall, Open at Login.
+  Archive`, which differ in 2 references and the photographers file). The app (0.2.0,
+  Open at Login on) uses the Pictures one.
 - PR `round-13` → `main` once `verify` is green. The PR also runs the app build (no
-  release); the merge publishes the first self-updating release. Install that one by
-  hand (replaces the 19 Oct app); every later one arrives by itself.
+  release); the merge publishes the first release, which the installed app picks up
+  and `/get` hands out. Until then its menu says "Couldn’t Check for Updates" (404).
 - 9 files in the real archive belong to no entry: `npm run check:photos -- --orphans`.
 - Install Tailscale on the Mac, switch on "Let My Phone In From Anywhere", redeploy.
   Needs Luca: `brew install --cask tailscale-app` asks for his password, then sign-in,

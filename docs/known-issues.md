@@ -115,5 +115,6 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 
 ## Open
 - Tailscale isn't installed on the Mac yet, so phone-from-anywhere isn't live.
-- The installed Mac app and the `v0.1.0` release that `/get` downloads are the 19 Oct
-  build, with its own drifted data copy, and nothing auto-starts a server (R13-06, D1).
+- The installed Mac app is 0.2.0 (self-updating, installed 2026-11-17) on
+  `~/Pictures/Colour Archive`, a drifted copy of the repo's archive (D1). `/get` still
+  hands out the 19 Oct `v0.1.0` until the first release from `main`.
