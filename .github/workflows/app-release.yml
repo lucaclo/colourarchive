@@ -30,8 +30,9 @@ concurrency:
 
 jobs:
   release:
-    # Apple silicon, the only build the app ships (arm64).
-    runs-on: macos-14
+    # Apple silicon, the only build the app ships (arm64). Not a pinned image:
+    # GitHub retires them (macos-14 was refused in Nov 2026), and latest is arm64.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
