@@ -37,11 +37,23 @@ function unslug(s: string): string {
   return by > 0 && by < words.length - 1 ? `${sentence} by ${words.slice(by + 1).map(cap).join(' ')}` : sentence;
 }
 
-/** "DSC01234 in the look of DSC06160", falling back to plain words. */
+/** A camera's own frame number (DSC06549, IMG_2863, DSCF0012-2): a name, but not a title. */
+const CAMERA_NAME = /^(?:_?DSC[FN]?|_MG|IMG|PXL|GOPR|DJI|P|R|L)[_-]?\d{3,}(?:[_-]\d+)*$/i;
+
+/** What a person would call the picture, or '' when it has no such name. */
+function titleOf(file: string): string {
+  const name = photoName(file);
+  return name && !CAMERA_NAME.test(name) ? name : '';
+}
+
+/**
+ * The match's heading. Frame numbers on both sides read as a filing note
+ * ("DSC06549 in the look of DSC00424-2", R13-28), so only real titles are
+ * used, and with none it's "Your photo in this look".
+ */
 export function matchTitle(mine: string, references: string[]): string {
-  const me = photoName(mine) || 'Your photo';
-  const named = references.map(photoName).filter(Boolean);
-  const ref =
-    references.length > 1 ? `${references.length} references` : named[0] ? named[0] : 'the reference';
-  return `${me} in the look of ${ref}`;
+  const me = titleOf(mine) || 'Your photo';
+  if (references.length > 1) return `${me} in the look of ${references.length} references`;
+  const ref = titleOf(references[0] ?? '');
+  return ref ? `${me} in the look of ${ref}` : `${me} in this look`;
 }

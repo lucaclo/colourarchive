@@ -82,13 +82,24 @@ export default defineConfig({
   // Astro lists every public file in the server's manifest, and those names
   // are this Mac's photo ids.
   ...(DESKTOP ? { publicDir: './desktop/.public' } : {}),
-  // The app's server is reached at http://127.0.0.1:<port>. Astro ignores the
-  // Host header unless its domain is listed here, and then takes every request
-  // to be for "localhost" — so the browser's correct Origin looks cross-site
-  // and every upload, relabel and removal is refused with a 403.
-  // The second entry is the iPad's way in (issue #138): this Mac's Bonjour
+  // The app's server is reached at http://127.0.0.1:<port>. In a production
+  // build Astro ignores the Host header unless its domain is listed here, and
+  // then takes every request to be for "localhost" with no port — so the
+  // browser's correct Origin looks cross-site and every upload, relabel and
+  // removal is refused with a 403.
+  // The *.local entry is the iPad's way in (issue #138): this Mac's Bonjour
   // name over HTTPS, served by desktop/server.mjs when "Let My iPad In" is on.
-  ...(DESKTOP ? { security: { allowedDomains: [{ protocol: 'http', hostname: '127.0.0.1' }, { protocol: 'https', hostname: '*.local' }] } } : {}),
+  // Every build, not only the app's: since round 13 src/middleware.ts refuses
+  // any /api write whose Origin isn't this server's own, so `npm run preview`
+  // at localhost:4321 refused them all. Dev reads the Host header itself.
+  security: {
+    allowedDomains: [
+      { protocol: 'http', hostname: '127.0.0.1' },
+      { protocol: 'http', hostname: 'localhost' },
+      { protocol: 'https', hostname: 'localhost' },
+      { protocol: 'https', hostname: '*.local' },
+    ],
+  },
   adapter: node({ mode: 'standalone' }),
   // Stamps the build with what it contains, and refuses to finish if a
   // photograph it lists has no file behind it. See src/lib/publish.ts.

@@ -300,11 +300,13 @@ test('F05-H1 the meteor fold names a shower and the best hour', async () => {
   // The meteor fold sits in the Night sky group since round 3.
   await o.page.getByText('Night sky', { exact: true }).click();
   await o.page.getByText('Meteor showers', { exact: true }).click();
-  await o.page.waitForTimeout(1500);
+  // The panel is imported on first open; in dev that takes a moment.
+  await o.page.waitForFunction(`(document.getElementById('meteor-line')?.textContent ?? '—') !== '—'`, null, { timeout: 10_000 });
   const line = (await o.page.locator('#meteor-line').textContent()) ?? '';
   assert.match(line, /Perseids · ~\d+ an hour at best/);
   assert.match((await o.page.locator('#meteor-moon').textContent()) ?? '', /^Moon \d+%/);
-  assert.ok(await o.page.getByRole('button', { name: 'Go to the best hour' }).isVisible());
+  // Set with the line, but the fold is still opening: the role query can lag it.
+  await o.page.getByRole('button', { name: 'Go to the best hour' }).waitFor({ state: 'visible', timeout: 5000 });
   await done(o);
 });
 
@@ -312,7 +314,10 @@ test('F05-H2 eye level stands at the pin facing the sun, and comes back', async 
   const o = await open(SCOUT);
   await o.page.waitForTimeout(4000);
   const cam = () => o.page.evaluate(`(() => { const m = window.scout.map(); return { pitch: m.getPitch(), bearing: (m.getBearing() + 360) % 360, zoom: m.getZoom() }; })()`) as Promise<{ pitch: number; bearing: number; zoom: number }>;
-  const before = await cam();
+  // The camera as it rests, not mid-flight: on a busy machine the opening fit
+  // can still be moving at 4 s.
+  const resting = () => o.page.waitForFunction(`(() => !window.scout.map().isMoving())()`, null, { timeout: 15_000, polling: 250 }).then(cam);
+  const before = await resting();
   await o.page.getByRole('button', { name: 'Eye level' }).click();
   await o.page.waitForTimeout(8000);
   const eye = await cam();
@@ -322,7 +327,7 @@ test('F05-H2 eye level stands at the pin facing the sun, and comes back', async 
   assert.ok(eye.zoom > 19, `zoom ${eye.zoom}`);
   await o.page.getByRole('button', { name: 'Eye level' }).click();
   await o.page.waitForTimeout(1500);
-  const back = await cam();
+  const back = await resting();
   assert.ok(Math.abs(back.zoom - before.zoom) < 0.05 && Math.abs(back.pitch - before.pitch) < 1, JSON.stringify({ before, back }));
   await done(o);
 });

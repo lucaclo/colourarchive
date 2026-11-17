@@ -6,9 +6,10 @@ import { FOLD_STEPS, FOLD_STEPS_16 } from '../../lib/zine/imposition';
 
 // The magazine maker: an eight-page, one-sheet zine built from the archive,
 // laid out the way Dirty Little Zine (dirtylittlezine.com) does it. Server-
-// rendered like the book editor, for the book's own order. Everything after
-// that happens in the browser: nothing is uploaded, and the zine is kept in
-// this browser's storage between visits.
+// rendered like the book editor, for the book's own order. The layout and
+// drawing happen in the browser; the zine itself is kept on the Mac, in
+// zine.json in the data folder (round 13, D2; src/lib/zine-store.ts), so every
+// device opens the same one.
 export const prerender = false;
 
 const manifest = await readManifest();
@@ -217,6 +218,11 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   </dialog>
 
   <p class="zn-toast" id="zn-toast" role="status" hidden></p>
+  <div class="zn-savenote" id="zn-savenote" role="status" hidden>
+    <span id="zn-savenote-text"></span>
+    <button type="button" class="btn" id="zn-savenote-act"></button>
+    <button type="button" class="zn-savenote-x" id="zn-savenote-close" aria-label="Dismiss">×</button>
+  </div>
 </Layout>
 
 <style>
@@ -224,6 +230,10 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
      Dirty Little Zine's layout: a bar across the top, the pages down the
      left, the page you're on large in the middle, and its controls beneath.
      On a phone the rail turns into a row under the page. */
+  /* Waiting for the Mac's copy (inert meanwhile). Dims only if that takes a
+     while, so a quick answer doesn't flicker. */
+  .zn { transition: opacity 160ms var(--ease); }
+  .zn[aria-busy='true'] { opacity: 0.5; transition-delay: 400ms; }
   .zn {
     --rail: 9.5rem;
     display: grid;
@@ -559,6 +569,22 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     animation: popIn 300ms var(--spring-move) both;
   }
 
+  /* Why a save didn't happen: a quiet corner note, never a card in the middle. */
+  .zn-savenote {
+    position: fixed; right: var(--edge, 1rem); bottom: calc(var(--tabbar-space) + 0.6rem); z-index: 45;
+    display: flex; align-items: center; gap: 0.5rem; max-width: calc(100vw - 2rem);
+    padding: 0.3rem 0.3rem 0.3rem 0.9rem; border-radius: var(--r-pill);
+    background: var(--glass-bg-strong); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--secondary);
+  }
+  .zn-savenote[hidden] { display: none; }
+  .zn-savenote .btn { min-height: var(--hit); }
+  .zn-savenote-x {
+    appearance: none; border: 0; background: none; color: var(--muted); cursor: pointer;
+    min-width: var(--hit); min-height: var(--hit); font-size: 1.1rem; border-radius: 999px;
+  }
+
   @media (max-width: 1100px) {
     .zn-edit :global(.zn-cols), .zn-edit :global(.zn-cols.one) { grid-template-columns: minmax(0, 1fr); }
     .zn-edit :global(.zn-mid) { flex-direction: row; flex-wrap: wrap; justify-content: center; row-gap: 0.4rem; padding-top: 0; }
@@ -573,7 +599,9 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     .zn-top { gap: 0.4rem 0.8rem; padding-inline: 1rem; }
     .zn-tools { margin-left: 0; width: 100%; }
     .zn-tools .zn-primary { margin-left: auto; }
-    .zn-stage { height: 54svh; padding: 1rem 1rem 1.6rem; }
+    /* Short enough that the page row under it clears the tab bar at first
+       view (R13-42): 18.5rem is the header and the row, roughly. */
+    .zn-stage { height: max(15rem, min(54svh, calc(100svh - 18.5rem - var(--tabbar-space)))); padding: 1rem 1rem 1.6rem; }
     .zn-rail { border-right: 0; border-bottom: 1px solid var(--separator); overflow-x: auto; contain: none; }
     .zn-rail ol { flex-direction: row; padding: 0.6rem 1rem; gap: 0.5rem; }
     .zn-rail :global(li) { flex: 0 0 auto; }
@@ -621,68 +649,250 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   const slides = () => slidesFor(doc.format);
 
   // ── Storage ─────────────────────────────────────────────────────────────
-  // The zine itself goes in localStorage. Photos from this device are too big
-  // for that, so they go in IndexedDB and are referred to by key. Any of it
-  // can be unavailable (private windows, blocked storage); the editor still
-  // works, it just won't remember.
-  const DOC_KEY = 'zine:doc:v1';
-  const DB = 'colour-archive-zine';
+  // The zine is kept on the Mac, in zine.json in the data folder, so the Mac,
+  // the iPad and the phone open the same one (round 13, D2; see
+  // src/lib/zine-store.ts). A photo from this device is shrunk here and sent
+  // to the Mac by key. Every save names the version it was based on: one from
+  // a tab that has fallen behind is refused and says so, rather than writing
+  // over the newer zine.
+  //
+  // Before round 13 the zine lived in this browser (the document in
+  // localStorage, device photos in IndexedDB). The first load that finds no
+  // zine on the Mac moves that copy across, once.
+  const OLD_DOC_KEY = 'zine:doc:v1';
+  const OLD_DB = 'colour-archive-zine';
+  const photoUrl = (key: string) => `/api/zine/photo/${encodeURIComponent(key)}`;
 
-  function idb(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore('files');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+  /** The version of zine.json this page last read or wrote. */
+  let version = 'empty';
+  /** On once the Mac's copy has loaded; off again if the zine changed elsewhere. */
+  let saving = false;
+
+  /** A device photo from the old browser storage, or null. */
+  function oldFile(key: string): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(OLD_DB, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('files');
+        req.onerror = () => resolve(null);
+        req.onsuccess = () => {
+          try {
+            const get = req.result.transaction('files').objectStore('files').get(key);
+            get.onsuccess = () => resolve((get.result as Blob | undefined) ?? null);
+            get.onerror = () => resolve(null);
+          } catch { resolve(null); }
+        };
+      } catch { resolve(null); }
     });
   }
-  async function putFile(key: string, blob: Blob) {
+
+  async function putPhoto(key: string, blob: Blob): Promise<boolean> {
     try {
-      const db = await idb();
-      await new Promise<void>((res, rej) => {
-        const tx = db.transaction('files', 'readwrite');
-        tx.objectStore('files').put(blob, key);
-        tx.oncomplete = () => res();
-        tx.onerror = () => rej(tx.error);
-      });
-    } catch { /* not remembered, still usable this session */ }
+      const res = await fetch(photoUrl(key), { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: blob });
+      if (!res.ok) console.warn('[zine] photo not saved', res.status, await res.text().catch(() => ''));
+      return res.ok;
+    } catch (err) {
+      console.warn('[zine] photo not saved', err);
+      return false;
+    }
   }
-  async function getFile(key: string): Promise<Blob | null> {
+
+  /** Every photo reference in a zine, shown or not (a spread can hold one while unmerged). */
+  const allRefs = (d: ZineDoc) => [...d.pages.map((p) => p.photo), ...Object.values(d.merged).map((m) => m.photo)];
+
+  /** Device photos point at the Mac's copy; one whose file is gone is dropped rather than printed blank. */
+  function linkPhotos(d: ZineDoc, onMac: Set<string>) {
+    const link = (p: PhotoRef | null): PhotoRef | null =>
+      !p || p.kind !== 'local' ? p : onMac.has(p.id) ? { ...p, thumb: photoUrl(p.id), full: photoUrl(p.id) } : null;
+    for (const p of d.pages) p.photo = link(p.photo);
+    for (const m of Object.values(d.merged)) m.photo = link(m.photo);
+  }
+
+  /** What is sent: a device photo's URL is only good on this page, so it goes by key. */
+  function forSaving(d: ZineDoc): ZineDoc {
+    const strip = (p: PhotoRef | null) => (p && p.kind === 'local' ? { ...p, thumb: '', full: '' } : p);
+    return {
+      ...d,
+      pages: d.pages.map((p) => ({ ...p, photo: strip(p.photo) })),
+      merged: Object.fromEntries(Object.entries(d.merged).map(([k, m]) => [k, { ...m, photo: strip(m.photo) }])) as ZineDoc['merged'],
+    };
+  }
+
+  function oldCopy(): { raw: string; doc: ZineDoc } | null {
     try {
-      const db = await idb();
-      return await new Promise((res) => {
-        const req = db.transaction('files').objectStore('files').get(key);
-        req.onsuccess = () => res((req.result as Blob) ?? null);
-        req.onerror = () => res(null);
-      });
+      const raw = localStorage.getItem(OLD_DOC_KEY);
+      if (!raw) return null;
+      const d = reviveDoc(JSON.parse(raw));
+      return isEmpty(d) ? null : { raw, doc: d };
     } catch { return null; }
   }
-  async function clearFiles() {
+
+  /** Sends this browser's old zine to the Mac. 'again' when another device saved one first. */
+  async function moveFromBrowser(): Promise<ZineDoc | 'again' | null> {
+    const old = oldCopy();
+    if (!old) return null;
+    const sent = new Set<string>();
+    for (const ref of allRefs(old.doc)) {
+      if (!ref || ref.kind !== 'local' || sent.has(ref.id)) continue;
+      const blob = await oldFile(ref.id);
+      if (!blob) continue; // already lost from this browser; linkPhotos drops it
+      if (!(await putPhoto(ref.id, blob))) return null; // left in place, to try on the next visit
+      sent.add(ref.id);
+    }
+    linkPhotos(old.doc, sent);
     try {
-      const db = await idb();
-      db.transaction('files', 'readwrite').objectStore('files').clear();
-    } catch { /* nothing to clear */ }
+      const res = await fetch('/api/zine', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ version, doc: forSaving(old.doc) }),
+      });
+      if (res.status === 409) return 'again';
+      const j = (await res.json()) as { ok?: boolean; version?: string };
+      if (!res.ok || !j.ok || !j.version) return null;
+      version = j.version;
+    } catch (err) {
+      console.warn('[zine] couldn’t move this browser’s zine', err);
+      return null;
+    }
+    // Kept under another name rather than deleted, in case it's ever wanted.
+    try {
+      localStorage.setItem(`${OLD_DOC_KEY}:moved`, old.raw);
+      localStorage.removeItem(OLD_DOC_KEY);
+    } catch { /* it moves again next time, onto a Mac that already has one, so it won't */ }
+    return old.doc;
   }
 
-  function loadDoc(): ZineDoc {
-    try { return reviveDoc(JSON.parse(localStorage.getItem(DOC_KEY) || 'null')); } catch { return freshDoc(); }
+  /**
+   * The Mac's zine, and whether this page may save over it. Saving stays off
+   * until the whole load — the move from this browser included — is done, so
+   * an edit made meanwhile can't race the move or save a blank zine.
+   */
+  async function loadDoc(tries = 2): Promise<{ doc: ZineDoc; ok: boolean }> {
+    let state: { doc: unknown; version: string; photos: string[] };
+    let reached = false;
+    try {
+      const res = await fetch('/api/zine', { cache: 'no-store' });
+      reached = true;
+      const j = (await res.json()) as { ok?: boolean; error?: string; doc: unknown; version: string; photos: string[] };
+      if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      state = j;
+    } catch (err) {
+      console.warn('[zine] couldn’t load', err);
+      saveNote(reached ? 'Couldn’t open the zine' : 'Couldn’t reach the Mac', 'Reload');
+      return { doc: oldCopy()?.doc ?? freshDoc(), ok: false };
+    }
+    version = state.version;
+    if (state.doc === null) {
+      const old = oldCopy();
+      if (!old) return { doc: freshDoc(), ok: true };
+      const moved = await moveFromBrowser();
+      if (moved === 'again' && tries > 0) return loadDoc(tries - 1);
+      if (moved && moved !== 'again') return { doc: moved, ok: true };
+      // Not moved (a photo or the save failed). Show it, but save nothing:
+      // a blank zine saved now would stop the move from ever running again.
+      saveNote('Not moved to the Mac', 'Reload');
+      return { doc: old.doc, ok: false };
+    }
+    const d = reviveDoc(state.doc);
+    linkPhotos(d, new Set(state.photos));
+    // Another device moved its zine first. This browser's own is kept and
+    // offered, not dropped: the Mac's copy goes to zine.json.bak if it's used.
+    const old = oldCopy();
+    if (old && JSON.stringify(forSaving(old.doc)) !== JSON.stringify(forSaving(d))) offerOldCopy();
+    return { doc: d, ok: true };
   }
+
+  /** "This browser has its own zine · Use it": sends it over the Mac's, or × keeps the Mac's for good. */
+  function offerOldCopy() {
+    showNote('This browser has its own zine', 'Use it', async () => {
+      hideNote();
+      saving = false;
+      const moved = await moveFromBrowser();
+      if (moved && moved !== 'again') location.reload();
+      else saveNote(moved === 'again' ? 'Changed elsewhere' : 'Not moved to the Mac', 'Reload');
+    }, () => {
+      try {
+        const raw = localStorage.getItem(OLD_DOC_KEY);
+        if (raw) localStorage.setItem(`${OLD_DOC_KEY}:kept`, raw);
+        localStorage.removeItem(OLD_DOC_KEY);
+      } catch { /* asked again next visit */ }
+    });
+  }
+
   let saveTimer = 0;
+  let dirty = false;
+  let inFlight: Promise<void> | null = null;
+  let again = false;
   function save() {
+    dirty = true;
     clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(() => {
-      // Blob URLs die with the page, so local photos are stored by key only.
-      const strip = (p: PhotoRef | null) => (p && p.kind === 'local' ? { ...p, thumb: '', full: '' } : p);
-      const out: ZineDoc = {
-        ...doc,
-        pages: doc.pages.map((p) => ({ ...p, photo: strip(p.photo) })),
-        merged: Object.fromEntries(Object.entries(doc.merged).map(([k, m]) => [k, { ...m, photo: strip(m.photo) }])) as ZineDoc['merged'],
-      };
-      try { localStorage.setItem(DOC_KEY, JSON.stringify(out)); } catch { /* storage full or blocked */ }
-    }, 300);
+    saveTimer = window.setTimeout(() => void flush(), 300);
   }
+  /** One save at a time, each based on the version the last one returned. */
+  async function flush(leaving = false): Promise<void> {
+    clearTimeout(saveTimer);
+    if (!saving || !dirty) return;
+    if (inFlight) { again = true; return; }
+    dirty = false;
+    const body = JSON.stringify({ version, doc: forSaving(doc) });
+    inFlight = (async () => {
+      try {
+        const res = await fetch('/api/zine', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body,
+          // Lets the last save finish as the page closes; the browser caps it at 64 KB.
+          keepalive: leaving && body.length < 60_000,
+        });
+        const j = (await res.json().catch(() => ({}))) as { ok?: boolean; version?: string; error?: string };
+        if (res.ok && j.ok && j.version) {
+          version = j.version;
+          if (noteKind === 'save') hideNote();
+        } else if (res.status === 409) {
+          saving = false;
+          saveNote('Changed elsewhere', 'Reload');
+        } else {
+          console.warn('[zine] not saved', res.status, j.error);
+          dirty = true;
+          saveNote('Couldn’t save', 'Try again');
+        }
+      } catch (err) {
+        console.warn('[zine] not saved', err);
+        dirty = true;
+        if (!leaving) saveNote('Couldn’t save', 'Try again');
+      }
+    })();
+    await inFlight;
+    inFlight = null;
+    if (again) { again = false; await flush(leaving); }
+  }
+  addEventListener('pagehide', () => void flush(true));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') void flush(true); });
 
-  let doc = loadDoc();
+  // The one note this page keeps in the corner: why a save didn't happen, and what to do.
+  let noteKind: '' | 'save' | 'offer' = '';
+  let onDismiss: (() => void) | null = null;
+  function showNote(text: string, action: string, onAction: () => void, dismissed: (() => void) | null = null, kind: 'save' | 'offer' = 'offer') {
+    $('zn-savenote-text').textContent = text;
+    const btn = $<HTMLButtonElement>('zn-savenote-act');
+    btn.textContent = action;
+    btn.onclick = onAction;
+    onDismiss = dismissed;
+    $('zn-savenote').hidden = false;
+    noteKind = kind;
+  }
+  function saveNote(text: string, action: 'Reload' | 'Try again') {
+    showNote(text, action, action === 'Reload' ? () => location.reload() : () => { dirty = true; void flush(); }, null, 'save');
+  }
+  function hideNote() {
+    $('zn-savenote').hidden = true;
+    noteKind = '';
+    onDismiss = null;
+  }
+  $('zn-savenote-close').addEventListener('click', () => {
+    const then = onDismiss;
+    hideNote();
+    then?.();
+  });
+
+  let doc = freshDoc();
   let current = 0;
 
   // ── Images ──────────────────────────────────────────────────────────────
@@ -706,22 +916,6 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     return img.complete && img.naturalWidth ? img : null;
   }
   const screenOpts = (hints: boolean): RenderOpts => ({ image: (r) => imageFor(r.thumb), hints });
-
-  /** Local photos come back from IndexedDB with fresh blob URLs. */
-  async function rehydrate() {
-    const refs = [...doc.pages.map((p) => p.photo), ...Object.values(doc.merged).map((m) => m.photo)];
-    for (const ref of refs) {
-      if (!ref || ref.kind !== 'local' || ref.thumb) continue;
-      const blob = await getFile(ref.id);
-      if (blob) ref.thumb = ref.full = URL.createObjectURL(blob);
-    }
-    // A local photo whose file is gone can't be shown; drop it rather than
-    // print a blank.
-    for (const p of doc.pages) if (p.photo?.kind === 'local' && !p.photo.thumb) p.photo = null;
-    for (const m of Object.values(doc.merged)) if (m.photo?.kind === 'local' && !m.photo.thumb) m.photo = null;
-    buildEdit();
-    renderAll();
-  }
 
   // ── Drawing ─────────────────────────────────────────────────────────────
   function slideAspect(s: Slide) {
@@ -1167,7 +1361,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
 
   const fromArchive = (p: ArchivePhoto): PhotoRef => ({ kind: 'archive', id: p.id, thumb: p.thumb, full: p.full, w: p.w, h: p.h, panX: 0, panY: 0 });
 
-  /** A file from this device, shrunk to print size and kept in IndexedDB. */
+  /** A file from this device, shrunk to print size and kept on the Mac. */
   async function fromFile(file: File): Promise<PhotoRef | null> {
     if (!file.type.startsWith('image/')) { toast('That isn’t an image this browser can open.'); return null; }
     let bmp: ImageBitmap;
@@ -1181,7 +1375,8 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.9));
     if (!blob) return null;
     const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await putFile(id, blob);
+    // Shown from this page's own copy either way; only a saved one comes back next visit.
+    if (!(await putPhoto(id, blob))) toast('Photo not saved on the Mac');
     const url = URL.createObjectURL(blob);
     return { kind: 'local', id, thumb: url, full: url, w: c.width, h: c.height, panX: 0, panY: 0 };
   }
@@ -1878,7 +2073,6 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     ask('Start over?', 'This clears every page.', 'Start over', () => {
       doc = freshDoc(doc.paper, doc.format);
       current = 0;
-      void clearFiles();
       syncPaper();
       changed(true);
     }),
@@ -1957,11 +2151,14 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   $('zn-jpg').addEventListener('click', (e) => download('jpg', e.currentTarget as HTMLButtonElement));
 
   // ── Start ───────────────────────────────────────────────────────────────
-  syncPaper();
-  syncFormat();
-  buildRail();
-  buildEdit();
-  renderAll();
+  function start() {
+    syncPaper();
+    syncFormat();
+    buildRail();
+    buildEdit();
+    renderAll();
+  }
+  start();
   new ResizeObserver(([entry]) => {
     stageAvail = { w: entry.contentRect.width, h: entry.contentRect.height };
     queueRender();
@@ -1973,5 +2170,24 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
     document.fonts.load('italic 500 40px Fraunces'),
     document.fonts.load('500 40px "JetBrains Mono"'),
   ]).finally(queueRender);
-  void rehydrate();
+  // The Mac's copy replaces the blank zine drawn above as soon as it answers.
+  // Until then the page can't be edited, so nothing typed into the blank one
+  // is quietly thrown away (over the Funnel the answer can take a moment).
+  const zn = $('zn');
+  zn.inert = true;
+  zn.setAttribute('aria-busy', 'true');
+  void loadDoc().catch((err) => {
+    console.warn('[zine] couldn’t open', err);
+    saveNote('Couldn’t open the zine', 'Reload');
+    return { doc: freshDoc(), ok: false };
+  }).then(({ doc: d, ok }) => {
+    doc = d;
+    dirty = false;
+    saving = ok;
+    current = Math.min(current, slides().length - 1);
+    start();
+    zn.inert = false;
+    zn.removeAttribute('aria-busy');
+    document.documentElement.dataset.zineLoaded = 'true';
+  });
 </script>

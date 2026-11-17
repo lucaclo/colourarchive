@@ -79,41 +79,44 @@ async function fetchCover(): Promise<{ count: number; chapters: number } | null>
 }
 
 /**
- * Are the two server functions live?
+ * Is the published Scout's place search reachable?
  *
- * Scout is almost entirely client-side, but place search and the dragged pin's
- * name go through `/api/scout/*` because Nominatim sends no CORS header. A deploy
- * that predates those functions serves Netlify's HTML 404 for them, and the page
- * shows an empty search rather than an error — which is how they were found to
- * have been missing for ten days.
+ * Nominatim sends no CORS header, so the published Scout searches through the
+ * site's own `/nominatim/*` proxy rule (public/_redirects) and reads the answer in
+ * the page (src/lib/scout/view/scout-api.ts). It replaced the two server
+ * functions, which Netlify's upload has refused since August 2026. A deploy
+ * without the rule serves Netlify's HTML 404 for it, and the page says search
+ * is unavailable — the same silent shape that hid the missing functions for
+ * ten days, so it is asked here.
  */
-async function functionsLive(): Promise<{ live: boolean; detail: string }> {
-  const url = `${SITE_URL}/api/scout/geocode?q=edinburgh`;
+async function searchLive(): Promise<{ live: boolean; detail: string }> {
+  const url = `${SITE_URL}/nominatim/search?q=edinburgh&format=jsonv2&limit=1&addressdetails=0`;
   try {
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+      headers: { 'User-Agent': 'ColourArchiveScout/0.1 (personal photography scouting tool)' },
+    });
     const type = res.headers.get('content-type') ?? '';
     if (res.ok && type.includes('json')) return { live: true, detail: 'live' };
-    return { live: false, detail: `${res.status}, ${type.split(';')[0] || 'no content-type'} — not a function` };
+    return { live: false, detail: `${res.status}, ${type.split(';')[0] || 'no content-type'} — not the proxy` };
   } catch (err) {
     return { live: false, detail: err instanceof Error ? err.message : String(err) };
   }
 }
 
 /**
- * Print the functions verdict, and say what it costs when they are down.
+ * Print the search verdict, and say what it costs when it is down.
  *
- * The result used to be printed and then ignored, one line above a summary
- * claiming the published site was current — so the report both measured the
- * ten-day-old fault and talked over it. It still does not change the exit code:
- * with the CLI unable to upload a function at all, failing here would fail every
- * publish including the static-only one that works, and a command that always
- * exits 1 is a command whose exit code stops being read.
+ * It does not change the exit code: the photographs are what a publish is for,
+ * and a command that fails on a third party's bad minute is a command whose
+ * exit code stops being read.
  */
-async function reportFunctions(): Promise<void> {
-  const { live, detail } = await functionsLive();
-  console.log(`\nScout's server functions: ${detail}`);
+async function reportSearch(): Promise<void> {
+  const { live, detail } = await searchLive();
+  console.log(`\nScout's place search (/nominatim proxy): ${detail}`);
   if (!live) {
-    console.log("  Typed place search is down on the published Scout; the pin still works.");
+    console.log("  Typed place search is down on the published Scout; tapping the map still works.");
   }
 }
 
@@ -187,7 +190,7 @@ async function main() {
   if (note) console.log(`  (${SITE_URL}/${STAMP_FILE} → ${note})`);
   const drift = driftBetween(local, published, new Date(), published ? null : await fetchCover());
   console.log(describeDrift(drift, nameOf).join('\n'));
-  await reportFunctions();
+  await reportSearch();
   await reportShared(manifest);
 
   if (CHECK) {
@@ -224,9 +227,9 @@ async function main() {
     const { stamp: live } = await fetchStamp();
     if (live?.builtAt === sent.builtAt) {
       console.log(`Live: ${live.count} photographs · the build from ${live.builtAt}.`);
-      // Asked again after the deploy, not only before it: whether the functions
+      // Asked again after the deploy, not only before it: whether search
       // came up is a property of the publish that just happened.
-      await reportFunctions();
+      await reportSearch();
       return;
     }
     if (attempt < 6) await wait(5000);

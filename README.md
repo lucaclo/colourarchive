@@ -310,16 +310,18 @@ rather than assumed:
 | Wikimedia Commons (photo hotspots) | yes, with `origin=*` |
 | Nominatim (place search, the dragged pin's name) | **no** — no CORS header under any query string |
 
-So the published Scout calls the first two directly and routes the third through
-`netlify/functions/`, which import the same `searchPlaces`/`reverseGeocode` the
-Astro routes do — one implementation, not two. `browser/sources.ts` holds the
-direct transports and reuses the same parsers as the server path, so both
-produce the same objects. The choice is baked in at build time from
+So the published Scout calls the first two directly and reaches the third
+through the site's own `/nominatim/*` proxy rules (`public/_redirects`). The page
+answers `/api/scout/geocode` and `/api/scout/reverse` itself
+(`view/scout-api.ts`), reading Nominatim with the same parser the Mac's routes
+use (`scout/nominatim.ts`) — one implementation, not two. `browser/sources.ts`
+holds the direct transports and reuses the same parsers as the server path, so
+both produce the same objects. The choice is baked in at build time from
 `PUBLIC_STATIC`, not probed at runtime.
 
-**A Netlify _Drop_ deploy carries no functions.** Drag `dist/client` onto Drop
-and everything works except typed place search, which says so in as many words
-and points you at the pin. Use `npm run deploy:site` if you want search.
+**A Netlify _Drop_ deploy has search too**: the proxy rules ship inside
+`dist/client`. On a host with no such rule, typed place search says it is
+unavailable and points you at tapping the map.
 
 `/inspiration` stays server-only: it writes to disk, and it holds other people's
 photographs pending credit. That means "already in the archive" is a Mac feature

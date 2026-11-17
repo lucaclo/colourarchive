@@ -5,6 +5,7 @@ import {
   MINUTES_PER_DAY,
   PHASE_COLOUR,
   altitudeColour,
+  clockMinute,
   daySegments,
   describeLightWindows,
   describeNextChange,
@@ -15,6 +16,7 @@ import {
   formatShadowRatio,
   formatZoneAbbreviation,
   isoDateIn,
+  jumpMinutes,
   scoutDay,
   shadeOverlayGradient,
   shiftIsoDate,
@@ -341,6 +343,40 @@ describe('sunEventRows', () => {
     assert.equal(list.length, 9);
     assert.equal(byKey(list, 'sunrise').start, null);
     assert.ok(byKey(list, 'solarNoon').start);
+  });
+});
+
+describe('jumpMinutes', () => {
+  // Midsummer, the audit's November day (16:14 vs 16:15 before), and the day
+  // the clocks go forward.
+  const DATES = ['2026-06-21', '2026-11-12', '2026-03-29'];
+  const KEYS = ['civilDawn', 'sunrise', 'solarNoon', 'sunset', 'civilDusk'];
+
+  for (const iso of DATES) {
+    it(`lands each jump on the minute the list prints, London ${iso}`, () => {
+      const day = scoutDay(LONDON.lat, LONDON.lon, zonedNoon(iso, LONDON.tz));
+      const jumps = jumpMinutes(day.times);
+      const list = sunEventRows(day.times);
+      for (const key of KEYS) {
+        const listed = list.find((r) => r.key === key)!.start!;
+        const minute = jumps[key];
+        assert.ok(minute != null, `${key} has a jump`);
+        assert.equal(
+          formatMinute(day.dayStart, minute, LONDON.tz),
+          formatClock(listed, LONDON.tz),
+          `${iso} ${key}`,
+        );
+        // And within the minute it names, not a minute either side.
+        const slider = day.dayStart.getTime() + minute * 60_000;
+        assert.ok(Math.abs(slider - listed.getTime()) < 60_000, `${iso} ${key}`);
+      }
+    });
+  }
+
+  it('has no jump for an event the day does not have', () => {
+    const day = scoutDay(TROMSO.lat, TROMSO.lon, utc(2026, 12, 21));
+    assert.equal(jumpMinutes(day.times).sunrise, null);
+    assert.equal(clockMinute(day.dayStart, null), null);
   });
 });
 

@@ -21,11 +21,12 @@
  * changes only whether and where it sits in one particular curated object.
  */
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { BOOK_PATH } from './paths';
 import type { Chapter, Photo } from './types';
-import { isTreatment, isTrimId, type Treatment, type TrimId } from './book-pages';
+import { TRIMS, isTreatment, isTrimId, type Treatment, type TrimId } from './book-pages';
 
 export interface BookCuration {
   /** Chapter key -> every one of that chapter's photo ids, in curated
@@ -53,7 +54,7 @@ export interface BookCuration {
   trim?: TrimId;
 }
 
-/** The page-layout fields, validated. Shared by the file reader and the API. */
+/** The page-layout fields, validated, as the file reader takes them. */
 export function readLayoutFields(raw: Record<string, unknown>): Pick<BookCuration, 'layout' | 'blankBefore' | 'trim'> {
   const out: Pick<BookCuration, 'layout' | 'blankBefore' | 'trim'> = {};
   if (raw.layout && typeof raw.layout === 'object' && !Array.isArray(raw.layout)) {
@@ -112,20 +113,150 @@ export async function readBookCuration(): Promise<BookCuration> {
   return readCuration(await readJson());
 }
 
-// Same read-modify-write hazard manifest.ts's own overrides carry — two
-// saves in close succession must not let the second clobber the first.
+// --- Saving: validate, merge, check the version (R13-01, R13-31) -----------
+// The editor posts its whole state, but a save must never be able to empty
+// the file: a field absent from the body keeps its saved value, and a field
+// present replaces it — empty included, which is how the editor says "nothing
+// left out" or "no moves". Every save also names the version of the file it
+// was based on; if the file has changed since (another tab, the phone), the
+// save is refused rather than written over the newer book.
+
+/** The version of a book file that doesn't exist yet. */
+export const EMPTY_BOOK_VERSION = 'empty';
+
+/** A short hash of the file's bytes, or EMPTY_BOOK_VERSION when there is no file. */
+export function bookVersionOf(bytes: Buffer | null): string {
+  return bytes ? createHash('sha256').update(bytes).digest('hex').slice(0, 16) : EMPTY_BOOK_VERSION;
+}
+
+async function readBytes(file: string): Promise<Buffer | null> {
+  try {
+    return await fs.readFile(file);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+function curationOf(bytes: Buffer | null): BookCuration {
+  if (!bytes) return {};
+  try {
+    return readCuration(JSON.parse(bytes.toString('utf8')));
+  } catch {
+    return {};
+  }
+}
+
+/** The curation and the version of the bytes it came from, from one read. */
+export async function readBookState(file = BOOK_PATH): Promise<{ curation: BookCuration; version: string }> {
+  // Unreadable reads as empty, as readBookCuration does, so the page still
+  // renders; a save re-reads strictly and fails instead of writing over it.
+  const bytes = await readBytes(file).catch(() => null);
+  return { curation: curationOf(bytes), version: bookVersionOf(bytes) };
+}
+
+/** What one save changes. A field absent keeps its saved value; null clears it. */
+export type BookPatch = { [K in keyof BookCuration]?: BookCuration[K] | null };
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
+const has = (o: Record<string, unknown>, key: string) => Object.hasOwn(o, key);
+
+/** Validates a save's body. Any field present but malformed refuses the whole save. */
+export function parseBookPatch(body: unknown): { ok: true; patch: BookPatch } | { ok: false; error: string } {
+  if (!isRecord(body)) return { ok: false, error: 'Expected a JSON object.' };
+  const bad = (field: string) => ({ ok: false as const, error: `Invalid ${field}.` });
+  const patch: BookPatch = {};
+
+  if (has(body, 'chapters')) {
+    const v = body.chapters;
+    if (!isRecord(v) || !Object.values(v).every(isStringArray)) return bad('chapters');
+    // Empty means "nothing to say", never "forget every order": the page always
+    // sends each chapter, so only another client could send {}.
+    if (Object.keys(v).length) patch.chapters = v as Record<string, string[]>;
+  }
+  if (has(body, 'excluded')) {
+    if (!isStringArray(body.excluded)) return bad('excluded');
+    patch.excluded = body.excluded.length ? body.excluded : null;
+  }
+  if (has(body, 'moved')) {
+    const v = body.moved;
+    if (!isRecord(v) || !Object.values(v).every((key) => typeof key === 'string')) return bad('moved');
+    patch.moved = Object.keys(v).length ? (v as Record<string, string>) : null;
+  }
+  if (has(body, 'layout')) {
+    const v = body.layout;
+    if (!isRecord(v) || !Object.values(v).every(isTreatment)) return bad('layout');
+    // A border is the default, so it is never stored (as readLayoutFields).
+    const layout = Object.fromEntries(Object.entries(v).filter(([, t]) => t !== 'border')) as Record<string, Treatment>;
+    patch.layout = Object.keys(layout).length ? layout : null;
+  }
+  if (has(body, 'blankBefore')) {
+    if (!isStringArray(body.blankBefore)) return bad('blankBefore');
+    patch.blankBefore = body.blankBefore.length ? [...new Set(body.blankBefore)] : null;
+  }
+  if (has(body, 'trim')) {
+    // Own keys only: `'toString' in TRIMS` is true.
+    if (typeof body.trim !== 'string' || !Object.hasOwn(TRIMS, body.trim)) return bad('trim');
+    patch.trim = body.trim as TrimId;
+  }
+  return { ok: true, patch };
+}
+
+/** The saved curation with a save's fields applied: present replaces, null clears, absent keeps. */
+export function mergeBookCuration(saved: BookCuration, patch: BookPatch): BookCuration {
+  const out: Record<string, unknown> = { ...saved };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null || value === undefined) delete out[key];
+    else out[key] = value;
+  }
+  return out as BookCuration;
+}
+
+export type BookSaveResult =
+  | { status: 200; version: string }
+  | { status: 400; error: string }
+  | { status: 409; version: string };
+
+// Same read-modify-write hazard manifest.ts's own overrides carry: the read,
+// the version check and the write run as one step, one save at a time, so two
+// saves arriving together can't both pass the check.
 let writeChain: Promise<unknown> = Promise.resolve();
-export function writeBookCuration(curation: BookCuration): Promise<void> {
-  const run = writeChain.then(() => write(curation), () => write(curation));
+
+/**
+ * One save from the editor: `body` is the POST body, with `version` naming
+ * the file it was based on. A body with no version is refused like a stale
+ * one (409): the editor always sends one, so its absence means a tab or a
+ * script from before versions, which can't know what it would overwrite.
+ */
+export function saveBookCuration(body: unknown, file = BOOK_PATH): Promise<BookSaveResult> {
+  const parsed = parseBookPatch(body);
+  if (!parsed.ok) return Promise.resolve({ status: 400, error: parsed.error });
+  const basedOn = (body as Record<string, unknown>).version;
+  const step = () => commitSave(file, parsed.patch, basedOn);
+  const run = writeChain.then(step, step);
   writeChain = run.catch(() => {});
   return run;
 }
 
-async function write(curation: BookCuration): Promise<void> {
-  await fs.mkdir(path.dirname(BOOK_PATH), { recursive: true });
-  const tmp = `${BOOK_PATH}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(curation, null, 2));
-  await fs.rename(tmp, BOOK_PATH);
+async function commitSave(file: string, patch: BookPatch, basedOn: unknown): Promise<BookSaveResult> {
+  const bytes = await readBytes(file);
+  const current = bookVersionOf(bytes);
+  if (typeof basedOn !== 'string' || basedOn !== current) return { status: 409, version: current };
+  if (!Object.keys(patch).length) return { status: 200, version: current };
+  // Strict here, unlike the page's read: a hand-edited file that no longer
+  // parses must fail the save, not be merged into {} and written over (and
+  // then lose its backup to the next autosave).
+  const saved = bytes ? readCuration(JSON.parse(bytes.toString('utf8'))) : {};
+  const next = JSON.stringify(mergeBookCuration(saved, patch), null, 2);
+  if (bytes && next === bytes.toString('utf8')) return { status: 200, version: current };
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  // One backup: the bytes just checked, so it is exactly the book this save replaces.
+  if (bytes) await fs.writeFile(`${file}.bak`, bytes);
+  const tmp = `${file}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, next);
+  await fs.rename(tmp, file);
+  return { status: 200, version: bookVersionOf(Buffer.from(next)) };
 }
 
 /**

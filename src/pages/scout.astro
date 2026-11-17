@@ -75,10 +75,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
       <!-- First-visit orientation — issue #74. Shown once, ever, before a
            place is picked, and gone the moment one is; see orientation.ts. -->
       <div class="first-visit" id="first-visit" role="status" hidden>
-        <p>
-          Pick somewhere and you'll get where the sun and moon go, twilight and tides, the odds of aurora,
-          what lines up behind what, and whether tonight is worth going out. There's also a notebook for what you saw.
-        </p>
+        <p>Search a place or use your location</p>
         <button type="button" id="first-visit-close" aria-label="Dismiss">×</button>
       </div>
 
@@ -182,6 +179,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                 <path d="m12 3.6 2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 10l6-.8Z"/>
               </svg>
               <span class="sr">Keep this spot</span>
+            </button>
+            <!-- R13-34: the ways to take this view with you (#share-menu). -->
+            <button class="round" id="share-button" type="button" aria-expanded="false" aria-controls="share-menu" title="Share" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8.5 9.5H7A1.5 1.5 0 0 0 5.5 11v8A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 17 9.5h-1.5"/>
+                <path d="M12 3.5v10M8.75 6.75 12 3.5l3.25 3.25"/>
+              </svg>
+              <span class="sr">Share</span>
             </button>
             <button class="round" id="radius-button" type="button" aria-expanded="false" aria-controls="radiusbox" title="Radius">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
@@ -1169,7 +1174,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
         <p class="star-info-detail" id="star-info-detail"></p>
       </div>
 
-      <div class="layers" id="layers" hidden>
+      <div class="layers" id="layers" hidden role="dialog" aria-label="Layers">
         <p class="layers-head">Basemap</p>
         <div class="seg seg-wide" data-seg id="baseseg">
           <button type="button" data-base="light" class="on">Light</button>
@@ -1291,21 +1296,25 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
             <p class="slab-note" id="sweep-note"></p>
           </div>
         </details>
+      </div>
 
-        <p class="layers-head">This view</p>
+      <!-- R13-34: actions, not layers, so they open from the share button in
+           the sheet head. Non-modal like Layers; page.ts places it beside the
+           button, since the sheet clips anything inside it. -->
+      <div class="share-menu" id="share-menu" role="dialog" aria-label="Share" hidden>
         <button class="wide" id="open-month" type="button">The month, hour by hour</button>
         <button class="wide" id="export" type="button">Save as an image</button>
         <button class="wide" id="copy-plan" type="button">Copy the plan</button>
         <button class="wide" id="copy-link" type="button">Copy a link to this spot</button>
         <button class="wide" id="save-offline" type="button">Save this area for offline</button>
-        <p class="slab-note" id="save-offline-note"></p>
+        <p class="slab-note" id="save-offline-note" aria-live="polite"></p>
       </div>
 
       <!-- ── The month, as a grid ─────────────────────────────────────────
            Rows are days, columns are hours, and the shape of the golden hour
            across a month is the thing you cannot get by scrubbing a slider
            thirty times. -->
-      <div class="monthgrid" id="monthgrid" hidden role="dialog" aria-modal="true" aria-label="The month, hour by hour">
+      <div class="monthgrid" id="monthgrid" hidden data-modal role="dialog" aria-modal="true" aria-label="The month, hour by hour">
         <div class="mg-head">
           <button class="chip chip-step" id="mg-back" type="button" aria-label="The month before">‹</button>
           <p class="mg-title" id="mg-title">—</p>
@@ -1502,6 +1511,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      read as floating chrome rather than as flat labels stuck to the glass. */
   .panel,
   .layers,
+  .share-menu,
   .photos,
   .sheet,
   .chip,
@@ -1530,18 +1540,18 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      and the other easing. prefers-reduced-motion already collapses every
      transition on this page to 0.01ms via the blanket rule below — nothing
      extra needed here for that. */
-  .layers, .monthgrid, .photos, .star-info, .searchbox, .kept, .panel, .slab, .scout-mapmsg {
+  .layers, .share-menu, .monthgrid, .photos, .star-info, .searchbox, .kept, .panel, .slab, .scout-mapmsg {
     transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete;
   }
   .panel { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete, width 220ms ease; }
   .toast { transition: opacity 200ms var(--ease), transform 200ms var(--ease), display 200ms allow-discrete; }
 
-  .layers[hidden], .monthgrid[hidden], .photos[hidden], .star-info[hidden],
+  .layers[hidden], .share-menu[hidden], .monthgrid[hidden], .photos[hidden], .star-info[hidden],
   .searchbox[hidden], .kept[hidden], .panel[hidden], .slab[hidden] { opacity: 0; transform: scale(0.95); }
   .toast[hidden] { opacity: 0; transform: translateX(-50%) translateY(10px); }
   .scout-mapmsg[hidden] { opacity: 0; transform: translateY(6px); }
   @starting-style {
-    .layers:not([hidden]), .monthgrid:not([hidden]), .photos:not([hidden]), .star-info:not([hidden]),
+    .layers:not([hidden]), .share-menu:not([hidden]), .monthgrid:not([hidden]), .photos:not([hidden]), .star-info:not([hidden]),
     .searchbox:not([hidden]), .kept:not([hidden]), .panel:not([hidden]), .slab:not([hidden]) { opacity: 0; transform: scale(0.95); }
     .toast:not([hidden]) { opacity: 0; transform: translateX(-50%) translateY(10px); }
     .scout-mapmsg:not([hidden]) { opacity: 0; transform: translateY(6px); }
@@ -3295,6 +3305,20 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border-color: color-mix(in oklab, #bd99f2 40%, var(--border));
   }
 
+  /* ── Share menu ── Same glass as Layers. page.ts sets top or bottom, right
+     and max-height from the share button, opening towards the roomier side. */
+  .share-menu {
+    position: absolute;
+    z-index: 30;
+    width: 16rem;
+    max-width: calc(100vw - 1.8rem);
+    overflow-y: auto;
+    padding: 0.75rem;
+    border-radius: 14px;
+  }
+  .share-menu[hidden] { display: none; }
+  .share-menu .wide + .wide { margin-top: 0.4rem; }
+
   /* ── Tapped-star card ─────────────────────────────────────────────────── */
 
   .star-info {
@@ -3916,6 +3940,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   #star[aria-pressed='true'] { color: #e8b33a; }
   #star[aria-pressed='true'] svg { fill: currentColor; stroke: currentColor; }
   #star[hidden] { display: none; }
+  #share-button[hidden] { display: none; }
 
   /* ── Undo ─────────────────────────────────────────────────────────────────
      A tap that moves the pin is fast, and fast is only safe if it is also
@@ -5334,6 +5359,41 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     /* A 16px grabber looks right and is a guess to hit. */
     .dock-grabber { position: relative; }
     .dock-grabber::before { content: ''; position: absolute; inset: -10px 0; }
+  }
+  /* ── Ghost buttons ── The actions inside a fold (Check now, Find dates,
+     Log this visit…): quieter than the chrome's filled pills, drawn with the
+     notebook's hairline instead of a fill. The hairline stays on touch, where
+     there is no hover to say "this is a button". A pressed toggle fills. */
+  .btn.ghost {
+    background: transparent;
+    border-color: color-mix(in oklab, var(--fg) 26%, transparent);
+    color: var(--fg);
+  }
+  .btn.ghost:hover:not(:disabled) { background: var(--fill); border-color: color-mix(in oklab, var(--fg) 40%, transparent); }
+  .btn.ghost[aria-pressed='true'] { background: var(--fill-active, var(--fill)); border-color: transparent; }
+  .btn.ghost:disabled { opacity: 0.45; cursor: default; }
+  .btn.ghost[hidden] { display: none; }
+
+  /* R13-37: every tool control is 36 px to hit on touch. The tool sliders
+     grow their box and keep the thin native track; the two small actions
+     take the touch floor. (The ⓘ tips already reach 43 px with ::after.) */
+  @media (pointer: coarse) {
+    #fold-tools input[type='range'] { min-height: 36px; }
+    #fold-tools .frame-lens-more { min-height: var(--hit); }
+    /* The time strip keeps the height it shows (30 px); clear borders take
+       its target to 36, inside the gaps above and below it. The radius is
+       split so the visible corner stays 9 px round. */
+    #dock .scout-slider {
+      height: 36px;
+      margin-block: -3px;
+      border-block: 3px solid transparent;
+      border-radius: 9px / 12px;
+      background-clip: padding-box;
+    }
+  }
+  @media (pointer: coarse) and (max-width: 640px) {
+    /* The phone's strip shows 24 px. */
+    #dock .scout-slider { margin-block: -6px; border-block-width: 6px; border-radius: 9px / 15px; }
   }
 </style>
 

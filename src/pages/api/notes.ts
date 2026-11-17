@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { readNotes, setNote } from '../../lib/notes';
+import { readStore } from '../../lib/manifest';
 
 export const prerender = false;
 
@@ -23,6 +24,11 @@ export const POST: APIRoute = async ({ request }) => {
     const body = (await request.json()) as { id?: unknown; text?: unknown };
     if (typeof body.id !== 'string' || !body.id) return json({ ok: false, error: 'Missing id.' }, 400);
     if (typeof body.text !== 'string') return json({ ok: false, error: 'Missing text.' }, 400);
+    // A note belongs to a photo that exists. Clearing one is always allowed, so a
+    // note left behind by a removed photo can still be emptied.
+    if (body.text.trim() && !(await readStore()).some((p) => p.id === body.id)) {
+      return json({ ok: false, error: 'No such photo' }, 404);
+    }
     await setNote(body.id, body.text);
     return json({ ok: true });
   } catch (err) {

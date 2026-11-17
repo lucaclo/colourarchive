@@ -5,6 +5,7 @@ import { oklchCss, baseKeyOf } from '../lib/color';
 import { GENRE_LABEL } from '../lib/types';
 import { borderlineOf, chapterChoices } from '../lib/borderline';
 import { readInboxLog, latestImport, INBOX_NAME } from '../lib/inbox';
+import { listRemoved } from '../lib/removed';
 
 export const prerender = false;
 const manifest = await readManifest();
@@ -19,7 +20,8 @@ const allPhotos = manifest.chapters.flatMap((c) =>
     // The edge is kept even for a moved photo — it is a fact about the
     // colour, not the filing — and only shown while the photo is automatic,
     // so moving one back brings its marker back without another request.
-    return { ...p, chapterName: c.name, auto, base: p.chapter, moved, edge: borderlineOf(p.oklch)?.alternative ?? '' };
+    // `shown`: the file name as it was given, without the hash saveOriginal adds.
+    return { ...p, chapterName: c.name, auto, base: p.chapter, moved, edge: borderlineOf(p.oklch)?.alternative ?? '', shown: p.filename.replace(`.${p.id}`, '') };
   }),
 );
 const choices = chapterChoices(overrides.chapters);
@@ -40,6 +42,8 @@ const inboxNoteTitle = inbox.problem
     ? `${inbox.held.length} ${inbox.held.length === 1 ? 'file' : 'files'} left in the inbox`
     : '';
 const onEdge = allPhotos.filter((p) => p.edge && !p.moved).length;
+// R13-16: originals waiting in the trash, to restore or empty.
+const removedCount = (await listRemoved()).items.length;
 // Same static echo as the archive's first chapter — see Layout's `accent`
 // prop. Upload feeds this exact chapter system, so it earns the same tint.
 const accent = manifest.chapters[0]
@@ -76,8 +80,11 @@ const accent = manifest.chapters[0]
       <div class="bar"><div class="bar-fill" id="bar"></div></div>
       <div class="status-row">
         <p id="status-text" class="status-text"></p>
+        <a class="btn" id="view-archive" href="/" hidden>View in the archive</a>
         <button type="button" class="cancel" id="cancel" hidden>Cancel</button>
       </div>
+      {/* The files of this run that didn't go in, each with its reason, under the count. */}
+      <ul id="not-added" class="results not-added" hidden></ul>
     </div>
 
     <ul id="results" class="results" aria-live="polite"></ul>
@@ -99,7 +106,7 @@ const accent = manifest.chapters[0]
 
     {/* Rendered even when empty, so photos added in this session can drop
         straight into it without a page reload. */}
-    <section class="manage" id="manage" hidden={allPhotos.length === 0} data-choices={JSON.stringify(choices)}>
+    <section class="manage" id="manage" hidden={allPhotos.length === 0 && removedCount === 0} data-choices={JSON.stringify(choices)}>
       {/* One toolbar row: the order, the search, and the edge filter. The
           page title above already says this is the archive. */}
       <h2 class="visually-hidden">In the archive</h2>
@@ -118,6 +125,9 @@ const accent = manifest.chapters[0]
             checking by eye, so they can be pulled out of the grid on their own. */}
         <button type="button" class="edge-filter" id="edge-filter" aria-pressed="false" hidden={onEdge === 0}>
           <span class="edge-mark" aria-hidden="true">≈</span> On a chapter edge <span class="edge-count" id="edge-count">{onEdge}</span>
+        </button>
+        <button type="button" class="edge-filter removed-open" id="removed-open" aria-haspopup="dialog" aria-controls="removed" hidden={removedCount === 0}>
+          Removed · <span id="removed-count">{removedCount}</span>
         </button>
       </div>
       {lastImport && (
@@ -150,7 +160,9 @@ const accent = manifest.chapters[0]
       <div class="grid" id="grid" data-reveal>
         {allPhotos.map((p) => (
           <figure class="cell" data-id={p.id} data-added={p.addedAt ?? ''} data-medium={p.medium} data-genre={p.genre ?? ''} data-auto={p.auto} data-base={p.base} data-edge={p.edge} data-file={p.filename}>
-            <img src={p.placeholder} data-src={p.derivatives[0].avif} alt="" loading="lazy" />
+            {/* The photo is the cell's checkbox (R13-09): on the figure the role
+                would hide the controls inside it from VoiceOver (axe nested-interactive). */}
+            <img src={p.placeholder} data-src={p.derivatives[0].avif} alt={p.shown} aria-label={p.shown} loading="lazy" tabindex="0" role="checkbox" aria-checked="false" />
             <button class="cell-remove" type="button" data-remove={p.id} aria-label={`Remove ${p.filename}`}>×</button>
             <button class="cell-medium" type="button" data-medium-btn={p.id} title="Toggle film / digital">{p.medium}</button>
             <button class="cell-genre" type="button" data-genre-btn={p.id} title="Change genre">{p.genre ? GENRE_LABEL[p.genre] : '— genre'}</button>
@@ -160,6 +172,26 @@ const accent = manifest.chapters[0]
         ))}
       </div>
     </section>
+
+    {/* R13-16: the originals in the trash. Nothing leaves it for good unless
+        Empty is pressed and confirmed. */}
+    <div class="removed" id="removed" role="dialog" aria-modal="true" aria-labelledby="removed-title" data-modal hidden>
+      <div class="removed-sheet">
+        <div class="removed-head">
+          <h2 class="removed-title" id="removed-title">Removed <span class="removed-n" id="removed-n"></span></h2>
+          <button type="button" class="btn btn-ghost btn-icon removed-close" id="removed-close" aria-label="Close">×</button>
+        </div>
+        <ul class="removed-list" id="removed-list"></ul>
+        <div class="removed-foot">
+          <button type="button" class="btn" id="removed-empty">Empty</button>
+          <div class="removed-confirm" id="removed-confirm" hidden>
+            <span id="removed-confirm-text"></span>
+            <button type="button" class="btn removed-delete" id="removed-delete">Delete</button>
+            <button type="button" class="btn btn-ghost" id="removed-keep">Keep</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 </Layout>
 
@@ -211,6 +243,8 @@ const accent = manifest.chapters[0]
   .bar-fill { height: 100%; width: 0; background: var(--fg); transition: width 200ms linear; }
   .status-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
   .status-text { color: var(--muted); font-size: 0.82rem; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
+  .status-row .btn { margin-top: 0.6rem; flex: 0 0 auto; }
+  .status-row .btn[hidden] { display: none; }
   .cancel {
     appearance: none; background: transparent; border: 0; cursor: pointer; flex: 0 0 auto;
     font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
@@ -231,10 +265,15 @@ const accent = manifest.chapters[0]
     animation: cellIn 420ms var(--ease) both;
   }
   @media (prefers-reduced-motion: reduce) { :global(.results li) { animation: none; } }
-  :global(.results .sw) { width: 1.1rem; height: 1.1rem; border-radius: 50%; flex: 0 0 auto; border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); }
+  .results.not-added { margin-top: 0.6rem; }
+  .results[hidden] { display: none; }
+  /* The photo itself (R13-10): its thumbnail once it's in, the file from this
+     device when it didn't go in. An empty tile when neither can be shown. */
+  :global(.results .th) { width: 40px; height: 40px; flex: 0 0 auto; object-fit: cover; border-radius: 3px; background: var(--border); }
   :global(.results .fn) { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.results .ch) { color: var(--muted); font-size: var(--t-caption); }
   :global(.results .skip) { color: var(--muted); font-style: italic; }
+  :global(.results .note) { color: var(--secondary); }
   :global(.results .err) { color: #e0603a; }
   /* Issue #61 — a chapter-fit verdict, on its own line under the row it
      belongs to (flex-basis 100% wraps it there without a second list item). */
@@ -303,6 +342,26 @@ const accent = manifest.chapters[0]
   /* `display: flex` above outranks the UA's [hidden], so the bar showed
      "0 selected" with nothing selected. */
   .bulk-bar[hidden], .edge-filter[hidden] { display: none; }
+  /* R13-08: photos are mostly picked far down the grid, where the bar at its
+     head had scrolled away. It holds just under the folded page head (its
+     --ph-bar strip, 3.5rem here) while the grid scrolls under it… */
+  .bulk-bar { position: sticky; top: calc(3.5rem + var(--sp-2)); z-index: 5; }
+  /* …and on a phone it floats just above the tab bar, where the thumb is.
+     `--vgap` moves the tab bar down into the iOS standalone strip, so the bar
+     follows it by the same amount. */
+  @media (max-width: 640px) {
+    .bulk-bar {
+      position: fixed; z-index: 65; left: 16px; right: 16px; top: auto;
+      bottom: calc(var(--tabbar-space) - var(--vgap, 0px));
+      margin: 0; gap: 0.4rem 0.6rem; padding: 0.4rem 0.4rem 0.4rem 0.9rem; border-radius: var(--r-lg);
+      background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+      border-color: var(--glass-edge); box-shadow: var(--glass-shadow);
+    }
+    /* The last row can still scroll clear of it. */
+    .ingest:has(.bulk-bar:not([hidden])) { padding-bottom: calc(var(--tabbar-space) + 9rem); }
+    /* Removed · Undo takes the same spot; the bar steps up over it. */
+    :global(body:has(.undo-bar:not([hidden]))) .bulk-bar { bottom: calc(var(--tabbar-space) - var(--vgap, 0px) + 3.25rem); }
+  }
   .bulk-count {
     font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
     color: var(--secondary); flex: 0 0 auto;
@@ -326,6 +385,10 @@ const accent = manifest.chapters[0]
     opacity: 0; transform: scale(0.6); transition: opacity 120ms, transform 120ms;
   }
   :global(.cell.selected .cell-select-mark) { opacity: 1; transform: none; }
+  /* The photo takes keyboard focus but fills a clipped cell, so the app's
+     focus ring is drawn on the cell instead. */
+  :global(.cell > img:focus-visible) { outline: none; }
+  :global(.cell:has(> img:focus-visible)) { outline: 2px solid var(--fg); outline-offset: 3px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
   :global(.cell) {
     position: relative; margin: 0; aspect-ratio: 1; overflow: hidden; background: var(--border);
@@ -463,6 +526,52 @@ const accent = manifest.chapters[0]
   .edge-count { font-family: var(--font-data); color: var(--muted); }
   .edge-filter[hidden] { display: none; }
   :global(.grid.edge-only .cell:not(.on-edge):not(.just-moved)) { display: none; }
+  /* --secondary, not the edge count's --muted: under a finger the pill keeps
+     its hover fill, and --muted on it is 4.15:1. */
+  .removed-open span { font-family: var(--font-data); color: var(--secondary); }
+
+  /* --- Removed (R13-16): a sheet over a dim page, centred at the desk and
+     at the foot of the screen on a phone, where the thumb is. ------------ */
+  .removed {
+    position: fixed; inset: 0; z-index: 90;
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+    background: color-mix(in oklab, #000 38%, transparent);
+    animation: vtFadeIn 200ms var(--ease) both;
+  }
+  .removed[hidden] { display: none; }
+  .removed-sheet {
+    width: min(32rem, 100%); max-height: min(42rem, calc(100dvh - 2rem));
+    display: flex; flex-direction: column; overflow: hidden;
+    /* Opaque: a long list over glass let the page's own words show through it. */
+    background: var(--surface-1);
+    border: 1px solid var(--glass-edge); border-radius: var(--r-lg);
+    box-shadow: var(--glass-shadow), 0 24px 60px rgb(0 0 0 / 0.45);
+    animation: popIn 300ms var(--spring-move) both;
+  }
+  .removed-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0.5rem 0.5rem 1.1rem; border-bottom: 1px solid var(--separator); }
+  .removed-title { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.35rem; }
+  .removed-n { font-family: var(--font-data); font-style: normal; font-size: var(--t-footnote); color: var(--muted); margin-left: 0.35rem; }
+  .removed-close { font-size: 1.2rem; }
+  .removed-list { list-style: none; margin: 0; padding: 0.35rem 0.6rem; overflow: auto; flex: 1 1 auto; }
+  :global(.removed-list li) { display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--border); font-family: var(--font-ui); font-size: var(--t-footnote); }
+  :global(.removed-list li:last-child) { border-bottom: 0; }
+  :global(.removed-list .rm-th) { width: 44px; height: 44px; flex: 0 0 auto; object-fit: cover; border-radius: 3px; background: var(--border); }
+  :global(.removed-list .rm-name) { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+  :global(.removed-list .rm-size) { flex: 0 0 auto; font-family: var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+  :global(.removed-list .rm-err) { flex: 0 0 auto; color: #e0603a; }
+  .removed-foot { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0.5rem; padding: 0.6rem; border-top: 1px solid var(--separator); }
+  .removed-foot .btn[hidden] { display: none; }
+  .removed-confirm { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg); }
+  .removed-confirm[hidden] { display: none; }
+  .removed-confirm span { margin-right: 0.25rem; }
+  /* The red of a photo's × under the pointer: this one deletes for good. */
+  .removed-delete { background: color-mix(in oklab, #c0392b 82%, transparent); color: #fff; }
+  .removed-delete:hover { background: #c0392b; }
+  @media (max-width: 640px) {
+    .removed { align-items: flex-end; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+    .removed-sheet { max-height: calc(100dvh - 4rem); }
+  }
+  @media (prefers-reduced-motion: reduce) { .removed, .removed-sheet { animation: none; } }
 
   /* A new arrival's placement: the photos it now sits among, and the way to
      move it if they are the wrong company. */
@@ -470,8 +579,6 @@ const accent = manifest.chapters[0]
     flex-basis: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.7rem;
     font-size: var(--t-footnote); color: var(--muted);
   }
-  :global(.results .nb) { display: flex; gap: 3px; }
-  :global(.results .nb img) { width: 36px; height: 36px; object-fit: cover; border-radius: 3px; background: var(--border); }
   :global(.results .row-chapter), :global(.results .edge-move) {
     appearance: none; cursor: pointer; border: 1px solid var(--separator); border-radius: 999px;
     background: var(--fill); color: var(--fg); font-family: var(--font-ui);
@@ -491,6 +598,8 @@ const accent = manifest.chapters[0]
   const bar = document.getElementById('bar');
   const statusText = document.getElementById('status-text');
   const results = document.getElementById('results');
+  const notAddedList = document.getElementById('not-added');
+  const viewArchive = document.getElementById('view-archive');
 
   // Swap manage thumbnails from placeholder to the real derivative as they come
   // into view. This used to fire `new Image()` for every cell the instant the
@@ -560,6 +669,7 @@ const accent = manifest.chapters[0]
   const RAW_EXT = /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2|pef|srw|x3f)$/i;
   const IMAGE_EXT = /\.(jpe?g|png|tiff?|webp|avif|heic|heif|gif)$/i;
   const CONCURRENCY = 3;   // the Mac processes these in parallel; the store write is serialised server-side
+  const COULDNT = "Couldn't add this one";   // the server's plainReason() fallback, in the same words
   const fmtBytes = (n) =>
     n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB';
 
@@ -577,12 +687,17 @@ const accent = manifest.chapters[0]
       xhr.addEventListener('load', () => {
         run.inflight.delete(xhr);
         onProgress(file.size);
+        // The server's own words go to the console; the row says it plainly.
         try {
           const data = JSON.parse(xhr.responseText);
-          if (!data.ok) return resolve([{ filename: file.name, status: 'error', error: data.error || `HTTP ${xhr.status}` }]);
+          if (!data.ok) {
+            console.warn(`[upload] ${file.name}:`, data.error || `HTTP ${xhr.status}`);
+            return resolve([{ filename: file.name, status: 'error', error: COULDNT }]);
+          }
           resolve(data.results);
         } catch {
-          resolve([{ filename: file.name, status: 'error', error: `Server returned ${xhr.status}` }]);
+          console.warn(`[upload] ${file.name}: server returned ${xhr.status}`);
+          resolve([{ filename: file.name, status: 'error', error: COULDNT }]);
         }
       });
       xhr.addEventListener('error', () => {
@@ -607,12 +722,17 @@ const accent = manifest.chapters[0]
     }
     // Anything we won't send is said out loud. Dropping a folder of ARWs used
     // to do nothing whatsoever — no upload, no error, no acknowledgement.
-    for (const f of raw) results.prepend(renderRow({ filename: f.name, status: 'unsupported', error: 'Camera RAW — export to JPEG or TIFF first' }));
-    for (const f of other) results.prepend(renderRow({ filename: f.name, status: 'unsupported', error: 'Not an image' }));
+    // Each run's count and its not-added list start afresh together.
+    notAddedList.replaceChildren();
+    notAddedList.hidden = true;
+    viewArchive.hidden = true;
+    const notIn = (r, f) => { notAddedList.append(renderRow(r, f)); notAddedList.hidden = false; };
+    for (const f of raw) notIn({ filename: f.name, status: 'unsupported', error: 'Camera RAW — export to JPEG or TIFF first' }, f);
+    for (const f of other) notIn({ filename: f.name, status: 'unsupported', error: 'Not a picture we can read' }, f);
     if (!files.length) {
       if (raw.length || other.length) {
         statusEl.hidden = false; bar.style.width = '0%'; cancelBtn.hidden = true;
-        statusText.textContent = `Nothing to add — ${raw.length + other.length} file${raw.length + other.length > 1 ? 's' : ''} can't be read.`;
+        statusText.textContent = `${raw.length + other.length} not added`;
       }
       input.value = '';
       return;
@@ -624,7 +744,9 @@ const accent = manifest.chapters[0]
     zone.setAttribute('aria-busy', 'true');
 
     const sent = new Array(files.length).fill(0);
-    let done = 0, added = 0, failed = 0;
+    // Every file chosen is counted (R13-12): duplicates, RAWs and files that
+    // aren't pictures are "not added", not left out of the sum.
+    let done = 0, added = 0, notAdded = raw.length + other.length;
     // Two phases, and the slow one is not always the network: sending is
     // weighted by BYTES (a 40MB frame beside a 2MB one makes a file count lie),
     // but the Mac then decodes, derives and fingerprints each photo, which on a
@@ -653,9 +775,8 @@ const accent = manifest.chapters[0]
         const rows = await send(files[i], (loaded) => { sent[i] = loaded; paint(); });
         if (rows === null) return;                     // aborted
         for (const r of rows) {
-          if (r.status === 'added') { added++; addCell(r); }
-          else if (r.status === 'error' || r.status === 'unsupported') failed++;
-          results.prepend(renderRow(r));
+          if (r.status === 'added') { added++; addCell(r); results.prepend(renderRow(r, files[i])); }
+          else { notAdded++; notIn(r, files[i]); }
         }
         done++;
         paint();
@@ -673,11 +794,11 @@ const accent = manifest.chapters[0]
       return;
     }
     bar.style.width = '100%';
-    const parts = [`${added} added`];
-    if (failed) parts.push(`${failed} skipped`);
-    statusText.innerHTML = added
-      ? `${esc(parts.join(' · '))}. <a href="/">View the archive →</a>`
-      : esc(parts.join(' · ') + '.');
+    const parts = [];
+    if (added) parts.push(`${added} added`);
+    if (notAdded) parts.push(`${notAdded} not added`);
+    statusText.textContent = parts.join(' · ');
+    viewArchive.hidden = !added;
   }
 
   const cancelBtn = document.getElementById('cancel');
@@ -692,20 +813,42 @@ const accent = manifest.chapters[0]
   // A run in progress is worth protecting from an accidental navigation.
   addEventListener('beforeunload', (e) => { if (run) { e.preventDefault(); e.returnValue = ''; } });
 
-  function renderRow(r) {
+  const span = (cls, text) => {
+    const s = document.createElement('span');
+    s.className = cls; s.textContent = text;
+    return s;
+  };
+  /** The name as it was given: saveOriginal stores `name.<id>.ext`. */
+  const shownName = (r) => (r.id ? String(r.filename).replace(`.${r.id}`, '') : r.filename);
+
+  // One row per file: the photo itself (R13-10) and its name, then where it
+  // went, or why it didn't go in. `file` is the File sent from this device.
+  function renderRow(r, file) {
     const li = document.createElement('li');
+    const th = document.createElement('img');
+    th.className = 'th'; th.alt = ''; th.decoding = 'async';
+    if (r.status === 'added' && (r.thumb || r.placeholder)) {
+      th.src = r.thumb || r.placeholder;
+    } else if (file) {
+      // Not in the archive, so there's no thumbnail of ours: show the file
+      // itself, or an empty tile when the browser can't draw it (RAW, not a picture).
+      const url = URL.createObjectURL(file);
+      th.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+      th.addEventListener('error', () => { URL.revokeObjectURL(url); th.replaceWith(span('th', '')); }, { once: true });
+      th.src = url;
+    }
+    li.append(th, span('fn', file?.name || shownName(r)));
     if (r.status === 'skipped') {
-      li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch skip">already added</span>`;
-    } else if (r.status === 'unsupported' || r.status === 'error') {
-      li.innerHTML = `<span class="sw" style="background:transparent"></span><span class="fn">${esc(r.filename)}</span><span class="ch err">${esc(r.error || r.status)}</span>`;
+      li.append(span('ch skip', 'Already in the archive'));
+    } else if (r.status !== 'added') {
+      li.append(span('ch err', r.error || COULDNT));
     } else {
+      li.append(span('ch', `${r.medium} · ${r.chapterName}`));
+      if (r.note) li.append(span('ch note', r.note));
       // Issue #61: how this photo's own measured look sits against the
       // chapter it just landed in — absent when the chapter has too few
       // other photos yet to have a settled look worth comparing to.
-      const fit = r.chapterFit
-        ? `<span class="fit fit-${esc(r.chapterFit.verdict)}">${esc(fitLabel(r.chapterFit.verdict))}</span>`
-        : '';
-      li.innerHTML = `<span class="sw" style="background:${r.swatch}"></span><span class="fn">${esc(r.filename)}</span><span class="ch">${esc(r.medium)} · ${esc(r.chapterName)}</span>${fit}`;
+      if (r.chapterFit) li.append(span(`fit fit-${r.chapterFit.verdict}`, fitLabel(r.chapterFit.verdict)));
       li.dataset.id = r.id;
       li.dataset.medium = r.medium;
       li.append(placeRow(r));
@@ -713,23 +856,12 @@ const accent = manifest.chapters[0]
     return li;
   }
 
-  // Issue #105: where a new arrival landed, shown as the company it now keeps,
-  // with the one-tap move when it sits on an edge and the full picker always.
+  // Issue #105: the one-tap move when a new arrival sits on an edge, and the
+  // full picker always.
   function placeRow(r) {
     const place = document.createElement('div');
     place.className = 'place';
     const base = baseOf(r.chapterKey);
-    if (r.neighbours?.length) {
-      const nb = document.createElement('span');
-      nb.className = 'nb';
-      nb.title = `Closest in colour, in ${r.chapterName}`;
-      for (const src of r.neighbours) {
-        const img = document.createElement('img');
-        img.src = src; img.alt = ''; img.decoding = 'async';
-        nb.append(img);
-      }
-      place.append(nb);
-    }
     if (r.borderline) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'edge-move';
@@ -938,7 +1070,12 @@ const accent = manifest.chapters[0]
     fig.dataset.edge = r.borderline?.alternative || '';
     fig.dataset.file = r.filename;
     const img = document.createElement('img');
-    img.alt = ''; img.loading = 'lazy';
+    img.alt = shownName(r); img.loading = 'lazy';
+    // The cell's checkbox, as on the cells served with the page (R13-09).
+    img.tabIndex = 0;
+    img.setAttribute('role', 'checkbox');
+    img.setAttribute('aria-checked', 'false');
+    img.setAttribute('aria-label', img.alt);
     img.src = r.placeholder || '';
     if (r.thumb) { img.dataset.src = r.thumb; watchThumb(img); }
     const btn = (cls, text, attr, val, label) => {
@@ -1030,14 +1167,20 @@ const accent = manifest.chapters[0]
     bulkBar.hidden = selected.size === 0;
     if (bulkCount) bulkCount.textContent = `${selected.size} selected`;
   }
+  // The photo in each cell is its checkbox (R13-09), so its aria-checked
+  // follows the selection everywhere the selection changes.
+  function markCell(cell, on) {
+    cell.classList.toggle('selected', on);
+    cell.querySelector(':scope > img')?.setAttribute('aria-checked', String(on));
+  }
   function setSelected(id, on) {
     const cell = cellFor(id);
     if (!cell) return;
-    if (on) { selected.add(id); cell.classList.add('selected'); }
-    else { selected.delete(id); cell.classList.remove('selected'); }
+    if (on) selected.add(id); else selected.delete(id);
+    markCell(cell, on);
   }
   function clearSelection() {
-    for (const id of selected) cellFor(id)?.classList.remove('selected');
+    for (const id of selected) { const cell = cellFor(id); if (cell) markCell(cell, false); }
     selected.clear();
     selectAnchor = null;
     updateBulkBar();
@@ -1046,9 +1189,20 @@ const accent = manifest.chapters[0]
   grid?.addEventListener('click', (e) => {
     if (e.target.closest('button, select')) return; // per-cell controls have their own handlers
     const cell = e.target.closest('.cell');
-    if (!cell) return;
+    if (cell) pickCell(cell, e.shiftKey);
+  });
+  // Space or Enter on the photo itself; on a button or the chapter picker
+  // inside the cell, the key stays theirs.
+  grid?.addEventListener('keydown', (e) => {
+    if ((e.key !== ' ' && e.key !== 'Enter') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!e.target.matches('.cell > img[role="checkbox"]')) return;
+    e.preventDefault();   // Space would scroll the page
+    pickCell(e.target.parentElement, e.shiftKey);
+  });
+  /** Select or deselect one cell; with Shift, everything from the last one picked. */
+  function pickCell(cell, range) {
     const id = cell.dataset.id;
-    if (e.shiftKey && selectAnchor && cellFor(selectAnchor)) {
+    if (range && selectAnchor && cellFor(selectAnchor)) {
       const ids = orderedIds();
       const a = ids.indexOf(selectAnchor);
       const b = ids.indexOf(id);
@@ -1061,7 +1215,7 @@ const accent = manifest.chapters[0]
       selectAnchor = id;
     }
     updateBulkBar();
-  });
+  }
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected.size) clearSelection(); });
 
   async function bulkSetMedium(next) {
@@ -1150,7 +1304,8 @@ const accent = manifest.chapters[0]
     if (!grid) return;
     if (manageCount) manageCount.textContent = String(grid.children.length);
     const empty = grid.children.length === 0;
-    if (manage) manage.hidden = empty;
+    // Kept while Removed has something in it, so the last photo can come back.
+    if (manage) manage.hidden = empty && Boolean(document.getElementById('removed-open')?.hidden);
     if (manageSearchBox) manageSearchBox.hidden = empty;
   }
   function showUndo(text, withUndo) {
@@ -1167,7 +1322,7 @@ const accent = manifest.chapters[0]
     const items = ids.map((id) => cellFor(id)).filter(Boolean).map((cell) => ({ id: cell.dataset.id, cell, next: cell.nextSibling }));
     // Detach back to front so each remembered nextSibling is still in the grid
     // when Undo puts them back front to back.
-    for (const it of [...items].reverse()) { selected.delete(it.id); it.cell.remove(); }
+    for (const it of [...items].reverse()) { setSelected(it.id, false); it.cell.remove(); }
     updateBulkBar();
     refreshCounts();
     pending = { items, timer: setTimeout(commitRemoval, UNDO_MS) };
@@ -1194,6 +1349,9 @@ const accent = manifest.chapters[0]
     hideUndo();
     const results = await Promise.all(items.map((it) => post('/api/remove', { id: it.id })));
     const failed = items.filter((_, i) => !results[i]);
+    // Only what actually reached the trash: one already gone answers removed: false.
+    const trashed = results.filter((r) => r && r.removed !== false).length;
+    if (trashed) setRemovedCount(removedTotal + trashed);
     if (!failed.length || !grid) return;
     for (const it of failed) grid.insertBefore(it.cell, it.next && it.next.parentNode === grid ? it.next : null);
     refreshCounts();
@@ -1208,6 +1366,146 @@ const accent = manifest.chapters[0]
 
   bulkRemove?.addEventListener('click', () => removeLater([...selected]));
   bulkClear?.addEventListener('click', clearSelection);
+
+  // ======================================================================
+  //  Removed (R13-16): the originals a removal moved to the trash. Restore
+  //  puts one back through the upload pipeline (same id, so the book and
+  //  notes find it again); Empty deletes them for good, after asking once.
+  // ======================================================================
+  const removedOpen = document.getElementById('removed-open');
+  const removedCountEl = document.getElementById('removed-count');
+  const removedDlg = document.getElementById('removed');
+  const removedList = document.getElementById('removed-list');
+  const removedN = document.getElementById('removed-n');
+  const removedEmpty = document.getElementById('removed-empty');
+  const removedConfirm = document.getElementById('removed-confirm');
+  const removedConfirmText = document.getElementById('removed-confirm-text');
+  const removedDelete = document.getElementById('removed-delete');
+  const removedKeep = document.getElementById('removed-keep');
+  let removedTotal = Number(removedCountEl?.textContent || 0);
+  let removedItems = [];   // as last listed: what Empty deletes
+
+  function setRemovedCount(n) {
+    removedTotal = Math.max(0, n);
+    if (removedCountEl) removedCountEl.textContent = String(removedTotal);
+    if (removedOpen) removedOpen.hidden = removedTotal === 0;
+    refreshCounts();
+  }
+  function removedRow(item) {
+    const li = document.createElement('li');
+    li.dataset.name = item.name;
+    const th = document.createElement('img');
+    th.className = 'rm-th'; th.alt = ''; th.loading = 'lazy'; th.decoding = 'async';
+    th.addEventListener('error', () => th.replaceWith(span('rm-th', '')), { once: true });
+    th.src = `/api/removed/preview?name=${encodeURIComponent(item.name)}`;
+    const restore = document.createElement('button');
+    restore.type = 'button'; restore.className = 'btn rm-restore'; restore.textContent = 'Restore';
+    restore.setAttribute('aria-label', `Restore ${item.shown}`);
+    li.append(th, span('rm-name', item.shown), span('rm-size', fmtBytes(item.bytes)), restore);
+    return li;
+  }
+  function paintRemoved() {
+    removedN.textContent = String(removedItems.length);
+    removedEmpty.textContent = `Empty · ${fmtBytes(removedItems.reduce((sum, i) => sum + i.bytes, 0))}`;
+    removedConfirmText.textContent = `Delete ${removedItems.length} for good?`;
+  }
+  /** The inline "for good?" in place of Empty, or Empty back. */
+  function askEmpty(on, focus = true) {
+    removedConfirm.hidden = !on;
+    removedEmpty.hidden = on;
+    if (focus) (on ? removedKeep : removedEmpty).focus();
+  }
+  async function openRemoved() {
+    let data;
+    try {
+      const res = await fetch('/api/removed');
+      data = await res.json();
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (err) {
+      console.warn('[removed] list', err);
+      showUndo('Couldn’t open Removed', false);
+      setTimeout(hideUndo, 4000);
+      return;
+    }
+    removedItems = data.items;
+    setRemovedCount(removedItems.length);
+    if (!removedItems.length) return;
+    removedList.replaceChildren(...removedItems.map(removedRow));
+    paintRemoved();
+    askEmpty(false, false);
+    removedDlg.hidden = false;   // data-modal moves focus in, and back to the opener on close
+    document.body.classList.add('modal-open');
+  }
+  function closeRemoved() {
+    if (removedDlg.hidden) return;
+    removedDlg.hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+  removedOpen?.addEventListener('click', openRemoved);
+  document.getElementById('removed-close')?.addEventListener('click', closeRemoved);
+  removedDlg?.addEventListener('click', (e) => { if (e.target === removedDlg) closeRemoved(); });
+  // Before the page's own Escape (which clears a selection behind the sheet).
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !removedDlg || removedDlg.hidden) return;
+    e.stopImmediatePropagation();
+    closeRemoved();
+  }, true);
+
+  removedList?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.rm-restore');
+    if (!btn) return;
+    const li = btn.closest('li');
+    const name = li.dataset.name;
+    btn.disabled = true;
+    let data;
+    try {
+      const res = await fetch('/api/removed/restore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+      data = await res.json();
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (err) {
+      console.warn('[removed] restore', name, err);
+      btn.disabled = false;
+      li.querySelector('.rm-size')?.replaceWith(span('rm-err', 'Couldn’t restore it'));
+      return;
+    }
+    // Back in the grid the way an upload arrives; already there if it was never really gone.
+    if (data.status === 'restored' && data.result) addCell(data.result);
+    removedItems = removedItems.filter((i) => i.name !== name);
+    const next = li.nextElementSibling || li.previousElementSibling;
+    li.remove();
+    setRemovedCount(data.left);
+    paintRemoved();
+    if (!removedItems.length) closeRemoved();
+    else next?.querySelector('.rm-restore')?.focus();
+  });
+
+  removedEmpty?.addEventListener('click', () => askEmpty(true));
+  removedKeep?.addEventListener('click', () => askEmpty(false));
+  removedDelete?.addEventListener('click', async () => {
+    // Only what the list showed: something removed since then is not deleted unseen.
+    const names = removedItems.map((i) => i.name);
+    removedDelete.disabled = removedKeep.disabled = true;
+    let data;
+    try {
+      const res = await fetch('/api/removed/empty', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ names }) });
+      data = await res.json();
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (err) {
+      console.warn('[removed] empty', err);
+      const text = document.getElementById('removed-confirm-text');
+      if (text) text.textContent = 'Couldn’t delete';
+      return;
+    } finally {
+      removedDelete.disabled = removedKeep.disabled = false;
+    }
+    removedItems = [];
+    removedList.replaceChildren();
+    askEmpty(false, false);
+    setRemovedCount(data.left);
+    closeRemoved();
+    // The link is gone with what it opened; focus lands somewhere that stays.
+    if (!data.left) document.getElementById('add-photos')?.focus();
+  });
 
   // One delegated listener for the whole grid, so cells added after load behave
   // exactly like the ones rendered on the server.
@@ -1248,12 +1546,10 @@ const accent = manifest.chapters[0]
       const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      return true;
+      return data; // truthy: the answer, for a caller that reads it
     } catch (err) {
       console.error(err);
       return false;
     }
   }
-
-  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 </script>

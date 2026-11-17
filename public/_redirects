@@ -1,0 +1,7 @@
+# Scout's place search and the pin's name. Nominatim sends no CORS header, so
+# the published page reaches it through this site's own origin, and reads the
+# answer itself (src/lib/scout/view/scout-api.ts). These rules live here rather
+# than in netlify.toml so they ship inside dist/client: a Netlify Drop deploy
+# of that folder gets search too. Query strings pass through.
+/nominatim/search   https://nominatim.openstreetmap.org/search   200!
+/nominatim/reverse  https://nominatim.openstreetmap.org/reverse  200!

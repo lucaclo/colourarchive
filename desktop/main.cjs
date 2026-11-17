@@ -7,10 +7,11 @@
 // window, and stops the server again when the app quits.
 //
 // Run it from the repository with `npm run app` (after `npm run app:build`);
-// `npm run app:dist` packages it into a .dmg.
+// `npm run app:dist` packages it into a .dmg, and the .zip updater.cjs installs.
 
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell, utilityProcess } = require('electron');
 const { ensureCerts, localHostName } = require('./certs.cjs');
+const { createUpdater, menuItems: updateMenuItems } = require('./updater.cjs');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -59,6 +60,9 @@ let lanState = null;
 // The same for the from-anywhere side.
 let remoteState = null;
 let passwordWindow = null;
+// Keeps the packaged app on the newest GitHub release (updater.cjs); its
+// state is a line in the app menu.
+const updater = createUpdater({ app, onChange: () => buildMenu() });
 
 // --- Settings -----------------------------------------------------------
 
@@ -558,14 +562,29 @@ async function signOutPhones() {
   dialog.showMessageBox(mainWindow ?? undefined, { type: 'info', message: 'Every phone is signed out', detail: 'They need the password again to open the archive.' });
 }
 
+// Background checks stay in the menu; only one asked for ends in a dialog.
+async function checkForUpdates() {
+  const res = await updater.check({ manual: true });
+  const then = 'It installs when you quit, or choose Restart to Update.';
+  const box = {
+    'up-to-date': { type: 'info', message: 'Colour Archive is up to date', detail: `Version ${res.version} is the newest.` },
+    downloading: { type: 'info', message: `Version ${res.version} is downloading`, detail: then },
+    ready: { type: 'info', message: `Version ${res.version} is ready`, detail: then },
+    error: { type: 'warning', message: 'Couldn’t check for updates', detail: res.error },
+  }[res.kind];
+  if (box) dialog.showMessageBox(mainWindow ?? startWindow ?? undefined, box);
+}
+
 function buildMenu() {
   const lanOn = Boolean(readSettings().lan);
   const remoteOn = Boolean(readSettings().remote);
+  const update = updater.status();
   const template = [
     {
       label: app.name,
       submenu: [
         { role: 'about' },
+        ...updateMenuItems(update, { check: () => checkForUpdates(), restart: () => updater.restart() }),
         { type: 'separator' },
         { label: 'Open at Login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
         { label: 'Let My iPad In', type: 'checkbox', checked: lanOn, click: (item) => setLan(item.checked) },
@@ -654,6 +673,7 @@ if (!app.requestSingleInstanceLock()) {
     // Only quiet when there's an archive to serve; a first run still asks.
     quiet = Boolean(app.getLoginItemSettings().wasOpenedAtLogin && readSettings().dataDir);
     buildMenu();
+    updater.start();
     start();
   });
 
@@ -670,4 +690,6 @@ if (!app.requestSingleInstanceLock()) {
     quitting = true;
     stopServer();
   });
+  // A downloaded version goes in once this process has gone.
+  app.on('will-quit', () => updater.installOnQuit());
 }

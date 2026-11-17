@@ -398,6 +398,37 @@ export function formatMinute(dayStart: Date, minute: number, timeZone: string): 
   return formatClock(new Date(dayStart.getTime() + minute * 60_000), timeZone);
 }
 
+/**
+ * The minute index that reads the same on the clock as `when` does.
+ *
+ * The slider counts whole minutes from solar midnight, which falls at an odd
+ * second, so its minutes straddle the clock's. Rounding or flooring the gap
+ * from solar midnight could land a minute off the time the list prints
+ * (Sunset 16:15 in the list, 16:14 on the slider). Counting whole clock
+ * minutes on both sides can't. Null outside the day.
+ */
+export function clockMinute(dayStart: Date, when: Date | null | undefined): number | null {
+  if (!when) return null;
+  const index = Math.floor(when.getTime() / 60_000) - Math.floor(dayStart.getTime() / 60_000);
+  return index >= 0 && index <= MINUTES_PER_DAY ? index : null;
+}
+
+/** Where each time-jump button puts the slider: the minute the day's list prints. */
+export function jumpMinutes(times: ReturnType<typeof sunTimes>): Record<string, number | null> {
+  const at = (when: Date | null | undefined) => clockMinute(times.dayStart, when);
+  const middle = (w: { start: Date; end: Date } | undefined) =>
+    w ? at(new Date((w.start.getTime() + w.end.getTime()) / 2)) : null;
+  return {
+    civilDawn: at(times.civilDawn),
+    sunrise: at(times.sunrise),
+    goldenMorning: middle(times.goldenHour[0]),
+    solarNoon: at(times.solarNoon),
+    goldenEvening: middle(times.goldenHour[1]),
+    sunset: at(times.sunset),
+    civilDusk: at(times.civilDusk),
+  };
+}
+
 interface LitWindow {
   lit: boolean;
   startMinute: number;

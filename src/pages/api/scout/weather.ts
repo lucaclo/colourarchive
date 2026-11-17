@@ -42,8 +42,14 @@ function todayFor(timeZone: string | null): string {
 // spot is exactly that question. A `date` at or after today changes nothing;
 // the live forecast already covers "now" through a week out on its own.
 export const GET: APIRoute = async ({ url }) => {
-  const lat = Number(url.searchParams.get('lat'));
-  const lon = Number(url.searchParams.get('lon'));
+  // Number('') and Number(null) are both 0: a missing coordinate must not
+  // become the Gulf of Guinea (R13-05).
+  const coord = (k: string) => {
+    const raw = url.searchParams.get(k)?.trim();
+    return raw ? Number(raw) : NaN;
+  };
+  const lat = coord('lat');
+  const lon = coord('lon');
   const bearingRaw = url.searchParams.get('bearing');
   const gateKmRaw = url.searchParams.get('gateKm');
   const dateRaw = url.searchParams.get('date');

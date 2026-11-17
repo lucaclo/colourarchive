@@ -29,6 +29,12 @@ export function hashBuffer(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex').slice(0, 16);
 }
 
+/** The readable part of an original's file name. Accents fold to their
+ *  letter ('café été' → 'cafe-ete') rather than dropping it ('caf-t-'). */
+export function slugName(base: string): string {
+  return base.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-zA-Z0-9-_]+/g, '-').slice(0, 60);
+}
+
 /** Save an uploaded/original file into /photos untouched (deduped by content
  *  hash). Returns the on-disk filename and the stable id. */
 export async function saveOriginal(
@@ -40,14 +46,24 @@ export async function saveOriginal(
   const ext = (path.extname(originalName) || '.jpg').toLowerCase();
   // Keep a readable original name but guarantee uniqueness with a short hash.
   const base = path.basename(originalName, path.extname(originalName)) || 'photo';
-  const safeBase = base.replace(/[^a-zA-Z0-9-_]+/g, '-').slice(0, 60);
+  const safeBase = slugName(base);
   const filename = `${safeBase}.${id}${ext}`;
   const dest = path.join(PHOTOS_DIR, filename);
   try {
     await fs.access(dest);
     return { id, filename, existed: true };
   } catch {
-    await fs.writeFile(dest, buf); // exact bytes, never re-encoded
+    // Exact bytes, never re-encoded. Written beside it and renamed in, so a
+    // write cut short (a full disk) never leaves a truncated original under
+    // the name a later upload would take as already saved.
+    const tmp = `${dest}.${process.pid}.part`;
+    try {
+      await fs.writeFile(tmp, buf);
+      await fs.rename(tmp, dest);
+    } catch (err) {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
     return { id, filename, existed: false };
   }
 }

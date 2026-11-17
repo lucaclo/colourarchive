@@ -4,6 +4,14 @@ dist
 public/img/*
 !public/img/.gitkeep
 sequence.json
+# The book before its last save (src/lib/book.ts) — local only
+book.json.bak
+# The magazine and its device photos (src/lib/paths.ts ZINE_PATH)
+/zine.json
+/zine.json.bak
+/zine/
+# A save's temp file (write, then rename), left only if it crashed between
+*.json.*.tmp
 # What the iCloud inbox imported — local only
 inbox.json
 # Push keys and subscriptions — private

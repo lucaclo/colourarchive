@@ -41,7 +41,8 @@ export const TRIMS: Record<TrimId, Trim> = {
   'a5-port': { label: 'A5 portrait', widthMM: 148, heightMM: 210, bleedMM: 3 },
 };
 export const DEFAULT_TRIM: TrimId = 'blurb-land';
-export const isTrimId = (v: unknown): v is TrimId => typeof v === 'string' && v in TRIMS;
+// Own keys only: `in` also finds 'toString' and 'constructor' on the prototype.
+export const isTrimId = (v: unknown): v is TrimId => typeof v === 'string' && Object.hasOwn(TRIMS, v);
 export const isTreatment = (v: unknown): v is Treatment => typeof v === 'string' && (TREATMENTS as readonly string[]).includes(v);
 
 export interface PagePhoto {

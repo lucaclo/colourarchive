@@ -26,7 +26,11 @@ const UA = {
   iphone26: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
   iphone18: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1',
   ipad: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
-  firefox: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.0; rv:131.0) Gecko/20100101 Firefox/131.0',
+  // Not a Mac: since the Mac app (8c9bf80) every Mac browser is offered it
+  // first, so the Chrome and Firefox paths are reached from other computers.
+  firefox: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0',
+  chrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  macChrome: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 };
 
 // Strings, not functions, for anything run in the page: see the note in
@@ -59,8 +63,17 @@ function watch(page: Page, problems: string[]) {
 }
 const read = (page: Page) => page.evaluate(READ) as Promise<Read>;
 
+test('any browser on a Mac is offered the Mac app', async () => {
+  const { page, ctx, problems } = await open('/get', { userAgent: UA.macChrome });
+  const r = await read(page);
+  assert.equal(r.label, 'Download for Mac');
+  assert.match(r.forLine, /Apple silicon/);
+  await ctx.close();
+  assert.deepEqual(problems, []);
+});
+
 test('a Chrome tab with no prompt shows the Chrome steps', async () => {
-  const { page, ctx, problems } = await open('/get');
+  const { page, ctx, problems } = await open('/get', { userAgent: UA.chrome });
   let r = await read(page);
   assert.equal(r.label, 'Install');
   assert.equal(r.forLine, 'For this computer');
@@ -76,7 +89,7 @@ test('a Chrome tab with no prompt shows the Chrome steps', async () => {
 
 for (const outcome of ['accepted', 'dismissed'] as const) {
   test(`one tap when Chrome offers to install (${outcome})`, async () => {
-    const { page, ctx, problems } = await open('/get');
+    const { page, ctx, problems } = await open('/get', { userAgent: UA.chrome });
     await page.evaluate(`(() => {
       const e = new Event('beforeinstallprompt', { cancelable: true });
       e.prompt = async () => { window.__prompted = (window.__prompted || 0) + 1; };

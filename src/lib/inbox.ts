@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { INBOX_LOG_PATH } from './paths';
 import { RAW_EXT, RAW_MESSAGE, ingestBatch } from './ingest-batch';
+import { readStore } from './manifest';
 
 // Issue #137: an inbox folder in iCloud Drive that Lightroom on the iPad
 // exports straight into, so adding a photo no longer needs the Mac's server
@@ -218,15 +219,21 @@ async function scanOnce(s: State): Promise<InboxLog> {
     }
     const items = [...bufs.keys()];
     const results = await ingestBatch(items.map((name) => ({ name, read: async () => bufs.get(name)! })));
+    const stored = new Set((await readStore()).map((p) => p.id));
     for (let i = 0; i < items.length; i++) {
       const name = items[i];
       const r = results[i];
-      if (r.status === 'added' || r.status === 'skipped') {
+      // "skipped" can mean another upload was adding the same picture at that
+      // moment; until it's really in the store, the inbox copy stays, and the
+      // next look at the folder settles it.
+      if (r.status === 'skipped' && !stored.has(r.id)) {
+        s.seen.delete(name);
+      } else if (r.status === 'added' || r.status === 'skipped') {
         if (r.status === 'added') added.push({ id: r.id, filename: r.filename, at: now });
         await fs.unlink(path.join(dir, name)).catch(() => {});
         s.seen.delete(name);
       } else {
-        const reason = r.error ?? 'It couldn’t be read.';
+        const reason = r.error ?? "Couldn't add this one";
         s.failed.set(failureKey(byName.get(name)!), reason);
         held.push({ name, reason, since: keepSince.get(name) ?? now });
       }

@@ -371,6 +371,12 @@ test('R5-6-H2 lightbox actions are offered only while the lightbox is open', asy
 
 // ── R5-7 sixteen pages from two nested sheets ──────────────────────────────
 
+/** Page 10's photo in the zine as saved on the Mac, once the 300 ms autosave has gone. */
+const savedPage10 = async (page: Page) => {
+  await page.waitForTimeout(900);
+  return page.evaluate(`fetch('/api/zine', { cache: 'no-store' }).then((r) => r.json()).then((j) => j.doc.pages[10].photo?.id)`);
+};
+
 test('R5-7-H1 sixteen pages: nine slides, no join across sheets, a two-page PDF, and back to eight losing nothing', async () => {
   const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 }, ignoreHTTPSErrors: true, serviceWorkers: 'block', acceptDownloads: true });
   const page = await ctx.newPage();
@@ -378,6 +384,9 @@ test('R5-7-H1 sixteen pages: nine slides, no join across sheets, a two-page PDF,
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(ORIGIN + '/book/zine');
   await page.waitForTimeout(1500);
+  // The zine lives on the Mac since round 13 (R13-41), so a new browser opens
+  // whatever was last saved: start from eight pages.
+  await page.locator('[data-format="8"]').click();
   await page.locator('[data-format="16"]').click();
   assert.deepEqual(await page.locator('#zn-rail li span').allTextContents(), [
     'Cover', 'Pages 2–3', 'Pages 4–5', 'Pages 6–7', 'Pages 8–9', 'Pages 10–11', 'Pages 12–13', 'Pages 14–15', 'Back cover',
@@ -397,12 +406,12 @@ test('R5-7-H1 sixteen pages: nine slides, no join across sheets, a two-page PDF,
   assert.match(text, /\/Count 2/);
   assert.equal(text.match(/\/Subtype \/Image/g)?.length, 2);
   // Page 9's photo survives a trip to eight pages and back.
-  const before = await page.evaluate(`JSON.parse(localStorage.getItem('zine:doc:v1')).pages[10].photo?.id`);
+  const before = await savedPage10(page);
   assert.ok(before);
   await page.locator('[data-format="8"]').click();
   assert.equal(await page.locator('#zn-rail li').count(), 5);
   await page.locator('[data-format="16"]').click();
-  assert.equal(await page.evaluate(`JSON.parse(localStorage.getItem('zine:doc:v1')).pages[10].photo?.id`), before);
+  assert.equal(await savedPage10(page), before);
   await page.locator('#zn-fold').click();
   await page.waitForTimeout(400);
   assert.ok(await page.locator('.zn-steps[data-for="16"]').isVisible());
@@ -416,6 +425,8 @@ test('R5-7-H2 eight pages is unchanged: five slides, join on 4–5, a one-page P
   const page = await ctx.newPage();
   await page.goto(ORIGIN + '/book/zine');
   await page.waitForTimeout(1500);
+  // Whatever the last test left on the Mac (R13-41): choose eight pages.
+  await page.locator('[data-format="8"]').click();
   assert.equal(await page.locator('[data-format="8"]').getAttribute('aria-checked'), 'true');
   assert.deepEqual(await page.locator('#zn-rail li span').allTextContents(), ['Cover', 'Pages 2–3', 'Pages 4–5', 'Pages 6–7', 'Back cover']);
   await page.locator('#zn-frombook').click();
