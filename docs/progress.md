@@ -3,8 +3,9 @@
 ## Now
 - `main` at 1ea6032: round 12 shipped (phone from anywhere, phone a11y pass).
 - Branch `workflow-omega`: this file, CLAUDE.md, worker agents, reflect skill.
-- Branch `round-13` (from workflow-omega): the sweep in `replica/round-13/audit.md` and
-  its fixes, batches 1–6 of `plan.md`. Everything but D1 (R13-06) is done.
+- Branch `round-13` (from workflow-omega), pushed at ed6f4ed: the sweep in
+  `replica/round-13/audit.md` and its fixes, batches 1–6 of `plan.md`. Everything but D1
+  (R13-06) is done. Netlify is live with this build (2026-11-17, static-only deploy).
 
 ## Next
 - Luca, D1 (R13-06): which data folder is the real one (repo vs `~/Pictures/Colour
@@ -23,7 +24,8 @@ One line per session, newest first: date · branch · what changed · what's ope
   6a/6b found 3 data-loss paths (failed zine move saved a blank zine, a second browser's
   zine stranded, Restore deleting a lone original) and 9 smaller ones, all fixed with
   tests. Saves checked on `npm run preview` and the app build. Phone sweep: every
-  control ≥ 36 px. Older e2e brought up to date (`/get` Mac path, server zine). D1 open.
+  control ≥ 36 px. Older e2e brought up to date (`/get` Mac path, server zine). Pushed
+  and deployed. D1 open; a short revealed Inspiration tile puts its credit mid-photo.
 - 2026-11-16 · round-13 · Batches 1–6 built (D2–D5 decided): versioned book saves, origin
   lock, clean imports, Scout phone search, phone reach, keyboard, words, zine on the Mac,
   Removed list.
