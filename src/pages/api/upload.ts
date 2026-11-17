@@ -7,10 +7,11 @@ export const prerender = false;
 // (lib/ingest-batch.ts). Runs entirely on this machine.
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const form = await request.formData();
-    const files = form.getAll('photos').filter((f): f is File => f instanceof File);
+    // A body that isn't a form (or none at all) has no files either.
+    const form = await request.formData().catch(() => null);
+    const files = form ? form.getAll('photos').filter((f): f is File => f instanceof File) : [];
     if (files.length === 0) {
-      return json({ ok: false, error: 'No files received.' }, 400);
+      return json({ ok: false, error: 'No files' }, 400);
     }
     const results = await ingestBatch(files.map((f) => ({ name: f.name, read: async () => Buffer.from(await f.arrayBuffer()) })));
     return json({

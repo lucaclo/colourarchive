@@ -528,14 +528,17 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           </button>
           <button class="lb-tool" id="lb-info" data-cmdk="Photo details" data-cmdk-keywords="info, exif" aria-label="Photo details" title="Photo details" aria-pressed="false"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r="0.6" fill="currentColor"/></svg></button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-similar" data-cmdk="Similar photos" data-cmdk-keywords="like this" aria-label="More like this in your archive" title="More like this in your archive">Similar</button>}
-          <a class="lb-tool lb-text" id="lb-plan" href="/scout" data-cmdk="Plan this shot again" data-cmdk-keywords="scout, lens, same light, again" title="Plan this shot again in Scout: its lens, its place, the next time the light stands there" hidden>Plan again</a>
-          <button class="lb-tool lb-text" id="lb-roll" data-cmdk="Same roll" data-cmdk-keywords="film" aria-label="The rest of this roll" title="The rest of this roll" aria-expanded="false" hidden>Same roll</button>
+          <a class="lb-tool lb-text lb-extra" id="lb-plan" href="/scout" data-cmdk="Plan this shot again" data-cmdk-keywords="scout, lens, same light, again" title="Plan this shot again in Scout: its lens, its place, the next time the light stands there" hidden>Plan again</a>
+          <button class="lb-tool lb-text lb-extra" id="lb-roll" data-cmdk="Same roll" data-cmdk-keywords="film" aria-label="The rest of this roll" title="The rest of this roll" aria-expanded="false" hidden>Same roll</button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-match" data-cmdk="Match this look" data-cmdk-keywords="lightroom, preset" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
           {/* Share to Scout's hotspots: the place goes out with the next publish. */}
-          {!STATIC && <button class="lb-tool lb-text" id="lb-share" data-cmdk="Share to Scout" data-cmdk-keywords="hotspot, publish, place, map" aria-pressed="false" title="Show this photo on the published Scout’s photo hotspots, at its place, credited to Colour Archive">Share</button>}
+          {!STATIC && <button class="lb-tool lb-text lb-extra" id="lb-share" data-cmdk="Share to Scout" data-cmdk-keywords="hotspot, publish, place, map" aria-pressed="false" title="Show this photo on the published Scout’s photo hotspots, at its place, credited to Colour Archive">Share</button>}
           {!STATIC && (
-            <button class="lb-tool lb-text" id="lb-chapter" data-cmdk="Move to another chapter" data-cmdk-keywords="chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">Chapter</button>
+            <button class="lb-tool lb-text lb-extra" id="lb-chapter" data-cmdk="Move to another chapter" data-cmdk-keywords="chapter" aria-label="Move to another chapter" title="Move to another chapter" aria-haspopup="menu" aria-expanded="false">Chapter</button>
           )}
+          {/* Phone only: the tools above marked lb-extra open in a row above (R13-19). */}
+          <button class="lb-tool lb-text lb-more" id="lb-more" type="button" aria-expanded="false">More</button>
+          <span class="lb-break" aria-hidden="true"></span>
           <button class="lb-tool lb-close" id="lb-close" aria-label="Close" title="Close"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
         </div>
         {!STATIC && (
@@ -909,6 +912,9 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     bar.classList.toggle('hidden', !overview && y > lastY && y > 90);
     lastY = y;
   });
+  // Slid away, its buttons were still Tab stops you couldn't see (R13-22):
+  // focus coming in brings the bar back.
+  bar?.addEventListener('focusin', () => bar.classList.remove('hidden'));
 
   // --- Fade photos in on load --------------------------------------------
   const markLoaded = (img) => {
@@ -1767,19 +1773,25 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   // byKeyboard: focus lands on Close, ready for the next key. From a tap or a
   // deep link it lands on the viewer itself — Chromium otherwise rings the
   // Close button on every photo you open, which reads as a selected state.
-  // On a phone the action bar scrolls; a fade at its right end says there's
-  // more (Share, Chapter) for as long as there is.
+  // On a phone, Plan again, Same roll, Share and Chapter wait behind More, in
+  // a row above the bar. More is there only when one of them is.
   const lbTools = lb.querySelector('.lb-tools');
-  const markToolsEnd = () => {
-    if (!lbTools) return;
-    lbTools.classList.toggle('more-right', lbTools.scrollWidth - lbTools.clientWidth - lbTools.scrollLeft > 2);
-  };
-  lbTools?.addEventListener('scroll', markToolsEnd, { passive: true });
-  if (lbTools) {
-    new ResizeObserver(markToolsEnd).observe(lbTools);
-    // Plan again and Same roll come and go photo by photo.
-    new MutationObserver(markToolsEnd).observe(lbTools, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  const lbMoreBtn = document.getElementById('lb-more');
+  const lbExtras = lbTools ? [...lbTools.querySelectorAll('.lb-extra')] : [];
+  function setLbMore(open) {
+    lbTools?.classList.toggle('more-open', open);
+    lbMoreBtn?.setAttribute('aria-expanded', String(open));
   }
+  const markToolsEnd = () => {
+    if (!lbMoreBtn) return;
+    const none = !lbExtras.some((el) => !el.hidden);
+    // Only on a change: setting `hidden` again would wake the observer below.
+    if (lbMoreBtn.hidden !== none) lbMoreBtn.hidden = none;
+    if (none && lbTools?.classList.contains('more-open')) setLbMore(false);
+  };
+  lbMoreBtn?.addEventListener('click', () => setLbMore(!lbTools?.classList.contains('more-open')));
+  // Plan again and Same roll come and go photo by photo.
+  if (lbTools) new MutationObserver(markToolsEnd).observe(lbTools, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
 
   function openLightbox(frame, byKeyboard = false) {
     const i = frames.indexOf(frame);
@@ -1806,6 +1818,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     lbPushed = false;
     stopSlideshow();
     closeChapters();
+    setLbMore(false);
     unlockScroll();
     // After the unlock, so the thumbnail is measured where it will really be.
     flyOut(frames[lbIndex]);
@@ -1963,7 +1976,9 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   const lbPrev = () => lbStep(-1);
   const lbOpen = () => lb && !lb.hidden;
 
-  document.getElementById('lb-close')?.addEventListener('click', closeLightbox);
+  // Not closeLightbox itself: the click event would arrive as `fromHistory` and
+  // skip the history.back(), leaving a dead Back step (R13-17).
+  document.getElementById('lb-close')?.addEventListener('click', () => closeLightbox());
   document.getElementById('lb-next')?.addEventListener('click', lbNext);
   document.getElementById('lb-prev')?.addEventListener('click', lbPrev);
   lb?.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
@@ -2000,6 +2015,16 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     infoBtn?.setAttribute('aria-pressed', String(on));
   };
   infoBtn?.addEventListener('click', toggleDetails);
+
+  /** Close the innermost open part of the lightbox. True when there was one. */
+  function closeLightboxPart() {
+    if (lbTools?.classList.contains('more-open')) { setLbMore(false); lbMoreBtn?.focus(); return true; }
+    if (note && !note.hidden) { note.hidden = true; return true; }
+    if (rollStrip && !rollStrip.hidden) { rollStrip.hidden = true; rollBtn?.setAttribute('aria-expanded', 'false'); rollBtn?.focus(); return true; }
+    if (lb.classList.contains('details')) { toggleDetails(); infoBtn?.focus(); return true; }
+    if (slideTimer) { stopSlideshow(); return true; }
+    return false;
+  }
   playBtn?.addEventListener('click', toggleSlideshow);
 
   // ======================================================================
@@ -2168,8 +2193,22 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
 
   // --- Deep-linkable URL: #photo=<id> when the viewer is open --------------
   let lbPushed = false;
+  /** The address for the filters on screen: view, genre and q are this page's;
+   *  anything else (ColourFilter's ?colour=) is kept as it is (R13-18). */
+  function filterUrl() {
+    const p = new URLSearchParams(location.search);
+    if (view !== 'all') p.set('view', view); else p.delete('view');
+    if (genre !== 'all') p.set('genre', genre); else p.delete('genre');
+    const q = searchInput?.value.trim();
+    if (q) p.set('q', q); else p.delete('q');
+    const qs = p.toString();
+    return location.pathname + (qs ? `?${qs}` : '');
+  }
+  function writeFilters() {
+    history.replaceState(history.state, '', filterUrl() + location.hash);
+  }
   function syncUrl(push) {
-    const base = location.pathname + (view !== 'all' ? `?view=${view}` : '');
+    const base = filterUrl();
     const hash = lbOpen() && lbIndex >= 0 ? `#photo=${frames[lbIndex].dataset.id}` : '';
     // One entry for "a photo is open" — stepping through photos rewrites it, so
     // Back returns to the archive rather than replaying every frame you saw.
@@ -2239,6 +2278,9 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     if (lbOpen()) {
       trapTab(e, lb);
       if (e.key === 'Escape' && chaptersOpen()) { e.preventDefault(); closeChapters(); lbChapterBtn?.focus(); }
+      // The innermost open part first, so Escape from Details, the roll, a note
+      // or the slideshow leaves the photo open (R13-21).
+      else if (e.key === 'Escape' && closeLightboxPart()) e.preventDefault();
       else if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); lbNext(); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); lbPrev(); }
@@ -2637,6 +2679,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     viewToggle?.querySelectorAll('[data-view]').forEach((b) =>
       b.setAttribute('aria-pressed', String(b.dataset.view === v)));
     savePos();
+    writeFilters();
   }
   viewToggle?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-view]');
@@ -2687,6 +2730,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     layoutAll();      // repack visible frames into tight columns
     refreshEmpties();
     savePos();
+    writeFilters();
   }
   genreBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2728,6 +2772,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   }
   async function runSearch(q) {
     const token = ++searchToken;
+    writeFilters();
     // A query hides inside the closed menu, so its button carries a dot.
     genreDrop?.classList.toggle('searching', Boolean(q));
     if (!q) { searchBusy(false); textTray = null; paintTray(); applySearchIds(null); return; }
@@ -2802,6 +2847,9 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     // hand one over.
     const q = params.get('q');
     if (q && searchInput) { searchInput.value = q; runSearch(q); }
+    const g = params.get('genre');
+    const gItem = g && g !== 'all' ? genreMenu?.querySelector(`[data-genre="${CSS.escape(g)}"]`) : null;
+    if (gItem) applyGenre(g, gItem.dataset.label || gItem.textContent.trim());
     goToChapterFromHash();
   })();
 

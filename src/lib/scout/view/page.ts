@@ -139,6 +139,7 @@ import { disablePush, enablePush, isMuted, pushOn, pushSupported, syncPush, test
 import {
   MINUTES_PER_DAY,
   PHASE_LABEL,
+  clockMinute,
   describeLightWindows,
   describeNextChange,
   formatClock,
@@ -148,6 +149,7 @@ import {
   formatShadowRatio,
   formatZoneAbbreviation,
   isoDateIn,
+  jumpMinutes,
   scoutDay,
   shadeOverlayGradient,
   shiftIsoDate,
@@ -2010,6 +2012,10 @@ export async function startScout(): Promise<void> {
     // and letting it through relocated the pin mid-orbit, which is exactly
     // the thing free-look exists to prevent.
     if (freeLookCleanup) return;
+    // With Layers, Share or the Milky Way switches open, this click is the
+    // one that closes them (the document listener further down, which runs
+    // after this one) and nothing else. It used to move the pin as well.
+    if (['layers', 'share-menu', 'night-panel'].some((id) => !$<HTMLElement>(id).hidden)) return;
     // A photo from "Your photos" is waiting for its place — this tap is that.
     if (mineLayer?.consumeClick({ lat: event.lngLat.lat, lon: event.lngLat.lng })) return;
     // Nowhere chosen yet. A tap can choose the first spot, but only once the map
@@ -2217,16 +2223,53 @@ export async function startScout(): Promise<void> {
     pin.setLngLat([centre.lon, centre.lat]).addTo(map!);
   }
 
+  /**
+   * Fit the ring into the part of the map the sheet leaves. MapLibre adds this
+   * margin to the map's own padding (the sheet), and on the globe a fit that
+   * can't be made throws instead of returning nothing. On a phone with the
+   * sheet up it threw, and the place was never saved (R13-30). So the margin
+   * shrinks to what is free, and any failure falls back to flying to the centre.
+   */
   function frameRing() {
     if (!centre || !map) return;
+    const m = map;
     const [west, south, east, north] = boundingBox(centre, radiusKm * 1000);
-    map.fitBounds(
-      [
-        [west, south],
-        [east, north],
-      ],
-      { padding: { top: 70, bottom: 190, left: 70, right: 70 }, duration: 900, maxZoom: 15 },
-    );
+    const bounds: [[number, number], [number, number]] = [
+      [west, south],
+      [east, north],
+    ];
+    const own = m.getPadding();
+    const { clientWidth: w, clientHeight: h } = m.getContainer();
+    const freeW = Math.max(0, w - (own.left ?? 0) - (own.right ?? 0));
+    const freeH = Math.max(0, h - (own.top ?? 0) - (own.bottom ?? 0));
+    // The desk's margins, scaled down so they never take more than half the free space.
+    const sx = Math.min(1, (freeW * 0.5) / 140);
+    const sy = Math.min(1, (freeH * 0.5) / 260);
+    const padding = {
+      top: Math.floor(70 * sy),
+      bottom: Math.floor(190 * sy),
+      left: Math.floor(70 * sx),
+      right: Math.floor(70 * sx),
+    };
+    try {
+      if (freeW > 40 && freeH > 40 && m.cameraForBounds(bounds, { padding, maxZoom: 15 })) {
+        m.fitBounds(bounds, { padding, duration: 900, maxZoom: 15 });
+        return;
+      }
+    } catch (err) {
+      console.warn('[scout] fitting the ring failed; flying to the centre instead', err);
+    }
+    // The radius takes about 40% of the shorter free side. Metres per pixel at
+    // zoom z on 512 px tiles: 40 075 017 · cos(lat) / (512 · 2^z).
+    const span = Math.max(40, Math.min(freeW, freeH)) * 0.42;
+    const metresPerPx = (radiusKm * 1000) / span;
+    const cosLat = Math.max(0.01, Math.cos((centre.lat * Math.PI) / 180));
+    const zoom = Math.min(15, Math.max(1, Math.log2((40_075_017 * cosLat) / (512 * metresPerPx))));
+    try {
+      m.flyTo({ center: [centre.lon, centre.lat], zoom, duration: 900 });
+    } catch (err) {
+      console.warn('[scout] flying to the place failed', err);
+    }
   }
 
   function drawSun() {
@@ -4862,14 +4905,14 @@ export async function startScout(): Promise<void> {
             when.textContent = formatClock(row.start, timeZone);
           }
 
-          const target = row.start && !pick ? minuteFor(row.start) : null;
+          const target = row.start && !pick ? eventMinute(row.start) : null;
           if (pick) button.disabled = !row.start;
           else if (target == null) button.disabled = true;
           // Kept on the element so the highlight pass can read the window back
           // without recomputing every event time.
           if (target != null) {
             when.dataset.from = String(target);
-            when.dataset.to = String(row.end ? (minuteFor(row.end) ?? target) : target);
+            when.dataset.to = String(row.end ? (eventMinute(row.end) ?? target) : target);
           }
 
           button.append(name, when);
@@ -4891,7 +4934,7 @@ export async function startScout(): Promise<void> {
       tomorrowRows = morningRows(sunEventRows(next.times));
       build(tomorrowRows, $('events-tomorrow'), (row) => {
         setDate(nextIso);
-        const target = row.start ? minuteFor(row.start) : null;
+        const target = row.start ? eventMinute(row.start) : null;
         if (target != null) setMinute(target);
       });
     }
@@ -5526,37 +5569,22 @@ export async function startScout(): Promise<void> {
 
   /**
    * Index into the day for an instant, or null when it falls outside it.
-   *
-   * `bias` decides which side of the minute boundary to land on. The slider's
-   * grain is a minute and the sun crosses the horizon at about a fifth of a
-   * degree per minute, so rounding to nearest can put "Sunrise" a shade *below*
-   * the sunrise threshold — you press the button and are told the sun is down.
+   * Rounded to the nearest minute; a named event (sunrise, sunset) goes
+   * through `eventMinute` instead, so it lands on the minute the list prints.
    */
-  function minuteFor(
-    when: Date | null | undefined,
-    bias: 'nearest' | 'after' | 'before' = 'nearest',
-  ): number | null {
+  function minuteFor(when: Date | null | undefined): number | null {
     if (!when || !day) return null;
-    const exact = (when.getTime() - day.dayStart.getTime()) / 60_000;
-    const round = bias === 'after' ? Math.ceil : bias === 'before' ? Math.floor : Math.round;
-    const index = round(exact);
+    const index = Math.round((when.getTime() - day.dayStart.getTime()) / 60_000);
     return index >= 0 && index <= 1440 ? index : null;
   }
 
+  /** The minute the day's list prints for an event, so a jump lands on it. */
+  function eventMinute(when: Date | null | undefined): number | null {
+    return day ? clockMinute(day.dayStart, when) : null;
+  }
+
   function jumpTargets(): Record<string, number | null> {
-    if (!day) return {};
-    const golden = day.times.goldenHour;
-    const middle = (w: { start: Date; end: Date }) =>
-      new Date((w.start.getTime() + w.end.getTime()) / 2);
-    return {
-      civilDawn: minuteFor(day.times.civilDawn, 'after'),
-      sunrise: minuteFor(day.times.sunrise, 'after'),
-      goldenMorning: golden[0] ? minuteFor(middle(golden[0])) : null,
-      solarNoon: minuteFor(day.times.solarNoon),
-      goldenEvening: golden[1] ? minuteFor(middle(golden[1])) : null,
-      sunset: minuteFor(day.times.sunset, 'before'),
-      civilDusk: minuteFor(day.times.civilDusk, 'before'),
-    };
+    return day ? jumpMinutes(day.times) : {};
   }
 
   function refreshJumps() {
@@ -5860,12 +5888,13 @@ export async function startScout(): Promise<void> {
     // move, just triggered by a different one.
     gapPanel.restate();
     tidePanel.restate();
-    if (refit) frameRing();
     void loadWeather();
     void loadPhotos();
     save();
     // A searched place carries its own zone; a tapped point waits for its name.
     if (place.kind !== 'point') afterPlaceKnown();
+    // Last, so a camera that can't move never strands the place (R13-30).
+    if (refit) frameRing();
   }
 
   /** The pin was dragged: keep everything, ask what the new spot is called. */
@@ -7998,6 +8027,70 @@ export async function startScout(): Promise<void> {
     if (open) $<HTMLElement>('night-panel').hidden = true;
   });
 
+  /* ── Share (R13-34) ─────────────────────────────────────────────────────
+     The five ways to take this view with you, off the sheet head instead of
+     the foot of Layers. Non-modal like Layers: a click outside or Escape
+     closes it. It lives outside the sheet, which clips, so it is placed
+     beside the button and follows it while the sheet changes height. */
+
+  function placeShare() {
+    const menu = $<HTMLElement>('share-menu');
+    if (menu.hidden) return;
+    const stage = (menu.parentElement ?? document.body).getBoundingClientRect();
+    const at = $('share-button').getBoundingClientRect();
+    const gap = 8;
+    // Below the button when it sits high (the desk sidebar, a full sheet),
+    // above it when it sits low (the phone's sheet at peek or half).
+    const below = at.top - stage.top < stage.bottom - at.bottom;
+    // Opening upwards, it clears the top of the sheet so the grabber stays
+    // in sight, not only the button.
+    const dock = $('dock').getBoundingClientRect();
+    const above = dock.top < at.top && dock.bottom > at.top ? dock.top : at.top;
+    menu.style.right = `${Math.max(gap, stage.right - at.right)}px`;
+    menu.style.top = below ? `${at.bottom - stage.top + gap}px` : '';
+    menu.style.bottom = below ? '' : `${stage.bottom - above + gap}px`;
+    const room = below ? stage.bottom - at.bottom : above - stage.top;
+    menu.style.maxHeight = `${Math.max(120, room - 2 * gap)}px`;
+  }
+
+  function closeShare({ refocus = false } = {}) {
+    const menu = $<HTMLElement>('share-menu');
+    if (menu.hidden) return;
+    menu.hidden = true;
+    $('share-button').setAttribute('aria-expanded', 'false');
+    if (refocus) $<HTMLButtonElement>('share-button').focus({ preventScroll: true });
+  }
+
+  on('share-button', 'click', () => {
+    const menu = $<HTMLElement>('share-menu');
+    if (!menu.hidden) {
+      closeShare();
+      return;
+    }
+    menu.hidden = false;
+    $('share-button').setAttribute('aria-expanded', 'true');
+    placeShare();
+  });
+  new ResizeObserver(placeShare).observe($('dock'));
+  addEventListener('resize', placeShare);
+
+  // Escape puts Layers or Share away and hands focus back to its button.
+  // Stopped here so the same press doesn't also drop the phone's sheet or
+  // leave night mode.
+  document.addEventListener('keydown', (event) => {
+    const layers = $<HTMLElement>('layers');
+    const share = $<HTMLElement>('share-menu');
+    if (event.key !== 'Escape' || event.defaultPrevented || (layers.hidden && share.hidden)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!share.hidden) closeShare({ refocus: true });
+    if (!layers.hidden) {
+      layers.hidden = true;
+      $('layers-button').setAttribute('aria-expanded', 'false');
+      $<HTMLButtonElement>('layers-button').focus({ preventScroll: true });
+    }
+  });
+
   /**
    * Which of the night's layers this button switched on, so that switching it
    * off puts back what was there rather than what it assumes was there.
@@ -9404,7 +9497,12 @@ export async function startScout(): Promise<void> {
   function renderStar() {
     const star = $<HTMLButtonElement>('star');
     star.hidden = !centre;
-    if (!centre) return;
+    // Share sits beside it and needs a place for the same reason.
+    $<HTMLButtonElement>('share-button').hidden = !centre;
+    if (!centre) {
+      closeShare();
+      return;
+    }
     const kept = indexOfSpot(keptSpots, centre) !== -1;
     star.setAttribute('aria-pressed', String(kept));
     star.title = kept ? 'Kept. Press to forget' : 'Keep this spot';
@@ -9848,10 +9946,11 @@ export async function startScout(): Promise<void> {
   });
 
   on('open-month', 'click', () => {
-    // The layers panel is where the button lives, and leaving it standing under
+    // The share menu is where the button lives, and leaving it standing under
     // a full-screen sheet means finding it still open on the way back out.
-    $<HTMLElement>('layers').hidden = true;
-    $<HTMLButtonElement>('layers-button').setAttribute('aria-expanded', 'false');
+    // The button goes with the menu, so focus waits on the share button:
+    // that's where the grid (data-modal) hands it back.
+    closeShare({ refocus: true });
     void ensureMonthSheet().then((sheet) => sheet.open());
   });
 
@@ -10971,7 +11070,7 @@ export async function startScout(): Promise<void> {
 
     if (event.key === 'Home' || event.key === 'End') {
       const times = day.times;
-      const edge = minuteFor(event.key === 'Home' ? times.sunrise : times.sunset, 'after');
+      const edge = eventMinute(event.key === 'Home' ? times.sunrise : times.sunset);
       if (edge != null) {
         event.preventDefault();
         handsOnTheClock();
@@ -11198,6 +11297,7 @@ export async function startScout(): Promise<void> {
     if (!target.closest('#night-panel') && !target.closest('#night-button')) {
       $<HTMLElement>('night-panel').hidden = true;
     }
+    if (!target.closest('#share-menu') && !target.closest('#share-button')) closeShare();
     // composedPath, not closest: paging the month rebuilds the grid, so the
     // clicked day can already be detached by the time this runs.
     const path = event.composedPath();

@@ -1120,6 +1120,7 @@ const credited = favourites.length ? [] : people
     transition: background var(--dur-fast) var(--ease);
   }
   .ph-chip:hover { background: var(--fill-hover); }
+  @media (pointer: coarse) { .ph-chip { min-height: var(--hit); } }
   .ph-chip span { font-family: var(--font-data); color: var(--muted); margin-left: 0.2rem; }
   .ph-credited {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; margin: 0.9rem 0 0;
@@ -1175,7 +1176,10 @@ const credited = favourites.length ? [] : people
   .ph-links :global(a:hover) { text-decoration: underline; text-underline-offset: 3px; }
   .ph-links :global(.ph-unlink) { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 0.3rem; font-size: 0.9rem; opacity: 0; transition: opacity 140ms; }
   .ph-meta:hover :global(.ph-unlink), .ph-links :global(.ph-unlink:focus-visible) { opacity: 1; }
-  @media (hover: none), (pointer: coarse) { .ph-links :global(.ph-unlink) { opacity: 0.7; } }
+  /* 36px to hit on touch, set off from the link it sits beside (R13-25). */
+  @media (hover: none), (pointer: coarse) {
+    .ph-links :global(.ph-unlink) { opacity: 0.7; min-width: var(--hit); min-height: var(--hit); display: inline-flex; align-items: center; justify-content: center; margin-left: 0.25rem; }
+  }
   .ph-look { margin: 0.5rem 0 0; font-family: var(--font-note); font-style: italic; font-size: var(--t-note); color: var(--fg); min-height: 1.2em; }
   .ph-look:empty { min-height: 0; margin: 0; }
   .ph-match { margin-top: 0.8rem; }

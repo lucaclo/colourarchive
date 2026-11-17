@@ -86,6 +86,12 @@ export const BOOK_PATH = kept('src', 'data', 'book.json');
 // Print PDFs built from the book (api/book/pdf). Regenerated on demand,
 // large, and full of originals, so git-ignored.
 export const BOOK_PRINT_DIR = kept('.book-print');
+// The magazine (/book/zine), kept here rather than in one browser so the Mac,
+// the iPad and the phone open the same one (round 13, D2). Photos added from
+// a device go in ZINE_PHOTOS_DIR by key. Both git-ignored: a zine is personal
+// and its photos aren't in the archive.
+export const ZINE_PATH = kept('zine.json');
+export const ZINE_PHOTOS_DIR = kept('zine');
 export const NOTES_PATH = kept('src', 'data', 'notes.json');
 // Scout's curated list of named photographers to look for near a spot — see
 // `scout/sources/notable.ts`'s header. Hand-edited, like NOTES_PATH, so it is

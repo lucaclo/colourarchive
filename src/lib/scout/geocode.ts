@@ -36,7 +36,8 @@ export interface Place {
   detail: string;
   lat: number;
   lon: number;
-  /** OSM's own classification: city, suburb, peak, viewpoint… */
+  /** What it is, in a plain word (City, Pier, Street), or '' when OSM's class
+   *  has none. `placeKind` makes it; 'point' marks a bare coordinate. */
   kind: string;
   /**
    * IANA zone for the coordinates — "Asia/Tokyo", not an offset.
@@ -78,6 +79,10 @@ function serialise<T>(task: () => Promise<T>): Promise<T> {
 /** Bumped when the cached shape changes, so stale entries are ignored rather
  *  than served without their newer fields. */
 const CACHE_VERSION = 2;
+/** Searches only: from 3, each place is listed once with a plain word for what
+ *  it is. Reverse lookups stay on 2, since they only read `kind` for 'point'
+ *  and re-asking for every placed photo would cost a second each. */
+const SEARCH_CACHE_VERSION = 3;
 
 // Places don't move, so an entry is never stale by content — but one bumping
 // CACHE_VERSION orphans every file under the old hash forever, and a query
@@ -86,9 +91,9 @@ const CACHE_VERSION = 2;
 const GEOCODE_MAX_AGE_MS = 180 * 24 * 60 * 60_000;
 sweepStaleCache(SCOUT_GEOCODE_DIR, GEOCODE_MAX_AGE_MS).catch(() => {});
 
-const cacheKey = (query: string, limit: number) =>
+const cacheKey = (query: string, limit: number, version = CACHE_VERSION) =>
   createHash('sha1')
-    .update(`v${CACHE_VERSION} ${normalise(query)} ${limit}`)
+    .update(`v${version} ${normalise(query)} ${limit}`)
     .digest('hex')
     .slice(0, 20);
 
@@ -143,6 +148,71 @@ interface NominatimResult {
   boundingbox?: [string, string, string, string];
 }
 
+/** OSM classes whose own name isn't a word a person would use. */
+const KIND_WORDS: Record<string, string> = {
+  'man_made/pier': 'Pier',
+  'man_made/lighthouse': 'Lighthouse',
+  'man_made/tower': 'Tower',
+  'man_made/bridge': 'Bridge',
+  'man_made/breakwater': 'Breakwater',
+  'man_made/windmill': 'Windmill',
+  'tourism/attraction': 'Attraction',
+  'tourism/viewpoint': 'Viewpoint',
+  'tourism/museum': 'Museum',
+  'tourism/gallery': 'Gallery',
+  'tourism/artwork': 'Artwork',
+  'tourism/hotel': 'Hotel',
+};
+
+/** Classes that already read as plain words, as Nominatim's `addresstype` or `type`. */
+const PLAIN_KINDS = new Set([
+  'city', 'town', 'village', 'hamlet', 'suburb', 'neighbourhood', 'quarter', 'borough',
+  'county', 'state', 'region', 'province', 'country', 'municipality', 'island', 'islet',
+  'peak', 'volcano', 'beach', 'bay', 'cliff', 'cape', 'glacier', 'valley', 'ridge',
+  'park', 'garden', 'forest', 'wood', 'lake', 'river', 'waterfall', 'reservoir',
+  'castle', 'monument', 'memorial', 'ruins', 'church', 'cathedral', 'station', 'square',
+]);
+
+/**
+ * A plain word for what a search result is: Pier, not "man made". Streets are
+ * Street, amenities say their type (Cafe, Library), anything else either
+ * already reads as a word (City, Peak) or gets no label at all.
+ */
+export function placeKind(category = '', type = '', addresstype = ''): string {
+  const word =
+    KIND_WORDS[`${category}/${type}`] ??
+    (category === 'highway' || addresstype === 'road' ? 'street' : null) ??
+    (category === 'amenity' && type ? type : null) ??
+    (PLAIN_KINDS.has(addresstype) ? addresstype : null) ??
+    (PLAIN_KINDS.has(type) ? type : null) ??
+    '';
+  const spaced = word.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Each place once. Nominatim can return the same pier as a way and as a node:
+ * same name, same address, a point apart. A later result is dropped when it
+ * has an earlier one's name and sits within 1e-4° of it, or has its name and
+ * address and falls inside its bounds. The first is kept.
+ */
+export function dedupePlaces(places: Place[]): Place[] {
+  const kept: Place[] = [];
+  const key = (s: string) => s.trim().toLowerCase();
+  const NEAR = 1e-4 + 1e-9; // within 1e-4°, with room for float error
+  for (const place of places) {
+    const repeat = kept.some((k) => {
+      if (key(k.name) !== key(place.name)) return false;
+      if (Math.abs(k.lat - place.lat) <= NEAR && Math.abs(k.lon - place.lon) <= NEAR) return true;
+      if (key(k.detail) !== key(place.detail) || !k.bounds) return false;
+      const [west, south, east, north] = k.bounds;
+      return place.lat >= south && place.lat <= north && place.lon >= west && place.lon <= east;
+    });
+    if (!repeat) kept.push(place);
+  }
+  return kept;
+}
+
 function toPlace(raw: NominatimResult): Place | null {
   const lat = Number(raw.lat);
   const lon = Number(raw.lon);
@@ -162,7 +232,7 @@ function toPlace(raw: NominatimResult): Place | null {
     detail: rest.slice(0, 3).join(', '),
     lat: safeLat,
     lon: safeLon,
-    kind: raw.addresstype || raw.type || raw.category || 'place',
+    kind: placeKind(raw.category, raw.type, raw.addresstype),
     // tz-lookup covers the whole globe including ocean, but a thrown lookup
     // should cost the time display, not the whole search result.
     timeZone: safeTimeZone(safeLat, safeLon),
@@ -192,7 +262,7 @@ export async function searchPlaces(query: string, limit = 6): Promise<Place[]> {
   if (trimmed.length < 2) return [];
   const bounded = Math.min(10, Math.max(1, Math.floor(limit)));
 
-  const key = cacheKey(trimmed, bounded);
+  const key = cacheKey(trimmed, bounded, SEARCH_CACHE_VERSION);
   const cached = await readCache(key);
   if (cached) return cached;
 
@@ -212,7 +282,7 @@ export async function searchPlaces(query: string, limit = 6): Promise<Place[]> {
     }
     const body = (await response.json()) as NominatimResult[];
     if (!Array.isArray(body)) throw new GeocodeError('Nominatim sent something unexpected.');
-    return body.map(toPlace).filter((p): p is Place => p !== null);
+    return dedupePlaces(body.map(toPlace).filter((p): p is Place => p !== null));
   });
 
   await writeCache(key, trimmed, places);

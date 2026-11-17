@@ -688,6 +688,7 @@ const accent = manifest.chapters[0]
   .cell-who:first-child { margin-left: 0; }
   .cell-who { position: relative; }
   .cell-who::after { content: ''; position: absolute; inset: -5px -4px; }
+  @media (pointer: coarse) { .cell-who::after { inset: -11px -4px; } }
   .cell-who:hover { text-decoration-color: #fff; }
   .cell-remove { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; background: color-mix(in oklab, #000 55%, transparent); color: #fff; font-size: 15px; line-height: 26px; text-align: center; opacity: 0; transition: opacity 140ms; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); }
   .insp-frame:hover .cell-remove, .insp-frame:focus-within .cell-remove { opacity: 1; }
@@ -718,6 +719,19 @@ const accent = manifest.chapters[0]
   .group-tray-find:hover { background: color-mix(in oklab, var(--fg) 85%, var(--accent)); }
   .group-tray-clear { background: transparent; color: var(--muted); padding: 0.48rem 0.4rem; font-size: var(--t-caption); }
   .group-tray-clear:hover { color: var(--fg); }
+  /* A phone: it wrapped off both edges as one centred line (R13-26). Edge to
+     edge instead, wrapping, with buttons a thumb can hit. */
+  @media (max-width: 640px) {
+    .group-tray {
+      left: var(--edge); right: var(--edge); transform: translateY(12px);
+      flex-wrap: wrap; justify-content: center; gap: 0.4rem 0.5rem;
+      padding: 0.5rem 0.6rem; border-radius: var(--r-lg);
+    }
+    .group-tray.show { transform: none; }
+    .group-tray-count { flex: 1 0 100%; text-align: center; padding: 0; }
+    .group-tray button { min-height: var(--hit); }
+  }
+  @media (max-width: 640px) and (prefers-reduced-motion: reduce) { .group-tray { transform: none; } }
 
   /* Overlay entrance: a quick scale+fade, matching the archive's own lightbox
      — these three full-screen panels used to snap open instantly with no
@@ -1601,6 +1615,11 @@ const accent = manifest.chapters[0]
     .insp-collage { columns: 2; column-gap: 4px; }
     .insp-frame { margin-bottom: 4px; }
     .insp-frame .src { font-size: 0.6875rem; padding: 0.4rem 0.45rem 0.4rem 1.9rem; }
+    /* A tapped tile's bottom corners belong to "+ group" and Match; on a
+       two-up tile a long credit ran under Match, so it steps up above them. */
+    @media (hover: none), (pointer: coarse) {
+      .insp-frame:is(.is-active, :focus-within) figcaption.src { padding-bottom: 2.9rem; }
+    }
 
     /* Match panel */
     .mx-head { padding: 0.8rem 1.1rem 0.7rem; }
@@ -1640,7 +1659,10 @@ const accent = manifest.chapters[0]
     /* The tab strip scrolls; without an edge fade the last tab (Notes, and its
        count of the solver's refusals) simply looks like it isn't there. */
     .mx-tabs { padding: 0 1.1rem; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
-    .mx-tabs button { flex: 0 0 auto; min-height: var(--hit); scroll-snap-align: start; }
+    /* Tighter so all six, Check included, fit a 402px phone (R13-24); the
+       fade below still covers a narrower one. */
+    .mx-tabs button { flex: 0 0 auto; min-height: var(--hit); scroll-snap-align: start; padding-inline: 0.5rem; }
+    .mx-tabs :global(.seg-thumb) { background-size: calc(100% - 1rem) 2px; }
     .mx-tabs::after { content: ''; position: sticky; right: 0; flex: 0 0 1.6rem; align-self: stretch; background: linear-gradient(to right, transparent, var(--bg)); pointer-events: none; }
 
     .mx-scroll { padding-left: 1.1rem; padding-right: 1.1rem; }

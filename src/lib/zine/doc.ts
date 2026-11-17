@@ -75,7 +75,7 @@ export function fontOf(id: FontId) {
 /** A photograph placed on a page. `pan` runs -1..1 and only matters when it fills. */
 export interface PhotoRef {
   kind: 'archive' | 'local';
-  /** Archive photo id, or the key of a local file in IndexedDB. */
+  /** Archive photo id, or the key of a photo from a device (kept on the Mac, src/lib/zine-store.ts). */
   id: string;
   /** Screen-sized source. For a local file this is filled in at load time. */
   thumb: string;

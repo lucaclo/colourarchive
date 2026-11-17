@@ -4,6 +4,17 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-16 · The zine is kept on the Mac as `zine.json` in the data folder, with device
+  photos in `<data>/.archive/zine/`, so every device opens the same one (D2, R13-41).
+  Saves are versioned like the book. A browser's pre-round-13 zine moves across once;
+  a second browser's own zine is offered ("Use it"), never dropped.
+- 2026-11-16 · Removed originals stay in `Photos/.trash` until asked: a "Removed · N" link
+  on Add & remove lists them with Restore and Empty. Nothing auto-empties (D4, R13-16).
+  Empty deletes only the names the list showed.
+- 2026-11-16 · Book saves merge and are versioned: a stale tab gets "Changed elsewhere ·
+  Reload" and writes nothing; one `book.json.bak` is kept (R13-01, R13-31).
+- 2026-11-16 · Writes to `/api` come only from this server's own origin, or with no
+  Origin at all (Shortcuts, curl). No login (R13-02, `src/middleware.ts`).
 - 2026-11-11 · Phone reaches the Mac from anywhere ("Mac as engine", Tailscale Funnel
   behind `desktop/remote-gate.mjs`). No cloud storage, no sync. Full editing on Netlify
   was rejected: fs-bound server, local ML models, function size limits.
@@ -23,6 +34,14 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-17 · On touch, segments, tabs and small buttons answer out to their capsule's
+  edge with an invisible `::after`. The drawn pill keeps its size; every control's target
+  is ≥ 36 px on a phone (`node_modules/.cache/r13/phone-sweep.mts` checks).
+- 2026-11-16 · Scout's five actions (month grid, save image, copy plan, copy link, save
+  offline) open from a share button in the sheet head, beside the star. Layers holds only
+  layers (D5, R13-34).
+- 2026-11-16 · The Book may grow invisible hit areas (`::after`, padding) to 36 px on
+  touch; its look stays (D3, R13-43).
 - 2026-11-04 · Design system in `global.css` + `src/lib/ui/`: `.btn`, `[data-seg]`,
   `.field`, `[data-reveal]`, `.page-head`. Press feedback is `lib/ui/press.ts`; don't add
   `:active { transform: scale() }` rules (opt out with `data-no-press`).

@@ -18,10 +18,13 @@ test('photoName keeps ordinary words and short numbers', () => {
   assert.equal(photoName('cafe.webp'), 'cafe');
 });
 
-test('matchTitle falls back to plain words', () => {
-  assert.equal(matchTitle('008f7d3eff93aa1f-1280.avif', ['DSC06160.b4490759aa4afe19.jpg']), 'Your photo in the look of DSC06160');
-  assert.equal(matchTitle('DSC1.ARW', ['a.jpg', 'b.jpg']), 'DSC1 in the look of 2 references');
-  assert.equal(matchTitle('DSC1.ARW', ['0123456789abcdef.jpg']), 'DSC1 in the look of the reference');
+test('matchTitle uses titles, not frame numbers, and falls back to plain words', () => {
+  assert.equal(matchTitle('DSC06549.jpg', ['DSC00424-2.4b9770dd43935280.jpg']), 'Your photo in this look');
+  assert.equal(matchTitle('008f7d3eff93aa1f-1280.avif', ['DSC06160.b4490759aa4afe19.jpg']), 'Your photo in this look');
+  assert.equal(matchTitle('IMG_2863.ARW', ['a.jpg', 'b.jpg']), 'Your photo in the look of 2 references');
+  assert.equal(matchTitle('DSC1.ARW', ['0123456789abcdef.jpg']), 'DSC1 in this look');
+  assert.equal(matchTitle('DSCF0012.jpg', ['approaching-shadow-hong-kong-by-fan-ho.9c8bbaf0eab03262.webp']), 'Your photo in the look of Approaching shadow hong kong by Fan Ho');
+  assert.equal(matchTitle('harbour at dusk.jpg', ['pantheon-2.jpg']), 'harbour at dusk in the look of pantheon-2');
 });
 
 test('photoName keeps a year, drops only derivative widths', () => {

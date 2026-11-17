@@ -23,10 +23,11 @@ export const POST: APIRoute = async ({ request }) => {
       try { got = await fetchImageFromUrl(url); } catch (e) { return json({ ok: false, error: (e as Error).message }, 400); }
       results.push(await ingest(got.buf, got.name, (source || url).trim(), { url, html: got.html, typed: source }));
     } else {
-      const form = await request.formData();
+      const form = await request.formData().catch(() => null);
+      if (!form) return json({ ok: false, error: 'No images' }, 400);
       const source = String(form.get('source') || '').trim();
       const files = form.getAll('images').filter((f): f is File => f instanceof File);
-      if (files.length === 0) return json({ ok: false, error: 'No images received.' }, 400);
+      if (files.length === 0) return json({ ok: false, error: 'No images' }, 400);
       for (const f of files) {
         if (RAW_EXT.test(f.name)) { results.push({ filename: f.name, status: 'unsupported', error: 'Camera RAW not supported.' }); continue; }
         const buf = Buffer.from(await f.arrayBuffer());

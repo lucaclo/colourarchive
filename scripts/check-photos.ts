@@ -3,6 +3,8 @@
  *
  *   npm run check:photos            report, exit 1 if anything is out of step
  *   npm run check:photos -- --fix   put it back in step
+ *   npm run check:photos -- --orphans   list originals in the photos folder no
+ *                                       store entry owns; deletes nothing
  *
  * The fault this exists for: `DSC06090` was listed in `photos.json` with three
  * derivatives and had none of them on disk, so the archive page laid out a slot,
@@ -52,6 +54,7 @@ import type { Derivative, Photo } from '../src/lib/types.ts';
 const args = new Set(process.argv.slice(2));
 const FIX = args.has('--fix');
 const PRUNE = args.has('--prune');
+const ORPHANS = args.has('--orphans');
 
 const listImages = async (): Promise<string[]> => {
   try {
@@ -119,7 +122,31 @@ async function dropStale(photo: Photo, owner: Owner, present: Set<string>): Prom
 /** The records asserting a file that is not there — the part that fails a run. */
 const broken = (report: Audit): number => report.missing.length + report.undeclared.length;
 
+/**
+ * Originals in the photos folder that no store entry owns — an import that
+ * failed after saving its file left these behind (R13-07). Listed, never
+ * deleted: one may be the last copy of a photograph. Dotfiles and `.trash`
+ * are skipped.
+ */
+async function listOrphanOriginals(): Promise<void> {
+  const owned = new Set((await readStore()).map((p) => p.filename));
+  let entries: { name: string; isFile: () => boolean }[] = [];
+  try {
+    entries = await fs.readdir(PHOTOS_DIR, { withFileTypes: true });
+  } catch {
+    // No photos folder yet: nothing to list.
+  }
+  const orphans = entries
+    .filter((e) => e.isFile() && !e.name.startsWith('.') && !owned.has(e.name))
+    .map((e) => e.name)
+    .sort();
+  for (const name of orphans) console.log(name);
+  console.log(`${orphans.length} file${orphans.length === 1 ? '' : 's'} in ${PHOTOS_DIR} no entry owns`);
+}
+
 async function main() {
+  if (ORPHANS) return listOrphanOriginals();
+
   const first = await audit();
   const records = first.owners;
   let report = first.audit;

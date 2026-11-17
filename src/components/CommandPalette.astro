@@ -44,8 +44,8 @@ const commands = [
 ];
 ---
 
-<div class="cmdk" id="cmdk" hidden data-text-search={STATIC ? 'false' : 'true'}>
-  <div class="cmdk-sheet" role="dialog" aria-modal="true" aria-label="Go to">
+<div class="cmdk" id="cmdk" hidden role="dialog" aria-modal="true" aria-label="Go to" data-modal data-text-search={STATIC ? 'false' : 'true'}>
+  <div class="cmdk-sheet">
     <input
       class="cmdk-input"
       id="cmdk-input"

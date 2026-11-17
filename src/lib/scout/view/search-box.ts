@@ -108,15 +108,19 @@ export function createSearchBox(ports: SearchBoxPorts): SearchBox {
         const body = document.createElement('span');
         body.className = 'result-body';
 
-        const kind = document.createElement('span');
-        kind.className = 'kd';
-        kind.textContent = place.kind.replace(/_/g, ' ');
+        // A plain word from the server (geocode.ts `placeKind`), or nothing.
+        if (place.kind) {
+          const kind = document.createElement('span');
+          kind.className = 'kd';
+          kind.textContent = place.kind;
+          body.append(kind);
+        }
 
         const name = document.createElement('span');
         name.className = 'nm';
         name.textContent = place.name;
 
-        body.append(kind, name);
+        body.append(name);
         if (place.detail) {
           const detail = document.createElement('span');
           detail.className = 'dt';

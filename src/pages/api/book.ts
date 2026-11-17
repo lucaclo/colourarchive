@@ -1,18 +1,20 @@
 import type { APIRoute } from 'astro';
 import { readManifest } from '../../lib/manifest';
-import { readBookCuration, writeBookCuration, orderedChaptersWithExclusions, readLayoutFields, type BookCuration } from '../../lib/book';
+import { readBookState, saveBookCuration, orderedChaptersWithExclusions } from '../../lib/book';
 
 export const prerender = false;
 
 // The book editor's own read/write — issue #82. GET returns every chapter's
 // photos in curated order (excluded ones included, marked, so the editor can
 // offer them back in rather than only ever removing) alongside the manifest's
-// own chapters; POST replaces the curation wholesale, since the editor always
-// holds the full current state client-side rather than a diff.
+// own chapters, and the file's version. POST merges a save into the file
+// (fields absent keep their saved value) only when it names the version on
+// disk: a stale tab gets 409 and the current version, and nothing is written.
+// See saveBookCuration in src/lib/book.ts.
 
 export const GET: APIRoute = async () => {
   try {
-    const [manifest, curation] = await Promise.all([readManifest(), readBookCuration()]);
+    const [manifest, { curation, version }] = await Promise.all([readManifest(), readBookState()]);
     const chapters = orderedChaptersWithExclusions(manifest.chapters, curation).map((ch) => ({
       key: ch.key,
       name: ch.name,
@@ -24,7 +26,7 @@ export const GET: APIRoute = async () => {
       })),
     }));
 
-    return json({ ok: true, chapters });
+    return json({ ok: true, chapters, version });
   } catch (err) {
     console.error('[book] failed', err);
     return json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
@@ -32,36 +34,17 @@ export const GET: APIRoute = async () => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
+  let body: unknown;
   try {
-    const body = (await request.json()) as {
-      chapters?: Record<string, unknown>;
-      excluded?: unknown;
-      moved?: Record<string, unknown>;
-    };
-    // Page layout (book-pages.ts) rides along with every save: POST replaces
-    // the curation wholesale, so a reorder must not drop it.
-    const curation: BookCuration = readLayoutFields(body as Record<string, unknown>);
-
-    if (body.chapters && typeof body.chapters === 'object') {
-      const chapters: Record<string, string[]> = {};
-      for (const [key, order] of Object.entries(body.chapters)) {
-        if (Array.isArray(order) && order.every((id) => typeof id === 'string')) chapters[key] = order;
-      }
-      if (Object.keys(chapters).length) curation.chapters = chapters;
-    }
-    if (Array.isArray(body.excluded) && body.excluded.every((id) => typeof id === 'string')) {
-      curation.excluded = body.excluded;
-    }
-    if (body.moved && typeof body.moved === 'object') {
-      const moved: Record<string, string> = {};
-      for (const [id, chapterKey] of Object.entries(body.moved)) {
-        if (typeof chapterKey === 'string') moved[id] = chapterKey;
-      }
-      if (Object.keys(moved).length) curation.moved = moved;
-    }
-
-    await writeBookCuration(curation);
-    return json({ ok: true });
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: 'Expected a JSON object.' }, 400);
+  }
+  try {
+    const result = await saveBookCuration(body);
+    if (result.status === 400) return json({ ok: false, error: result.error }, 400);
+    if (result.status === 409) return json({ ok: false, conflict: true, error: 'Changed elsewhere', version: result.version }, 409);
+    return json({ ok: true, version: result.version });
   } catch (err) {
     console.error('[book] save failed', err);
     return json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);

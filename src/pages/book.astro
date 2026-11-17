@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { readManifest, readStore } from '../lib/manifest';
-import { readBookCuration, orderedChaptersWithExclusions, curatedChapters } from '../lib/book';
+import { readBookState, orderedChaptersWithExclusions, curatedChapters } from '../lib/book';
 import { duplicateGroups } from '../lib/duplicates';
 import { readNotes } from '../lib/notes';
 import { oklchCss, readableInk } from '../lib/color';
@@ -11,7 +11,8 @@ import { DEFAULT_TRIM, TRIMS, checkPages, padToEven, paginate, withColophon } fr
 export const prerender = false;
 
 const manifest = await readManifest();
-const curation = await readBookCuration();
+// The version rides on the save bar; every save names it (see saveBookCuration).
+const { curation, version: bookVersion } = await readBookState();
 const chapters = orderedChaptersWithExclusions(manifest.chapters, curation);
 const includedCount = chapters.reduce((n, ch) => n + ch.photos.filter((p) => !p.excluded).length, 0);
 // One divider page per chapter that survives exclusion, plus one plate page
@@ -255,9 +256,13 @@ const accent = manifest.chapters[0]
                         }
                         {/* Only the current chapter until it's touched; the rest come
                             from #book-chapter-options then (see the script). */}
-                        <select class="book-move" data-move={p.id} title="Move to a different chapter" aria-label={`Chapter for ${p.filename.split(".")[0]}`}>
-                          <option value={ch.key} selected>{ch.name}</option>
-                        </select>
+                        {/* The pill is drawn by the wrapper; the real <select> lies over it,
+                            invisible and larger, so a finger has 36 px to hit (R13-43). */}
+                        <span class="book-move-pill" data-label={ch.name}>
+                          <select class="book-move" data-move={p.id} title="Move to a different chapter" aria-label={`Chapter for ${p.filename.split(".")[0]}`}>
+                            <option value={ch.key} selected>{ch.name}</option>
+                          </select>
+                        </span>
                       </div>
                     </li>
                   );
@@ -287,7 +292,7 @@ const accent = manifest.chapters[0]
     <div class="survey-row" id="survey-row"></div>
   </dialog>
 
-  <div class="book-savebar" id="book-savebar" hidden>
+  <div class="book-savebar" id="book-savebar" data-version={bookVersion} hidden>
     <span id="book-savebar-text">Unsaved changes</span>
     <button type="button" class="ghost" id="book-save">Save</button>
   </div>
@@ -395,14 +400,24 @@ const accent = manifest.chapters[0]
      as .lb-tool in global.css — every one of these floats over a photograph,
      not over app chrome, and was at 6px, under Apple's stated 8-16px range
      for that case. */
-  .book-move {
-    pointer-events: auto; appearance: none; border: 0; border-radius: 999px; cursor: pointer;
+  .book-move-pill {
+    position: relative; display: inline-block;
+    pointer-events: auto; border-radius: 999px;
     background: color-mix(in oklab, #000 55%, transparent); color: #fff;
-    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.02em;
-    padding: 0.2rem 0.4rem; max-width: 5.2rem; flex: none;
+    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.02em; line-height: normal;
+    padding: 0.2rem 0.4rem; max-width: 5.2rem; flex: none; box-sizing: border-box;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
-  .book-move:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
+  /* The text clips here, not on the pill, so the select below can hang past it. */
+  .book-move-pill::before { content: attr(data-label); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Invisible, over the pill: the target, not the look. 16px type so iOS
+     doesn't zoom when it opens. */
+  .book-move {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    appearance: none; border: 0; margin: 0; padding: 0; opacity: 0; cursor: pointer;
+    font-size: 16px; pointer-events: auto;
+  }
+  .book-move-pill:has(.book-move:focus-visible) { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
   /* "Keep this one" — excludes the rest of its duplicate group in one step,
      same one-step-undo path the × exclude button already uses. */
   .book-dup {
@@ -414,7 +429,6 @@ const accent = manifest.chapters[0]
     transition: transform 110ms ease-out, background 140ms;
   }
   .book-dup:hover { background: color-mix(in oklab, #c9973a 78%, #000 22%); }
-  .book-dup:active { transform: scale(0.92); }
   .book-dup:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 1px; }
   .book-exclude {
     position: absolute; top: 6px; right: 6px; z-index: 2;
@@ -425,7 +439,6 @@ const accent = manifest.chapters[0]
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   }
   .book-exclude:hover { background: color-mix(in oklab, #c0392b 82%, transparent); }
-  .book-exclude:active { transform: scale(0.88); }
   .book-cell[data-excluded='1'] .book-exclude { background: color-mix(in oklab, #2e7d32 78%, transparent); }
   .book-cell[data-excluded='1'] .book-exclude:hover { background: color-mix(in oklab, #2e7d32 95%, transparent); }
   .book-handle {
@@ -465,7 +478,6 @@ const accent = manifest.chapters[0]
     font-size: var(--t-footnote); font-weight: 600;
     min-height: 2.5rem; padding: 0 1.2rem; transition: transform 110ms ease-out, opacity 140ms;
   }
-  #book-save:active { transform: scale(0.96); }
   #book-save:disabled { opacity: 0.6; cursor: default; }
 
   .book-noteedit {
@@ -506,7 +518,6 @@ const accent = manifest.chapters[0]
     transition: transform 120ms ease-out, border-color var(--dur-fast) var(--ease);
   }
   .book-noteedit-actions button:hover { border-color: var(--fg); }
-  .book-noteedit-actions button:active { transform: scale(0.97); }
   .book-noteedit-actions button:disabled { opacity: 0.5; cursor: default; }
   #book-noteedit-save { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
   .book-voice { display: inline-flex; align-items: center; gap: 0.4rem; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -542,6 +553,18 @@ const accent = manifest.chapters[0]
       inset: -9px;
       border-radius: 50%;
     }
+    /* The chapter pill's target: 36px tall, grown upward, since the cell
+       clips below the foot (R13-43). */
+    .book-move { top: -12px; left: -4px; width: calc(100% + 8px); height: calc(100% + 16px); }
+    /* List/Spreads and the print choices: the target reaches the track's
+       edge (36px), the pill drawn inside it stays 30. */
+    .book-viewtoggle button, .book-seg label { position: relative; }
+    .book-viewtoggle button::after, .book-seg label::after { content: ''; position: absolute; inset: -3px -1px; }
+  }
+  /* On a phone the pill is drawn at 0.7 (below), so its target grows in
+     unscaled pixels: 28 more is 36 on screen. */
+  @media (pointer: coarse) and (max-width: 640px) {
+    .book-move { top: -22px; left: -6px; width: calc(100% + 12px); height: calc(100% + 28px); }
   }
   /* Phone: the corner marks take less of each thumbnail. The chapter picker
      is a <select>, so it keeps 16px type (iOS zooms on focus below that) and
@@ -551,9 +574,9 @@ const accent = manifest.chapters[0]
      a first tap on touch (Lightroom's "clickable items on mouse over only",
      Photos' tap to select). The duplicate badge stays, because it is the one
      overlay that is a warning, and so does the + on a left-out photo. */
-  .book-handle, .book-exclude, .book-caption, .book-move { opacity: 0; transition: opacity 160ms var(--ease); }
+  .book-handle, .book-exclude, .book-caption, .book-move-pill { opacity: 0; transition: opacity 160ms var(--ease); }
   .book-foot { background: none; transition: background 160ms var(--ease); }
-  .book-cell:is(:hover, :focus-within, .is-active) :is(.book-handle, .book-exclude, .book-caption, .book-move),
+  .book-cell:is(:hover, :focus-within, .is-active) :is(.book-handle, .book-exclude, .book-caption, .book-move-pill),
   .book-cell[data-excluded='1'] .book-exclude { opacity: 1; }
   .book-cell:is(:hover, :focus-within, .is-active) .book-foot {
     background: linear-gradient(to top, color-mix(in oklab, #000 70%, transparent), transparent);
@@ -561,15 +584,15 @@ const accent = manifest.chapters[0]
   /* A finger can't hover, so hidden controls must not catch the first tap:
      it only reveals them (see the script). */
   @media (hover: none) {
-    .book-cell:not(.is-active):not(:focus-within) :is(.book-handle, .book-caption, .book-move),
+    .book-cell:not(.is-active):not(:focus-within) :is(.book-handle, .book-caption, .book-move-pill, .book-move),
     .book-cell:not(.is-active):not(:focus-within):not([data-excluded='1']) .book-exclude { pointer-events: none; }
   }
-  @media (prefers-reduced-motion: reduce) { .book-handle, .book-exclude, .book-caption, .book-move, .book-foot { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .book-handle, .book-exclude, .book-caption, .book-move-pill, .book-foot { transition: none; } }
 
   @media (max-width: 640px) {
     .book-exclude { width: 22px; height: 22px; line-height: 22px; font-size: 13px; }
     .book-handle { width: 22px; height: 22px; }
-    .book-move {
+    .book-move-pill {
       min-height: 0; font-size: 16px; padding: 0.15rem 0.45rem;
       transform: scale(0.7); transform-origin: right bottom; max-width: 7.4rem;
     }
@@ -600,15 +623,22 @@ const accent = manifest.chapters[0]
   // Bumped on every change, so a save already in flight can tell whether the
   // state it captured is still the latest state once its POST resolves.
   let version = 0;
+  // The version of book.json this tab last read or wrote. Every save names
+  // it, and the server refuses (409) when the book has changed since in
+  // another tab or on the phone; from then on this tab can only reload.
+  let fileVersion = savebar.dataset.version || '';
+  let conflict = false;
 
   function markDirty() {
     version++;
     dirty = true;
     savebar.hidden = false;
-    saveText.textContent = 'Unsaved changes';
-    saveBtn.disabled = false;
     clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(save, AUTOSAVE_DELAY);
+    if (!conflict) {
+      saveText.textContent = 'Unsaved changes';
+      saveBtn.disabled = false;
+      autosaveTimer = setTimeout(save, AUTOSAVE_DELAY);
+    }
     window.dispatchEvent(new Event('book:changed'));
   }
   // The spread view (module script below) changes page layout through the
@@ -812,6 +842,8 @@ const accent = manifest.chapters[0]
     const fromSection = cell.closest('.book-chapter');
     const toList = document.querySelector(`[data-chapter-list="${CSS.escape(select.value)}"]`);
     if (!toList || !cell) return;
+    const pill = select.closest('.book-move-pill');
+    if (pill) pill.dataset.label = select.selectedOptions[0]?.textContent ?? '';
     toList.appendChild(cell);
     updateChapterCount(fromSection);
     updateChapterCount(cell.closest('.book-chapter'));
@@ -952,12 +984,37 @@ const accent = manifest.chapters[0]
   });
 
   // --- Save ------------------------------------------------------------
-  // One save path for both the button and the debounce timer above.
-  let saving = false;
-  async function save() {
+  // One save path for both the button and the debounce timer above. Saves
+  // run one at a time, each naming the version the one before it returned,
+  // so a tab never trips over its own save in flight; a save asked for while
+  // one is running goes next instead of being dropped.
+  let inFlight = null;
+  let saveAgain = false;
+  function save() {
     clearTimeout(autosaveTimer);
-    if (saving || !dirty) return;
-    saving = true;
+    if (inFlight) { saveAgain = true; return inFlight; }
+    if (conflict || !dirty) return Promise.resolve();
+    inFlight = postSave().then((ok) => {
+      inFlight = null;
+      if (saveAgain) {
+        saveAgain = false;
+        // After a failure the bar's Save button is the retry, as before.
+        if (ok && dirty) save();
+      }
+    });
+    return inFlight;
+  }
+  // For the PDF (module script below): waits out any save, tries once more
+  // if something is still unsaved, and says whether the book on disk is now
+  // what's on screen.
+  window.bookSaveSettled = async () => {
+    while (inFlight) await inFlight;
+    if (dirty && !conflict) await save();
+    while (inFlight) await inFlight;
+    return !dirty;
+  };
+
+  async function postSave() {
     const startVersion = version;
     saveBtn.disabled = true;
     saveText.textContent = 'Saving…';
@@ -978,10 +1035,21 @@ const accent = manifest.chapters[0]
       const res = await fetch('/api/book', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chapters, excluded, moved, ...(window.bookLayoutState ? window.bookLayoutState() : {}) }),
+        body: JSON.stringify({ version: fileVersion, chapters, excluded, moved, ...(window.bookLayoutState ? window.bookLayoutState() : {}) }),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Save failed.');
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        // Saved from another tab or the phone since this one loaded: saying
+        // so beats writing over it. Reload is the way on.
+        conflict = true;
+        clearTimeout(autosaveTimer);
+        saveText.textContent = 'Changed elsewhere';
+        saveBtn.textContent = 'Reload';
+        saveBtn.disabled = false;
+        return false;
+      }
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.version) fileVersion = data.version;
       if (version === startVersion) {
         // Nothing changed while this POST was in flight — the archive now
         // matches what's on screen.
@@ -996,17 +1064,25 @@ const accent = manifest.chapters[0]
         saveText.textContent = 'Unsaved changes';
         saveBtn.disabled = false;
       }
+      return true;
     } catch (err) {
-      saveText.textContent = err.message || 'Save failed.';
+      // The reason goes to the console; the bar keeps to a plain line.
+      console.error('[book] save failed', err);
+      saveText.textContent = 'Couldn’t save';
       saveBtn.disabled = false;
       // A failed autosave still gets another try on the next edit (markDirty
       // reschedules it) or the visible button — either way there is no
       // silent dead end.
-    } finally {
-      saving = false;
+      return false;
     }
   }
-  saveBtn?.addEventListener('click', save);
+  saveBtn?.addEventListener('click', () => {
+    if (!conflict) { save(); return; }
+    // This tab's edits can't be saved over the newer book, so leaving
+    // needs no second "leave the page?" confirm.
+    dirty = false;
+    location.reload();
+  });
 
   // --- Notes: the archive's own notebook -----------------------------------
   // One reusable overlay, opened from whichever cell's caption was clicked.
@@ -1152,6 +1228,7 @@ const accent = manifest.chapters[0]
     bookMarkDirty?: () => void;
     bookLayoutState?: () => unknown;
     bookPlaceAfter?: (cell: HTMLElement, after: HTMLElement) => void;
+    bookSaveSettled?: () => Promise<boolean>;
   };
   w.bookLayoutState = () => ({ layout: state.layout, blankBefore: [...state.blankBefore], trim: state.trim });
 
@@ -1547,8 +1624,11 @@ const accent = manifest.chapters[0]
     const path = e.composedPath();
     if (printPop && printOpen && !path.includes(printPop) && !path.includes(printOpen)) setPrintOpen(false);
   });
-  printPop?.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { setPrintOpen(false); printOpen?.focus(); }
+  // Escape closes it wherever focus is, including on the button that opened it (R13-39).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !printPop || printPop.hidden) return;
+    setPrintOpen(false);
+    printOpen?.focus();
   });
   // The warning dot follows the page check as the size or the book changes.
   if (check && printOpen) {
@@ -1566,16 +1646,14 @@ const accent = manifest.chapters[0]
     const label = pdfBtn.textContent;
     pdfBtn.textContent = 'Building…';
     pdfStatus.textContent = '';
-    // The PDF is built from what's saved, so save first.
-    const saveBtn = document.getElementById('book-save') as HTMLButtonElement | null;
-    const savebar = document.getElementById('book-savebar');
-    if (savebar && !savebar.hidden && saveBtn && !saveBtn.disabled) {
-      saveBtn.click();
-      for (let i = 0; i < 50 && !(document.getElementById('book-savebar-text')?.textContent === 'Saved' || savebar.hidden); i++) {
-        await new Promise((r) => setTimeout(r, 100));
-      }
-    }
     try {
+      // The PDF is built from what's saved, so save first, and build only once
+      // that save went through. A failed one shows on the save bar (up to 5 s).
+      const saved = await Promise.race([
+        w.bookSaveSettled ? w.bookSaveSettled() : Promise.resolve(true),
+        new Promise<boolean>((r) => setTimeout(() => r(false), 5000)),
+      ]);
+      if (!saved) return;
       const res = await fetch(`/api/book/pdf?trim=${state.trim}&bleed=${bleed?.checked ? '1' : '0'}`, { method: 'POST' });
       if (!res.ok || !res.body) throw new Error('The server could not build it.');
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -1813,7 +1891,6 @@ const accent = manifest.chapters[0]
   /* The one primary action. */
   .book-pdf { background: var(--fg); color: var(--bg); padding: 0 var(--sp-5); }
   .book-pdf:hover { background: color-mix(in oklab, var(--fg) 86%, var(--bg)); }
-  .book-pdf:active { transform: scale(0.97); }
   .book-pdf:disabled { cursor: progress; background: var(--fill); color: var(--secondary); }
   .book-blank { font-weight: 500; }
   .book-blank[aria-pressed='true'] { background: var(--fill-active); font-weight: 600; }

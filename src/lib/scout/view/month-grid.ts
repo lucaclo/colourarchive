@@ -185,6 +185,14 @@ export function createMonthGrid(ports: MonthGridPorts): MonthGridView {
   }
 
   on('mg-close', 'click', close);
+  // Focus is inside while it's open (data-modal, lib/ui/modal.ts), so Escape
+  // lands here. Stopped so it doesn't also drop the phone's sheet behind.
+  on('monthgrid', 'keydown', (event) => {
+    if ((event as KeyboardEvent).key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  });
   on('mg-back', 'click', () => {
     gridMonth = shiftIsoMonth(gridMonth, -1);
     render();
