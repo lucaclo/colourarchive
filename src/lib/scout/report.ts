@@ -79,7 +79,7 @@ function closing(timeZone: string, caveat?: string): string[] {
   return [
     `Times are local to ${timeZone}.`,
     caveat
-      ? `Sun and moon are computed; shadows are modelled — ${caveat}`
+      ? `Sun and moon are computed; shadows are modelled: ${caveat}`
       : 'Sun and moon are computed; shadows are modelled, not measured.',
   ];
 }
@@ -136,7 +136,7 @@ export function itineraryReport(report: ItineraryReport): string {
   const { itinerary, clock } = report;
   const lines: string[] = [];
 
-  lines.push(`Day plan — ${report.dayLabel}`);
+  lines.push(`Day plan: ${report.dayLabel}`);
   lines.push('');
 
   if (itinerary.stops.length) {

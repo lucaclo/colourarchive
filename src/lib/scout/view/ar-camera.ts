@@ -151,9 +151,9 @@ const tiltFromBeta = (betaDeg: number): number => betaDeg - 90;
  * model, and not knowing the phone's real field of view.
  */
 export const AR_LIMITS_NOTE =
-  'Rectilinear projection, no lens distortion — same model as the frame wedge on the map. ' +
+  'Rectilinear projection, no lens distortion. Same model as the frame wedge on the map. ' +
   'Markers are positioned for the sensor and focal length chosen in the frame panel, not the ' +
-  "phone's actual camera angle, which this page cannot measure.";
+  'phone’s actual camera angle, which this page cannot measure.';
 
 /**
  * How long to wait for a first orientation event before calling the sensor
@@ -285,7 +285,7 @@ export function createArCamera(ports: ArCameraPorts): ArCameraView {
   /** Camera permission and the video feed. Explicit about every failure. */
   async function startCamera(): Promise<void> {
     if (!window.isSecureContext) {
-      throw new Error('Camera access needs HTTPS — this page was not loaded over a secure connection.');
+      throw new Error('Camera access needs HTTPS. This page was not loaded over a secure connection.');
     }
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('This browser has no camera API. Try a recent Chrome or Safari on a phone.');
@@ -316,7 +316,7 @@ export function createArCamera(ports: ArCameraPorts): ArCameraView {
     const track = stream.getVideoTracks()[0];
     const facing = track?.getSettings().facingMode;
     if (facing && facing !== 'environment') {
-      setStatus(`This device gave the "${facing}" camera, not the rear one — the overlay will not point where the picture does.`);
+      setStatus(`This device gave the "${facing}" camera, not the rear one. The overlay will not point where the picture does.`);
     }
   }
 
@@ -335,7 +335,7 @@ export function createArCamera(ports: ArCameraPorts): ArCameraView {
         });
       }
       if (permission !== 'granted') {
-        throw new Error('Orientation permission was denied — the overlay needs the compass to know where the phone is pointed.');
+        throw new Error('Orientation permission was denied. The overlay needs the compass to know where the phone is pointed.');
       }
     } else if (typeof DeviceOrientationEvent === 'undefined') {
       throw new Error('This browser has no orientation sensors API. AR mode needs a phone.');
@@ -347,7 +347,7 @@ export function createArCamera(ports: ArCameraPorts): ArCameraView {
         if (settled) return;
         settled = true;
         removeOrientationListener();
-        reject(new Error('No orientation reading arrived — this device may have no compass, or the browser is blocking it.'));
+        reject(new Error('No orientation reading arrived. This device may have no compass, or the browser is blocking it.'));
       }, ORIENTATION_TIMEOUT_MS);
 
       const handle = (event: DeviceOrientationEvent) => {

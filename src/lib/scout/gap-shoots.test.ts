@@ -35,7 +35,7 @@ describe('suggestShootForGap', () => {
     const shoot = suggestShootForGap(gap('green', 'Green', 145), CALTON, FROM, 365);
     assert.equal(shoot.match, null);
     assert.equal(shoot.occurrences.length, 0);
-    assert.match(shoot.note, /isn't a colour daylight itself makes/);
+    assert.match(shoot.note, /isn’t a colour daylight itself makes/);
   });
 
   it('every occurrence carries a real azimuth and a direction of travel', () => {

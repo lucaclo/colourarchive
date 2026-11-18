@@ -68,5 +68,5 @@ export function scoreAgainstChapter(signature: LookSignature, dna: LookSignature
   const resemblance = compareLooks(dna, signature);
   const verdict: ChapterFitVerdict =
     resemblance.distance <= CLOSE_ENOUGH ? 'keeps' : resemblance.distance >= TOO_FAR ? 'new-look' : 'borderline';
-  return { resemblance, verdict, note: `${VERDICT_WORD[verdict]} — ${resemblance.note}` };
+  return { resemblance, verdict, note: `${VERDICT_WORD[verdict]}: ${resemblance.note}` };
 }

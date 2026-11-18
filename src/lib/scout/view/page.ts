@@ -844,12 +844,21 @@ export async function startScout(): Promise<void> {
       'no-webgl',
       'No map in this browser',
       "The map needs WebGL, which this browser has switched off (embedded preview panes, " +
-        "VS Code's Simple Browser for one, often do). Open Scout in Chrome, Safari or Firefox " +
+        "VS Code’s Simple Browser for one, often do). Open Scout in Chrome, Safari or Firefox " +
         'to see it. Everything else here works.',
     );
   } else {
     scaleControl = new maplibregl.ScaleControl({ unit: 'metric' });
     map.addControl(scaleControl, 'bottom-right');
+    // Out at the whole globe the scale can't measure the screen and prints
+    // "NaN m". Hide it until there's a distance to show. Looked up each time:
+    // standing removes the control and a later add builds a new element.
+    const scaleSays = () => {
+      const bar = map?.getContainer().querySelector<HTMLElement>('.maplibregl-ctrl-scale');
+      if (bar) bar.style.visibility = /NaN/.test(bar.textContent ?? '') ? 'hidden' : '';
+    };
+    map.on('move', scaleSays);
+    map.once('idle', scaleSays);
     /**
      * Start the credit folded.
      *
@@ -1030,7 +1039,7 @@ export async function startScout(): Promise<void> {
         if (painted) return;
         showMapMessage(
           'not-painted',
-          "The map isn't drawing",
+          'The map isn’t drawing',
           'No frame has been drawn yet. Usually WebGL is off or throttled, most often in an ' +
             'embedded preview pane rather than a browser window. The times and the slider still work.',
         );
@@ -1327,10 +1336,8 @@ export async function startScout(): Promise<void> {
           scoutAt: (at) => {
             if (!centre) placeFirstSpotAt(at);
             else {
-              undoSpot = { centre, label: { ...label }, timeZone };
               setCentreCoordinates(at);
               pin.setLngLat([at.lon, at.lat]);
-              offerUndo('Scouting where you took it');
             }
             map?.flyTo({ center: [at.lon, at.lat], zoom: Math.max(map.getZoom(), 15) });
           },
@@ -2126,10 +2133,8 @@ export async function startScout(): Promise<void> {
     // Markers and controls sit in their own DOM above the canvas and never
     // reach this, so dragging the monolith is unaffected.
     const next = { lat: event.lngLat.lat, lon: event.lngLat.lng };
-    undoSpot = { centre, label: { ...label }, timeZone };
     setCentreCoordinates(next);
     pin.setLngLat([next.lon, next.lat]);
-    offerUndo('Pin moved');
   });
   // `sourcedata` fires for every tile that finishes, so at a city zoom this
   // arrives in bursts of dozens — and `collectBuildings` walks every loaded
@@ -2174,7 +2179,7 @@ export async function startScout(): Promise<void> {
     if (/style|sprite|glyph|tiles\.json|source/i.test(detail)) {
       showMapMessage(
         'basemap',
-        "Part of the map didn't load",
+        'Part of the map didn’t load',
         'A map source did not answer, so some of the map may be blank. The sun, the times and the shadows are unaffected.',
       );
     }
@@ -4789,7 +4794,7 @@ export async function startScout(): Promise<void> {
     }
     box.hidden = false;
     $<HTMLElement>('lightday-strip').style.background = `linear-gradient(to right, ${stops.join(', ')})`;
-    $('lightday-note').textContent = `The beam's own colour through the day · ${air.provenance.aerosol.basis === 'measured' ? 'aerosol measured' : 'aerosol from a table'}`;
+    $('lightday-note').textContent = `The beam’s own colour through the day · ${air.provenance.aerosol.basis === 'measured' ? 'aerosol measured' : 'aerosol from a table'}`;
   }
 
   /**
@@ -6076,67 +6081,20 @@ export async function startScout(): Promise<void> {
     nameSpot(next, ++reverseToken);
   }
 
-  /* ── Tapping the map ───────────────────────────────────────────────────
-     The pin was draggable and nothing else, which on a touchscreen means
-     catching a marker a few millimetres across with a fingertip. Tapping the
-     map is the obvious gesture and MapLibre already distinguishes it from a
-     pan, which is a drag — so this cannot fire while you are moving the map.
+  /* ── Notes ─────────────────────────────────────────────────────────────
+     A short line over the map for things that did not happen: a save the
+     browser refused, a tap from too far out. A tap that moves the pin says
+     nothing; the pin and the sheet's new name show it. */
 
-     What it *can* do is move a spot you chose carefully, by accident. So it is
-     paired with an undo that restores the position, the name and the zone
-     exactly, and the undo is what makes the speed safe rather than reckless. */
-
-  let undoSpot: { centre: LatLon; label: typeof label; timeZone: string } | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function offerUndo(text: string) {
-    $('toast-text').textContent = text;
-    $<HTMLElement>('toast-undo').hidden = false;
-    $<HTMLElement>('toast').hidden = false;
-    clearTimeout(toastTimer);
-    // Long enough to notice and reach, short enough not to sit over the map.
-    toastTimer = setTimeout(() => ($<HTMLElement>('toast').hidden = true), 6000);
-  }
-
-  /**
-   * The same strip, with nothing to undo.
-   *
-   * For the things that simply did not happen — a save the browser refused.
-   * Offering "Undo" against those would be inviting you to reverse something
-   * that never took place.
-   */
   function notify(text: string) {
-    undoSpot = null;
     $('toast-text').textContent = text;
-    $<HTMLElement>('toast-undo').hidden = true;
     $<HTMLElement>('toast').hidden = false;
     clearTimeout(toastTimer);
+    // Long enough to read, short enough not to sit over the map.
     toastTimer = setTimeout(() => ($<HTMLElement>('toast').hidden = true), 6000);
   }
-
-  on('toast-undo', 'click', () => {
-    const previous = undoSpot;
-    $<HTMLElement>('toast').hidden = true;
-    clearTimeout(toastTimer);
-    if (!previous) return;
-    undoSpot = null;
-    // Restored wholesale rather than re-derived: a reverse lookup could name
-    // the same coordinate differently a minute later, and "undo" has to mean
-    // exactly what was there before.
-    reverseToken++; // abandon any naming still in flight for the tapped spot
-    centre = previous.centre;
-    label = previous.label;
-    timeZone = previous.timeZone;
-    nearby = [];
-    searchBox.setQuery(label.name);
-    pin.setLngLat([centre.lon, centre.lat]);
-    renderPanel();
-    rebuildDay({ keepMinute: true });
-    redrawEverything();
-    void loadWeather();
-    void loadPhotos();
-    save();
-  });
 
   /* ── Photo hotspots ────────────────────────────────────────────────────
      What Scout could never say before: whether anyone has ever found this
@@ -6765,7 +6723,7 @@ export async function startScout(): Promise<void> {
           const badge = document.createElement('span');
           badge.className = 'acc acc-notable';
           badge.textContent = photo.notable.name;
-          badge.title = `On the curated list of named photographers${photo.notable.wikipediaUrl ? ' — ' + photo.notable.wikipediaUrl : ''}.`;
+          badge.title = `On the curated list of named photographers${photo.notable.wikipediaUrl ? ' (' + photo.notable.wikipediaUrl + ')' : ''}.`;
           link.append(badge);
         } else if (photo.accolade) {
           const badge = document.createElement('span');
@@ -9984,7 +9942,7 @@ export async function startScout(): Promise<void> {
           spot.note?.split('\n')[0],
         ]
           .filter(Boolean)
-          .join(' — ');
+          .join(' · ');
         body.append(detail);
         li.append(body);
 
@@ -10110,11 +10068,11 @@ export async function startScout(): Promise<void> {
     if (targetDeg != null) {
       if (deg - targetDeg > 0.2) {
         parts.push(
-          `The ring's own target reads ${targetDeg.toFixed(1)}° up, so something nearer or taller hides it first.`,
+          `The ring’s own target reads ${targetDeg.toFixed(1)}° up, so something nearer or taller hides it first.`,
         );
       } else if (targetDeg - deg > 0.2) {
         parts.push(
-          `The ring's own target reads ${targetDeg.toFixed(1)}° up — but it's past the end of the profile, so the sun may have to clear more than this.`,
+          `The ring’s own target reads ${targetDeg.toFixed(1)}° up, but it’s past the end of the profile, so the sun may have to clear more than this.`,
         );
       }
     }
@@ -10528,7 +10486,7 @@ export async function startScout(): Promise<void> {
         body.className = 'cr';
         const claim = document.createElement('span');
         claim.className = 'proof-claim';
-        claim.textContent = `“${proof.claim}” — ${new Date(proof.capturedAt).toLocaleString()}`;
+        claim.textContent = `“${proof.claim}” · ${new Date(proof.capturedAt).toLocaleString()}`;
         body.append(claim);
         const check = document.createElement('span');
         check.className = 'proof-check';

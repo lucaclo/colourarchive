@@ -1,14 +1,13 @@
 # Progress
 
 ## Now
-- `main` at e865dd2: round 13 (#161) and the phone tab bar fix (#162) merged. App 0.2.4
-  installed and up to date. Netlify has that build.
-- Branch `round-14`, not committed: Archive bars hide on scroll, Scout sheet "min",
-  Esri grey-tile fill, Mapterhorn terrain, "Stand here", the minimised tab, D1 (one
-  archive in `~/Pictures/Colour Archive`). All checks green.
+- `main` at 4adb792: round 14 (#163) merged. Release v0.2.6 published (the installed
+  app picks it up within 4 h, or "Restart to Update"). Netlify has the 2026-11-18 11:44
+  build, made from `~/Pictures/Colour Archive`: 110 photographs, search live.
+- CI `smoke` fails in the same 15 Scout tests on `main` as on #163 (not required,
+  network-dependent); worth a look.
 
 ## Next
-- Luca: commit and ship round 14 (PR → merge → app release → Netlify)?
 - Luca: publishing is now by hand (`npm run deploy:site`). Want the app to publish on
   its own after a photo change? It needs a one-time Desktop permission, asked again
   after each update, or the repo moved off the Desktop.
@@ -23,6 +22,16 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-18 · polish-type · Type, alignment and copy pass over every page and state
+  (probes in `node_modules/.cache/type-audit/`). Buttons no longer fall back to Arial;
+  Inspiration, Add & remove and the Book share one column and head (the Book's count
+  beside its title, Share and Magazine as icon buttons on a phone); Scout's sheet text
+  on one left edge (tiles were 10 px in, times 2 px), slider labels out of mono, the ND
+  field a well like the selects; Match labels back in Fraunces italic; zine Remove styled;
+  "NaN m" scale hidden; 404 and Insights lose their explanatory lines; curly apostrophes
+  and no em-dash asides in ~130 UI strings (a builder did the lib ones).
+- 2026-11-18 · remove-pin-undo · Scout's "Pin moved · Undo" note is gone (map tap and
+  "Scout here" from a photo); the R13-32 and R14 tap e2e now check the sheet name.
 - 2026-11-18 · round-14 · Shipped the phone tab bar fix (#162). Built: Archive bars hide on
   scroll; Scout sheet min detent; no Esri grey tiles; Mapterhorn terrain with ancestor
   fill; "Stand here" at 1.7 m with head-turn drag, 150 km view, still frame 16–19 ms, a
@@ -35,7 +44,8 @@ One line per session, newest first: date · branch · what changed · what's ope
   archive (repo's 2 Fan Ho refs, photographers file and caches merged in); public builds,
   publish, drift, check:photos and doctor read it; dev auto-deploy removed. Proved by
   a public build from a test archive (stamp, cover and images all followed it); drift
-  says the live site matches. Not committed yet.
+  says the live site matches. Shipped: #163 merged, v0.2.6 released, Netlify deployed
+  from the real archive and confirmed live.
 - 2026-11-17 · round-13 · The Mac app updates itself from GitHub releases, one per merge
   to `main`; the app menu shows "Up to Date · Version 0.2.N". Checked end to end in
   scratch (0.2.0 → 0.2.1, relaunch, up to date). Not yet run on GitHub; the installed

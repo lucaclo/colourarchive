@@ -79,7 +79,7 @@ export async function restoreRemoved(name: string): Promise<RestoreOutcome> {
   const [result] = await ingestBatch([{ name: shownName(name), read: () => fs.readFile(found.file) }]);
   const stored = result && (result.status === 'added' || result.status === 'skipped')
     && (await readStore()).some((p) => p.id === result.id);
-  if (!stored) return { status: 'failed', error: result?.error ?? "Couldn't add this one" };
+  if (!stored) return { status: 'failed', error: result?.error ?? 'Couldn’t add this one' };
   // Already listed: a removal can move the original here and then fail to
   // write the store, leaving the entry with no file but this one. Then this
   // copy goes back as its original instead of being deleted.

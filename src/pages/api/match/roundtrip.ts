@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request }) => {
     if (!(file instanceof File)) return json({ ok: false, error: 'No export received.' }, 400);
     const download = await readDownload(downloadId);
     if (!download) {
-      return json({ ok: false, error: 'That preset download is not on record — download the preset again, apply it, and check that export.' }, 404);
+      return json({ ok: false, error: 'That preset download is not on record. Download the preset again, apply it, and check that export.' }, 404);
     }
 
     const buf = Buffer.from(await file.arrayBuffer());

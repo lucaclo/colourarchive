@@ -504,7 +504,7 @@ export function pointSwatches(adj: Adjustments, target: SimTarget, sample: Decod
       hueRange: [0, 1 / 3, 2 / 3, 1],
       satRange: span(sats, s),
       lumRange: span(vals, ev),
-      rationale: `${label} is still ${(now[region] ?? 0).toFixed(1)} from the reference after the global grade. Point Color picks it out by its colour, so it travels in the preset — no mask to draw.`,
+      rationale: `${label} is still ${(now[region] ?? 0).toFixed(1)} from the reference after the global grade. Point Color picks it out by its colour, so it travels in the preset. No mask to draw.`,
     });
   }
   return out;

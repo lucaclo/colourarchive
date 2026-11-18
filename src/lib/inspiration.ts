@@ -76,7 +76,7 @@ export async function fetchImageFromUrl(url: string): Promise<{ buf: Buffer; nam
     }
     if (!res.ok) {
       console.warn(`[inspiration] ${url} answered ${res.status}`);
-      throw new Error("That link didn't give a picture");
+      throw new Error('That link didn’t give a picture');
     }
     if (Number(res.headers.get('content-length') || 0) > MAX_FETCH_BYTES) throw new Error('That file is too big.');
     return res;

@@ -421,12 +421,12 @@ function regionNote(
   spanOfWidth: number,
   spanOfHeight: number,
 ): string {
-  const fills = `It fills ${percent(spanOfWidth)} of the frame's width and ${percent(spanOfHeight)} of its height.`;
+  const fills = `It fills ${percent(spanOfWidth)} of the frame’s width and ${percent(spanOfHeight)} of its height.`;
   if (wholly) return `The whole bright region is in the picture. ${fills}`;
   if (anyInside) {
     return `The bright region runs ${round1(overflow.by)}° past the ${overflow.edge} edge. ${fills}`;
   }
-  return `None of the bright region is in the picture — the nearest of it is ${round1(shortfall.by)}° outside the ${shortfall.edge} edge.`;
+  return `None of the bright region is in the picture. The nearest of it is ${round1(shortfall.by)}° outside the ${shortfall.edge} edge.`;
 }
 
 /**

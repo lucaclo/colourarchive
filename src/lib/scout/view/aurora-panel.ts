@@ -66,9 +66,9 @@ export interface AuroraPanel {
 }
 
 const ABSENCE_TEXT: Record<NoAurora, string> = {
-  'data-unavailable': "NOAA's space-weather feed did not answer — not the same as a quiet night.",
+  'data-unavailable': 'NOAA’s space-weather feed did not answer (not the same as a quiet night).',
   'not-dark': 'Not dark enough here yet for this to mean anything.',
-  'moon-up': 'The moon is up — it would wash out anything but a strong display.',
+  'moon-up': 'The moon is up: it would wash out anything but a strong display.',
 };
 
 /** Under the server's own 5-minute cache TTL, so a proactive refetch here

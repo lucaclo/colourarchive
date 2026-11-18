@@ -228,8 +228,8 @@ test('Removed: a removed photo comes back with Restore, and the count with it', 
     assert.deepEqual(trashed(`${stamp}.`), [filename]);
     assert.equal(await count(), before - 1);
     const link = o.page.locator('#removed-open');
-    assert.ok(await link.isVisible(), 'Removed · N shows');
-    assert.match((await link.textContent())!.replace(/\s+/g, ' ').trim(), /^Removed · \d+$/);
+    assert.ok(await link.isVisible(), 'Removed N shows');
+    assert.match((await link.textContent())!.replace(/\s+/g, ' ').trim(), /^Removed \d+$/);
 
     await link.click();
     const dlg = o.page.locator('#removed[role="dialog"][aria-modal="true"][data-modal]');

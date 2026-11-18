@@ -57,7 +57,7 @@ describe('compareEdit', () => {
 
   it('says so when the edit overshot, rather than calling it progress', () => {
     const c = compareEdit(analysis({ L: 0.4 }), analysis({ L: 0.7 }), analysis({ L: 0.6 }));
-    assert.match(c.rows.find((r) => r.key === 'brightness')!.text, /overshot — now brighter/);
+    assert.match(c.rows.find((r) => r.key === 'brightness')!.text, /overshot, now brighter/);
   });
 
   it('does not invent a percentage for a quantity that was already matched', () => {

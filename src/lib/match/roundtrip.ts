@@ -86,8 +86,8 @@ export function compareEdit(mine: PhotoAnalysis, edited: PhotoAnalysis, referenc
     const text =
       closed === null ? (after < NO_GAP[key] * 2 ? `${label}: already matched, and still is.` : `${label}: was matched; the edit moved it ${side} than the reference by ${words.unit(after)}.`)
       : after < NO_GAP[key] ? `${label}: matched.`
-      : crossed ? `${label}: overshot — now ${side} than the reference by ${words.unit(after)}.`
-      : closed < 0 ? `${label}: moved away from the reference — now ${side} by ${words.unit(after)}.`
+      : crossed ? `${label}: overshot, now ${side} than the reference by ${words.unit(after)}.`
+      : closed < 0 ? `${label}: moved away from the reference, now ${side} by ${words.unit(after)}.`
       : `${label}: ${Math.round(closed * 100)}% of the gap closed; still ${side} than the reference by ${words.unit(after)}.`;
     return { key, label, before, after, closed, text };
   };
@@ -130,7 +130,7 @@ function castRow(mine: PhotoAnalysis, edited: PhotoAnalysis, reference: PhotoAna
   const text =
     closed === null ? (after < NO_GAP.cast * 2 ? 'Colour cast: already matched, and still is.' : `Colour cast: was matched; now ${direction()}.`)
     : after < NO_GAP.cast ? 'Colour cast: matched.'
-    : closed < 0 ? `Colour cast: moved away from the reference — ${direction()}.`
+    : closed < 0 ? `Colour cast: moved away from the reference; ${direction()}.`
     : `Colour cast: ${Math.round(closed * 100)}% of the gap closed; ${direction()}.`;
   return { key: 'cast', label: 'Colour cast', before, after, closed, text };
 }
@@ -302,7 +302,7 @@ export function roundTripEligibility(i: EligibilityInput): { eligible: boolean; 
     reasons.push('“Yours” was not a zero-slider Lightroom export, so the difference also contains Lightroom’s own rendering of the file, not only the preset.');
   }
   if (i.hadMasks) {
-    reasons.push('The preset carried masks, which Lightroom regenerates on import — their effect on each region cannot be separated. Use “Without masks” for a round trip meant to calibrate.');
+    reasons.push('The preset carried masks, which Lightroom regenerates on import. Their effect on each region cannot be separated. Use “Without masks” for a round trip meant to calibrate.');
   }
   const ar = (d: { width: number; height: number }) => d.width / Math.max(1, d.height);
   if (Math.abs(ar(i.mine) / ar(i.edited) - 1) > 0.01) {
@@ -354,7 +354,7 @@ export const CAL_TARGETS: Target[] = [
 /** Constants a round trip can never teach, and why — shown so their absence
  *  from the proposal reads as a fact, not an omission. */
 export const NOT_FROM_ROUND_TRIPS: Array<{ key: keyof Calibration; why: string }> = [
-  { key: 'tempUnit', why: 'The preset never writes Temp — it routes the cast through Colour Grading — so no round trip moves it. The probe harness can.' },
+  { key: 'tempUnit', why: 'The preset never writes Temp (it routes the cast through Colour Grading), so no round trip moves it. The probe harness can.' },
   { key: 'tintUnit', why: 'Same as Temp: never written to a preset.' },
   { key: 'tempKelvinPer100', why: 'A relabelling for RAW files, not a slider response; nothing here can measure it.' },
   { key: 'sharpenUnit', why: 'The solver never advises Sharpening, so there is nothing to calibrate against.' },
@@ -537,9 +537,9 @@ export function fitCalibration(rows: CalRow[], current: Calibration = DEFAULT_CA
     const sameSign = Math.sign(value) === Math.sign(base.estimate);
     const ratio = Math.abs(value / base.estimate);
     if (!Number.isFinite(value) || !sameSign || ratio > PLAUSIBLE_FACTOR || ratio < 1 / PLAUSIBLE_FACTOR) {
-      out.push({ ...base, status: 'implausible', points, value, relError, text: `Fitted ${fmt(value)}, which is too far from the estimate (${fmt(base.estimate)}) to trust — usually a round trip that was not applied as recorded.` });
+      out.push({ ...base, status: 'implausible', points, value, relError, text: `Fitted ${fmt(value)}, which is too far from the estimate (${fmt(base.estimate)}) to trust: usually a round trip that was not applied as recorded.` });
     } else if (!(relError <= MAX_REL_ERROR)) {
-      out.push({ ...base, status: 'uncertain', points, value, relError, text: `Fitted ${fmt(value)} ± ${Math.round(relError * 100)}% — too noisy to apply yet.` });
+      out.push({ ...base, status: 'uncertain', points, value, relError, text: `Fitted ${fmt(value)} ± ${Math.round(relError * 100)}%, too noisy to apply yet.` });
     } else {
       out.push({ ...base, status: 'fitted', points, value, relError, text: `Fitted ${fmt(value)} ± ${Math.round(relError * 100)}% from ${points} round trips.` });
     }

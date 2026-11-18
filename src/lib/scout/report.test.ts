@@ -67,7 +67,7 @@ describe('shootPlan', () => {
 
   it('uses the caller’s own caveat when there is a sharper one to give', () => {
     const text = shootPlan({ ...BASE, caveat: '412 of 900 heights are storey-count guesses.' });
-    assert.match(text, /shadows are modelled — 412 of 900 heights are storey-count guesses\./);
+    assert.match(text, /shadows are modelled: 412 of 900 heights are storey-count guesses\./);
     assert.doesNotMatch(text, /not measured/);
   });
 
@@ -179,7 +179,7 @@ describe('itineraryReport', () => {
 
   it('takes the caveat the same way a shoot plan does', () => {
     const text = itineraryReport({ ...REPORT, caveat: '12 heights are guesses.' });
-    assert.match(text, /shadows are modelled — 12 heights are guesses\./);
+    assert.match(text, /shadows are modelled: 12 heights are guesses\./);
     assert.doesNotMatch(text, /not measured/);
   });
 

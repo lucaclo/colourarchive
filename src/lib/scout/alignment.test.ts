@@ -244,7 +244,7 @@ describe('findAlignments — the four absences', () => {
     assert.equal(search.absence, 'never-quite');
     // A tolerance the caller chose must not be reported as a fact about the sky.
     assert.match(search.note, /within 0\.0°/);
-    assert.doesNotMatch(search.note, /disc's width/);
+    assert.doesNotMatch(search.note, /disc’s width/);
   });
 
   it('carries the closest approach whichever absence it is', () => {

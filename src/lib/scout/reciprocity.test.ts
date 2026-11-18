@@ -31,7 +31,7 @@ test('Portra past a second, and Velvia past a minute, refuse rather than guess',
   assert.ok(Math.abs(at8.stops - 0.5) < 1e-9);
   assert.equal(at8.filter, '7.5M');
   assert.equal(correctExposure(v, 2).filter, undefined);
-  assert.match(correctExposure(v, 64).refusal!, /doesn't recommend exposures of 64 s or longer/);
+  assert.match(correctExposure(v, 64).refusal!, /doesn’t recommend exposures of 64 s or longer/);
 });
 
 test('every stock names its source', () => {

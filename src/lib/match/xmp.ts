@@ -369,7 +369,7 @@ export function buildPresetFiles(adj: Adjustments, opts: PresetOptions): PresetF
     files.push({
       filename: `${base}.xmp`,
       contents: toXmp(adj, { ...opts, includeMasks: true }),
-      description: `Full preset — global grade plus ${usableMasks.length} automatic mask${usableMasks.length > 1 ? 's' : ''} (${usableMasks.map((m) => m.label).join(', ')}), which Lightroom regenerates against your photo on import.`,
+      description: `Full preset: global grade plus ${usableMasks.length} automatic mask${usableMasks.length > 1 ? 's' : ''} (${usableMasks.map((m) => m.label).join(', ')}), which Lightroom regenerates against your photo on import.`,
     });
   }
 
@@ -378,7 +378,7 @@ export function buildPresetFiles(adj: Adjustments, opts: PresetOptions): PresetF
     contents: toXmp(adj, { ...opts, includeMasks: false }),
     description:
       usableMasks.length > 0
-        ? 'Same grade without the mask block — use this if the full preset fails to import.'
+        ? 'Same grade without the mask block. Use this if the full preset fails to import.'
         : 'Global grade. No automatic masks applied for this pair.',
   });
 

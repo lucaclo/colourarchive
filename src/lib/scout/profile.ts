@@ -248,9 +248,9 @@ function sightNote(
 
   if (minClearance == null) return `Nothing between the two ends was measurable.${gap}`;
   if (clear) {
-    return `Clear line of sight, with ${metres(minClearance)} to spare over the ground at ${km(minAt!)}.${gap} Bare earth only — trees and buildings are not in this.`;
+    return `Clear line of sight, with ${metres(minClearance)} to spare over the ground at ${km(minAt!)}.${gap} Bare earth only: trees and buildings are not in this.`;
   }
-  return `Blocked — the ground at ${km(minAt!)} stands ${metres(-minClearance)} into the line. ${metres(rise)} higher would clear it.${gap}`;
+  return `Blocked: the ground at ${km(minAt!)} stands ${metres(-minClearance)} into the line. ${metres(rise)} higher would clear it.${gap}`;
 }
 
 /* ── Drawing it ────────────────────────────────────────────────────────────── */

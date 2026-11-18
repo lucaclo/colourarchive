@@ -422,7 +422,7 @@ export function horizonReading(
       canvasCover,
       bearing,
       distanceM,
-      note: `${Math.round(gateCover)}% low and mid cloud on the horizon where the sun is (${where}). The light probably won't get out from under it, however clear it is overhead.`,
+      note: `${Math.round(gateCover)}% low and mid cloud on the horizon where the sun is (${where}). The light probably won’t get out from under it, however clear it is overhead.`,
     };
   }
 
@@ -433,7 +433,7 @@ export function horizonReading(
       canvasCover,
       bearing,
       distanceM,
-      note: `The horizon is open (${Math.round(gateCover)}% low and mid cloud ${where}), but there's only ${Math.round(canvasCover)}% mid and high cloud overhead. Clean light with nothing to land on.`,
+      note: `The horizon is open (${Math.round(gateCover)}% low and mid cloud ${where}), but there’s only ${Math.round(canvasCover)}% mid and high cloud overhead. Clean light with nothing to land on.`,
     };
   }
 
@@ -443,7 +443,7 @@ export function horizonReading(
     canvasCover,
     bearing,
     distanceM,
-    note: `The horizon is open (${Math.round(gateCover)}% low and mid cloud ${where}) and there's ${Math.round(canvasCover)}% mid and high cloud overhead. That's the setup a colourful sky needs, though it's no guarantee.`,
+    note: `The horizon is open (${Math.round(gateCover)}% low and mid cloud ${where}) and there’s ${Math.round(canvasCover)}% mid and high cloud overhead. That’s the setup a colourful sky needs, though it’s no guarantee.`,
   };
 }
 

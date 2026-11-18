@@ -85,9 +85,9 @@ function noteFor(opportunity: Omit<GoTonightOpportunity, 'note' | 'confirmed'>):
   }
   const pct = Math.round(opportunity.directLightFraction * 100);
   if (opportunity.horizon) {
-    return `${bodyWord} ${verb} on the kept bearing ${when} UTC (${off}) — ${pct}% direct light locally, horizon reads ${opportunity.horizon.verdict}: ${opportunity.horizon.note}`;
+    return `${bodyWord} ${verb} on the kept bearing ${when} UTC (${off}), ${pct}% direct light locally, horizon reads ${opportunity.horizon.verdict}: ${opportunity.horizon.note}`;
   }
-  return `${bodyWord} ${verb} on the kept bearing ${when} UTC (${off}) — ${pct}% direct light forecast locally.`;
+  return `${bodyWord} ${verb} on the kept bearing ${when} UTC (${off}), ${pct}% direct light forecast locally.`;
 }
 
 /**

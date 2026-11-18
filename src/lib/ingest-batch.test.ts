@@ -51,7 +51,7 @@ test('an original that was already on disk is never removed when the import fail
 test('plainReason: the image library’s words, put plainly', async () => {
   assert.equal(plainReason(await sharpError(Buffer.from('hello'))), 'Not a picture we can read');
   assert.equal(plainReason(await sharpError(Buffer.alloc(0))), 'Empty file');
-  assert.equal(plainReason(new Error('EACCES: permission denied')), "Couldn't add this one");
+  assert.equal(plainReason(new Error('EACCES: permission denied')), 'Couldn’t add this one');
 });
 
 test('slugName: accents fold instead of being dropped; plain names are unchanged', () => {

@@ -69,7 +69,7 @@ async function bitmapFrom(blob: Blob, label: string): Promise<ImageBitmap> {
     return await createImageBitmap(blob);
   } catch {
     throw new BrowserAnalysisError(
-      `This device could not decode ${label}. Without the Mac there is no RAW decoder available — export a JPEG from Lightroom with every slider reset and use that instead.`,
+      `This device could not decode ${label}. Without the Mac there is no RAW decoder available. Export a JPEG from Lightroom with every slider reset and use that instead.`,
     );
   }
 }
@@ -95,14 +95,14 @@ export async function analyseInBrowser(
   const baseline: BaselineMode = requested === 'export' ? 'export' : 'native';
   if (RAW_EXT.test(filename)) {
     throw new BrowserAnalysisError(
-      'RAW files need the Mac, which decodes them with macOS Image I/O. Export a JPEG from Lightroom with every slider reset — that is the more accurate baseline anyway.',
+      'RAW files need the Mac, which decodes them with macOS Image I/O. Export a JPEG from Lightroom with every slider reset. That is the more accurate baseline anyway.',
     );
   }
 
   const started = Date.now();
   const timings: Record<string, number> = {};
   const warnings: string[] = [
-    'Measured on this device without the Mac, so no segmentation ran. Sky, subject, skin and the other masked regions were not measured — only the whole frame, the luminance zones and the colour bands.',
+    'Measured on this device without the Mac, so no segmentation ran. Sky, subject, skin and the other masked regions were not measured (only the whole frame, the luminance zones and the colour bands).',
   ];
 
   const t0 = Date.now();

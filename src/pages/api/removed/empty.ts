@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ ok: true, deleted, left: items.length });
   } catch (err) {
     console.error('[removed] empty failed', err);
-    return json({ ok: false, error: "Couldn't empty Removed" }, 500);
+    return json({ ok: false, error: 'Couldn’t empty Removed' }, 500);
   }
 };
 

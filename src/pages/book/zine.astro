@@ -283,13 +283,14 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-primary:hover { background: color-mix(in oklab, var(--fg) 86%, var(--bg)); }
   /* Secondary actions in the foot: quiet pills, like every other
      secondary action (they were underlined italic words). */
-  .zn-textbtn {
+  /* :global: the cover well's Remove is built by script. */
+  :global(.zn-textbtn) {
     appearance: none; background: transparent; border: 0; padding: 0 0.95rem; cursor: pointer; min-height: var(--hit);
     border-radius: var(--r-pill); font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500; color: var(--secondary);
     transition: background 140ms var(--ease), color 140ms var(--ease);
   }
-  .zn-textbtn:hover { color: var(--fg); background: var(--fill); }
-  .zn-quiet { color: var(--muted); margin-left: auto; }
+  :global(.zn-textbtn:hover) { color: var(--fg); background: var(--fill); }
+  :global(.zn-quiet) { color: var(--muted); margin-left: auto; }
 
   /* ── Rail ──────────────────────────────────────────────────────────── */
   /* contain: size, so a long rail (sixteen pages is nine thumbnails) scrolls
@@ -339,6 +340,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   .zn-edit :global(.zn-pagehead small) { font-family: var(--font-label); font-style: normal; font-size: var(--t-caption); color: var(--muted); }
   .zn-edit :global(.zn-mid) { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; padding-top: 2rem; }
   .zn-edit :global(.zn-wellcol) { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+  .zn-edit :global(.zn-wellcol .zn-quiet) { margin-left: 0; }
 
   /* The photo well: a crop-marked frame, like the drop zones on Inspiration. */
   .zn-edit :global(.zn-well) {
@@ -552,6 +554,7 @@ const chapters = curatedChapters(manifest.chapters, curation).map((ch) => ({
   }
   .zn-palfoot p { margin: 0 auto 0 0; font-family: var(--font-display); font-style: italic; color: var(--secondary); }
   .zn-palcredit { margin: 0; padding: 0 1rem 0.9rem; font-size: var(--t-caption); color: var(--muted); }
+  .zn-palcredit cite { font-family: var(--font-note); font-style: italic; }
   @media (max-width: 640px) {
     .zn-wheelbody { grid-template-columns: minmax(0, 1fr); justify-items: center; }
     .zn-wheelside { width: 100%; }

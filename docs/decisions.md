@@ -58,6 +58,19 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-18 · Big-title pages (Inspiration, Add & remove, the Book) share one column and
+  one head: `--page-max` (68rem) and `--page-pad` (20 px on a phone, 48 px at the desk),
+  `.page-head` with the count beside the title and icon-and-word actions that drop to the
+  icon on a phone. The Book's head is `.page-head ph-static` (no fold).
+- 2026-11-18 · Type roles, app-wide: the UI face for anything read or tapped, labels
+  included; JetBrains Mono only for values; Fraunces italic for titles and notebook
+  labels and notes. Never the system face in italic, never mono in italic. 11 px
+  (`--t-caption-2`) is the dense tier: Scout's sheet, field labels, tab labels.
+- 2026-11-18 · Copy: curly apostrophes; no em-dash asides in UI strings (a colon, a full
+  stop, a comma or brackets instead); a count follows its label after a space, no "·"
+  ("Removed 24", like "On a chapter edge 18").
+- 2026-11-18 · Scout: moving the pin (a map tap, or "Scout here" from your photos) shows
+  no note and no Undo. The pin and the sheet's new name say it moved.
 - 2026-11-18 · Phone and tablet Archive: the top bar and tab bar slide away on scroll
   down and come back on scroll up (fade in place with Reduce Motion). Desk keeps them.
 - 2026-11-18 · Scout's phone sheet has a "min" detent: a small centred tab with the

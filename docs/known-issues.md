@@ -49,6 +49,11 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - macOS has no `timeout` command; a check wrapped in it silently never runs.
 - `/api/scout/places` 500s in dev without Full Disk Access (can't copy Photos.sqlite).
   Not caused by UI changes.
+- Copy a throwaway archive with `ditto <from> <to>`, not `cp -cR`: the clone nested the
+  folder and dropped `.archive/src`, so the server showed no photos and every Archive
+  e2e timed out. Check `curl -sk <origin>/ | grep -c 'class="frame'` before a run.
+- A dev server another session started can't be stopped from this one. Start your
+  own on a free port (`E2E_ORIGIN` points the e2e at it).
 - With `COLOUR_ARCHIVE_DATA` set, dev still serves `/img/*` from the repo's `public/img`.
   A probe that uploads to the throwaway server must route `/img/**` to the throwaway
   folder, or new thumbnails 404.
@@ -84,6 +89,21 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - Six parallel workers on the main model ran out the 5-hour usage limit twice, with
   nothing saved. For a sweep, run scripted probes from the main session, or at most two
   workers that each write findings to a file as they go.
+
+## Type and alignment
+- `[data-seg]` prepends a `.seg-thumb` span (`lib/ui/segments.ts`), so `:first-child`
+  on its items never matches. Use `:first-of-type`. Scout's Sun tile sat 10 px in.
+- In `inspiration.astro` the "Last of the tracked capitals" block comes after the
+  notebook block and wins. A notebook label listed there falls back to the system
+  face in italic at 12 px.
+- JetBrains Mono ships no italic: a count inside a Fraunces italic heading renders
+  fake-oblique. Give data spans in italic headings `font-style: normal`.
+- To check type across the app, run `node node_modules/.cache/type-audit/probe.mjs <out>`
+  then `summarize.mjs <out>` (in the same folder): faces outside the three, sizes off
+  the scale, tracked capitals, mono words, system italic, and stacked text that starts
+  1 to 6 px apart. `states.mjs` does the same for menus, sheets and Match.
+- A probe that clicks inside Add & remove's grid can remove photos. Mock every non-GET
+  `/api` request in a probe, not a list of routes.
 
 ## Astro
 - Scoped `<style>` doesn't reach elements built at runtime. Wrap those selectors in

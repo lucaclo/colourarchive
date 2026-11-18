@@ -296,7 +296,7 @@ describe('checkFraming', () => {
     assert.equal(check.inFrame, true);
     assert.equal(check.placement, 'edge');
     assert.ok(Math.abs(check.edgeGapDeg) < EDGE_TOLERANCE_DEG);
-    assert.match(check.note, /model's own error/);
+    assert.match(check.note, /model’s own error/);
   });
 
   it('flags the flare band outside the frame but not far beyond it', () => {

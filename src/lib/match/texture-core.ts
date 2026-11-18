@@ -266,7 +266,7 @@ export async function measureTextureFrom(src: TextureSource): Promise<TextureSta
   ) {
     return blockedTexture(
       'resolution',
-      `Too small to read grain honestly (${native.width}x${native.height}). Grain, noise and sharpening need roughly ${MIN_LONG_EDGE}px on the long edge — below that, what looks like grain is mostly resizing.`,
+      `Too small to read grain honestly (${native.width}x${native.height}). Grain, noise and sharpening need roughly ${MIN_LONG_EDGE}px on the long edge. Below that, what looks like grain is mostly resizing.`,
       native,
     );
   }

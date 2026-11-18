@@ -490,10 +490,10 @@ function refusalFor(state: {
   }
   if (state.core.alwaysDown) return 'The core never rises here.';
   if (!state.coreUp.length) {
-    return `The core does not clear ${state.minAltitude}° here tonight — it peaks at ${state.core.peakAltitude.toFixed(0)}°.`;
+    return `The core does not clear ${state.minAltitude}° here tonight: it peaks at ${state.core.peakAltitude.toFixed(0)}°.`;
   }
   if (!state.darkness.length) {
-    return 'It never gets astronomically dark tonight — the sun stays above −18°.';
+    return 'It never gets astronomically dark tonight: the sun stays above −18°.';
   }
   if (!state.moonFree.length) return 'The moon is up for the whole of the dark window.';
   return 'The core is up, and the sky is dark, but not at the same time tonight.';

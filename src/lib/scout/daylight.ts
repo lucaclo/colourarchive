@@ -457,7 +457,7 @@ export function describeLightWindows(
   const clock = (minute: number) => formatMinute(dayStart, minute, timeZone);
 
   if (lit.length > 3) {
-    return `Sun in ${lit.length} spells, ${formatDuration(total)} in all — first ${clock(
+    return `Sun in ${lit.length} spells, ${formatDuration(total)} in all: first ${clock(
       lit[0].startMinute,
     )}, last ends ${clock(lit[lit.length - 1].endMinute)}.`;
   }

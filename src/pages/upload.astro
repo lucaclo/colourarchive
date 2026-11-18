@@ -63,7 +63,7 @@ const accent = manifest.chapters[0]
         <span class="ph-count manage-count" id="manage-count">{allPhotos.length}</span>
       </div>
       <div class="ph-actions">
-        <button class="btn btn-primary ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add<span class="ingest-addbtn-more"> photos</span></button>
+        <button class="btn btn-primary ingest-addbtn" id="add-photos" type="button" data-cmdk="Add photos" data-cmdk-keywords="upload, import"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add<span class="ingest-addbtn-more"> photos</span></span></button>
       </div>
     </header>
 
@@ -127,7 +127,7 @@ const accent = manifest.chapters[0]
           <span class="edge-mark" aria-hidden="true">≈</span> On a chapter edge <span class="edge-count" id="edge-count">{onEdge}</span>
         </button>
         <button type="button" class="edge-filter removed-open" id="removed-open" aria-haspopup="dialog" aria-controls="removed" hidden={removedCount === 0}>
-          Removed · <span id="removed-count">{removedCount}</span>
+          Removed <span class="edge-count" id="removed-count">{removedCount}</span>
         </button>
       </div>
       {lastImport && (
@@ -205,7 +205,7 @@ const accent = manifest.chapters[0]
 
   /* No topbar above this any more (the tab bar carries navigation), so the
      page opens on its own title; the foot clears the tab bar. */
-  .ingest { max-width: 62rem; margin: 0 auto; padding: 0 6vw calc(var(--tabbar-space) + 4rem); }
+  .ingest { max-width: var(--page-max); margin: 0 auto; padding: 0 var(--page-pad) calc(var(--tabbar-space) + 4rem); }
   .lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.4rem; max-width: 40rem; }
 
   .drop[hidden] { display: none; }
@@ -526,7 +526,6 @@ const accent = manifest.chapters[0]
   :global(.grid.edge-only .cell:not(.on-edge):not(.just-moved)) { display: none; }
   /* --secondary, not the edge count's --muted: under a finger the pill keeps
      its hover fill, and --muted on it is 4.15:1. */
-  .removed-open span { font-family: var(--font-data); color: var(--secondary); }
 
   /* --- Removed (R13-16): a sheet over a dim page, centred at the desk and
      at the foot of the screen on a phone, where the thumb is. ------------ */
@@ -667,7 +666,7 @@ const accent = manifest.chapters[0]
   const RAW_EXT = /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2|pef|srw|x3f)$/i;
   const IMAGE_EXT = /\.(jpe?g|png|tiff?|webp|avif|heic|heif|gif)$/i;
   const CONCURRENCY = 3;   // the Mac processes these in parallel; the store write is serialised server-side
-  const COULDNT = "Couldn't add this one";   // the server's plainReason() fallback, in the same words
+  const COULDNT = "Couldn’t add this one";   // the server's plainReason() fallback, in the same words
   const fmtBytes = (n) =>
     n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' kB';
 
@@ -725,7 +724,7 @@ const accent = manifest.chapters[0]
     notAddedList.hidden = true;
     viewArchive.hidden = true;
     const notIn = (r, f) => { notAddedList.append(renderRow(r, f)); notAddedList.hidden = false; };
-    for (const f of raw) notIn({ filename: f.name, status: 'unsupported', error: 'Camera RAW — export to JPEG or TIFF first' }, f);
+    for (const f of raw) notIn({ filename: f.name, status: 'unsupported', error: 'Camera RAW isn’t supported. Export to JPEG or TIFF first.' }, f);
     for (const f of other) notIn({ filename: f.name, status: 'unsupported', error: 'Not a picture we can read' }, f);
     if (!files.length) {
       if (raw.length || other.length) {
@@ -932,8 +931,8 @@ const accent = manifest.chapters[0]
     cell.classList.toggle('on-edge', Boolean(edge));
     const folded = landedKey && moved && baseOf(landedKey) !== cell.dataset.base;
     cell.querySelector('figcaption').title =
-      folded ? `Filed under ${choiceName(cell.dataset.base)} — shown in ${name} until ${choiceName(cell.dataset.base)} has enough photos to be its own chapter`
-      : moved ? `Moved here by you — the colour alone says ${choiceName(cell.dataset.auto)}`
+      folded ? `Filed under ${choiceName(cell.dataset.base)}: shown in ${name} until ${choiceName(cell.dataset.base)} has enough photos to be its own chapter`
+      : moved ? `Moved here by you. The colour alone says ${choiceName(cell.dataset.auto)}`
       : edge ? `On the edge with ${choiceName(edge)}`
       : '';
   }

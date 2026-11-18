@@ -21,7 +21,7 @@ import { addGpsLocations } from './photo-locations';
 // Camera RAW is not decodable by this sharp/libvips build — reject it clearly
 // rather than failing with a cryptic error mid-batch.
 export const RAW_EXT = /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2|pef|srw|x3f)$/i;
-export const RAW_MESSAGE = 'Camera RAW not supported — export to JPEG or TIFF first.';
+export const RAW_MESSAGE = 'Camera RAW isn’t supported. Export to JPEG or TIFF first.';
 const CONCURRENCY = Math.max(2, Math.min(8, os.cpus().length - 2));
 
 /** Why a file wasn't added, in plain words for the upload rows and the inbox
@@ -30,7 +30,7 @@ export function plainReason(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   if (/buffer is empty/i.test(raw)) return 'Empty file';
   if (/unsupported image format|not a known file format/i.test(raw)) return 'Not a picture we can read';
-  return "Couldn't add this one";
+  return 'Couldn’t add this one';
 }
 
 /** Below this on its long side a picture is still added, with a note. */
