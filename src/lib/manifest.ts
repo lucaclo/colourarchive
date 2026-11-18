@@ -7,7 +7,6 @@ import {
   type OKLCH, type Band,
 } from './color';
 import type { Photo, Chapter, Manifest, Overrides, Derivative } from './types';
-import { scheduleDeploy } from './deploy';
 
 // Flat photo list is the source of truth (append-only, deduped by id).
 // The nested, ordered, override-applied `manifest.json` is derived from it —
@@ -85,7 +84,6 @@ export function setMedium(id: string, medium: 'film' | 'digital'): Promise<Manif
     overrides.photos[id] = { ...overrides.photos[id], medium };
     await writeJson(OVERRIDES_PATH, overrides);
     const manifest = await rebuild();
-    scheduleDeploy();
     return manifest;
   });
 }
@@ -98,7 +96,6 @@ export function setGenre(id: string, genre: import('./types').Genre): Promise<Ma
     overrides.photos[id] = { ...overrides.photos[id], genre };
     await writeJson(OVERRIDES_PATH, overrides);
     const manifest = await rebuild();
-    scheduleDeploy();
     return manifest;
   });
 }
@@ -114,7 +111,7 @@ export function setGenre(id: string, genre: import('./types').Genre): Promise<Ma
  * next week. A move that matches what the pipeline would choose anyway is
  * stored as no override at all, so an undo leaves no residue.
  *
- * Several ids in one write, so a bulk move is one rebuild and one deploy
+ * Several ids in one write, so a bulk move is one rebuild
  * rather than one per photo.
  */
 export function setChapter(ids: string[], base: string | null): Promise<Manifest> {
@@ -131,7 +128,6 @@ export function setChapter(ids: string[], base: string | null): Promise<Manifest
     }
     await writeJson(OVERRIDES_PATH, overrides);
     const manifest = await rebuild();
-    scheduleDeploy();
     return manifest;
   });
 }
@@ -155,10 +151,6 @@ export function setChapter(ids: string[], base: string | null): Promise<Manifest
  * write, and a change means someone else got there first — retry, then give up
  * and say so rather than overwrite them. The lock is still taken, because within
  * the app it is the cheaper of the two mechanisms.
- *
- * Deliberately no `scheduleDeploy()`: a repair leaves the archive looking the
- * same as it was always meant to look, and the CLI that calls this exits long
- * before the debounce would fire.
  */
 export function replaceDerivatives(id: string, derivatives: Derivative[]): Promise<Manifest> {
   return withLock(async () => {
@@ -418,7 +410,6 @@ export function addPhotos(incoming: Photo[]): Promise<Manifest> {
     }
     await writeJson(STORE_PATH, photos);
     const manifest = await rebuild();
-    scheduleDeploy();
     return manifest;
   });
 }
@@ -465,6 +456,5 @@ async function removePhotoLocked(id: string): Promise<{ manifest: Manifest; remo
   }
 
   const manifest = await rebuild();
-  scheduleDeploy();
   return { manifest, removed: true };
 }

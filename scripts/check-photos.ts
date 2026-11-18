@@ -41,6 +41,8 @@
  * the originals in `inspiration/`, which is the only reason that is a story
  * rather than a loss. Anything that renders from `/img/` must be in `owners()`.
  */
+// The real archive (the Mac app's folder) unless COLOUR_ARCHIVE_DATA says otherwise.
+import './use-real-archive.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { IMG_DIR, INSPIRATION_DIR, PHOTOS_DIR, imgUrl } from '../src/lib/paths.ts';
