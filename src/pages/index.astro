@@ -903,18 +903,39 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
 
   // --- Top bar auto-hide on scroll down, reveal on scroll up --------------
   const bar = document.getElementById('topbar');
+  // On a phone or tablet the tab bar goes with it: scrolling down gives the
+  // photographs the whole screen, any scroll up brings both back, and near
+  // the top they always show. The desk keeps its own rule, and its tab bar
+  // only goes compact (TabBar.astro).
+  const tabbar = document.getElementById('tabbar');
+  const touchLayout = matchMedia('(max-width: 1024px), (pointer: coarse)');
+  const setBarsAway = (away) => {
+    bar?.classList.toggle('hidden', away);
+    tabbar?.classList.toggle('away', away);
+  };
+  // An open photo or panel owns the screen; nothing it does is reading.
+  const overlayOpen = () => document.body.classList.contains('modal-open') || !!document.querySelector('[data-modal]:not([hidden])');
   let lastY = window.scrollY;
   scrollTasks.push((y) => {
-    if (Math.abs(y - lastY) < 4) return;           // ignore rubber-band jitter
     // Overview keeps the bar: it holds the way back out (the pressed
     // Overview button), and a grid you scroll around in is not reading.
     const overview = document.querySelector('.archive')?.classList.contains('overview');
+    if (touchLayout.matches) {
+      if (overlayOpen()) return;
+      const dy = y - lastY;
+      if (overview || y <= 80 || dy < 0) { setBarsAway(false); lastY = y; }
+      else if (dy > 8) { setBarsAway(true); lastY = y; }
+      return;
+    }
+    if (Math.abs(y - lastY) < 4) return;           // ignore rubber-band jitter
     bar.classList.toggle('hidden', !overview && y > lastY && y > 90);
     lastY = y;
   });
+  touchLayout.addEventListener('change', () => setBarsAway(false));
   // Slid away, its buttons were still Tab stops you couldn't see (R13-22):
-  // focus coming in brings the bar back.
-  bar?.addEventListener('focusin', () => bar.classList.remove('hidden'));
+  // focus coming into either bar brings both back.
+  bar?.addEventListener('focusin', () => setBarsAway(false));
+  tabbar?.addEventListener('focusin', () => setBarsAway(false));
 
   // --- Fade photos in on load --------------------------------------------
   const markLoaded = (img) => {
@@ -1255,7 +1276,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     const anchor = frameNear(focusX, focusY);
     const before = anchor?.getBoundingClientRect().top;
     archive.classList.toggle('overview', lvl !== 'read');
-    if (lvl !== 'read') document.getElementById('topbar')?.classList.remove('hidden');
+    if (lvl !== 'read') setBarsAway(false);
     archive.classList.toggle('strips', lvl === 'strips');
     if (cols) archive.style.setProperty('--ocols', String(cols));
     shownLevel = lvl; shownCols = cols;

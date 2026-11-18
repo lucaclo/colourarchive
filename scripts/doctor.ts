@@ -22,6 +22,8 @@
  * way to notice a file that is still there but is quietly not what it used to
  * be.
  */
+// The real archive (the Mac app's folder) unless COLOUR_ARCHIVE_DATA says otherwise.
+import './use-real-archive.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';

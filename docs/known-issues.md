@@ -19,11 +19,27 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   `window.scout.setMinute()`.
 - Chrome on macOS 26 ignores Keychain trust for the local CA. Import it in
   chrome://certificate-manager. Don't use `security add-trusted-cert` from Claude.
+- A dark strip of icons under the tab bar in a dev shot is Astro's dev toolbar,
+  raised by a tap. Not in the app.
+- iOS home-screen apps can report a bottom safe-area gap that isn't there. Never move
+  a control by the measured `--vgap`: the tab bar went below the screen (fixed #162).
+  Only Scout's map may reach into it. Desktop emulation can't show this; a phone can.
 
 ## Testing safely
-- Don't test writes against the real archive (it auto-deploys). Use a throwaway
-  `COLOUR_ARCHIVE_DATA` dev server on :4400, plus `COLOUR_ARCHIVE_INBOX` /
+- Don't test writes against the real archive (`~/Pictures/Colour Archive`, D1). Use a
+  throwaway `COLOUR_ARCHIVE_DATA` dev server on :4400, plus `COLOUR_ARCHIVE_INBOX` /
   `COLOUR_ARCHIVE_PHOTOS_LIBRARY`. The shell can't read iCloud Drive or Photos (TCC).
+  Plain `npm run dev` uses the repo's development copy, which no longer publishes.
+- `check:photos` (`--fix`, `--prune` write), `doctor`, `drift`, `deploy:site` and any
+  `PUBLIC_STATIC=true` build read the real archive, found from the app's settings.
+  Point them elsewhere with `COLOUR_ARCHIVE_DATA` (or `COLOUR_ARCHIVE_PROFILE` for a
+  fake settings file).
+- `paths.ts` reads `COLOUR_ARCHIVE_DATA` once, when it loads. `astro.config.mjs` imports
+  `publish.ts`, which loads it, so `static-archive.ts` must stay the config's first
+  local import, and `use-real-archive.ts` each script's first import. Otherwise the
+  build stamp counts one archive and the pages show another.
+- `astro build` (like `astro sync`) rewrites `.vite/deps` under a running dev server:
+  restart :4400 afterwards (`earcut.js` 504s).
 - The Book size select writes `src/data/book.json`; never change it against the dev
   server. `tests/features.e2e.ts` mocks saves.
 - Probe scripts in `node_modules/.cache/audit-*.mjs` block non-GET requests, so they're
@@ -39,6 +55,11 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - `/api/photos` lists only dated photos (83 of 110). Count the store file
   (`.archive/src/data/photos.json`), not that endpoint. Film/Digital overrides live in
   `photos.overrides.json`, so the store's `medium` can differ from what the page shows.
+- On the :4400 throwaway archive, `features.e2e.ts` F01-E2 and R2-F01-E1 fail on `main`
+  too: `#00ff00` matches photos there, so the "nothing has it" state never shows.
+- `*{animation:none}` doesn't reach `::before`/`::after`: the Archive cover's scroll hint
+  kept looping, and a page a failed test left open starved every later Scout test under
+  SwiftShader. Close contexts in `afterEach`, and include the pseudo-elements.
 - `POST /api/book` merges and is versioned since round 13: it needs the `version` from
   GET or the page (`data-version` on `#book-savebar`), answers 409 when it's stale, and
   keeps `book.json.bak`. Still copy `book.json` before a test that saves the book.
@@ -92,6 +113,43 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - `fitBounds` throws ("reading 'center'") when its padding plus the map's own padding
   leaves no room, which happens on a phone with the sheet up. Anything after it in the
   same function never runs (R13-30). Guard `cameraForBounds` and fall back to `flyTo`.
+- Esri imagery sends a 2,521-byte grey "Map data not yet available" JPEG with HTTP 200
+  where it has none. `?blankTile=false` gives a 404 instead, but that 404 has no CORS
+  header (a console error per tile). `satellite-protocol.ts` spots the size and uses an
+  ancestor tile instead.
+- Mapterhorn elevation stops at different depths by place (z17 Alps, z16 Lake District,
+  z12 Patagonia) and 404s below that; `terrarium-tile.ts` cuts the tile from an ancestor.
+  The east–west stripes over Patagonia are in Mapterhorn's data, not our decoding.
+- `queryTerrainElevation` returns 0, not null, before the terrain tiles load. Wait for
+  `idle` or terrain `sourcedata` before placing anything on the ground.
+- Standing (Eye level), MapLibre's tile zoom fails both ways. Its glancing-angle penalty
+  uses the camera's height over the centre, about 0, so every tile came in at z0.
+  `setSourceTileLodParams` zeroes the penalty only at one exact value (horizon 89.25°);
+  just off it, it becomes a boost of ~25 zooms and the page locks up. Use the
+  per-source `calculateTileZoom` hook (`eye-camera.ts`).
+- Terrain draws draped layers into a pool of 30 textures. Each unbroken run of draped
+  layers is a "stack", and stacks steal each other's slots: with 2 or more stacks, or
+  more than ~28 terrain tiles, every tile redraws every frame (220 ms against 18).
+  Check `map.painter.renderToTexture._stacks.length` and
+  `map.terrain.tileManager.getRenderableTiles().length`. `keepDrapedTogether` in
+  `view/page.ts` keeps one stack: on every style change it lifts each non-draped layer
+  (circle, symbol, fill-extrusion, custom) above all draped ones. So a new layer's
+  `beforeId` only orders it among layers of its own kind.
+- `getStyle().layers` leaves out custom layers; `getLayersOrder()` has them all.
+- ScaleControl's move handler calls `unproject`, which with terrain reads pixels
+  back from the GPU (185 ms per move while standing). Standing removes it.
+- MapLibre bug: past the elevation's maxzoom, `getTerrainData` assumes the elevation
+  tile is the overscaled tile's own parent, so a coarser one floats buildings off the
+  hillside. Keep each source's tile zoom at or under its own `maxzoom`.
+- `getCameraAltitude()` is NaN on the globe transform. Work it out from
+  `transform.elevation`, pitch and `cameraToCenterDistance`.
+- Under SwiftShader (no GPU) the 2D map takes 0.6 s a frame and standing 2.5–6.5 s
+  while tiles load. The page freezes, Vite's reload socket drops, and the console fills
+  with "send was called before connect". Run eye-view tests on Metal (`gpu: true` in
+  `tests/features.e2e.ts`).
+- Arrow keys step Scout's time from a document keydown handler. Anything else using
+  arrows (standing, night free-look) needs a capture-phase listener and
+  `stopImmediatePropagation`.
 
 ## Publishing
 - Netlify's upload refused the two Scout functions from Aug 2026, so there are none now:
@@ -110,11 +168,13 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   through the install script (`open -n --env`), or the relaunch opens the real profile.
 - Each build is signed ad hoc, so macOS may ask again for Location, Microphone or a
   protected folder (Desktop, Documents) after an update.
-- Until the workflow's first run, the latest release (v0.1.0) has no `latest-mac.yml`:
-  checks 404 and the menu says "Couldn’t Check for Updates".
+- GitHub refuses retired runner images (`macos-14` failed the first release). The
+  release job runs on `macos-latest`.
 
 ## Open
 - Tailscale isn't installed on the Mac yet, so phone-from-anywhere isn't live.
-- The installed Mac app is 0.2.0 (self-updating, installed 2026-11-17) on
-  `~/Pictures/Colour Archive`, a drifted copy of the repo's archive (D1). `/get` still
-  hands out the 19 Oct `v0.1.0` until the first release from `main`.
+- Nothing publishes by itself since D1: after photo changes in the app, run
+  `npm run deploy:site` (`npm run drift` says whether the site is behind). Publishing
+  from the app itself isn't built: it would need the app to reach the repo on the
+  Desktop (a TCC prompt after every self-update) and run its build.
+- Standing doesn't model the earth's curve: peaks 100 km off are drawn ~0.45° high.

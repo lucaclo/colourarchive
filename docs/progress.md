@@ -1,19 +1,20 @@
 # Progress
 
 ## Now
-- `main` at 1ea6032: round 12 shipped (phone from anywhere, phone a11y pass).
-- Branch `workflow-omega`: this file, CLAUDE.md, worker agents, reflect skill.
-- Branch `round-13` (from workflow-omega), pushed at ed6f4ed: the sweep in
-  `replica/round-13/audit.md` and its fixes, batches 1–6 of `plan.md`. Everything but D1
-  (R13-06) is done. Netlify is live with this build (2026-11-17, static-only deploy).
+- `main` at e865dd2: round 13 (#161) and the phone tab bar fix (#162) merged. App 0.2.4
+  installed and up to date. Netlify has that build.
+- Branch `round-14`, not committed: Archive bars hide on scroll, Scout sheet "min",
+  Esri grey-tile fill, Mapterhorn terrain, "Stand here", the minimised tab, D1 (one
+  archive in `~/Pictures/Colour Archive`). All checks green.
 
 ## Next
-- Luca, D1 (R13-06): which data folder is the real one (repo vs `~/Pictures/Colour
-  Archive`, which differ in 2 references and the photographers file). The app (0.2.0,
-  Open at Login on) uses the Pictures one.
-- PR `round-13` → `main` once `verify` is green. The PR also runs the app build (no
-  release); the merge publishes the first release, which the installed app picks up
-  and `/get` hands out. Until then its menu says "Couldn’t Check for Updates" (404).
+- Luca: commit and ship round 14 (PR → merge → app release → Netlify)?
+- Luca: publishing is now by hand (`npm run deploy:site`). Want the app to publish on
+  its own after a photo change? It needs a one-time Desktop permission, asked again
+  after each update, or the repo moved off the Desktop.
+- The repo's own `photos/`, `inspiration/`, `public/img` (1.0 GB) are now only a dev
+  copy; they could go once round 14 ships. Backup of the 2 replaced files:
+  `~/Pictures/Colour Archive/.archive/.before-merge-2026-11-18/`.
 - 9 files in the real archive belong to no entry: `npm run check:photos -- --orphans`.
 - Install Tailscale on the Mac, switch on "Let My Phone In From Anywhere", redeploy.
   Needs Luca: `brew install --cask tailscale-app` asks for his password, then sign-in,
@@ -22,6 +23,19 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-18 · round-14 · Shipped the phone tab bar fix (#162). Built: Archive bars hide on
+  scroll; Scout sheet min detent; no Esri grey tiles; Mapterhorn terrain with ancestor
+  fill; "Stand here" at 1.7 m with head-turn drag, 150 km view, still frame 16–19 ms, a
+  drag 0.7–0.9 s (was 5–11 s). Checked with WebGL shots in 5 places and on a phone.
+  Then: one draped stack in every view (3D scrub redraws 35–50 → 4–5 tiles a step; the
+  pictures are the same apart from the sun-path end dots, no longer half covered);
+  night free-look arrows no longer scrub the time; features e2e 28 min → 2.5 min
+  (pages closed after each test). Later: the minimised sheet is a small tab with the
+  short name only (Repulse Bay). D1 settled: `~/Pictures/Colour Archive` is the one
+  archive (repo's 2 Fan Ho refs, photographers file and caches merged in); public builds,
+  publish, drift, check:photos and doctor read it; dev auto-deploy removed. Proved by
+  a public build from a test archive (stamp, cover and images all followed it); drift
+  says the live site matches. Not committed yet.
 - 2026-11-17 · round-13 · The Mac app updates itself from GitHub releases, one per merge
   to `main`; the app menu shows "Up to Date · Version 0.2.N". Checked end to end in
   scratch (0.2.0 → 0.2.1, relaunch, up to date). Not yet run on GitHub; the installed

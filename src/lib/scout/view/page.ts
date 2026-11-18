@@ -47,6 +47,23 @@ import {
   initialBearing,
   type LatLon,
 } from '../geo';
+import {
+  EYE_FAR_PLANE_M,
+  EYE_HEIGHT_M,
+  EYE_PITCH_LEVEL,
+  EYE_PITCH_MAX,
+  EYE_TERRAIN_BIAS,
+  EYE_TERRAIN_MAX_ZOOM,
+  clampEyePitch,
+  degreesPerPixel,
+  eyeTileZoom,
+  lookTarget,
+  nextTerrainBias,
+  pixelsPerMetre,
+  turnHead,
+  type EyePose,
+  type TileZoomFunction,
+} from '../eye-camera';
 import { SUN_ALTITUDE, shadowBearing, shadowLengthRatio, sunPosition, type SunSample } from '../sun';
 import {
   BUILDING_EDGE_COLOUR,
@@ -106,6 +123,7 @@ import { crossCheckProof } from '../proof-check';
 import { PHOTO_SEARCH_RADIUS_M, type RawPhoto } from '../sources/types';
 import { photographerCount, toHotspots } from '../sources/photo-client';
 import { isLandmark, placeNameFor, type NamedPlace } from '../place-names';
+import { shortPlaceName } from '../short-name';
 import { DemUploadError, elevationWithOverride, parseGeoTiffDem } from '../dem-upload';
 import { removeUpload, saveUpload, uploadsFor, type StoredDem } from './dem-store';
 import { shootPlan } from '../report';
@@ -249,6 +267,7 @@ import {
 } from './dome-layer';
 import { createTerrainShadows, type TerrainShadows } from './terrain-shadows';
 import { DESPIKED_TERRAIN_PROTOCOL, registerDespikedTerrainProtocol } from './terrain-protocol';
+import { SATELLITE_TILES, registerSatelliteProtocol } from './satellite-protocol';
 import { loadStars } from './stars-loader';
 import {
   cloudStructure,
@@ -464,10 +483,11 @@ export async function startScout(): Promise<void> {
    * style's own ground fills switched off — so it comes out as a hybrid, with
    * real roads and labels over real ground, rather than as a bare photograph you
    * cannot navigate. The imagery is Esri's, which is free to use with the
-   * attribution below and needs no key, like everything else here.
+   * attribution below and needs no key, like everything else here. Its tiles
+   * come through `satellite-protocol.ts` (`SATELLITE_TILES`), which fills the
+   * places Esri has no imagery at a zoom from the zoom above instead of
+   * showing its grey "Map data not yet available" square.
    */
-  const SATELLITE_TILES =
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
   /** Source layers whose fills would cover the imagery. */
   const GROUND_LAYERS = new Set(['landcover', 'landuse', 'park', 'water', 'waterway', 'aeroway']);
 
@@ -480,6 +500,13 @@ export async function startScout(): Promise<void> {
   let styleReady = false;
   let basemap: Basemap = 'light';
   let view: ViewMode = '2d';
+  /** Standing at the pin (see "Stand here"): the camera to go back to, and
+   *  what undoes the standing setup. Up here because terrain, taps and
+   *  moveend all ask about them. */
+  let eyeView: { bearing: number; pitch: number; zoom: number; center: MapLibre.LngLatLike; view: ViewMode } | null = null;
+  let eyeCleanup: (() => void) | null = null;
+  /** True during a look-around drag while standing. */
+  let eyeDragging = false;
   let day: ScoutDay | null = null;
   /** Minutes into the solar day — the slider's unit. */
   let minute = 720;
@@ -768,6 +795,7 @@ export async function startScout(): Promise<void> {
    */
   const maplibregl = (await import('maplibre-gl')).default;
   registerDespikedTerrainProtocol(maplibregl);
+  registerSatelliteProtocol(maplibregl);
 
   // Asking MapLibre for the map is the WebGL test: it throws when no context
   // can be had. A separate probe canvas cost 360 ms of a cold load in
@@ -1308,6 +1336,39 @@ export async function startScout(): Promise<void> {
           },
         });
 
+  /** MapLibre's draped layer types: with terrain on, drawn into textures laid on the ground. */
+  const DRAPED_TYPES = new Set(['background', 'fill', 'line', 'raster', 'hillshade', 'color-relief']);
+  const isDraped = (m: MapLibreMap, id: string) => DRAPED_TYPES.has(m.getLayer(id)?.type ?? '');
+
+  /**
+   * Every other layer above every draped one, kept that way as layers come
+   * and go. With terrain on, MapLibre draws each unbroken run of draped
+   * layers into textures of its own, and its cache of 30 hands one run's
+   * textures to the next: this style's five runs redrew every terrain tile
+   * five times a frame, moving or not (280 redraws over 8 still frames at
+   * Zermatt, against none). Draped layers lie on the ground whatever comes
+   * between them; the 3D layers, circles and names keep their own order.
+   */
+  function keepDrapedTogether(m: MapLibreMap) {
+    let queued = false;
+    const tidy = () => {
+      queued = false;
+      const order = m.getLayersOrder();
+      const firstOther = order.findIndex((id) => !isDraped(m, id));
+      if (firstOther < 0) return;
+      const rest = order.slice(firstOther);
+      if (!rest.some((id) => isDraped(m, id))) return;
+      for (const id of rest) if (!isDraped(m, id)) m.moveLayer(id);
+    };
+    // Once a frame at most: styledata also fires for every paint change.
+    m.on('styledata', () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(tidy);
+    });
+  }
+  if (map) keepDrapedTogether(map);
+
   map?.on('style.load', () => {
     if (!map) return;
 
@@ -1818,16 +1879,27 @@ export async function startScout(): Promise<void> {
     }
 
     // --- Terrain ----------------------------------------------------------
-    // Routed through DESPIKED_TERRAIN_PROTOCOL rather than straight at AWS —
-    // see terrain-protocol.ts for why: the raw tileset has isolated bad
-    // pixels that render as needles spiking out of otherwise flat ground.
+    // Mapterhorn's open elevation, routed through DESPIKED_TERRAIN_PROTOCOL
+    // rather than straight at the host — see terrain-protocol.ts: it cleans
+    // bad pixels, and cuts the tiles Mapterhorn lacks at a depth from their
+    // nearest ancestor, so the 404s below its deepest zoom are never holes.
+    //
+    // maxzoom 14 at 512 px is 4.8 m a sample at the equator, 3.3 m in the
+    // Alps: twice as fine as the AWS tiles at z14 were, and past it MapLibre
+    // overzooms. Not 15, though Mapterhorn has more there: the basemap's
+    // vector tiles stop at z14, and with the elevation deeper than them
+    // MapLibre warns "cannot calculate elevation if elevation maxzoom >
+    // source.maxzoom": labels on overzoomed tiles are then raised against
+    // whichever coarser elevation tile it still has cached, not the one the
+    // ground is drawn from. Where Mapterhorn stops at z12 (Patagonia, the
+    // Sahara) this also keeps the resampled tiles to two levels.
     map.addSource(TERRAIN_SOURCE, {
       type: 'raster-dem',
-      tiles: [`${DESPIKED_TERRAIN_PROTOCOL}://elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`],
+      tiles: [`${DESPIKED_TERRAIN_PROTOCOL}://mapterhorn/{z}/{x}/{y}.webp`],
       encoding: 'terrarium',
-      tileSize: 256,
+      tileSize: 512,
       maxzoom: 14,
-      attribution: 'Elevation: Mapzen / AWS Open Data',
+      attribution: 'Elevation: <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>',
     });
     map.addLayer(
       {
@@ -1997,7 +2069,9 @@ export async function startScout(): Promise<void> {
     // reading the shadows on it. `disableFreeLook`'s own camera restore
     // ends in a real, single `moveend` once it settles, so both refresh
     // correctly for wherever the view actually lands.
-    if (freeLookCleanup) return;
+    // A look-around drag while standing does the same; it refreshes once at
+    // the end of the drag instead (see `standHere`).
+    if (freeLookCleanup || eyeDragging) return;
     collectBuildings();
     collectTrees();
     refreshTerrain();
@@ -2010,8 +2084,9 @@ export async function startScout(): Promise<void> {
     // drag still ends in an ordinary 'click' event at wherever the pointer
     // came up. Nothing below this point is a click a person meant to make,
     // and letting it through relocated the pin mid-orbit, which is exactly
-    // the thing free-look exists to prevent.
-    if (freeLookCleanup) return;
+    // the thing free-look exists to prevent. Standing here turns dragPan off
+    // the same way, and the pin is under your feet.
+    if (freeLookCleanup || eyeCleanup) return;
     // With Layers, Share or the Milky Way switches open, this click is the
     // one that closes them (the document listener further down, which runs
     // after this one) and nothing else. It used to move the pin as well.
@@ -4540,6 +4615,7 @@ export async function startScout(): Promise<void> {
     $('panel-name').textContent = label.name;
     $('panel-detail').textContent = label.detail;
     $('sheet-name').textContent = label.name;
+    $('sheet-short').textContent = shortPlaceName(label.name, navigator.languages ?? [navigator.language]);
     renderLive();
     renderFacts();
   }
@@ -6949,7 +7025,9 @@ export async function startScout(): Promise<void> {
     const projection = (map as unknown as { style?: { projection?: unknown } }).style?.projection;
     if (on && (!styleReady || !projection)) return;
     try {
-      map.setTerrain(on ? { source: TERRAIN_SOURCE, exaggeration: 1.15 } : null);
+      // True height while standing: the 3D view's 1.15 makes every slope
+      // steeper than it looks from the ground.
+      map.setTerrain(on ? { source: TERRAIN_SOURCE, exaggeration: eyeView ? 1 : 1.15 } : null);
     } catch {
       /* terrain unsupported — the rest still works */
     }
@@ -6975,7 +7053,8 @@ export async function startScout(): Promise<void> {
       setTerrainSafely(three);
       // A tilt gesture that promoted 2D to 3D is already choosing its own
       // pitch; easing to 55° under the person's fingers would fight them.
-      if (!tiltPromoting) map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
+      // Standing owns the pitch too, and keeps it through a basemap swap.
+      if (!tiltPromoting && !eyeCleanup) map.easeTo({ pitch: three ? 55 : 0, duration: prefersReducedMotion() ? 0 : 700 });
     }
     // Turning terrain on and off moves the ground the dome stands on — in 2D
     // the ground *is* the plane at zero, in 3D it is the exaggerated DEM — so
@@ -7033,7 +7112,7 @@ export async function startScout(): Promise<void> {
     const next = button?.dataset.view as '2d' | '3d' | undefined;
     if (!next || next === view) return;
     // Choosing 2D or 3D leaves eye level for that view, not the one before it.
-    if (eyeView) { eyeView = null; $('eye-button').setAttribute('aria-pressed', 'false'); }
+    if (eyeView) leaveEyeLevel();
     view = next;
     for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
     applyView();
@@ -8730,20 +8809,23 @@ export async function startScout(): Promise<void> {
       else if (e.key === '-' || e.key === '_') zoom = m.getZoom() - ZOOM_KEY_STEP;
       else return;
       e.preventDefault();
+      // Caught first (capture phase) and kept: the same arrows step the time,
+      // so a look round the sky also scrubbed the evening away under it.
+      e.stopImmediatePropagation();
       m.jumpTo({
         ...(bearing !== null && { bearing }),
         ...(pitch !== null && { pitch }),
         ...(zoom !== null && { zoom }),
       });
     };
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown, true);
 
     freeLookCleanup = () => {
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onKeyDown, true);
       canvas.style.cursor = '';
       canvas.style.touchAction = prevTouchAction;
       m.touchZoomRotate.enableRotation();
@@ -8982,15 +9064,20 @@ export async function startScout(): Promise<void> {
     maybeOfferNightVision();
   });
 
-  /* ── Eye level ─────────────────────────────────────────────────────────
-     Stand at the pin and look: the camera at head height above the ground,
-     facing the frame's aim when there is one, else the sun. Everything the
-     3D view already draws (terrain, buildings, trees, their shadows) is in
-     the scene, so this is the same light seen from where you would stand,
-     the view ShadowMap and Planit offer and a top-down map cannot. */
-  const EYE_HEIGHT_M = 1.7;
-  const EYE_PITCH = 85;
-  let eyeView: { bearing: number; pitch: number; zoom: number; center: MapLibre.LngLatLike; view: ViewMode } | null = null;
+  /* ── Stand here ────────────────────────────────────────────────────────
+     Stand at the pin and look: the camera exactly at head height over it,
+     facing the frame's aim when there is one, else the sun, with the terrain
+     at its true height. A drag turns the head; the eye stays put. Everything
+     the 3D view draws (terrain, buildings, trees, their shadows, the sun's
+     path) is in the scene, so this is the same light seen from where you
+     would stand. The geometry is in `eye-camera.ts`. */
+
+  /** Where the eye is and which way it looks, while standing. */
+  let eyePose: EyePose | null = null;
+  /** The canvas size at the last placement, to tell a resize from a camera move. */
+  let eyeCanvasSize = '';
+  /** How much coarser than distance asks the terrain is drawn (see `nextTerrainBias`). */
+  let eyeTerrainBias = EYE_TERRAIN_BIAS;
 
   function eyeBearing(): number {
     if (shown.frame) return lens.bearing;
@@ -8998,58 +9085,356 @@ export async function startScout(): Promise<void> {
     return current()?.azimuth ?? map?.getBearing() ?? 0;
   }
 
-  function setEyeLevel(onNow: boolean) {
-    const btn = $('eye-button');
-    if (!map || !centre) return;
-    if (!onNow) {
-      btn.setAttribute('aria-pressed', 'false');
-      const back = eyeView;
-      eyeView = null;
-      if (!back) return;
-      if (back.view !== view) {
-        view = back.view;
-        for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
-        applyView();
-      }
-      map.easeTo({ bearing: back.bearing, pitch: back.pitch, zoom: back.zoom, center: back.center, duration: prefersReducedMotion() ? 0 : 700 });
-      return;
+  const canvasSize = (): string => {
+    const canvas = map?.getCanvas();
+    return canvas ? `${canvas.clientWidth}x${canvas.clientHeight}` : '';
+  };
+
+  /** The ground under the pin as drawn, or null while its terrain tile loads. */
+  function eyeGround(): number | null {
+    if (!map || !centre) return null;
+    try {
+      return map.queryTerrainElevation([centre.lon, centre.lat]);
+    } catch {
+      return null;
     }
-    if (freeLookCleanup) return; // Milky Way mode owns the camera
-    eyeView = { bearing: map.getBearing(), pitch: map.getPitch(), zoom: map.getZoom(), center: map.getCenter(), view };
-    btn.setAttribute('aria-pressed', 'true');
+  }
+
+  /**
+   * What standing changes in the style, and what puts it back. Run again on
+   * a basemap swap, which brings a fresh style. (One run of draped layers,
+   * which standing needed first, is kept for every view: `keepDrapedTogether`.)
+   */
+  function dressForStanding(m: MapLibre.Map): () => void {
+    const undo: Array<() => void> = [];
+
+    // Tile detail by distance from the eye: see `eyeTileZoom`. Never past a
+    // source's own maxzoom: a vector tile stretched past its zoom 14 over
+    // terrain coarser than 14 is placed by MapLibre as if the terrain were at
+    // 14 (`getTerrainData`), so buildings took their height from elsewhere on
+    // the mountain and hung in the sky above Zermatt. The tile has no more
+    // detail to give past its maxzoom anyway.
+    const terrainZoom = eyeTileZoom({ bias: () => eyeTerrainBias, maxZoom: EYE_TERRAIN_MAX_ZOOM });
+    for (const id of Object.keys(m.getStyle().sources)) {
+      const source = m.getSource(id) as { calculateTileZoom?: TileZoomFunction; maxzoom?: number } | undefined;
+      if (!source) continue;
+      const before = source.calculateTileZoom;
+      source.calculateTileZoom = id === TERRAIN_SOURCE ? terrainZoom : eyeTileZoom({ maxZoom: source.maxzoom ?? 22 });
+      undo.push(() => {
+        source.calculateTileZoom = before;
+      });
+    }
+
+    // Lit windows are drawn in a pass of their own that nearer walls don't
+    // hide, so from the street every window behind a house shows through it.
+    // Names laid flat on the map, along roads and rivers or not, smear into
+    // streaks seen edge-on.
+    for (const id of m.getLayersOrder()) {
+      const type = m.getLayer(id)?.type;
+      const flat =
+        type === 'symbol' &&
+        ((m.getLayoutProperty(id, 'symbol-placement') ?? 'point') !== 'point' || m.getLayoutProperty(id, 'text-pitch-alignment') === 'map');
+      if (id !== 'scout-windows' && !flat) continue;
+      const visibility = m.getLayoutProperty(id, 'visibility') ?? 'visible';
+      if (visibility === 'none') continue;
+      m.setLayoutProperty(id, 'visibility', 'none');
+      undo.push(() => {
+        if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', visibility);
+      });
+    }
+
+    // Solid walls: at the 3D view's 0.94 the hill behind shows through the
+    // house in front.
+    if (m.getLayer('scout-buildings')) {
+      const opacity = m.getPaintProperty('scout-buildings', 'fill-extrusion-opacity');
+      m.setPaintProperty('scout-buildings', 'fill-extrusion-opacity', 1);
+      undo.push(() => {
+        if (m.getLayer('scout-buildings')) m.setPaintProperty('scout-buildings', 'fill-extrusion-opacity', opacity);
+      });
+    }
+
+    m.triggerRepaint();
+    return () => {
+      for (const step of undo.reverse()) step();
+    };
+  }
+
+  /** The camera at the eye, looking along the pose. */
+  function placeEye() {
+    if (!map || !eyePose) return;
+    const target = lookTarget(eyePose, eyePose.bearing, eyePose.pitch);
+    const options = map.calculateCameraOptionsFromTo(
+      new maplibregl.LngLat(eyePose.lon, eyePose.lat),
+      eyePose.altM,
+      new maplibregl.LngLat(target.lon, target.lat),
+      target.altM,
+    );
+    eyeCanvasSize = canvasSize();
+    map.jumpTo(options, { eyeLevel: true });
+    // The far plane, when MapLibre's own falls short: see `EYE_FAR_PLANE_M`.
+    const tr = map.transform;
+    tr.clearNearFarZOverride();
+    const farPx = EYE_FAR_PLANE_M * pixelsPerMetre(tr.worldSize, tr.center.lat);
+    if (tr.farZ < farPx) tr.overrideNearFarZ(tr.nearZ, farPx);
+  }
+
+  /** Undoes standing without moving the camera; the caller decides where it goes. */
+  function leaveEyeLevel() {
+    eyeCleanup?.();
+    eyeCleanup = null;
+    eyePose = null;
+    eyeView = null;
+    eyeDragging = false;
+    $('eye-button').setAttribute('aria-pressed', 'false');
+    // Back to the 3D view's exaggeration.
+    if (view === '3d') setTerrainSafely(true);
+  }
+
+  function standHere() {
+    if (!map || !centre || freeLookCleanup || eyeCleanup) return;
+    const m = map;
+    const terrainWasOn = !!m.getTerrain();
+    eyeView = { bearing: m.getBearing(), pitch: m.getPitch(), zoom: m.getZoom(), center: m.getCenter(), view };
+    $('eye-button').setAttribute('aria-pressed', 'true');
     if (view !== '3d') {
       view = '3d';
       for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
       applyView();
+    } else {
+      setTerrainSafely(true); // the same terrain at true height
     }
-    const at = centre;
-    const place = () => {
-      if (!map || !eyeView) return;
-      // MapLibre's camera sits `cameraToCenterDistance` pixels behind the
-      // centre along the view (1.5 × the canvas height at its default 36.87°
-      // field of view). Put the centre a few metres ahead along the aim and
-      // pick the zoom that makes that distance put the eye EYE_HEIGHT_M above
-      // the ground there; the centre itself is clamped to the terrain.
-      const bearing = eyeBearing();
-      const pitch = EYE_PITCH;
-      const distM = EYE_HEIGHT_M / Math.cos((pitch * Math.PI) / 180);
-      const ahead = destination(at, bearing, distM * Math.sin((pitch * Math.PI) / 180));
-      const H = map.getCanvas().clientHeight || 800;
-      const metresPerPxAtZ0 = (2 * Math.PI * 6378137 * Math.cos((at.lat * Math.PI) / 180)) / 512;
-      const zoom = Math.min(map.getMaxZoom(), Math.log2((1.5 * H * metresPerPxAtZ0) / distM));
-      map.jumpTo({ center: [ahead.lon, ahead.lat], zoom, pitch, bearing });
+
+    // Nothing may carry the eye away: no panning, zooming or orbiting, and
+    // the pin under your feet can't be dragged or tapped somewhere else.
+    const handlers = [m.dragPan, m.dragRotate, m.scrollZoom, m.touchZoomRotate, m.touchPitch, m.doubleClickZoom, m.boxZoom, m.keyboard];
+    const wasEnabled = handlers.map((h) => h.isEnabled());
+    for (const h of handlers) h.disable();
+    for (const marker of [pin, slabMarker, sightMarker]) {
+      marker.setDraggable(false);
+      marker.getElement().style.display = 'none';
+    }
+    // Looking above the horizon needs pitch past 90. The 3D view stops at 88
+    // because its terrain z-fights from up high; from head height it doesn't.
+    const prevMaxPitch = m.getMaxPitch();
+    m.setMaxPitch(EYE_PITCH_MAX);
+    // The camera's centre floats on the line of sight (see `lookTarget`);
+    // clamped to the ground it would drag the eye up or down with it.
+    const prevClamped = m.getCenterClampedToGround();
+    m.setCenterClampedToGround(false);
+    // The style is dressed for standing at the first placement: before it
+    // the camera is still the 3D view's. Again on a basemap swap.
+    let undress: (() => void) | null = null;
+    const onStyleLoad = () => {
+      if (undress) undress = dressForStanding(m);
     };
-    // Terrain must have a tile under the pin before the camera goes that low:
-    // jumping first reads elevation from a tile that isn't there yet.
-    const whenGrounded = (tries: number) => {
-      if (!map || !eyeView) return;
-      if (map.queryTerrainElevation([at.lon, at.lat]) !== null || tries <= 0) {
-        try { place(); } catch (err) { console.warn('[scout] eye level', err); }
+    // The scale bar measures the ground across the middle of the view, which
+    // standing is the horizon, and to do it reads a pixel back from the GPU
+    // on every move: 185 ms a turn, nine tenths of a look-around drag.
+    const scale = scaleControl && m.hasControl(scaleControl) ? scaleControl : null;
+    if (scale) m.removeControl(scale);
+
+    const canvas = m.getCanvas();
+    let pointer: number | null = null;
+    let lastX = 0;
+    let lastY = 0;
+    let nextX = 0;
+    let nextY = 0;
+    let frame = 0;
+    // One turn per frame however fast the pointer reports, as in free-look.
+    const applyTurn = () => {
+      frame = 0;
+      if (!eyePose) return;
+      const turned = turnHead(eyePose, nextX - lastX, nextY - lastY, degreesPerPixel(m.getVerticalFieldOfView(), canvas.clientHeight));
+      lastX = nextX;
+      lastY = nextY;
+      eyePose = { ...eyePose, ...turned };
+      placeEye();
+    };
+    const onDown = (e: PointerEvent) => {
+      if (pointer !== null) return; // one finger looks; a second is ignored
+      pointer = e.pointerId;
+      eyeDragging = true;
+      lastX = nextX = e.clientX;
+      lastY = nextY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+      canvas.style.cursor = 'grabbing';
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== pointer) return;
+      nextX = e.clientX;
+      nextY = e.clientY;
+      if (!frame) frame = requestAnimationFrame(applyTurn);
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== pointer) return;
+      if (frame) {
+        cancelAnimationFrame(frame);
+        applyTurn();
+      }
+      pointer = null;
+      eyeDragging = false;
+      canvas.style.cursor = 'grab';
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+      // The refresh moveend skipped during the drag.
+      collectBuildings();
+      collectTrees();
+      refreshTerrain();
+    };
+    // Arrow keys look around as a drag does; Escape steps back.
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (/^(input|textarea|select)$/i.test(target.tagName) || target.isContentEditable)) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setEyeLevel(false);
         return;
       }
-      map.once('idle', () => whenGrounded(tries - 1));
+      const step = e.shiftKey ? 15 : 5;
+      const turns: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, step],
+        ArrowDown: [0, -step],
+      };
+      const turn = turns[e.key];
+      if (!turn || !eyePose) return;
+      e.preventDefault();
+      // Caught first (capture phase) and kept: the same arrows step the time.
+      e.stopImmediatePropagation();
+      eyePose = { ...eyePose, bearing: eyePose.bearing + turn[0], pitch: clampEyePitch(eyePose.pitch + turn[1]) };
+      placeEye();
     };
-    whenGrounded(4);
+    // A resize changes the camera's distance from its centre, so the eye is
+    // put back; finer terrain arriving under the pin moves the ground, so the
+    // eye follows it; anything else moving the camera (a search, a fly-to)
+    // means it is time to stop standing and let it.
+    const onResize = () => placeEye();
+    const reground = () => {
+      const ground = eyeGround();
+      if (ground === null || !eyePose) return;
+      const altM = ground + EYE_HEIGHT_M;
+      if (Math.abs(altM - eyePose.altM) < 0.05) return;
+      eyePose = { ...eyePose, altM };
+      placeEye();
+    };
+    // As each terrain tile lands, not only once all have: finer ground under
+    // the pin can be metres higher, and until the eye follows it is inside the
+    // hill. A frame's worth of tiles is one check.
+    // Twice a second: the eye back on the ground if the terrain under it has
+    // sharpened since, and the terrain fitted to the texture cache.
+    eyeTerrainBias = EYE_TERRAIN_BIAS;
+    const tick = window.setInterval(() => {
+      if (!eyePose || eyeDragging) return;
+      reground();
+      const tiles = m.terrain?.tileManager.getRenderableTiles().length ?? 0;
+      const bias = nextTerrainBias(eyeTerrainBias, tiles);
+      if (bias === eyeTerrainBias) return;
+      eyeTerrainBias = bias;
+      placeEye(); // a camera move is what makes MapLibre choose tiles again
+    }, 500);
+    let regroundFrame = 0;
+    const onSourceData = (e: { sourceId?: string; tile?: unknown }) => {
+      if (e.sourceId !== TERRAIN_SOURCE || !e.tile || regroundFrame) return;
+      regroundFrame = requestAnimationFrame(() => {
+        regroundFrame = 0;
+        reground();
+      });
+    };
+    const onMoveStart = (e: { eyeLevel?: boolean }) => {
+      if (e.eyeLevel || canvasSize() !== eyeCanvasSize) return;
+      leaveEyeLevel();
+    };
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onUp);
+    document.addEventListener('keydown', onKey, true);
+    canvas.style.cursor = 'grab';
+    // MapLibre sets touch-action only while its own handlers are on.
+    const prevTouchAction = canvas.style.touchAction;
+    canvas.style.touchAction = 'none';
+    m.on('resize', onResize);
+    m.on('idle', reground);
+    m.on('sourcedata', onSourceData);
+    m.on('movestart', onMoveStart);
+    m.on('style.load', onStyleLoad);
+
+    eyeCleanup = () => {
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onUp);
+      document.removeEventListener('keydown', onKey, true);
+      m.off('resize', onResize);
+      m.off('style.load', onStyleLoad);
+      m.off('idle', reground);
+      m.off('sourcedata', onSourceData);
+      if (regroundFrame) cancelAnimationFrame(regroundFrame);
+      window.clearInterval(tick);
+      m.off('movestart', onMoveStart);
+      if (frame) cancelAnimationFrame(frame);
+      canvas.style.cursor = '';
+      canvas.style.touchAction = prevTouchAction;
+      handlers.forEach((h, i) => {
+        if (wasEnabled[i]) h.enable();
+      });
+      for (const marker of [pin, slabMarker, sightMarker]) {
+        marker.setDraggable(true);
+        marker.getElement().style.display = '';
+      }
+      undress?.();
+      undress = null;
+      m.transform.clearNearFarZOverride();
+      if (scale && !m.hasControl(scale)) m.addControl(scale, 'bottom-right');
+      m.setCenterClampedToGround(prevClamped);
+      m.setMaxPitch(prevMaxPitch);
+    };
+
+    // The eye goes on the ground once the terrain under the pin is in. Just
+    // switched on, MapLibre answers 0 for terrain it hasn't loaded rather
+    // than null, so the first answer is only trusted once the map has been
+    // idle (every tile in) or three seconds have passed.
+    const at = centre;
+    const session = eyeCleanup;
+    const ground = () => {
+      // Once per stand, and never into a later one.
+      if (!map || eyeCleanup !== session || eyePose) return;
+      eyePose = { lon: at.lon, lat: at.lat, altM: (eyeGround() ?? 0) + EYE_HEIGHT_M, bearing: eyeBearing(), pitch: EYE_PITCH_LEVEL };
+      undress = dressForStanding(m);
+      try {
+        placeEye();
+      } catch (err) {
+        console.warn('[scout] stand here', err);
+      }
+    };
+    if (terrainWasOn && eyeGround() !== null) {
+      ground();
+    } else {
+      m.once('idle', ground);
+      window.setTimeout(ground, 3000);
+    }
+  }
+
+  function setEyeLevel(onNow: boolean) {
+    if (!map || !centre) return;
+    if (onNow) {
+      standHere();
+      return;
+    }
+    const back = eyeView;
+    leaveEyeLevel();
+    if (!back) return;
+    if (back.view !== view) {
+      view = back.view;
+      for (const b of $('viewseg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+      applyView();
+    }
+    map.easeTo({ bearing: back.bearing, pitch: back.pitch, zoom: back.zoom, center: back.center, duration: prefersReducedMotion() ? 0 : 700 });
   }
 
   on('eye-button', 'click', () => {
@@ -11637,12 +12022,13 @@ export async function startScout(): Promise<void> {
     }
   }
 
-  /* ── The sheet's three heights ─────────────────────────────────────────────
+  /* ── The sheet's four heights ──────────────────────────────────────────────
      Place, time and the whole information stack share one bottom sheet that
-     rests at peek, half or full — Apple Maps' card, and HIG `sheets.md`: a
-     medium detent for progressive disclosure, and a grabber that cycles the
-     detents on a tap so the sheet can be resized without dragging at all
-     (which is also the WCAG 2.2 single-pointer alternative to the drag).
+     rests at min (the head row alone), peek, half or full — Apple Maps'
+     card, and HIG `sheets.md`: a medium detent for progressive disclosure,
+     and a grabber that cycles the detents on a tap so the sheet can be
+     resized without dragging at all (which is also the WCAG 2.2
+     single-pointer alternative to the drag).
 
      Peek is *measured*, never counted: it ends a little under the day's strip,
      or under the place row before there is a day. Whatever the place row does
@@ -11659,9 +12045,9 @@ export async function startScout(): Promise<void> {
    *  elsewhere — the Layers panel, ⌘K, a link — can actually be seen. */
   let openSheetTo: (height: 'half' | 'full') => void = () => {};
   if (stage && dock) {
-    type Detent = 'peek' | 'half' | 'full';
-    const order: Detent[] = ['peek', 'half', 'full'];
-    const spoken: Record<Detent, string> = { peek: 'Collapsed', half: 'Half height', full: 'Full height' };
+    type Detent = 'min' | 'peek' | 'half' | 'full';
+    const order: Detent[] = ['min', 'peek', 'half', 'full'];
+    const spoken: Record<Detent, string> = { min: 'Minimised', peek: 'Collapsed', half: 'Half height', full: 'Full height' };
     const wideQuery = window.matchMedia('(min-width: 821px)');
     let detent: Detent = 'peek';
 
@@ -11670,6 +12056,13 @@ export async function startScout(): Promise<void> {
       const anchor = timebar && !timebar.hidden ? document.getElementById('time') : document.getElementById('sheet');
       if (!anchor) return 120;
       return Math.ceil(anchor.getBoundingClientRect().bottom - dock.getBoundingClientRect().top + 14);
+    };
+    // Min is the grabber and the head row (search, the place, star, share),
+    // measured the same way: it follows the row, whatever the row holds.
+    const minHeight = () => {
+      const row = document.querySelector('#sheet .sheet-row');
+      if (!row) return 72;
+      return Math.ceil(row.getBoundingClientRect().bottom - dock.getBoundingClientRect().top + 10);
     };
     const fullHeight = () => {
       const top = parseFloat(getComputedStyle(stage).getPropertyValue('--safe-top')) || 0;
@@ -11681,6 +12074,7 @@ export async function startScout(): Promise<void> {
       const full = Math.max(peek, fullHeight());
       if (d === 'full') return full;
       if (d === 'half') return Math.min(full, Math.max(peek + 140, Math.round(stage.clientHeight * 0.5)));
+      if (d === 'min') return Math.min(peek, minHeight());
       return peek;
     };
 
@@ -11748,6 +12142,16 @@ export async function startScout(): Promise<void> {
         padMap(sidebarHidden ? 0 : Math.round(dock.offsetLeft + dock.offsetWidth), 0);
         return;
       }
+      // Min is a small tab as wide as the short name. Measured off the text,
+      // not the box, which is still full width on the way down from peek.
+      if (next === 'min') {
+        const short = document.getElementById('sheet-short');
+        const range = document.createRange();
+        if (short) range.selectNodeContents(short);
+        const text = short ? range.getBoundingClientRect().width : 0;
+        const width = Math.min(stage.clientWidth - 16, Math.max(128, Math.ceil(text) + 48));
+        dock.style.setProperty('--tab-inset', `${Math.max(8, Math.floor((stage.clientWidth - width) / 2))}px`);
+      }
       const px = heightOf(next);
       dock.style.height = `${px}px`;
       publish(px);
@@ -11813,7 +12217,7 @@ export async function startScout(): Promise<void> {
         dock.setPointerCapture(event.pointerId);
         stage.classList.add('dock-dragging');
       }
-      const h = Math.min(heightOf('full'), Math.max(heightOf('peek') - 24, drag.h - dy));
+      const h = Math.min(heightOf('full'), Math.max(heightOf('min') - 24, drag.h - dy));
       dock.style.height = `${h}px`;
       publish(h);
       drag.lastY = event.clientY;
@@ -11827,7 +12231,8 @@ export async function startScout(): Promise<void> {
       if (!was.moved) return;
       const h = dock.offsetHeight;
       const velocity = (event.clientY - was.lastY) / Math.max(1, performance.now() - was.lastT);
-      const byDistance = order.reduce((best, d) =>
+      // Pulled down past peek, the sheet goes all the way down to min.
+      const byDistance = h < was.h && h < heightOf('peek') ? 'min' : order.reduce((best, d) =>
         Math.abs(heightOf(d) - h) < Math.abs(heightOf(best) - h) ? d : best, detent);
       const i = order.indexOf(byDistance);
       // Flicks overrule distance: down is a step lower, up a step higher.
@@ -11849,7 +12254,16 @@ export async function startScout(): Promise<void> {
     // Opening search wants room for its results; so does picking a place
     // the first time, which is when there is suddenly a sheet worth reading.
     on('search-button', 'click', () => {
-      if (!document.getElementById('searchbox')!.hidden && detent === 'peek') setDetent('half');
+      if (!document.getElementById('searchbox')!.hidden && (detent === 'min' || detent === 'peek')) setDetent('half');
+    });
+    // Min shows only the head row; what opens under it needs the room.
+    on('radius-button', 'click', () => {
+      if (!document.getElementById('radiusbox')!.hidden && detent === 'min') setDetent('peek');
+    });
+    // In min the place's name is the way back up.
+    document.querySelector('#sheet .sheet-place')?.addEventListener('click', () => {
+      if (wideQuery.matches || detent !== 'min' || suppressClick) return;
+      setDetent('peek');
     });
 
     /* Content that changes the peek — the search field, a place arriving and
@@ -11878,13 +12292,16 @@ export async function startScout(): Promise<void> {
         resettle();
       });
     }).observe(dock, { attributes: true, attributeFilter: ['hidden'], subtree: true });
+    // A name arriving while the sheet is a tab (a reverse lookup) resizes the tab.
+    const shortName = document.getElementById('sheet-short');
+    if (shortName) new MutationObserver(() => { if (detent === 'min') resettle(); }).observe(shortName, { childList: true, characterData: true, subtree: true });
     wideQuery.addEventListener('change', () => applySidebar());
     // The sheet clips rather than scrolls (its body is the scroller), but a
     // clipped box can still be scrolled by focus — a control below the fold
     // taking focus slid the place row up out of sight. Hold it at the top.
     dock.addEventListener('scroll', () => { if (dock.scrollTop) dock.scrollTop = 0; });
     window.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || wideQuery.matches || detent === 'peek') return;
+      if (event.key !== 'Escape' || wideQuery.matches || detent === 'peek' || detent === 'min') return;
       const typing = event.target instanceof HTMLElement && event.target.closest('input, select, textarea');
       if (!typing) setDetent('peek');
     });

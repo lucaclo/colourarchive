@@ -2,8 +2,9 @@
 #
 # The public site MUST be the read-only static snapshot: PUBLIC_STATIC=true
 # hides the server-only chrome (Add/Remove, Inspiration, original-image zoom).
-# Pinning it here means every deploy — CLI, drag-drop, or the auto-deploy
-# watcher — produces the same correct build, regardless of any UI settings.
+# Pinning it here means every deploy — `npm run deploy:site` or drag-drop —
+# produces the same correct build, regardless of any UI settings. On the Mac
+# it is built from the app's archive folder (astro.config.mjs, D1).
 #
 # This is a security boundary, not only a UI one: `publish = "dist/client"`
 # ships prerendered HTML/JS/images with no server behind them, so the

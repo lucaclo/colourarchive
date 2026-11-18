@@ -31,7 +31,7 @@ import type { Manifest, Photo } from './types';
  * Not a preference. `astro:build:done` runs after Vite has closed its module
  * runner, so a dynamic import from inside the hook throws "Vite module runner
  * has been closed" — and importing the module statically would pull the whole
- * mutation layer, its write lock and its auto-deploy timer into the config file
+ * mutation layer and its write lock into the config file
  * that every `astro dev` loads. Two JSON files, read once, at the end.
  */
 async function readJson<T>(file: string, fallback: T): Promise<T> {

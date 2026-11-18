@@ -19,7 +19,12 @@
  * what is the difference between here and there, and did the thing I just sent
  * actually arrive. Both are answered against `/publish.json`, the stamp the build
  * writes into the site — see src/lib/publish.ts.
+ *
+ * Since D1 the photographs come from the Mac app's archive folder, not this
+ * repository's development copy: the first import below finds it, and the
+ * build Netlify's CLI runs inherits it (astro.config.mjs).
  */
+import './use-real-archive.ts';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -128,8 +133,7 @@ async function reportSearch(): Promise<void> {
  * and a preflight stricter than the build would be a rule nobody wrote down. An
  * undeclared width publishes fine: every file it declares exists, nothing 404s,
  * and the reader gets a smaller largest size. Blocking on it would wedge every
- * publish, including the unattended ones from `src/lib/deploy.ts`, over
- * something no reader can see — and if that photograph's original had been
+ * publish over something no reader can see — and if that photograph's original had been
  * trashed, `--fix` could not clear it and publishing would stay wedged.
  */
 async function preflightImages(): Promise<boolean> {

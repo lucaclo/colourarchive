@@ -24,12 +24,11 @@ import {
   maskToRGBA,
   terrainShadowMask,
   tilesFor,
-  TILE_SIZE,
   type Bounds,
   type HeightField,
   type TileAddress,
 } from '../terrain';
-import { getCleanedTerrariumTile } from './terrarium-tile';
+import { getCleanedTerrariumTile, TERRARIUM_TILE_SIZE } from './terrarium-tile';
 
 export const TERRAIN_SHADOW_SOURCE = 'scout-landform-src';
 export const TERRAIN_SHADOW_LAYER = 'scout-landform';
@@ -75,7 +74,7 @@ const MAX_TILES = 64;
 /* ── Tiles ─────────────────────────────────────────────────────────────────── */
 
 /**
- * A terrarium PNG as heights, cleaned of the source tileset's occasional bad
+ * A terrarium tile as heights, cleaned of the source tileset's occasional bad
  * pixels — a phantom peak here is not just a cosmetic spike, it is something
  * the shadow sweep would happily cast a shadow from, or stop one behind.
  *
@@ -265,19 +264,29 @@ export function createTerrainShadows(map: maplibregl.Map): TerrainShadows {
       return;
     }
     tooWide = false;
-    const zoom = choice.zoom;
+    // The budget above is counted in 256 px tiles. Mapterhorn's are 512 px, so
+    // one of them a zoom up holds exactly the samples four 256 px tiles held:
+    // asking there keeps the grid and the bytes about where they were, in
+    // about a quarter of the requests, and tops out at z12, as deep as
+    // Mapterhorn goes even where land is least surveyed (Patagonia, the
+    // Sahara), so the overlay never waits on a tile cut from an ancestor.
+    const zoom = Math.max(0, choice.zoom - 1);
     const tiles = tilesFor(padded, zoom);
     const across = Math.max(1, new Set(tiles.map((t) => t.x)).size);
     const down = Math.max(1, new Set(tiles.map((t) => t.y)).size);
     // Thin the grid by whatever square factor brings it inside the budget, so
     // both axes give up detail at the same rate rather than one of them being
     // sacrificed for the other.
-    const full = across * down * TILE_SIZE * TILE_SIZE;
+    const full = across * down * TERRARIUM_TILE_SIZE * TERRARIUM_TILE_SIZE;
     const downsample = Math.max(1, Math.ceil(Math.sqrt(full / MAX_CELLS)));
 
     loading = (async () => {
       try {
-        const next = await loadHeightField(padded, decodeTile, { zoom, downsample });
+        const next = await loadHeightField(padded, decodeTile, {
+          zoom,
+          downsample,
+          tileSize: TERRARIUM_TILE_SIZE,
+        });
         if (destroyed) return;
         field = next;
         loadedFor = padded;

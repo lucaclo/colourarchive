@@ -3,7 +3,33 @@ import node from '@astrojs/node';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+// First: points a public build at the real archive before publish.ts loads paths.ts.
+import './src/lib/static-archive.ts';
 import { publishStamp } from './src/lib/publish.ts';
+
+// D1: the public site is built from the real archive, the Mac app's folder,
+// not this repository's development copy. static-archive.ts points paths.ts
+// at it for a public build on this Mac (`netlify deploy`, `npm run
+// export:static`); the photographs' derivatives come from it too. Astro copies
+// `publicDir` into the site, so the build reads a copy of public/ whose img/
+// is the archive's, cloned (APFS, no extra space). CI has no app settings and
+// keeps building the repository's copy.
+const staticPublic = process.env.PUBLIC_STATIC === 'true' && process.env.COLOUR_ARCHIVE_DATA
+  ? publicWithImagesFrom(path.join(process.env.COLOUR_ARCHIVE_DATA, '.archive', 'public', 'img'))
+  : undefined;
+function publicWithImagesFrom(imgDir) {
+  const root = path.dirname(fileURLToPath(import.meta.url));
+  const source = path.join(root, 'public');
+  const out = path.join(root, 'node_modules', '.cache', 'public-static');
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.cpSync(source, out, { recursive: true, filter: (src) => path.relative(source, src).split(path.sep)[0] !== 'img' });
+  fs.mkdirSync(path.join(out, 'img'), { recursive: true });
+  for (const entry of fs.readdirSync(imgDir, { withFileTypes: true })) {
+    if (entry.isFile()) fs.copyFileSync(path.join(imgDir, entry.name), path.join(out, 'img', entry.name), fs.constants.COPYFILE_FICLONE);
+  }
+  return out;
+}
 
 // The public copy links its Mac-only tabs to the Mac's from-anywhere address
 // (TabBar.astro). Written by the Mac app's "Let My Phone In From Anywhere" and
@@ -81,7 +107,7 @@ export default defineConfig({
   // The app build reads public/ from a copy without img/ (desktop/build.mjs):
   // Astro lists every public file in the server's manifest, and those names
   // are this Mac's photo ids.
-  ...(DESKTOP ? { publicDir: './desktop/.public' } : {}),
+  ...(DESKTOP ? { publicDir: './desktop/.public' } : staticPublic ? { publicDir: staticPublic } : {}),
   // The app's server is reached at http://127.0.0.1:<port>. In a production
   // build Astro ignores the Host header unless its domain is listed here, and
   // then takes every request to be for "localhost" with no port — so the

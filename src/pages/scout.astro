@@ -58,7 +58,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     'https://tiles.openfreemap.org',
     // The elevation the hillshade, the landform shadows and the line of sight
     // are all built from.
-    'https://s3.amazonaws.com',
+    'https://tiles.mapterhorn.com',
   ]}
 >
   <!-- Night vision before first paint, so a dark-adapted eye never gets a
@@ -173,6 +173,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
             <div class="sheet-place">
               <p class="sheet-name" id="sheet-name">Nowhere yet</p>
               <p class="sheet-zone" id="sheet-zone"></p>
+              <!-- The minimised sheet's one line: "Repulse Bay", not "淺水灣 Repulse Bay". -->
+              <p class="sheet-name sheet-short" id="sheet-short">Nowhere yet</p>
             </div>
             <button class="round" id="star" type="button" data-cmdk="Keep this spot" data-cmdk-keywords="save, star" aria-pressed="false" title="Keep this spot" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" id="star-mark">
@@ -4894,7 +4896,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      sheet rises, so the collapsed sheet ends cleanly. */
   @media (max-width: 820px) {
     #dock .jumps { transition: opacity 240ms var(--ease); }
-    #dock[data-detent='peek'] .jumps { opacity: 0; pointer-events: none; }
+    #dock[data-detent='peek'] .jumps,
+    #dock[data-detent='min'] .jumps { opacity: 0; pointer-events: none; }
   }
   #dock .jumps {
     margin: 0.55rem -0.75rem 0;
@@ -4947,6 +4950,32 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   #dock[data-detent='peek'] .jumps,
   #dock[data-detent='peek'] #edge-date,
   #dock[data-detent='peek'] #dock-body { visibility: hidden; }
+  /* Min is the head row alone: the place, and the way back up by its name. */
+  #dock[data-detent='min'] .searchbox,
+  #dock[data-detent='min'] .radiusbox,
+  #dock[data-detent='min'] #edge-time,
+  #dock[data-detent='min'] #timebar,
+  #dock[data-detent='min'] #edge-date,
+  #dock[data-detent='min'] #dock-body { visibility: hidden; }
+  #dock[data-detent='min'] .sheet-place {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: var(--hit);
+    cursor: pointer;
+  }
+  /* Min on a phone is a small tab: the short name alone, centred, as wide as
+     the name. `--tab-inset` is measured by page.ts. */
+  .sheet-short { display: none; }
+  @media (max-width: 820px) {
+    #dock { transition: height 420ms var(--sheet-curve), left 420ms var(--sheet-curve), right 420ms var(--sheet-curve), background-color 600ms ease; }
+    .scout-stage.dock-dragging #dock { transition: left 300ms var(--sheet-curve), right 300ms var(--sheet-curve); }
+    #dock[data-detent='min'] { left: var(--tab-inset, 0.5rem); right: var(--tab-inset, 0.5rem); }
+    #dock[data-detent='min'] .sheet-row > .round,
+    #dock[data-detent='min'] .sheet-name:not(.sheet-short),
+    #dock[data-detent='min'] .sheet-zone { display: none; }
+    #dock[data-detent='min'] .sheet-short { display: block; }
+  }
 
   /* ── The map's own controls, one row above the sheet ───────────────────── */
   @media (max-width: 820px) {
@@ -4996,8 +5025,13 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     .dock-grabber { display: none; }
     #dock .sheet { padding-top: 0.75rem; touch-action: auto; }
     #dock[data-detent] .jumps,
+    #dock[data-detent] .searchbox,
+    #dock[data-detent] .radiusbox,
+    #dock[data-detent] #edge-time,
+    #dock[data-detent] #timebar,
     #dock[data-detent] #edge-date,
     #dock[data-detent] #dock-body { visibility: visible; }
+    #dock[data-detent] .sheet-place { display: block; min-height: 0; cursor: auto; }
     .scout-map :global(.maplibregl-ctrl-bottom-left) { left: 25.8rem; }
     /* Before a place is chosen there is nothing to dock: the card hugs the
        search and its suggestions instead of standing as an empty column. */
@@ -5320,7 +5354,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     :global(body:has(.scout-stage) .tabbar-tabs), :global(body:has(.scout-stage) .tabbar-add) { background: color-mix(in oklab, var(--bg) 96%, transparent); }
     /* The scale bar sat over place labels at the top right, and the sheet in
        peek is exactly when the map is being read. */
-    .scout-stage:has(#dock[data-detent='peek']) .scout-map :global(.maplibregl-ctrl-scale) { display: none; }
+    .scout-stage:has(#dock[data-detent='peek']) .scout-map :global(.maplibregl-ctrl-scale),
+    .scout-stage:has(#dock[data-detent='min']) .scout-map :global(.maplibregl-ctrl-scale) { display: none; }
   }
 
   /* Kept spots and recent places share the empty search; either half hides. */

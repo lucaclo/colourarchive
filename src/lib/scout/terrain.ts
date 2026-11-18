@@ -223,6 +223,91 @@ export function decodeTerrariumTile(rgba: Uint8ClampedArray | Uint8Array, size =
   return heights;
 }
 
+/** The inverse of {@link decodeTerrariumTile}: heights as opaque terrarium RGBA. */
+export function encodeTerrariumTile(heights: Float32Array): Uint8ClampedArray<ArrayBuffer> {
+  const rgba = new Uint8ClampedArray(new ArrayBuffer(heights.length * 4));
+  for (let i = 0; i < heights.length; i++) {
+    const [r, g, b] = encodeTerrarium(heights[i]);
+    const p = i * 4;
+    rgba[p] = r;
+    rgba[p + 1] = g;
+    rgba[p + 2] = b;
+    rgba[p + 3] = 255;
+  }
+  return rgba;
+}
+
+/* ── Tiles built from an ancestor ──────────────────────────────────────────── */
+
+/**
+ * The tile `levels` zooms up that contains this one, or null above z0.
+ *
+ * Both tile sources Scout draws stop at a depth that depends on the place:
+ * Mapterhorn's elevation reaches z17 over the Alps and z12 over Patagonia, and
+ * Esri's imagery has holes at z18–19. A tile that does not exist is cut from
+ * the nearest one above it that does.
+ */
+export function ancestorTile(tile: TileAddress, levels: number): TileAddress | null {
+  if (!Number.isInteger(levels) || levels < 0 || levels > tile.z) return null;
+  const scale = 2 ** levels;
+  return { z: tile.z - levels, x: Math.floor(tile.x / scale), y: Math.floor(tile.y / scale) };
+}
+
+/** A square of pixels inside a tile, from its north-west corner. Fractional when deep. */
+export interface PixelSquare {
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** Where a tile sits inside its ancestor `levels` up, in that ancestor's pixels. */
+export function quadrantIn(tile: TileAddress, levels: number, tileSize: number): PixelSquare {
+  const scale = 2 ** levels;
+  const size = tileSize / scale;
+  return { x: (tile.x % scale) * size, y: (tile.y % scale) * size, size };
+}
+
+/**
+ * Heights for `square` of a tile, bilinearly resampled to `outSize × outSize`.
+ *
+ * Interpolated in metres, never in the encoded colour: terrarium packs a height
+ * across three channels, and each blended channel rounds on its own, so the
+ * pixel halfway between 255 m (128, 255, 0) and 256 m (129, 0, 0) comes out
+ * as (129, 128, 0), which reads 384 m.
+ *
+ * Heights stand at pixel centres, as everywhere else in this file (see
+ * `sampleAt`), so each new pixel takes the value of the surface through the
+ * source's samples at its own centre. Past the source tile's outermost centres
+ * the edge value stands: there is nothing on the far side to blend with.
+ */
+export function upsampleHeights(
+  heights: Float32Array,
+  tileSize: number,
+  square: PixelSquare,
+  outSize = tileSize,
+): Float32Array {
+  const step = square.size / outSize;
+  const at = (start: number, i: number) => {
+    const p = Math.min(tileSize - 1, Math.max(0, start + (i + 0.5) * step - 0.5));
+    const lo = Math.floor(p);
+    return { lo, hi: Math.min(tileSize - 1, lo + 1), f: p - lo };
+  };
+  const cols = Array.from({ length: outSize }, (_, i) => at(square.x, i));
+  const out = new Float32Array(outSize * outSize);
+  for (let j = 0; j < outSize; j++) {
+    const { lo: r0, hi: r1, f: fy } = at(square.y, j);
+    const top = r0 * tileSize;
+    const bottom = r1 * tileSize;
+    for (let i = 0; i < outSize; i++) {
+      const { lo: c0, hi: c1, f: fx } = cols[i];
+      const north = heights[top + c0] * (1 - fx) + heights[top + c1] * fx;
+      const south = heights[bottom + c0] * (1 - fx) + heights[bottom + c1] * fx;
+      out[j * outSize + i] = north * (1 - fy) + south * fy;
+    }
+  }
+  return out;
+}
+
 /* ── Web mercator ──────────────────────────────────────────────────────────── */
 
 /** Fractional tile column for a longitude. */
@@ -361,6 +446,12 @@ export interface HeightFieldOptions {
   downsample?: number;
   maxTiles?: number;
   zoom?: number;
+  /**
+   * Samples along one side of a source tile. Mapterhorn's are 512; the default
+   * is the 256 of the tiles this was written for. A decoded tile of any other
+   * size is counted as missing rather than stitched in as garbage.
+   */
+  tileSize?: number;
 }
 
 /**
@@ -391,7 +482,8 @@ export async function loadHeightField(
   const minY = Math.max(0, Math.floor(latToTileY(bounds.north, zoom)));
   const maxY = Math.min(scale - 1, Math.floor(latToTileY(bounds.south, zoom)));
 
-  const perTile = Math.floor(TILE_SIZE / downsample);
+  const tileSize = options.tileSize ?? TILE_SIZE;
+  const perTile = Math.floor(tileSize / downsample);
   const across = maxX - minX + 1;
   const down = maxY - minY + 1;
   const width = across * perTile;
@@ -414,7 +506,7 @@ export async function loadHeightField(
 
   let tilesLoaded = 0;
   for (const { tile, data } of decoded) {
-    if (!data) continue;
+    if (!data || data.length !== tileSize * tileSize) continue;
     tilesLoaded++;
     // Tile columns were wrapped for the request; place them back on the
     // unwrapped grid so a field straddling the antimeridian still stitches.
@@ -422,7 +514,7 @@ export async function loadHeightField(
     const col0 = (unwrappedX - minX) * perTile;
     const row0 = (tile.y - minY) * perTile;
     for (let ty = 0; ty < perTile; ty++) {
-      const source = (ty * downsample) * TILE_SIZE;
+      const source = (ty * downsample) * tileSize;
       const target = (row0 + ty) * width + col0;
       for (let tx = 0; tx < perTile; tx++) {
         heights[target + tx] = data[source + tx * downsample];
