@@ -809,7 +809,10 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
    so an open photograph is never framed by chrome. */
 .tabbar {
   position: fixed; z-index: 70;
-  left: 50%; bottom: calc(var(--tabbar-bottom) - var(--vgap, 0px));
+  /* Never moved by --vgap: that measurement has been wrong on a real iPhone
+     (2026-11-17), and a bar pushed below the screen can't be tapped. Too high
+     is a cosmetic fault; too low is a broken app. */
+  left: 50%; bottom: var(--tabbar-bottom);
   transform: translateX(-50%);
   display: flex; align-items: center; gap: var(--sp-2);
   font-family: var(--font-ui);
