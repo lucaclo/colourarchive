@@ -346,13 +346,11 @@ const accent = manifest.chapters[0]
      head had scrolled away. It holds just under the folded page head (its
      --ph-bar strip, 3.5rem here) while the grid scrolls under it… */
   .bulk-bar { position: sticky; top: calc(3.5rem + var(--sp-2)); z-index: 5; }
-  /* …and on a phone it floats just above the tab bar, where the thumb is.
-     `--vgap` moves the tab bar down into the iOS standalone strip, so the bar
-     follows it by the same amount. */
+  /* …and on a phone it floats just above the tab bar, where the thumb is. */
   @media (max-width: 640px) {
     .bulk-bar {
       position: fixed; z-index: 65; left: 16px; right: 16px; top: auto;
-      bottom: calc(var(--tabbar-space) - var(--vgap, 0px));
+      bottom: var(--tabbar-space);
       margin: 0; gap: 0.4rem 0.6rem; padding: 0.4rem 0.4rem 0.4rem 0.9rem; border-radius: var(--r-lg);
       background: var(--glass-bg-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
       border-color: var(--glass-edge); box-shadow: var(--glass-shadow);
@@ -360,7 +358,7 @@ const accent = manifest.chapters[0]
     /* The last row can still scroll clear of it. */
     .ingest:has(.bulk-bar:not([hidden])) { padding-bottom: calc(var(--tabbar-space) + 9rem); }
     /* Removed · Undo takes the same spot; the bar steps up over it. */
-    :global(body:has(.undo-bar:not([hidden]))) .bulk-bar { bottom: calc(var(--tabbar-space) - var(--vgap, 0px) + 3.25rem); }
+    :global(body:has(.undo-bar:not([hidden]))) .bulk-bar { bottom: calc(var(--tabbar-space) + 3.25rem); }
   }
   .bulk-count {
     font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;

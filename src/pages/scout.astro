@@ -1403,9 +1403,6 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .scout {
     position: fixed;
     inset: 0;
-    /* Down into the strip some iOS home-screen apps leave bare — see the
-       --vgap measurement in Layout.astro. */
-    bottom: calc(-1 * var(--vgap, 0px));
     display: flex;
     flex-direction: column;
   }
@@ -1467,7 +1464,11 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   /* Painted at a sixth of the size; the stretch and blur smooth it. Scaled a
      little past the edges so the blur doesn't fade them in. */
   .scout-space-haze { background: #05070f; filter: blur(5px); transform: scale(1.04); }
-  .scout-map { position: absolute; inset: 0; }
+  /* Only the map reaches down into the strip some iOS home-screen apps leave
+     bare (--vgap, Layout.astro). The sheet and controls stay on the real
+     bottom: when the measurement is wrong, a map running past the screen
+     loses nothing, while a sheet would lose its last row. */
+  .scout-map { position: absolute; inset: 0; bottom: calc(-1 * var(--vgap, 0px)); }
 
   .sr {
     position: absolute;

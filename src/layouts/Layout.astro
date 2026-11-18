@@ -169,8 +169,13 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
       // out in a window one status bar shorter than the screen while still
       // drawing from the very top, so everything pinned to the bottom stops
       // short and leaves a bare strip under it. Measure the shortfall and let
-      // full-screen pages and the tab bar reach into it. Gaps bigger than a
-      // status bar are the keyboard, and are left alone.
+      // backgrounds (Scout's map) reach into it. Gaps bigger than a status bar
+      // are the keyboard, and are left alone.
+      //
+      // Only backgrounds: on the same iPhone the measurement has also said
+      // "short" when the window wasn't, and the tab bar it moved went below
+      // the screen (2026-11-17). Controls stay on the real bottom. It is taken
+      // again whenever the window may have changed without a resize event.
       (function () {
         if (navigator.standalone !== true) return;
         const root = document.documentElement;
@@ -182,6 +187,10 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
         };
         fit();
         addEventListener('resize', fit);
+        addEventListener('orientationchange', fit);
+        addEventListener('pageshow', fit);
+        addEventListener('load', () => setTimeout(fit, 300));
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) fit(); });
       })();
     </script>
     <script is:inline>
