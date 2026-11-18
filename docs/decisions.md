@@ -4,6 +4,21 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-18 · One archive (D1): the Mac app's folder, `~/Pictures/Colour Archive`, the
+  same kind of folder anyone who installs the app gets. The repo's `photos/`,
+  `public/img` and `src/data` are a development copy (the tracked JSON stays as CI's
+  fixture). A public build on the Mac, `deploy:site`, `drift`, `check:photos` and
+  `doctor` all read the app's folder (`src/lib/archive-home.ts`); `COLOUR_ARCHIVE_DATA`
+  overrides it, and with neither they refuse. Nothing publishes by itself: the dev
+  server's auto-deploy is gone (it published the checked-out branch from the copy).
+- 2026-11-18 · Scout's "Stand here" (the eye button) puts the camera exactly at the pin,
+  1.7 m above the real ground (no exaggeration). Drag or arrow keys turn the head,
+  60° down to 30° up; the view reaches 150 km. While standing, walls are solid and lit
+  windows and flat labels are hidden, and a tap doesn't move the pin. Escape leaves.
+- 2026-11-18 · Scout elevation comes from Mapterhorn (open survey data, 512 px tiles).
+  Missing deep tiles are cut from an ancestor, never left flat.
+- 2026-11-18 · Satellite: where Esri has no imagery, the tile is cut from the nearest
+  ancestor that has some (up to 8 zooms up), never Esri's grey placeholder.
 - 2026-11-17 · The Mac app updates itself: every merge to `main` publishes release
   `v0.2.<run>` (`.github/workflows/app-release.yml`); the app checks 30 s after launch
   and every 4 h, downloads in the background, and swaps on quit or "Restart to Update"
@@ -43,6 +58,12 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-18 · Phone and tablet Archive: the top bar and tab bar slide away on scroll
+  down and come back on scroll up (fade in place with Reduce Motion). Desk keeps them.
+- 2026-11-18 · Scout's phone sheet has a "min" detent: a small centred tab with the
+  place's short name and nothing else ("Repulse Bay", not "淺水灣 Repulse Bay": the half
+  in the reader's script, then Latin; `scout/short-name.ts`). Tapping it opens peek. The
+  grabber cycles min → peek → half → full; a pull past peek settles at min.
 - 2026-11-17 · Scout's `.btn.ghost` (Tools-fold actions: Check now, Find dates…) is a
   clear capsule with a 26% `--fg` hairline; hover fills, pressed loses the line.
 - 2026-11-17 · On touch, segments, tabs and small buttons answer out to their capsule's
