@@ -4,6 +4,10 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-18 · The published site keeps itself current on a phone: when a page comes back
+  to the screen and `/publish.json` names a newer build, it reloads. The service worker
+  never caches `/publish.json`; bump its `VERSION` to make every device drop its saved
+  copy once (v2, 2026-11-18).
 - 2026-11-18 · One archive (D1): the Mac app's folder, `~/Pictures/Colour Archive`, the
   same kind of folder anyone who installs the app gets. The repo's `photos/`,
   `public/img` and `src/data` are a development copy (the tracked JSON stays as CI's

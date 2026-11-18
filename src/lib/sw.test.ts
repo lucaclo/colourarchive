@@ -22,6 +22,8 @@ const SOURCE = readFileSync(
   fileURLToPath(new URL('../../public/sw.js', import.meta.url)),
   'utf8',
 );
+/** The worker's own cache name, so bumping `VERSION` in sw.js needs no edit here. */
+const CACHE_NAME = `colour-archive-${SOURCE.match(/const VERSION = '([^']+)'/)?.[1] ?? 'v?'}`;
 
 const ORIGIN = 'https://archive.local';
 
@@ -68,7 +70,7 @@ function boot(options: {
   let fetches = 0;
 
   const cache = new FakeCache();
-  caches.set('colour-archive-v1', cache);
+  caches.set(CACHE_NAME, cache);
   for (const [url, body] of Object.entries(options.cached ?? {})) {
     cache.store.set(url, new Response(body, { status: 200 }));
   }

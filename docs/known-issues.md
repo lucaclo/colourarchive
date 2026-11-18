@@ -38,12 +38,8 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   `publish.ts`, which loads it, so `static-archive.ts` must stay the config's first
   local import, and `use-real-archive.ts` each script's first import. Otherwise the
   build stamp counts one archive and the pages show another.
-- `astro build` (like `astro sync`) rewrites `.vite/deps` under a running dev server:
-  restart :4400 afterwards (`earcut.js` 504s).
 - The Book size select writes `src/data/book.json`; never change it against the dev
   server. `tests/features.e2e.ts` mocks saves.
-- Probe scripts in `node_modules/.cache/audit-*.mjs` block non-GET requests, so they're
-  safe on :4321.
 - After `npm install`, restart the dev server: stale Vite deps give 504s and scripts that
   silently never run.
 - macOS has no `timeout` command; a check wrapped in it silently never runs.
@@ -54,6 +50,9 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   e2e timed out. Check `curl -sk <origin>/ | grep -c 'class="frame'` before a run.
 - A dev server another session started can't be stopped from this one. Start your
   own on a free port (`E2E_ORIGIN` points the e2e at it).
+- Scout e2e treat a 502 from `/api/scout/weather` or `/seeing` as a problem; the Mac
+  answers 502 when the forecast service drops out. Rerun that one test
+  (`--test-name-pattern`) before blaming the change.
 - With `COLOUR_ARCHIVE_DATA` set, dev still serves `/img/*` from the repo's `public/img`.
   A probe that uploads to the throwaway server must route `/img/**` to the throwaway
   folder, or new thumbnails 404.
@@ -68,9 +67,10 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - `POST /api/book` merges and is versioned since round 13: it needs the `version` from
   GET or the page (`data-version` on `#book-savebar`), answers 409 when it's stale, and
   keeps `book.json.bak`. Still copy `book.json` before a test that saves the book.
-- `npm run check` (its `astro sync`) rewrites `node_modules/.vite/deps` under a running
-  dev server. The server then 504s on deps such as `earcut.js` and Scout's page never
-  runs. Run `check` last, or restart the server with `npx astro dev --force` after it.
+- `npm run check` or `npm run build` (both run `astro sync`) rewrites
+  `node_modules/.vite/deps` under a running dev server. The server then 504s on deps
+  such as `earcut.js` and Scout's page never runs. Run them last, or restart the server
+  with `npx astro dev --force` after.
   `npx tsc --noEmit` and `npx tsx scripts/check-astro-scripts.ts` are safe with the
   server up; only `astro sync` breaks it.
 - Run long Playwright suites under `caffeinate -i`. The Mac sleeps while a turn waits,
