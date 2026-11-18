@@ -1,9 +1,10 @@
 # Progress
 
 ## Now
-- `main` at 4adb792: round 14 (#163) merged. Release v0.2.6 published (the installed
-  app picks it up within 4 h, or "Restart to Update"). Netlify has the 2026-11-18 11:44
-  build, made from `~/Pictures/Colour Archive`: 110 photographs, search live.
+- `main` at 7df8163: polish-type and remove-pin-undo (#164) merged. The release workflow
+  publishes the next v0.2.x (the installed app picks it up within 4 h, or "Restart to
+  Update"). Netlify has the 2026-11-18 19:14 build, made from `~/Pictures/Colour
+  Archive`: 110 photographs, search live, `drift` clean.
 - CI `smoke` fails in the same 15 Scout tests on `main` as on #163 (not required,
   network-dependent); worth a look.
 
@@ -22,6 +23,10 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-18 · phone-fixes · Chapter count: number in mono, "photographs" in the UI face.
+  The offline pill and Scout's note no longer wrap at half width on a phone (`left: 50%`
+  shrink-wrap). "Netlify looks old" was a comparison with :4400, another session's test
+  server on a throwaway archive (114 photos); Netlify matched the Mac app exactly.
 - 2026-11-18 · polish-type · Type, alignment and copy pass over every page and state
   (probes in `node_modules/.cache/type-audit/`). Buttons no longer fall back to Arial;
   Inspiration, Add & remove and the Book share one column and head (the Book's count
@@ -29,7 +34,9 @@ One line per session, newest first: date · branch · what changed · what's ope
   on one left edge (tiles were 10 px in, times 2 px), slider labels out of mono, the ND
   field a well like the selects; Match labels back in Fraunces italic; zine Remove styled;
   "NaN m" scale hidden; 404 and Insights lose their explanatory lines; curly apostrophes
-  and no em-dash asides in ~130 UI strings (a builder did the lib ones).
+  and no em-dash asides in ~130 UI strings (a builder did the lib ones). e2e 44/44 on a
+  throwaway archive (one Scout rerun after an upstream 502). Merged as #164; Netlify
+  deployed from `main`.
 - 2026-11-18 · remove-pin-undo · Scout's "Pin moved · Undo" note is gone (map tap and
   "Scout here" from a photo); the R13-32 and R14 tap e2e now check the sheet name.
 - 2026-11-18 · round-14 · Shipped the phone tab bar fix (#162). Built: Archive bars hide on
