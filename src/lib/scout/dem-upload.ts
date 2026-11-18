@@ -64,7 +64,7 @@ export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 export async function parseGeoTiffDem(buffer: ArrayBuffer): Promise<UploadedDem> {
   if (buffer.byteLength > MAX_UPLOAD_BYTES) {
     throw new DemUploadError(
-      `That file is ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB — ${MAX_UPLOAD_BYTES / 1024 / 1024} MB is the most this can hold.`,
+      `That file is ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB. ${MAX_UPLOAD_BYTES / 1024 / 1024} MB is the most this can hold.`,
     );
   }
 
@@ -84,7 +84,7 @@ export async function parseGeoTiffDem(buffer: ArrayBuffer): Promise<UploadedDem>
   }
   if (width * height > 20_000_000) {
     throw new DemUploadError(
-      `${width}×${height} is more cells than this can hold — a survey this precise needs to be cropped to the area that matters first.`,
+      `${width}×${height} is more cells than this can hold. A survey this precise needs to be cropped to the area that matters first.`,
     );
   }
 
@@ -107,7 +107,7 @@ export async function parseGeoTiffDem(buffer: ArrayBuffer): Promise<UploadedDem>
     north <= south
   ) {
     throw new DemUploadError(
-      "This file's coordinates don't read as longitude and latitude — only WGS84 GeoTIFFs are supported. Reproject it (e.g. QGIS → Export → EPSG:4326) and try again.",
+      'This file’s coordinates don’t read as longitude and latitude. Only WGS84 GeoTIFFs are supported. Reproject it (e.g. QGIS → Export → EPSG:4326) and try again.',
     );
   }
 

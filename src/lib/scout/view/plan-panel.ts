@@ -187,7 +187,7 @@ export function createPlanPanel(ports: PlanPanelPorts): PlanPanel {
     );
 
     $('plan-help').textContent = atLimit
-      ? `${MAX_ITINERARY_SPOTS} is the most that can be ordered — unpick one to swap it.`
+      ? `${MAX_ITINERARY_SPOTS} is the most that can be ordered. Unpick one to swap it.`
       : `Choose ${MIN_ITINERARY_SPOTS} to ${MAX_ITINERARY_SPOTS} kept spots.`;
 
     const stops = planned?.stops ?? [];

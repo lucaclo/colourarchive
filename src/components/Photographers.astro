@@ -160,7 +160,7 @@ const credited = favourites.length ? [] : people
           <li>In the Graph API Explorer, pick that app and generate a user token with instagram_basic, instagram_manage_insights, pages_show_list and pages_read_engagement.</li>
           <li>Paste the app ID, the app secret (App settings, Basic) and the token below.</li>
         </ol>
-        <p>It stays in development mode: only your account uses it, so no review. It reads professional accounts only; personal ones can't be read by anyone.</p>
+        <p>It stays in development mode: only your account uses it, so no review. It reads professional accounts only; personal ones can’t be read by anyone.</p>
       </details>
       <form class="ph-igc-form" id="ph-igc-form">
         <label><span>App ID</span><input id="ph-igc-app" type="text" inputmode="numeric" autocomplete="off" /></label>
@@ -445,7 +445,7 @@ const credited = favourites.length ? [] : people
     // The feed ends. Glass's fans and Cosmos's critics agree on that one.
     const end = $('ph-end');
     end.hidden = !fresh.length || !seenAt;
-    end.textContent = seenAt ? `That's everything since ${dateWords(seenAt)}` : '';
+    end.textContent = seenAt ? `That’s everything since ${dateWords(seenAt)}` : '';
     moreSec.hidden = !rest.length;
     moreSec.querySelector('h3')!.firstChild!.textContent = fresh.length ? 'Earlier ' : 'Their work ';
     moreSec.querySelector('.n')!.textContent = String(rest.length);
@@ -1052,7 +1052,7 @@ const credited = favourites.length ? [] : people
     font-family: var(--font-note); font-style: italic; font-size: var(--t-footnote); color: var(--fg);
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .ph-new { font-family: var(--font-label); font-size: 0.6875rem; color: var(--fg); margin-top: -0.2rem; }
+  .ph-new { font-family: var(--font-label); font-size: var(--t-caption-2); color: var(--fg); margin-top: -0.2rem; }
   .ph-new[hidden] { display: none; }
   .ph-plus {
     display: grid; place-items: center; font-size: 1.6rem; color: var(--muted);
@@ -1276,7 +1276,7 @@ const credited = favourites.length ? [] : people
   .ph-ig-list :global(.ph-ig-row.known) { opacity: 0.5; cursor: default; }
   .ph-ig-list :global(input) { accent-color: var(--fg); width: 1.05rem; height: 1.05rem; align-self: center; }
   .ph-ig-list :global(.ph-ig-name) { font-family: var(--font-note); font-style: italic; font-size: 1.02rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ph-ig-list :global(.ph-ig-line) { font-family: var(--font-label); font-size: 0.6875rem; color: var(--muted); white-space: nowrap; }
+  .ph-ig-list :global(.ph-ig-line) { font-family: var(--font-label); font-size: var(--t-caption-2); color: var(--muted); white-space: nowrap; }
   .ph-ig-list :global(a) { color: var(--secondary); text-decoration: none; padding: 0 0.3rem; }
   .ph-ig-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1.6rem calc(env(safe-area-inset-bottom, 0px) + 0.9rem); border-top: 1px solid var(--separator); }
   .ph-ig-foot .ph-note { margin: 0; }

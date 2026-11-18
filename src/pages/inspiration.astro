@@ -564,7 +564,7 @@ const accent = manifest.chapters[0]
 </Layout>
 
 <style>
-  .insp { max-width: 68rem; margin: 0 auto; padding: 0 var(--edge) calc(var(--tabbar-space) + 5rem); }
+  .insp { max-width: var(--page-max); margin: 0 auto; padding: 0 var(--page-pad) calc(var(--tabbar-space) + 5rem); }
   .insp-lead { color: var(--muted); font-size: 1rem; line-height: 1.6; margin: 0 0 2.6rem; max-width: 40rem; }
 
   .insp-add { margin-bottom: 3.5rem; }
@@ -600,7 +600,7 @@ const accent = manifest.chapters[0]
     color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   :global(.kept-date) {
-    display: block; font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted);
+    display: block; font-family: var(--font-ui); font-size: var(--t-caption-2); color: var(--muted);
   }
   /* Same corner-circle language as .cell-remove on the archive/upload grids. */
   :global(.kept-remove) {
@@ -775,7 +775,7 @@ const accent = manifest.chapters[0]
   .cell-similar {
     position: absolute; left: 6px; top: 6px; z-index: 3;
     border: 0; cursor: pointer; border-radius: 999px;
-    font-family: var(--font-ui); font-size: 0.6875rem;
+    font-family: var(--font-ui); font-size: var(--t-caption-2);
     padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     opacity: 0; transition: opacity 140ms, background 140ms;
@@ -839,7 +839,7 @@ const accent = manifest.chapters[0]
     box-shadow: 0 0 0 2px color-mix(in oklab, #000 40%, transparent);
   }
   .sim-controls { width: min(100%, 26rem); }
-  .sim-slider { display: flex; align-items: center; gap: 0.8rem; font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .sim-slider { display: flex; align-items: center; gap: 0.8rem; font-family: var(--font-label); font-size: var(--t-caption-2); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .sim-slider input { flex: 1; accent-color: var(--fg); }
   .sim-hint { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); text-align: center; margin: 0.8rem 0 0; }
   .sim-right { overflow: auto; padding: calc(var(--edge) + 1.5rem) var(--edge); }
@@ -891,7 +891,7 @@ const accent = manifest.chapters[0]
   .cell-match {
     position: absolute; left: 6px; top: 34px; z-index: 3;
     border: 0; cursor: pointer; border-radius: 999px;
-    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-label); font-size: var(--t-caption-2); letter-spacing: 0.1em; text-transform: uppercase;
     padding: 0.28rem 0.62rem; color: #fff; background: color-mix(in oklab, #000 55%, transparent);
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
     opacity: 0; transition: opacity 140ms, background 140ms;
@@ -1092,7 +1092,7 @@ const accent = manifest.chapters[0]
   @keyframes mxRise { from { opacity: 0; translate: 0 8px; } }
   .mx-fig figcaption {
     position: absolute; left: 8px; bottom: 8px;
-    font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: var(--font-label); font-size: var(--t-caption-2); letter-spacing: 0.1em; text-transform: uppercase;
     color: #fff; background: color-mix(in oklab, #000 62%, transparent);
     padding: 2px 8px; border-radius: 999px;
     backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
@@ -1105,7 +1105,7 @@ const accent = manifest.chapters[0]
   .mx-holding #mx-canvas { cursor: zoom-out; }
   .mx-holdhint {
     position: absolute; right: 10px; top: 8px; pointer-events: none;
-    font-family: var(--font-ui); font-size: 0.6875rem; color: #fff;
+    font-family: var(--font-ui); font-size: var(--t-caption-2); color: #fff;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.45);
     opacity: calc(var(--s) * 0.75); transition: opacity 160ms;
   }
@@ -1134,7 +1134,7 @@ const accent = manifest.chapters[0]
   }
   .mx-strength { display: flex; align-items: center; gap: 0.8rem; flex: 1 1 22rem; max-width: 30rem; }
   .mx-strength input { flex: 1; accent-color: var(--fg); }
-  .mx-end { font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); flex: 0 0 auto; }
+  .mx-end { font-family: var(--font-ui); font-size: var(--t-caption-2); color: var(--muted); flex: 0 0 auto; }
   /* The one line in this panel that reads as a verdict rather than a
      measurement ("Restrained — adopts the reference's character…") — the
      panel's single earned use of the display face, same idiom as the
@@ -1168,7 +1168,7 @@ const accent = manifest.chapters[0]
   .mx-groupslider { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 15rem; max-width: 20rem; }
   .mx-groupslider input { flex: 1; accent-color: var(--fg); }
   .mx-grouplabel {
-    font-family: var(--font-ui); font-size: 0.6875rem;
+    font-family: var(--font-ui); font-size: var(--t-caption-2);
     color: var(--muted); flex: 0 0 3.4rem;
   }
   .mx-unlink {
@@ -1206,7 +1206,7 @@ const accent = manifest.chapters[0]
     background: linear-gradient(color-mix(in oklab, var(--accent-mix) 55%, var(--fg)), color-mix(in oklab, var(--accent-mix) 55%, var(--fg)))
       no-repeat center bottom / calc(100% - 1.9rem) 2px;
   }
-  .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: 0.6875rem; color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
+  .mx-tabs .count { display: inline-block; margin-left: 0.4rem; font-size: var(--t-caption-2); color: var(--bg); background: #e0603a; border-radius: 999px; padding: 0 0.36rem; line-height: 1.4; vertical-align: 1px; }
   .mx-tabs .count:empty { display: none; }
 
   /* --- Round trip (Check tab) — built at runtime, hence :global --------- */
@@ -1267,7 +1267,7 @@ const accent = manifest.chapters[0]
   :global(.mx-rt-caltable td:nth-child(2)), :global(.mx-rt-caltable td:nth-child(3)) { font-family: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
   :global(.mx-rt-caltable .why) { color: var(--muted); max-width: 22rem; }
   :global(.mx-rt-caltable .act) { white-space: nowrap; }
-  :global(.mx-rt-caltable .tag) { font-family: var(--font-ui); font-size: 0.6875rem; padding: 0.05rem 0.4rem; border-radius: 999px; background: color-mix(in oklab, var(--fg) 14%, transparent); }
+  :global(.mx-rt-caltable .tag) { font-family: var(--font-ui); font-size: var(--t-caption-2); padding: 0.05rem 0.4rem; border-radius: 999px; background: color-mix(in oklab, var(--fg) 14%, transparent); }
   :global(.mx-rt-caltable .tag.est) { background: transparent; color: var(--muted); }
   :global(.mx-rt-caltable tr.st-implausible .why), :global(.mx-rt-caltable tr.st-confounded .why) { color: #e0a63a; }
   :global(.mx-rt-never) { margin-top: 0.9rem; font-size: var(--t-footnote); color: var(--muted); }
@@ -1303,7 +1303,7 @@ const accent = manifest.chapters[0]
   :global(.mx-stat) { display: flex; flex-direction: column; gap: 0.18rem; }
   :global(.mx-stat .mx-stat-figure) { font-family: var(--font-label); font-variant-numeric: tabular-nums; font-size: 1.7rem; line-height: 1; letter-spacing: -0.01em; color: var(--fg); }
   :global(.mx-stat .mx-stat-unit) { font-size: 0.95rem; margin-left: 0.06rem; color: var(--muted); }
-  :global(.mx-stat .mx-stat-label) { font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  :global(.mx-stat .mx-stat-label) { font-family: var(--font-label); font-size: var(--t-caption-2); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   :global(.mx-stat.warn .mx-stat-figure) { color: #e0603a; }
   /* Structural caveats: not a reading, an honesty note about one — no pill,
      no mono, no uppercase. Quiet italic Fraunces (the site's display cut,
@@ -1321,7 +1321,7 @@ const accent = manifest.chapters[0]
     background: color-mix(in oklab, var(--fg) 3%, transparent);
   }
   :global(.mx-noterow.caution) { border-left-color: #e0603a; color: var(--fg); background: color-mix(in oklab, #e0603a 8%, transparent); }
-  :global(.mx-noterow .panel) { font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); padding-top: 0.25rem; }
+  :global(.mx-noterow .panel) { font-family: var(--font-ui); font-size: var(--t-caption-2); color: var(--muted); padding-top: 0.25rem; }
 
   .mx-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; }
 
@@ -1334,11 +1334,11 @@ const accent = manifest.chapters[0]
   }
   :global(.mx-grouphead) {
     display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem;
-    font-family: var(--font-ui); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase;
+    font-family: var(--font-ui); font-size: var(--t-caption-2); letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--fg); margin-bottom: 0.45rem;
     font-weight: 600;
   }
-  :global(.mx-grouphead .tag) { font-size: 0.6875rem; letter-spacing: 0.1em; color: var(--muted); text-transform: none; }
+  :global(.mx-grouphead .tag) { font-size: var(--t-caption-2); letter-spacing: 0.1em; color: var(--muted); text-transform: none; }
   :global(.mx-row) { display: flex; justify-content: space-between; gap: 1rem; font-size: var(--t-footnote); padding: 0.2rem 0; font-variant-numeric: tabular-nums; }
   :global(.mx-row + .mx-row) { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
   :global(.mx-row .k) { color: var(--muted); }
@@ -1348,7 +1348,7 @@ const accent = manifest.chapters[0]
   /* Colour Mixer: one row per band with three aligned columns beats 24
      separate key/value rows for scanning. */
   :global(.mx-mixer) { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 0.1rem 0.7rem; font-size: var(--t-footnote); font-variant-numeric: tabular-nums; }
-  :global(.mx-mixer .hdr) { font-family: var(--font-ui); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 0.25rem;
+  :global(.mx-mixer .hdr) { font-family: var(--font-ui); font-size: var(--t-caption-2); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 0.25rem;
     font-weight: 600;
   }
   :global(.mx-mixer .band) { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); }
@@ -1408,7 +1408,7 @@ const accent = manifest.chapters[0]
     box-shadow: 0 0 0 1px color-mix(in oklab, #000 70%, transparent), 0 0 9px 1px color-mix(in oklab, var(--glow, transparent) 65%, transparent);
     transform: translate(-50%, -50%);
   }
-  :global(.mx-cw .nm) { font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: block; }
+  :global(.mx-cw .nm) { font-family: var(--font-label); font-size: var(--t-caption-2); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: block; }
   :global(.mx-cw .v) { font-family: var(--font-label); font-size: var(--t-caption); color: var(--fg); font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
   :global(.mx-cw.off .disc) { filter: grayscale(1); opacity: 0.28; }
   :global(.mx-cw.off .v) { color: var(--muted); }
@@ -1423,14 +1423,14 @@ const accent = manifest.chapters[0]
   :global(.mx-ev .lbl) { color: var(--muted); }
   :global(.mx-ev .val) { font-family: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: var(--t-caption); }
   :global(.mx-bars) { grid-column: 1 / -1; display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.5rem; align-items: center; margin: 0.1rem 0 0.45rem; }
-  :global(.mx-bars .cap) { font-family: var(--font-label); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--muted) 70%, transparent); }
+  :global(.mx-bars .cap) { font-family: var(--font-label); font-size: var(--t-caption-2); letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--muted) 70%, transparent); }
   /* 3px read as near-identical regardless of how different two rows'
      magnitudes actually were — the bar DOES scale with the value (see
      `bar()`), it was just too thin to see it at a glance. */
   :global(.mx-track) { position: relative; height: 5px; background: color-mix(in oklab, var(--fg) 8%, transparent); border-radius: 3px; }
   :global(.mx-track i) { position: absolute; top: 0; bottom: 0; background: var(--fg); border-radius: 3px; }
   :global(.mx-track::after) { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: color-mix(in oklab, var(--fg) 22%, transparent); }
-  :global(.mx-ev .none) { color: color-mix(in oklab, var(--muted) 60%, transparent); font-style: italic; }
+  :global(.mx-ev .none) { color: color-mix(in oklab, var(--muted) 60%, transparent); font-family: var(--font-note); font-style: italic; }
 
   .mx-actions {
     flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 0.6rem;
@@ -1600,7 +1600,6 @@ const accent = manifest.chapters[0]
      phone is the same client one size down. Nothing here changes what the
      match does — only whether you can reach it with a thumb. */
   @media (max-width: 640px) {
-    .insp { padding: 0 1.1rem calc(var(--tabbar-space) + 5rem); }
     .insp-lead { margin-bottom: 1.8rem; }
     .drop { padding: 2.2rem 1rem; }
 
@@ -1614,7 +1613,7 @@ const accent = manifest.chapters[0]
        screens of board to reach the fifth reference. */
     .insp-collage { columns: 2; column-gap: 4px; }
     .insp-frame { margin-bottom: 4px; }
-    .insp-frame .src { font-size: 0.6875rem; padding: 0.4rem 0.45rem 0.4rem 1.9rem; }
+    .insp-frame .src { font-size: var(--t-caption-2); padding: 0.4rem 0.45rem 0.4rem 1.9rem; }
     /* A tapped tile's bottom corners belong to "+ group" and Match; on a
        two-up tile a long credit ran under Match, so it steps up above them. */
     @media (hover: none), (pointer: coarse) {
@@ -1876,11 +1875,12 @@ const accent = manifest.chapters[0]
      after the rest of the app moved to sentence case (round 3 left them as
      the next audit). Same rule as everywhere else now: the interface face,
      sentence case, no tracking, and nothing under the 12px floor. Data
-     (counts, values) stays in the mono where it already is. */
-  .sim-count, .sim-slider, .mx-stop, .mx-h, .mx-fig figcaption, .cell-match,
-  :global(.mx-ref .mx-ref-weight), :global(.mx-rt-h), :global(.mx-stat .mx-stat-label),
-  :global(.mx-grouphead), :global(.mx-mixer .hdr), :global(.mx-cw .nm), :global(.mx-bars .cap),
-  .results :global(.ch) {
+     (counts, values) stays in the mono where it already is.
+     The notebook labels above (headings, captions, wheel and bar names,
+     stat labels) keep their Fraunces italic: this rule used to list them
+     too, and left them in the system face's italic at 12px. */
+  .sim-count, .sim-slider, .mx-stop, .cell-match,
+  :global(.mx-ref .mx-ref-weight), .results :global(.ch) {
     text-transform: none; letter-spacing: 0; font-family: var(--font-ui); font-size: var(--t-caption);
   }
 
@@ -2104,10 +2104,10 @@ const accent = manifest.chapters[0]
     // Anything filtered out is named. Dropping a PDF or a folder of RAWs used
     // to be indistinguishable from the page ignoring you.
     for (const f of all.filter((f) => !files.includes(f))) {
-      row({ filename: f.name, status: 'error', error: /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$/i.test(f.name) ? 'Camera RAW — export a JPEG first' : 'Not an image' });
+      row({ filename: f.name, status: 'error', error: /\.(cr2|cr3|nef|arw|dng|raf|orf|rw2)$/i.test(f.name) ? 'Camera RAW isn’t supported. Export a JPEG first.' : 'Not an image' });
     }
     if (!files.length) {
-      if (all.length) { statusEl.hidden = false; bar.style.width = '0%'; statusText.textContent = `Nothing added — ${all.length} file${all.length > 1 ? 's' : ''} can't be read.`; }
+      if (all.length) { statusEl.hidden = false; bar.style.width = '0%'; statusText.textContent = `Nothing added: ${all.length} file${all.length > 1 ? 's' : ''} can’t be read.`; }
       return;
     }
     begin(`Adding ${files.length} image${files.length > 1 ? 's' : ''}…`);
@@ -2378,7 +2378,7 @@ const accent = manifest.chapters[0]
   function describeReadiness(d) {
     const flagged = (d.refs || []).filter((r) => r.outlier).length;
     const warn = flagged
-      ? ` ${flagged} reference${flagged === 1 ? '' : 's'} ${flagged === 1 ? 'looks' : 'look'} like a different edit — see the ⚠ mark.`
+      ? ` ${flagged} reference${flagged === 1 ? '' : 's'} ${flagged === 1 ? 'looks' : 'look'} like a different edit (see the ⚠ mark).`
       : '';
     const base = simGroupIds.length > 1
       ? ''
@@ -3768,7 +3768,7 @@ const accent = manifest.chapters[0]
         [
           rowIf('Exposure', a.exposure, 2),
           `<div class="mx-curvebox"><button type="button" class="mx-curve-btn" data-curve='${esc(JSON.stringify(a.curve))}' aria-label="Enlarge the tone curve">${curveSvg(a.curve)}</button><div class="legend">
-             <strong>Tone curve</strong>${flat ? ' — flat at this strength, so no tonal change.' : '. The dashed diagonal is no change. Click it to enlarge.'}
+             <strong>Tone curve</strong>${flat ? ': flat at this strength, so no tonal change.' : '. The dashed diagonal is no change. Click it to enlarge.'}
            </div></div>`,
         ],
         undefined,
@@ -4152,7 +4152,7 @@ const accent = manifest.chapters[0]
       });
       const d = await res.json();
       if (d.ok) rt.calibration = d;
-      if (d.refused?.length) rt.error = 'That fit changed since this table was drawn — look again before applying.';
+      if (d.refused?.length) rt.error = 'That fit changed since this table was drawn. Look again before applying.';
     } catch {
       rt.error = 'Could not reach the Mac to change the calibration.';
     }

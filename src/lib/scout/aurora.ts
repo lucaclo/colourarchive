@@ -327,26 +327,26 @@ function positionNote(position: OvalPosition, geomagLatAbs: number, boundary: nu
   const here = round1(geomagLatAbs);
   const reach = round1(boundary);
   if (position === 'inside') {
-    return `This spot sits at ${here}° geomagnetic latitude, inside the oval's reach at Kp ${round1(kp)} (≈${reach}°).`;
+    return `This spot sits at ${here}° geomagnetic latitude, inside the oval’s reach at Kp ${round1(kp)} (≈${reach}°).`;
   }
   if (position === 'near') {
-    return `This spot sits at ${here}° geomagnetic latitude, just outside the oval's reach at Kp ${round1(kp)} (≈${reach}°) — NOAA's own guidance allows visibility up to about 1,000 km further out from a clear northern horizon, so low on the horizon is the more honest expectation than overhead.`;
+    return `This spot sits at ${here}° geomagnetic latitude, just outside the oval’s reach at Kp ${round1(kp)} (≈${reach}°). NOAA’s own guidance allows visibility up to about 1,000 km further out from a clear northern horizon, so low on the horizon is the more honest expectation than overhead.`;
   }
-  return `This spot sits at ${here}° geomagnetic latitude, well outside the oval's reach at Kp ${round1(kp)} (≈${reach}°).`;
+  return `This spot sits at ${here}° geomagnetic latitude, well outside the oval’s reach at Kp ${round1(kp)} (≈${reach}°).`;
 }
 
 function cloudNote(cloud: CloudState, cloudCoverPct: number | null): string {
   if (cloud === 'unknown') return ' Cloud cover unknown.';
   const pct = Math.round(cloudCoverPct ?? 0);
-  if (cloud === 'clear') return ` ${pct}% cloud — the sky is open.`;
-  if (cloud === 'patchy') return ` ${pct}% cloud — patchy, expect gaps rather than a clear dome.`;
-  return ` ${pct}% cloud — overcast, nothing of the sky is actually visible.`;
+  if (cloud === 'clear') return ` ${pct}% cloud: the sky is open.`;
+  if (cloud === 'patchy') return ` ${pct}% cloud: patchy, expect gaps rather than a clear dome.`;
+  return ` ${pct}% cloud: overcast, nothing of the sky is actually visible.`;
 }
 
 function spaceWeatherNoteFor(bzNt: number | null, windSpeedKmS: number | null): string {
   const parts: string[] = [];
   if (bzNt != null) {
-    const direction = bzNt < -0.5 ? 'south — favourable for the field to couple with the wind' : bzNt > 0.5 ? 'north — unfavourable, coupling stays weak while it holds' : 'near zero';
+    const direction = bzNt < -0.5 ? 'south: favourable for the field to couple with the wind' : bzNt > 0.5 ? 'north: unfavourable, coupling stays weak while it holds' : 'near zero';
     parts.push(`Bz ${round1(bzNt)} nT, ${direction}.`);
   }
   if (windSpeedKmS != null) parts.push(`Solar wind ${Math.round(windSpeedKmS)} km/s.`);
@@ -372,7 +372,7 @@ export function auroraReading(input: AuroraInput): AuroraReading {
   const absent = (absence: NoAurora, note: string): AuroraReading => ({ arrangement: null, absence, note });
 
   if (!input.spaceWeather) {
-    return absent('data-unavailable', "NOAA's space-weather feed did not answer, so there is nothing to report — not the same as a quiet night.");
+    return absent('data-unavailable', 'NOAA’s space-weather feed did not answer, so there is nothing to report (not the same as a quiet night).');
   }
   if (!(input.sunAltitudeDeg <= SUN_ALTITUDE.astronomical)) {
     return absent('not-dark', 'the sky here is not astronomically dark yet.');

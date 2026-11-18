@@ -176,7 +176,7 @@ export function createMonthGrid(ports: MonthGridPorts): MonthGridView {
     $('mg-legend').textContent = [
       'Colour is the sun’s altitude; hatching is an hour the local clock never read.',
       forecastCells
-        ? `Cloud dims about the first ${covered} days — the rest is geometry, with no forecast to qualify it.`
+        ? `Cloud dims about the first ${covered} days. The rest is geometry, with no forecast to qualify it.`
         : 'No forecast loaded, so nothing here is dimmed by cloud.',
       // Because clicking 00:30 lands on the previous date, and that looks like
       // a bug until you know the day here starts when the sun is lowest.

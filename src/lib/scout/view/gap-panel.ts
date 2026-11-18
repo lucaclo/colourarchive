@@ -83,8 +83,8 @@ export function createGapPanel(gaps: ColourGap[], ports: GapPanelPorts): GapPane
     head.className = 'gap-head';
     const status = shoot.gap.kind === 'missing' ? 'never shot' : `${shoot.gap.photoCount} only`;
     head.textContent = confirmed
-      ? `${shoot.gap.anchorName} — ${status} — forecast clear`
-      : `${shoot.gap.anchorName} — ${status}`;
+      ? `${shoot.gap.anchorName}: ${status}, forecast clear`
+      : `${shoot.gap.anchorName}: ${status}`;
     item.append(head);
 
     const note = document.createElement('p');
@@ -126,9 +126,9 @@ export function createGapPanel(gaps: ColourGap[], ports: GapPanelPorts): GapPane
     const confirmedCount = ranked.filter((r) => r.confirmed).length;
     const base = gaps.length
       ? `${gaps.length} colour${gaps.length === 1 ? '' : 's'} thin or missing from the archive.`
-      : 'Every hue anchor is already represented — nothing missing to chase.';
+      : 'Every hue anchor is already represented. Nothing missing to chase.';
     $('gap-note').textContent = weather
-      ? `${base} ${confirmedCount} confirmed clear against this week's forecast.`
+      ? `${base} ${confirmedCount} confirmed clear against this week’s forecast.`
       : base;
     $<HTMLButtonElement>('gap-weather').disabled = checkingWeather || !lastShoots.some((s) => s.occurrences.length);
 

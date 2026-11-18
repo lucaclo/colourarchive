@@ -140,7 +140,7 @@ export function correctExposure(stock: FilmStock, meteredS: number): Corrected {
     }
     case 'stops': {
       if (meteredS >= rule.notRecommendedFromS) {
-        return { ...none, refusal: `${stock.name}'s maker doesn't recommend exposures of ${rule.notRecommendedFromS} s or longer.` };
+        return { ...none, refusal: `${stock.name}’s maker doesn’t recommend exposures of ${rule.notRecommendedFromS} s or longer.` };
       }
       const first = rule.points[0][0];
       if (meteredS <= first) return none;

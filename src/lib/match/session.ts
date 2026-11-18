@@ -151,7 +151,7 @@ export interface RunMatchInput {
  *  the wait is legible instead of merely long. */
 export type MatchStage = 'reference' | 'mine' | 'solve' | 'preview' | 'cached';
 export const MATCH_STAGE_LABEL: Record<MatchStage, string> = {
-  cached: 'Already measured — opening',
+  cached: 'Already measured, opening',
   reference: 'Measuring the reference',
   mine: 'Decoding and segmenting your photo',
   solve: 'Solving the grade',

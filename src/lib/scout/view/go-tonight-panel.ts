@@ -60,7 +60,7 @@ export function createGoTonightPanel(ports: GoTonightPorts): GoTonightPanel {
     button().disabled = aimed.length === 0;
     note().textContent =
       aimed.length === 0
-        ? 'Keep a spot with a lens aimed — the star on a spot, with Behind a target on — to get an answer here.'
+        ? 'Keep a spot with a lens aimed (the star on a spot, with Behind a target on) to get an answer here.'
         : `Press “Check tonight” to weigh ${aimed.length} kept spot${aimed.length === 1 ? '' : 's'} against this week’s forecast.`;
   }
 
@@ -70,7 +70,7 @@ export function createGoTonightPanel(ports: GoTonightPorts): GoTonightPanel {
     row.className = 'tonight-row';
     const head = document.createElement('span');
     head.className = 'tonight-head';
-    head.textContent = `${best.spot.name} — ${fmtDate(best.alignment.best.at)}`;
+    head.textContent = `${best.spot.name} · ${fmtDate(best.alignment.best.at)}`;
     const detail = document.createElement('span');
     detail.className = 'tonight-detail';
     detail.textContent = best.note;
@@ -118,7 +118,7 @@ export function createGoTonightPanel(ports: GoTonightPorts): GoTonightPanel {
       const nearest = opportunities.reduce((a, b) =>
         a.alignment.best.at.getTime() <= b.alignment.best.at.getTime() ? a : b,
       );
-      note().textContent = `None of ${opportunities.length} checked opportunities are confirmed clear yet. Nearest: ${nearest.spot.name} — ${nearest.note}`;
+      note().textContent = `None of ${opportunities.length} checked opportunities are confirmed clear yet. Nearest: ${nearest.spot.name}. ${nearest.note}`;
     } else {
       note().textContent = 'No kept spot has a meeting alignment in the year ahead.';
     }

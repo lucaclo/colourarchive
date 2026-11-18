@@ -486,9 +486,9 @@ function bisect(lo: number, hi: number, f: (t: number) => number): number {
  */
 export function moonlightNote(altitude: number, fraction: number): string {
   if (altitude <= MOONRISE_ALTITUDE) return 'below the horizon';
-  if (fraction < 0.15) return 'a sliver — a subject, not a light';
-  if (altitude < 10) return 'low — behind anything on the skyline';
+  if (fraction < 0.15) return 'a sliver, a subject rather than a light';
+  if (altitude < 10) return 'low, behind anything on the skyline';
   if (fraction > 0.85) return 'bright enough to light a landscape';
   if (fraction > 0.5) return 'usable fill on a long exposure';
-  return 'faint — expect to expose for the sky';
+  return 'faint: expect to expose for the sky';
 }

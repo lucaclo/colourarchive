@@ -619,7 +619,7 @@ function describeVisitMatch(visit: SpotVisit, altitudeDiffDeg: number, azimuthDi
       ? 'nearly the same height'
       : altitudeDiffDeg < 10
         ? `${altitudeDiffDeg.toFixed(0)}° different in height`
-        : `${altitudeDiffDeg.toFixed(0)}° off in height — not that close a match`;
+        : `${altitudeDiffDeg.toFixed(0)}° off in height (not that close a match)`;
   const conditions = [visit.weather, visit.cloud].filter(Boolean).join(', ');
   const outcome = visit.outcome ? ` "${visit.outcome}"` : ' No outcome was logged.';
   return (

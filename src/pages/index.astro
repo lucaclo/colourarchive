@@ -295,7 +295,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     </button>
     <span class="topbar-right tb-group tb-actions" id="tb-actions">
       {hasPhotos && (
-        <button type="button" class="tb-button" id="overview-btn" data-cmdk="Overview" data-cmdk-keywords="grid, zoom out" aria-pressed="false" aria-label="Overview" title="Overview — or pinch out">
+        <button type="button" class="tb-button" id="overview-btn" data-cmdk="Overview" data-cmdk-keywords="grid, zoom out" aria-pressed="false" aria-label="Overview" title="Overview, or pinch out">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
           <span class="tb-label">Overview</span>
         </button>
@@ -633,7 +633,6 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           {!STATIC && (
             <section class="ins-drift" id="ins-drift" hidden>
               <h3>Your look</h3>
-              <p class="ins-drift-sub">The photos whose grade sits furthest from the rest of their chapter. A hint, not a verdict.</p>
               <div id="ins-drift-list"></div>
             </section>
           )}
@@ -2092,7 +2091,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
       arcSimilarMatches = d.matches || [];
       arcSimilarHint.textContent = d.ready
         ? 'Your closest photographs, ranked. Drag to weigh colour against composition.'
-        : 'Composition needs analysing — run  npm run reanalyze  once.';
+        : 'Composition needs analysing: run  npm run reanalyze  once.';
       renderArcSimilar();
     } catch (err) {
       if (token !== arcSimilarToken) return;
@@ -2202,7 +2201,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
       reload.type = 'button'; reload.dataset.reload = '1'; reload.textContent = 'Reload to see it in place';
       lbcStatus.append(reload);
     } catch (err) {
-      lbcStatus.textContent = `Couldn’t move it — ${err.message || 'the server did not answer'}.`;
+      lbcStatus.textContent = `Couldn’t move it: ${err.message || 'the server did not answer'}.`;
     } finally {
       opts.forEach((o) => { o.disabled = false; });
     }

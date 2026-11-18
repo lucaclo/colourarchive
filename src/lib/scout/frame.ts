@@ -468,9 +468,9 @@ function framingNote(
   const tiltTo = tilt == null ? '' : ` Tilt to ${tilt >= 0 ? '+' : ''}${tilt}° to include it.`;
   switch (placement) {
     case 'in-frame':
-      return `In frame — ${across}, ${Math.abs(round1(upDeg))}° ${upDeg >= 0 ? 'above' : 'below'} it, with ${Math.abs(round1(gap))}° to the nearest edge.`;
+      return `In frame: ${across}, ${Math.abs(round1(upDeg))}° ${upDeg >= 0 ? 'above' : 'below'} it, with ${Math.abs(round1(gap))}° to the nearest edge.`;
     case 'edge':
-      return `On the frame edge — inside by ${Math.abs(round1(gap))}°, which is inside this model's own error. Treat it as either.`;
+      return `On the frame edge: inside by ${Math.abs(round1(gap))}°, which is inside this model’s own error. Treat it as either.`;
     case 'just-outside':
       return tilt == null
         ? `Just outside, ${round1(gap)}° ${edge}. Close enough to flare across the frame.`
@@ -487,7 +487,7 @@ function framingNote(
       // its own three-way split, and prints its answer on the very next line —
       // so at 132° off aim the two sat one above the other saying "front" and
       // "side" about the same sun. One question, one owner.
-      return `Behind you — ${Math.abs(round1(acrossDeg))}° off the aim, so it is not in the picture.`;
+      return `Behind you, ${Math.abs(round1(acrossDeg))}° off the aim, so it is not in the picture.`;
   }
 }
 
@@ -618,7 +618,7 @@ function describeDepthOfField(
   const range = `${formatDistanceM(nearM)} to ${Number.isFinite(farM) ? formatDistanceM(farM) : 'infinity'}`;
   const hyperfocalNote =
     focusDistanceM >= hyperfocalM
-      ? ` Focused at or past the hyperfocal distance (${formatDistanceM(hyperfocalM)}) — this is as much as the lens can bring in.`
+      ? ` Focused at or past the hyperfocal distance (${formatDistanceM(hyperfocalM)}). This is as much as the lens can bring in.`
       : ` The hyperfocal distance is ${formatDistanceM(hyperfocalM)}; focus there instead for the widest range that still reaches infinity.`;
   return `${lead} from ${range}, focused at ${formatDistanceM(focusDistanceM)}.${hyperfocalNote}`;
 }

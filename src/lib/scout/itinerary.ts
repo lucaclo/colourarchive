@@ -348,7 +348,7 @@ export function planItinerary(
       if (Math.abs(a.minute - b.minute) < clash) {
         conflicts.push({
           kind: 'peaks-together',
-          note: `${schedulable[i].name} and ${schedulable[j].name} are both at their best within ${clash} minutes of each other — you can have one of them at its best, not both.`,
+          note: `${schedulable[i].name} and ${schedulable[j].name} are both at their best within ${clash} minutes of each other. You can have one of them at its best, not both.`,
         });
       }
     }
@@ -412,7 +412,7 @@ export function planItinerary(
     conflicts,
     totalTravelM: Math.round(stops.reduce((sum, stop) => sum + stop.travelM, 0)),
     totalTravelMinutes,
-    travelAssumption: `Travel is straight-line distance at ${settings.speedKmh} km/h, plus ${settings.dwellMinutes} minutes at each spot. Real routes are longer — treat every move as a lower bound.`,
+    travelAssumption: `Travel is straight-line distance at ${settings.speedKmh} km/h, plus ${settings.dwellMinutes} minutes at each spot. Real routes are longer. Treat every move as a lower bound.`,
   };
 }
 

@@ -188,7 +188,7 @@ export async function fetchHistoricalWeather(
     if (err instanceof Error && err.name === 'TimeoutError') throw err;
     throw new WeatherError('Could not reach the historical weather service.');
   }
-  if (!response.ok) throw new WeatherError(`Open-Meteo's archive answered ${response.status}.`);
+  if (!response.ok) throw new WeatherError(`Open-Meteo’s archive answered ${response.status}.`);
 
   const report = parseForecast(await response.json(), Date.now());
   if (!report.hours.length) {

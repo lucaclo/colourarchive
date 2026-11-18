@@ -485,7 +485,7 @@ function noteFor(event: Alignment): string {
     const nights =
       event.window.length > 1 ? ` · ${event.window.length} dates in a row` : '';
     const how = event.passesBehind ? 'passes behind' : 'grazes';
-    return `${how}, disc on the line — ${round1(off)}° off centre${nights}${edge}`;
+    return `${how}, disc on the line, ${round1(off)}° off centre${nights}${edge}`;
   }
   const side = event.best.clearanceDeg > 0 ? 'above' : 'below';
   return `closest approach: ${round1(off)}° ${side} it${edge}`;
@@ -615,7 +615,7 @@ function searchNote(
 ): string {
   const there = `${round1(horizonDeg)}° up on ${Math.round(bearing)}°`;
   if (absence === 'no-bearing') {
-    return `It never reaches ${Math.round(bearing)}° from here — the closest it comes is ${round1(
+    return `It never reaches ${Math.round(bearing)}° from here. The closest it comes is ${round1(
       scan.closestGapDeg,
     )}° off that bearing.`;
   }
@@ -626,17 +626,17 @@ function searchNote(
   const gap = round1(Math.abs(nearest.clearanceDeg));
 
   if (absence === 'always-above') {
-    return `It crosses that bearing every time, always clear of what is there (${there}) — never closer than ${gap}° above. It does not go behind it in this window.`;
+    return `It crosses that bearing every time, always clear of what is there (${there}), never closer than ${gap}° above. It does not go behind it in this window.`;
   }
   if (absence === 'always-below') {
-    return `By the time it reaches that bearing it is already behind what is there (${there}) — never closer than ${gap}° below. You would not see it in this window.`;
+    return `By the time it reaches that bearing it is already behind what is there (${there}), never closer than ${gap}° below. You would not see it in this window.`;
   }
   if (absence === 'never-quite') {
     // Name the tolerance when the caller chose one. "Never within a disc's
     // width" is a claim about the sky; "never within 0.05°" is a claim about a
     // setting, and reading the second as the first would be badly misleading.
-    const within = toleranceDeg == null ? "a disc's width" : `${round1(toleranceDeg)}°`;
-    return `It passes either side of ${there} across this window but never within ${within} — the nearest is ${gap}°.`;
+    const within = toleranceDeg == null ? 'a disc’s width' : `${round1(toleranceDeg)}°`;
+    return `It passes either side of ${there} across this window but never within ${within}. The nearest is ${gap}°.`;
   }
 
   const meeting = events.filter((event) => event.meets);

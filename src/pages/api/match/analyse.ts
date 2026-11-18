@@ -67,7 +67,7 @@ export const POST: APIRoute = async ({ request }) => {
         {
           ok: false,
           error:
-            'RAW decoding needs LibRaw or macOS (sips), and neither is available here. Export a JPEG from Lightroom with every slider reset and use that instead — it is the more accurate baseline anyway.',
+            'RAW decoding needs LibRaw or macOS (sips), and neither is available here. Export a JPEG from Lightroom with every slider reset and use that instead. It is the more accurate baseline anyway.',
         },
         400,
       );

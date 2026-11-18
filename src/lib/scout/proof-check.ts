@@ -39,7 +39,7 @@ export function crossCheckProof(point: LatLon, proof: LightProof): ProofCrossChe
   const sun = sunPosition(point.lat, point.lon, new Date(proof.capturedAt));
   const sunUp = sun.altitudeApparent > SUN_ALTITUDE.sunrise;
   const note = sunUp
-    ? `Scout's geometry for that instant: sun at ${round1(sun.azimuth)}°, ${round1(sun.altitudeApparent)}° up.`
-    : `Scout's geometry for that instant: the sun was down (${round1(sun.altitudeApparent)}° below the horizon).`;
+    ? `Scout’s geometry for that instant: sun at ${round1(sun.azimuth)}°, ${round1(sun.altitudeApparent)}° up.`
+    : `Scout’s geometry for that instant: the sun was down (${round1(sun.altitudeApparent)}° below the horizon).`;
   return { sunAltitude: sun.altitudeApparent, sunAzimuth: sun.azimuth, sunUp, note };
 }

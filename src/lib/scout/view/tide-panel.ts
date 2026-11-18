@@ -90,7 +90,7 @@ export function createTidePanel(ports: TidePanelPorts): TidePanel {
   function renderKeyMissing() {
     show();
     $('tide-note').textContent =
-      "Tide data needs a WorldTides API key (WORLDTIDES_API_KEY), which isn't configured for this deployment.";
+      'Tide data needs a WorldTides API key (WORLDTIDES_API_KEY), which isn’t configured for this deployment.';
     $('tide-events').replaceChildren();
     $<HTMLElement>('tide-strip').hidden = true;
   }
@@ -151,7 +151,7 @@ export function createTidePanel(ports: TidePanelPorts): TidePanel {
     show();
     const km = station.distanceKm.toFixed(station.distanceKm < 10 ? 1 : 0);
     $('tide-note').textContent =
-      `Nearest tide station: ${station.name}, ${km} km away — heights are relative to the station's own datum.` +
+      `Nearest tide station: ${station.name}, ${km} km away. Heights are relative to the station’s own datum.` +
       (extra ? ` ${extra}` : '');
 
     const dayStart = ports.dayStart();
@@ -207,7 +207,7 @@ export function createTidePanel(ports: TidePanelPorts): TidePanel {
 
     if (dayResult.status === 'error') {
       console.warn('[scout] tide day fetch failed:', dayResult.message);
-      renderCoastal(station, null, "This date's predictions could not be loaded.");
+      renderCoastal(station, null, 'This date’s predictions could not be loaded.');
       return;
     }
 

@@ -282,7 +282,7 @@ function resemblanceNote(
       : ` ${missing.map((m) => PART_LABEL[m]).join(' and ')} could not be compared, so ${count === 1 ? 'this rests on one measurement' : `this rests on the other ${count}`}.`;
 
   if (distance <= CLOSE_ENOUGH) {
-    return `Measures like the same treatment — closest on ${PART_LABEL[nearest]}, furthest apart on ${PART_LABEL[furthest]}.${gap} Alike in the numbers; not a claim about how either was edited.`;
+    return `Measures like the same treatment: closest on ${PART_LABEL[nearest]}, furthest apart on ${PART_LABEL[furthest]}.${gap} Alike in the numbers; not a claim about how either was edited.`;
   }
   if (distance <= TOO_FAR) {
     return `In the same territory. Agrees on ${PART_LABEL[nearest]}, parts company on ${PART_LABEL[furthest]}.${gap}`;

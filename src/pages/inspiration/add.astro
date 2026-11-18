@@ -48,7 +48,7 @@ if (url && !trusted) {
       {state === 'added' && 'Added to the board'}
       {state === 'already' && 'Already on the board'}
       {state === 'error' && message}
-      {state === 'empty' && 'Nothing was shared.'}
+      {state === 'empty' && 'Nothing was shared'}
     </p>
     {by && <a href={`/inspiration?ph=${encodeURIComponent(by.id)}`} class="share-open share-by">More by {creditLabel(by.name)}</a>}
     <a href="/inspiration" class="share-open">Open the board</a>

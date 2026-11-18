@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
       const files = form.getAll('images').filter((f): f is File => f instanceof File);
       if (files.length === 0) return json({ ok: false, error: 'No images' }, 400);
       for (const f of files) {
-        if (RAW_EXT.test(f.name)) { results.push({ filename: f.name, status: 'unsupported', error: 'Camera RAW not supported.' }); continue; }
+        if (RAW_EXT.test(f.name)) { results.push({ filename: f.name, status: 'unsupported', error: 'Camera RAW isn’t supported. Export a JPEG first.' }); continue; }
         const buf = Buffer.from(await f.arrayBuffer());
         results.push(await ingest(buf, f.name, source, { typed: source }));
       }

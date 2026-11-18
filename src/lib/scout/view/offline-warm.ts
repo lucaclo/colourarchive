@@ -88,7 +88,7 @@ export function createOfflineWarm(ports: OfflineWarmPorts): void {
     }
     const sw = navigator.serviceWorker.controller;
     if (!sw) {
-      note('Still starting up — try again in a moment.');
+      note('Still starting up. Try again in a moment.');
       return;
     }
 
@@ -100,7 +100,7 @@ export function createOfflineWarm(ports: OfflineWarmPorts): void {
     // fits inside the same 64-tile ceiling that protects it.
     const choice = fitsZoom(bounds, MAX_TILES);
     if (!choice.fits && choice.tiles > MAX_TILES) {
-      note('That radius is too wide to save in one go — try a smaller one.');
+      note('That radius is too wide to save in one go. Try a smaller one.');
       return;
     }
     // A zoom up, for the 512 px tiles: the same ground at the same detail as

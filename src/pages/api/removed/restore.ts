@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ ok: true, status: outcome.status, result: outcome.result, left: items.length });
   } catch (err) {
     console.error('[removed] restore failed', err);
-    return json({ ok: false, error: "Couldn't restore it" }, 500);
+    return json({ ok: false, error: 'Couldn’t restore it' }, 500);
   }
 };
 

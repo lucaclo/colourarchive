@@ -173,7 +173,7 @@ export function createSweepExport(ports: SweepExportPorts): void {
     }
 
     if (!chunks.length) {
-      note('Nothing was captured — try again.');
+      note('Nothing was captured. Try again.');
       return;
     }
 
@@ -185,7 +185,7 @@ export function createSweepExport(ports: SweepExportPorts): void {
     link.download = `${place}-${span}-sweep.${extensionFor(mimeType)}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    note(`Done — ${instants.length} frames at ${fps} fps, ${clipLengthSeconds} s.`);
+    note(`Done: ${instants.length} frames at ${fps} fps, ${clipLengthSeconds} s.`);
   }
 
   on('sweep-run', 'click', () => void run());

@@ -178,7 +178,7 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
         out.push({
           uid: `scout-align-${body}-${Math.round(aim * 10)}-${crossing.at.getTime()}@colour-archive.local`,
           at: crossing.at,
-          summary: `${bodyLabel} ${verb} behind the target — ${locationLabel}`,
+          summary: `${bodyLabel} ${verb} behind the target (${locationLabel})`,
           description: `${clearance}${isBest ? phase : ''}${isBest ? '' : ' (also within the same pass as the closest date)'}. ${event.note}`,
           location: locationLabel,
         });
@@ -202,7 +202,7 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
     $('align-basis').textContent =
       aim === null
         ? 'Turn on Line of sight and drag its ring onto what you want the sun behind.'
-        : `On ${Math.round(aim)}° — ${horizon ? horizon.basis : 'a flat horizon, because nothing has loaded here yet.'}`;
+        : `On ${Math.round(aim)}°: ${horizon ? horizon.basis : 'a flat horizon, because nothing has loaded here yet.'}`;
 
     const phaseRow = $<HTMLElement>('align-phase-row');
     phaseRow.hidden = body !== 'moon';
@@ -211,7 +211,7 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
     if (!search) {
       list().replaceChildren();
       $('align-note').textContent =
-        aim === null ? '' : 'Press “Find dates” — a year of them takes about a tenth of a second.';
+        aim === null ? '' : 'Press “Find dates”. A year of them takes about a tenth of a second.';
       return;
     }
 
@@ -310,7 +310,7 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
       : `the skyline there now reads ${round1(horizonDeg)}°`;
     return `Found against ${Math.round(ranWith.bearing)}° at ${round1(
       ranWith.horizonDeg,
-    )}° up, and ${what} — find again. `;
+    )}° up, and ${what}. Find again. `;
   }
 
   on('align-body', 'click', (event) => {
@@ -350,7 +350,7 @@ export function createAlignmentPanel(ports: AlignmentPorts): AlignmentPanel {
     if (!met.length) return;
     const locationLabel = ports.locationLabel();
     const events = icsEventsFor(met, aim, locationLabel);
-    const ics = buildIcs(events, { calendarName: `${locationLabel} — Scout ${body} alignments` });
+    const ics = buildIcs(events, { calendarName: `${locationLabel}: Scout ${body} alignments` });
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

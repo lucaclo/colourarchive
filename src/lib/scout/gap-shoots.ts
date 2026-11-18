@@ -54,7 +54,7 @@ function describeWhen(occurrences: GapOccurrence[], point: LatLon, altitudeDeg: 
   const next = occurrences[0];
   const side = next.ascending ? 'sunrise side' : 'sunset side';
   const span = days >= 300 ? `${occurrences.length}× over the next year` : `${occurrences.length}× in the next ${days} days`;
-  return `next on ${next.at.toISOString().slice(0, 10)}, ${side} — ${span}`;
+  return `next on ${next.at.toISOString().slice(0, 10)}, ${side} (${span})`;
 }
 
 /**
@@ -73,7 +73,7 @@ export function suggestShootForGap(
       gap,
       match: null,
       occurrences: [],
-      note: `${gap.anchorName} isn't a colour daylight itself makes — it needs the right subject in frame, not different light.`,
+      note: `${gap.anchorName} isn’t a colour daylight itself makes. It needs the right subject in frame, not different light.`,
     };
   }
 
@@ -86,7 +86,7 @@ export function suggestShootForGap(
   const when = describeWhen(occurrences, point, match.point.altitudeDeg, days);
   const note =
     `${match.point.environment.label}, sun near ${round1(match.point.altitudeDeg)}° ` +
-    `(${round1(match.hueDeltaDeg)}° off ${gap.anchorName.toLowerCase()}) — ${when}.`;
+    `(${round1(match.hueDeltaDeg)}° off ${gap.anchorName.toLowerCase()}): ${when}.`;
 
   return { gap, match, occurrences, note };
 }

@@ -22,6 +22,14 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-18 · polish-type · Type, alignment and copy pass over every page and state
+  (probes in `node_modules/.cache/type-audit/`). Buttons no longer fall back to Arial;
+  Inspiration, Add & remove and the Book share one column and head (the Book's count
+  beside its title, Share and Magazine as icon buttons on a phone); Scout's sheet text
+  on one left edge (tiles were 10 px in, times 2 px), slider labels out of mono, the ND
+  field a well like the selects; Match labels back in Fraunces italic; zine Remove styled;
+  "NaN m" scale hidden; 404 and Insights lose their explanatory lines; curly apostrophes
+  and no em-dash asides in ~130 UI strings (a builder did the lib ones).
 - 2026-11-18 · remove-pin-undo · Scout's "Pin moved · Undo" note is gone (map tap and
   "Scout here" from a photo); the R13-32 and R14 tap e2e now check the sheet name.
 - 2026-11-18 · round-14 · Shipped the phone tab bar fix (#162). Built: Archive bars hide on

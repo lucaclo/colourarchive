@@ -433,7 +433,7 @@ export function createMineLayer(ports: MinePorts): MineLayer {
       const badge = document.createElement('b');
       badge.textContent = String(count);
       element.append(badge);
-      element.setAttribute('aria-label', `${count} of your photos here — zoom in`);
+      element.setAttribute('aria-label', `${count} of your photos here. Zoom in`);
     } else {
       element.setAttribute('aria-label', `Your ${cover.chapter.toLowerCase()} photo`);
     }

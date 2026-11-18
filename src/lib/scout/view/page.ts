@@ -844,12 +844,21 @@ export async function startScout(): Promise<void> {
       'no-webgl',
       'No map in this browser',
       "The map needs WebGL, which this browser has switched off (embedded preview panes, " +
-        "VS Code's Simple Browser for one, often do). Open Scout in Chrome, Safari or Firefox " +
+        "VS Code’s Simple Browser for one, often do). Open Scout in Chrome, Safari or Firefox " +
         'to see it. Everything else here works.',
     );
   } else {
     scaleControl = new maplibregl.ScaleControl({ unit: 'metric' });
     map.addControl(scaleControl, 'bottom-right');
+    // Out at the whole globe the scale can't measure the screen and prints
+    // "NaN m". Hide it until there's a distance to show. Looked up each time:
+    // standing removes the control and a later add builds a new element.
+    const scaleSays = () => {
+      const bar = map?.getContainer().querySelector<HTMLElement>('.maplibregl-ctrl-scale');
+      if (bar) bar.style.visibility = /NaN/.test(bar.textContent ?? '') ? 'hidden' : '';
+    };
+    map.on('move', scaleSays);
+    map.once('idle', scaleSays);
     /**
      * Start the credit folded.
      *
@@ -1030,7 +1039,7 @@ export async function startScout(): Promise<void> {
         if (painted) return;
         showMapMessage(
           'not-painted',
-          "The map isn't drawing",
+          'The map isn’t drawing',
           'No frame has been drawn yet. Usually WebGL is off or throttled, most often in an ' +
             'embedded preview pane rather than a browser window. The times and the slider still work.',
         );
@@ -2170,7 +2179,7 @@ export async function startScout(): Promise<void> {
     if (/style|sprite|glyph|tiles\.json|source/i.test(detail)) {
       showMapMessage(
         'basemap',
-        "Part of the map didn't load",
+        'Part of the map didn’t load',
         'A map source did not answer, so some of the map may be blank. The sun, the times and the shadows are unaffected.',
       );
     }
@@ -4785,7 +4794,7 @@ export async function startScout(): Promise<void> {
     }
     box.hidden = false;
     $<HTMLElement>('lightday-strip').style.background = `linear-gradient(to right, ${stops.join(', ')})`;
-    $('lightday-note').textContent = `The beam's own colour through the day · ${air.provenance.aerosol.basis === 'measured' ? 'aerosol measured' : 'aerosol from a table'}`;
+    $('lightday-note').textContent = `The beam’s own colour through the day · ${air.provenance.aerosol.basis === 'measured' ? 'aerosol measured' : 'aerosol from a table'}`;
   }
 
   /**
@@ -6714,7 +6723,7 @@ export async function startScout(): Promise<void> {
           const badge = document.createElement('span');
           badge.className = 'acc acc-notable';
           badge.textContent = photo.notable.name;
-          badge.title = `On the curated list of named photographers${photo.notable.wikipediaUrl ? ' — ' + photo.notable.wikipediaUrl : ''}.`;
+          badge.title = `On the curated list of named photographers${photo.notable.wikipediaUrl ? ' (' + photo.notable.wikipediaUrl + ')' : ''}.`;
           link.append(badge);
         } else if (photo.accolade) {
           const badge = document.createElement('span');
@@ -9933,7 +9942,7 @@ export async function startScout(): Promise<void> {
           spot.note?.split('\n')[0],
         ]
           .filter(Boolean)
-          .join(' — ');
+          .join(' · ');
         body.append(detail);
         li.append(body);
 
@@ -10059,11 +10068,11 @@ export async function startScout(): Promise<void> {
     if (targetDeg != null) {
       if (deg - targetDeg > 0.2) {
         parts.push(
-          `The ring's own target reads ${targetDeg.toFixed(1)}° up, so something nearer or taller hides it first.`,
+          `The ring’s own target reads ${targetDeg.toFixed(1)}° up, so something nearer or taller hides it first.`,
         );
       } else if (targetDeg - deg > 0.2) {
         parts.push(
-          `The ring's own target reads ${targetDeg.toFixed(1)}° up — but it's past the end of the profile, so the sun may have to clear more than this.`,
+          `The ring’s own target reads ${targetDeg.toFixed(1)}° up, but it’s past the end of the profile, so the sun may have to clear more than this.`,
         );
       }
     }
@@ -10477,7 +10486,7 @@ export async function startScout(): Promise<void> {
         body.className = 'cr';
         const claim = document.createElement('span');
         claim.className = 'proof-claim';
-        claim.textContent = `“${proof.claim}” — ${new Date(proof.capturedAt).toLocaleString()}`;
+        claim.textContent = `“${proof.claim}” · ${new Date(proof.capturedAt).toLocaleString()}`;
         body.append(claim);
         const check = document.createElement('span');
         check.className = 'proof-check';

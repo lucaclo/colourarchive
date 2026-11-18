@@ -519,7 +519,7 @@ export function chromaticityToSrgb(colour: Chromaticity): string {
 
 /** "5 400 K · 4.6 stops · EV 15" territory, as words. */
 export function describeLight(reading: LightReading): string {
-  if (!(reading.directLux > 50)) return 'No direct sun — everything here is skylight.';
+  if (!(reading.directLux > 50)) return 'No direct sun: everything here is skylight.';
   const cct = Math.round(reading.sun.cct / 50) * 50;
   const hardness =
     reading.contrastStops >= 4.5

@@ -236,7 +236,7 @@ export async function toWorkingImage(
           .toFile(workPath);
         baseline = 'preview';
         note =
-          "Using the camera's embedded preview. It carries your picture profile, " +
+          'Using the camera’s embedded preview. It carries your picture profile, ' +
           'not Lightroom’s baseline, so treat the magnitude of each move as approximate.';
       } else {
         const srcPath = path.join(dir, `src${path.extname(filename) || '.raw'}`);

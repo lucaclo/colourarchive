@@ -677,7 +677,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                     </div>
                     <!-- Issue #155: whichever way the filter is marked. -->
                     <label class="frame-field nd-ring" for="nd-ring"><span>Or as marked on the filter</span>
-                      <input id="nd-ring" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="ND400, 2.7 or 9 stops" />
+                      <input id="nd-ring" class="field" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="ND400, 2.7 or 9 stops" />
                     </label>
                     <label class="frame-field nd-film" for="nd-film"><span>Film<button class="infotip" type="button" aria-label="What reciprocity failure is" data-term="reciprocity" data-tip={tip('reciprocity')}>i</button></span>
                       <select class="field" id="nd-film"></select>
@@ -1051,7 +1051,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                         placeholder="What actually happened? (optional)"
                         aria-label="What happened on this visit"
                       />
-                      <button class="btn btn-sm ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider — set it to a past photo's own capture time to log a reconstruction instead of today">Log this visit</button>
+                      <button class="btn btn-sm ghost" id="visit-log" type="button" title="Logs the sun, moon and cloud for the date and hour on the slider. Set it to a past photo’s own capture time to log a reconstruction instead of today.">Log this visit</button>
                     </div>
                     <p class="note-say" id="visit-say"></p>
 
@@ -1081,11 +1081,11 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
                 <dl class="facts">
                   <div><dt>Centre</dt><dd id="f-coords">—</dd></div>
                   <div><dt>Radius</dt><dd id="f-radius">—</dd></div>
-                  <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="The shadow ratio in real distance: how far a 10 m object's shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
+                  <div><dt>A 10 m wall<button class="infotip" type="button" aria-label="What this means" data-tip="The shadow ratio in real distance: how far a 10 m object’s shadow reaches right now.">i</button></dt><dd id="f-throw">—</dd></div>
                   <div><dt>Buildings<button class="infotip" type="button" aria-label="What this means" data-tip="How many nearby buildings are casting a shadow right now. With the sun low, a whole city can be in range, so it stops at the 4,000 tallest and tells you when it has.">i</button></dt><dd id="f-buildings">—</dd></div>
                   <div><dt>Trees<button class="infotip" type="button" aria-label="What this means" data-tip="Trees from OpenStreetMap where someone has surveyed them, plus guessed ones in parks and woods where nobody has. Guessed trees cast lighter shadows and never count towards the light windows or the hotspot ranking.">i</button></dt><dd id="f-trees">—</dd></div>
-              <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin is in the shadow of a hill or ridge, using the same elevation data as the map's terrain shading. The grid size it was read at is shown too.">i</button></dt><dd id="f-landform">—</dd></div>
-                  <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Photos shared from your archive and geotagged work by photographers you've favourited, grouped into hotspots near here (plus Flickr if there's a key, and Wikimedia Commons if you turn it on in Layers). It's a sample, not every photo ever taken here.">i</button></dt><dd id="f-photos">—</dd></div>
+              <div><dt>Landform<button class="infotip" type="button" aria-label="What this means" data-tip="Whether the pin is in the shadow of a hill or ridge, using the same elevation data as the map’s terrain shading. The grid size it was read at is shown too.">i</button></dt><dd id="f-landform">—</dd></div>
+                  <div><dt>Photographed<button class="infotip" type="button" aria-label="What this means" data-tip="Photos shared from your archive and geotagged work by photographers you’ve favourited, grouped into hotspots near here (plus Flickr if there’s a key, and Wikimedia Commons if you turn it on in Layers). It’s a sample, not every photo ever taken here.">i</button></dt><dd id="f-photos">—</dd></div>
                   <div>
                     <dt>Light<button class="infotip" type="button" aria-label="What this means" data-term="light" data-tip={tip('light')}>i</button></dt>
                     <dd id="f-light">
@@ -1380,7 +1380,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
         </div>
         <ul class="photo-grid" id="photo-grid"></ul>
         <!-- Where they come from is in Layers; here, only whose they are. -->
-        <p class="photos-note">Each photograph is its author's, under the licence shown.</p>
+        <p class="photos-note">Each photograph is its author’s, under the licence shown.</p>
       </div>
 
       <a id="download" hidden aria-hidden="true"></a>
@@ -1659,13 +1659,15 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     background: transparent;
     color: var(--muted);
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     font-style: italic;
     line-height: 1;
     cursor: pointer;
     flex: none;
     transition: border-color 140ms, color 140ms, background 140ms;
   }
+  /* After a label's last word, a space's width, not touching it. */
+  :is(span, p, label) > .infotip { margin-left: 0.3em; }
   .infotip:hover,
   .infotip[aria-expanded='true'] {
     border-color: var(--fg);
@@ -1972,7 +1974,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   }
   .wx-stale {
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: #c1863c;
   }
   .wx-note {
@@ -1993,7 +1995,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     padding-left: 0.55rem;
     border-left: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.55;
     color: var(--muted);
   }
@@ -2023,7 +2025,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .best-head {
     margin: 0 0 0.4rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
@@ -2061,7 +2063,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   }
   .best-list :global(.best-rank) {
     font-family: var(--font-label);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
   .best-list :global(.best-name) {
@@ -2079,14 +2081,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
        "terrain only" to an ellipsis. */
     white-space: normal;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
   .best-list :global(.best-light) {
     justify-self: end;
     text-align: right;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     white-space: nowrap;
   }
@@ -2098,7 +2100,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .best-note {
     margin: 0.4rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2115,7 +2117,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .align-basis {
     margin: 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2152,12 +2154,12 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .align-list :global(.align-when) { font-size: var(--t-caption); line-height: 1.3; }
   .align-list :global(.align-what) {
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: #f0b866;
   }
   .align-list :global(.align-detail) {
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     color: var(--muted);
   }
@@ -2172,7 +2174,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     background: none;
     cursor: pointer;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     color: var(--muted);
     text-align: left;
@@ -2182,7 +2184,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .align-note {
     margin: 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2191,7 +2193,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .align-phase[hidden] { display: none; }
   .align-phase span {
     font-family: var(--font-label);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
 
@@ -2223,14 +2225,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .tonight :global(.tonight-head) { font-size: var(--t-caption); line-height: 1.3; }
   .tonight :global(.tonight-detail) {
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     color: var(--muted);
   }
   #tonight-note {
     margin: 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2242,7 +2244,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .mine-count, .mine-hint {
     margin: 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     color: var(--muted);
   }
@@ -2274,7 +2276,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .mine-suggest-list :global(.ms-thumb img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .mine-suggest-list :global(.ms-words) { min-width: 0; font-family: var(--font-ui); line-height: 1.3; }
   .mine-suggest-list :global(.ms-place) { display: block; font-size: var(--t-caption); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mine-suggest-list :global(.ms-gap) { display: block; font-size: 0.6875rem; color: var(--muted); }
+  .mine-suggest-list :global(.ms-gap) { display: block; font-size: var(--t-caption-2); color: var(--muted); }
   .mine-suggest-list :global(.ms-actions) { display: flex; gap: 0.25rem; }
   .mine-suggest-list :global(.ms-actions button) {
     appearance: none; cursor: pointer; font: 500 var(--t-caption) var(--font-ui); min-height: 32px; padding: 0 0.7rem;
@@ -2444,7 +2446,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .gap-list :global(.gap-detail) {
     margin: 0.15rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     color: var(--muted);
   }
@@ -2464,7 +2466,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     cursor: pointer;
     text-align: left;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.4;
     color: #f0b866;
     transition: color 140ms;
@@ -2474,13 +2476,13 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .gap-list :global(.gap-more) {
     margin: 0.15rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
   #gap-note {
     margin: 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2536,7 +2538,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .plan-stops :global(.plan-leg) {
     display: block;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
   .plan-total {
@@ -2551,7 +2553,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
      it is drawn as loudly as the plan itself. */
   .plan-trouble :global(li) {
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.45;
     color: #e8a0a0;
     padding-left: 0.7rem;
@@ -2560,7 +2562,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .plan-assume {
     margin: 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2582,7 +2584,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .sight-note {
     margin: 0.25rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -2610,7 +2612,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     justify-content: space-between;
     gap: 0.3rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
@@ -2635,7 +2637,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     align-items: baseline;
     justify-content: space-between;
     gap: 0.6rem;
-    width: 100%;
+    /* The hover fill keeps its little margin, but the words and times start
+       and end on the sheet's own edges, like every other line in it. */
+    width: calc(100% + 0.3rem);
+    margin: 0 -0.15rem;
     padding: 0.42rem 0.15rem;
     background: transparent;
     border: 0;
@@ -2659,7 +2664,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .fold { margin-bottom: 0.5rem; }
   .fold summary {
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
     cursor: pointer;
     padding: 0.35rem 0;
@@ -2727,7 +2732,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .mg-body :global(.mg-row) { display: contents; }
   .mg-body :global(.mg-day) {
     font-family: var(--font-label);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     letter-spacing: 0.06em;
     color: var(--muted);
     padding-right: 0.35rem;
@@ -2846,7 +2851,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .note-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; max-height: 14rem; overflow-y: auto; }
   .note-check-list :global(li) { display: grid; grid-template-columns: 52px 1fr; gap: 0.6rem; align-items: start; }
   .note-check-list :global(img) { width: 52px; height: 40px; object-fit: cover; border-radius: 3px; background: var(--border); }
-  .note-check-list :global(.nc-said) { font-size: 0.6875rem; line-height: 1.4; color: var(--secondary); }
+  .note-check-list :global(.nc-said) { font-size: var(--t-caption-2); line-height: 1.4; color: var(--secondary); }
   .note-check-list :global(.nc-said b) { color: var(--fg); font-weight: 600; }
   .note-check-list :global(.nc-miss b) { color: #e0a060; }
   /* Every row in here is built by the script, and Astro's scoping only reaches
@@ -2925,7 +2930,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border: 0;
     color: var(--muted);
     cursor: pointer;
-    font-size: 0.82rem;
+    font-size: var(--t-footnote);
     line-height: 1;
     padding: 0 0.2rem;
     transition: color 140ms;
@@ -2934,7 +2939,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .visit-list :global(.ghost-visit[aria-pressed='true']) { color: var(--fg); }
   /* The archive photo a visit was reconstructed from, if any — issue #75. */
   .visit-list :global(.visit-photo-link) {
-    flex: none; color: var(--muted); text-decoration: none; font-size: 0.82rem;
+    flex: none; color: var(--muted); text-decoration: none; font-size: var(--t-footnote);
     line-height: 1; padding: 0 0.2rem; transition: color 140ms;
   }
   .visit-list :global(.visit-photo-link:hover) { color: var(--fg); }
@@ -3002,7 +3007,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  .moon-note { margin: 0.25rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); font-style: italic; }
+  .moon-note { margin: 0.25rem 0 0; font-family: var(--font-note); font-size: var(--t-caption); color: var(--muted); font-style: italic; }
   .moon-note:empty { display: none; }
 
   /* ── The light's colour ───────────────────────────────────────────────── */
@@ -3030,7 +3035,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .lightday-note {
     margin: 0.25rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
     font-style: italic;
   }
@@ -3092,7 +3097,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .core-caveat {
     margin: 0.3rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption);
     color: var(--muted);
     font-style: italic;
   }
@@ -3125,7 +3130,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     align-items: center;
     gap: 0.3rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
@@ -3208,7 +3213,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   }
   #chip-now.on { animation: nowPulse 2.6s ease-in-out infinite; }
   .chip-clock { font-size: 1rem; padding: 0.35rem 0.7rem; cursor: default; }
-  .chip-phase { font-size: 0.6875rem; color: var(--muted); cursor: default; }
+  .chip-phase { font-size: var(--t-caption-2); color: var(--muted); cursor: default; }
   .chip-phase:empty { display: none; }
   .stepper { display: flex; gap: 0.25rem; align-items: center; }
   .chip-step { padding: 0.4rem 0.55rem; font-size: 0.9rem; line-height: 1; }
@@ -3349,7 +3354,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .layers-head {
     margin: 0 0 0.4rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
@@ -3379,15 +3384,17 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
   .slab { margin: 0.4rem 0 0.6rem; padding: 0.5rem 0 0; border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); }
   .slab[hidden] { display: none; }
+  /* A slider's name is a label like the field names beside it (UI face);
+     only its value is data. */
   .slab-row {
     display: flex;
     justify-content: space-between;
-    font-family: var(--font-label);
-    font-size: var(--t-caption);
+    font-family: var(--font-ui);
+    font-size: var(--t-caption-2);
     color: var(--muted);
     margin-bottom: 0.3rem;
   }
-  .slab-row output { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .slab-row output { font-family: var(--font-data); font-size: var(--t-caption); color: var(--fg); font-variant-numeric: tabular-nums; }
   .slab input[type='range'] { width: 100%; accent-color: var(--fg); }
   /* Same fix as .spot-basis — this is the note explaining what the shadow-ratio
      slider means, not a label, so it needs to actually be read. */
@@ -3404,7 +3411,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .nd-countdown.done { color: var(--accent, var(--fg)); }
 
   .frame-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
-  .frame-field { flex: 1; display: grid; gap: 0.2rem; font-family: var(--font-ui); font-size: 0.6875rem; color: var(--muted); }
+  .frame-field { flex: 1; display: grid; gap: 0.2rem; font-family: var(--font-ui); font-size: var(--t-caption-2); color: var(--muted); }
   /* The well itself is the global `select.field`; only its size is set here. */
   .frame-field select {
     width: 100%;
@@ -3441,7 +3448,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     background: transparent;
     color: var(--muted);
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.2;
     text-align: center;
     cursor: pointer;
@@ -3634,17 +3641,14 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
 
   /* ── Long exposure (issue #155) ──────────────────────────────────────── */
   .nd-ring, .nd-film { display: grid; margin-bottom: 0.5rem; }
+  /* The same filled well as the selects around it (global .field), at their
+     size; 16px only where a finger types, so iOS doesn't zoom on focus. */
   .nd-ring input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0.35rem 0.45rem;
-    font: inherit;
-    font-size: 16px; /* no focus zoom on iOS */
-    color: var(--fg);
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 5px;
+    min-height: 34px;
+    padding: 0.3rem 0.7rem;
+    font-size: var(--t-caption);
   }
+  @media (pointer: coarse) { .nd-ring input { font-size: 16px; } }
   .nd-ring input[aria-invalid='true'] { border-color: #e0603a; }
   .nd-film select { width: 100%; min-height: 34px; padding: 0.3rem 2rem 0.3rem 0.7rem; font-family: var(--font-ui); font-size: var(--t-caption); background-position: right 0.65rem center; }
   .nd-time { margin-top: 0.4rem; }
@@ -3775,7 +3779,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .sheet-zone {
     margin: 0.1rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
 
@@ -3790,7 +3794,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border-radius: var(--r-sm);
     color: var(--fg);
     font-family: var(--font-ui);
-    font-size: 0.82rem;
+    font-size: var(--t-footnote);
     padding: 0.6rem 0.8rem;
     min-height: 40px;
     transition: border-color 160ms var(--ease), background 160ms var(--ease), box-shadow 260ms var(--ease);
@@ -3880,7 +3884,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .results :global(.kd) {
     float: right;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: color-mix(in oklab, var(--muted) 70%, transparent);
     margin-left: 0.6rem;
   }
@@ -3902,7 +3906,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .kept-head {
     margin: 0 0 0.3rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
   }
   /* The list inside is `.results`, which is absolutely placed for the search
@@ -3925,10 +3929,10 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .kept-push[hidden] { display: none; }
   .kept-push button {
     appearance: none; cursor: pointer; min-height: 30px; padding: 0 0.75rem; border-radius: var(--r-pill);
-    border: 1px solid var(--rule); background: none; color: var(--fg); font: 500 0.6875rem var(--font-ui);
+    border: 1px solid var(--rule); background: none; color: var(--fg); font: 500 var(--t-caption-2) var(--font-ui);
   }
   .kept-push button[aria-pressed='true'] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-  .kept-push-say { font-size: 0.6875rem; color: var(--muted); }
+  .kept-push-say { font-size: var(--t-caption-2); color: var(--muted); }
   .kept :global(.bell-spot) {
     flex: none; align-self: center; border: 0; background: transparent; cursor: pointer; color: var(--fg);
     padding: 0 0.2rem; line-height: 0;
@@ -4000,7 +4004,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .photos-head { flex: none; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; }
   .photos-close { flex: none; width: var(--hit, 36px); height: var(--hit, 36px); display: grid; place-items: center; padding: 0; border-radius: 50%; color: var(--fg); cursor: pointer; }
   .photos-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-  .photos-title { margin: 0; font-family: var(--font-ui); font-size: 0.82rem; color: var(--fg);
+  .photos-title { margin: 0; font-family: var(--font-ui); font-size: var(--t-footnote); color: var(--fg);
     font-weight: 600;
   }
   .photos-sub { margin: 0.15rem 0 0; font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); }
@@ -4074,7 +4078,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     display: block;
     padding: 0.35rem 0.4rem 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--fg);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4086,7 +4090,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     display: block;
     padding: 0 0.4rem 0.35rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4099,7 +4103,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     margin-top: -0.2rem;
     padding: 0 0.4rem 0.35rem;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     font-variant-numeric: tabular-nums;
     line-height: 1.35;
     color: var(--muted);
@@ -4107,7 +4111,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .photos-note {
     margin: 0.6rem 0 0;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     line-height: 1.5;
     color: var(--muted);
   }
@@ -4292,7 +4296,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     color: var(--muted);
     cursor: pointer;
     font-family: var(--font-ui);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
     padding: 0.34rem 0.62rem;
     min-height: 30px;
     transition: color 140ms, border-color 140ms;
@@ -4366,7 +4370,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   .scout-map :global(.maplibregl-ctrl-attrib) {
     background: color-mix(in oklab, var(--bg) 78%, transparent);
     font-family: var(--font-label);
-    font-size: 0.6875rem;
+    font-size: var(--t-caption-2);
   }
   /* The folded credit's ⓘ: MapLibre draws it as a black disc with its own
      glyph, the one control on the map not in the app's glass. Same material
@@ -5227,7 +5231,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     transition: background-color 160ms var(--ease);
   }
   .tile + .tile { border-left: 1px solid var(--separator); }
-  .tile:first-child { padding-left: 0; }
+  /* first-of-type: the glider (lib/ui/segments.ts) prepends a <span>, so the
+     Sun tile is never :first-child and its words sat 10px in from the rest. */
+  .tile:first-of-type { padding-left: 0; }
   @media (hover: hover) { .tile:hover { background: color-mix(in oklab, var(--fg) 5%, transparent); } }
   .tile:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
   /* The open tile is underlined in the sun's colour, like a tab, and the
@@ -5373,7 +5379,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     border-top: 0;
     border-radius: 0 0 6px 6px;
     color: color-mix(in oklab, var(--fg) 82%, transparent);
-    font: 500 0.6875rem/1.4 var(--font-ui);
+    font: 500 var(--t-caption-2)/1.4 var(--font-ui);
     padding: 0 0.4rem 0.1rem;
     -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   }

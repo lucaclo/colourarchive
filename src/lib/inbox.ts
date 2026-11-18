@@ -233,7 +233,7 @@ async function scanOnce(s: State): Promise<InboxLog> {
         await fs.unlink(path.join(dir, name)).catch(() => {});
         s.seen.delete(name);
       } else {
-        const reason = r.error ?? "Couldn't add this one";
+        const reason = r.error ?? 'Couldn’t add this one';
         s.failed.set(failureKey(byName.get(name)!), reason);
         held.push({ name, reason, since: keepSince.get(name) ?? now });
       }
