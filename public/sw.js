@@ -11,7 +11,9 @@
  *   • third-party assets → network-first with a short fuse, then the cached copy
  *   • /api/*       → never cached (uploads, removals, full-res originals)
  */
-const VERSION = 'v1';
+// v2 (2026-11-18): a phone still showed an old build after a deploy; a new
+// version drops every device's saved copy once, on its next visit.
+const VERSION = 'v2';
 const CACHE = `colour-archive-${VERSION}`;
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -47,6 +49,9 @@ self.addEventListener('fetch', (event) => {
 
   // Dynamic, machine-side endpoints — leave them to the network.
   if (url.pathname.startsWith('/api/')) return;
+  // The build stamp says which build is live; a saved copy would say which one
+  // was live when it was saved. The page checks it to reload itself (Layout).
+  if (url.pathname === '/publish.json') return;
 
   const isNavigation =
     req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');

@@ -1,10 +1,9 @@
 # Progress
 
 ## Now
-- `main` at 7df8163: polish-type and remove-pin-undo (#164) merged. The release workflow
-  publishes the next v0.2.x (the installed app picks it up within 4 h, or "Restart to
-  Update"). Netlify has the 2026-11-18 19:14 build, made from `~/Pictures/Colour
-  Archive`: 110 photographs, search live, `drift` clean.
+- `main` at 57be6ec: polish-type (#164) and phone-fixes (#165) merged. Netlify has the
+  2026-11-18 19:50 build, made from `~/Pictures/Colour Archive`: 110 photographs, search
+  live. Luca's installed app is 0.2.4; v0.2.7 is out ("Restart to Update").
 - CI `smoke` fails in the same 15 Scout tests on `main` as on #163 (not required,
   network-dependent); worth a look.
 
@@ -23,6 +22,10 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-18 · phone-refresh · Luca's phone still looked old after the deploys. Service
+  worker v2 (every device drops its saved copy once; `/publish.json` never cached) and the
+  published pages reload themselves on return to the screen when a newer build is live.
+  Checked in WebKit at iPhone size against a local v1 → v2 switch and a newer stamp.
 - 2026-11-18 · phone-fixes · Chapter count: number in mono, "photographs" in the UI face.
   The offline pill and Scout's note no longer wrap at half width on a phone (`left: 50%`
   shrink-wrap). "Netlify looks old" was a comparison with :4400, another session's test

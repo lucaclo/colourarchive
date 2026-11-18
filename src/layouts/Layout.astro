@@ -68,6 +68,8 @@ const ringPointer = cursor && (['archive', 'inspiration', 'book', 'scout'] as co
 // production social-preview card.
 const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? Astro.url);
 const ogImageURL = new URL(image, Astro.site ?? Astro.url);
+// The published copy carries /publish.json; the Mac's own server doesn't.
+const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
 ---
 
 <!doctype html>
@@ -193,6 +195,25 @@ const ogImageURL = new URL(image, Astro.site ?? Astro.url);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) fit(); });
       })();
     </script>
+    {STATIC && <script is:inline>
+      // A page left open (a Home Screen app resumed, a Safari tab come back to)
+      // keeps the build it was loaded with. The published site stamps each
+      // build in /publish.json; if a newer one went live while this page was
+      // in the background, load it.
+      (function () {
+        const stamp = () => fetch('/publish.json', { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => (j && typeof j.builtAt === 'string' ? j.builtAt : null))
+          .catch(() => null);
+        let loaded = null;
+        stamp().then((b) => { loaded = b; });
+        document.addEventListener('visibilitychange', async () => {
+          if (document.visibilityState !== 'visible' || !loaded) return;
+          const live = await stamp();
+          if (live && live !== loaded) location.reload();
+        });
+      })();
+    </script>}
     <script is:inline>
       // Offline snapshot: register the service worker, then pre-cache every
       // image on the page so the archive is fully browsable offline after one
