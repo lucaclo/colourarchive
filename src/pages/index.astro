@@ -383,7 +383,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
               >
                 <p class="chapter-index">Chapter {roman(ci)}</p>
                 <h2 class="chapter-title">{ch.name}</h2>
-                <p class="chapter-count">{ch.photos.length} photograph{ch.photos.length === 1 ? '' : 's'}</p>
+                <p class="chapter-count"><span class="chapter-count-n">{ch.photos.length}</span> photograph{ch.photos.length === 1 ? '' : 's'}</p>
                 <ul class="chapter-palette" aria-hidden="true">
                   {chapterPalette(ch.photos).map((o) => <li style={`background:${oklchCss(o)}`} />)}
                 </ul>

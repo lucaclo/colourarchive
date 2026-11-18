@@ -104,6 +104,8 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   1 to 6 px apart. `states.mjs` does the same for menus, sheets and Match.
 - A probe that clicks inside Add & remove's grid can remove photos. Mock every non-GET
   `/api` request in a probe, not a list of routes.
+- A fixed or absolute pill at `left: 50%` with `translate(-50%)` only shrink-wraps into
+  half the screen and wraps its text. Give it `width: max-content; max-width: calc(100% - 2rem)`.
 
 ## Astro
 - Scoped `<style>` doesn't reach elements built at runtime. Wrap those selectors in
@@ -179,6 +181,10 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   answers.
 - A Netlify proxy forwards the query string as is; Nominatim answers it from Netlify's
   IPs. If it ever starts refusing, Photon (komoot) sends CORS headers and needs no proxy.
+- "Netlify looks old": compare it with the Mac app (`127.0.0.1:43210`, the real archive),
+  never with :4400, which is often a session's test server on a throwaway archive
+  (`ps eww <pid>` shows its `COLOUR_ARCHIVE_DATA`). The public site has only the Archive,
+  Scout, `/get`, `/book/view` and the 404.
 
 ## Mac app updates
 - `app.getVersion()` in a packaged app reads `Contents/Resources/app/package.json`, not

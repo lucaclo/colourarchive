@@ -3956,6 +3956,7 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
     left: 50%;
     bottom: calc(7.5rem + var(--safe-bottom));
     transform: translateX(-50%);
+    width: max-content; max-width: calc(100% - 2rem); /* left: 50% alone wraps it at half width */
     z-index: 40;
     display: flex;
     align-items: center;

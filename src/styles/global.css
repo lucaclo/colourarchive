@@ -554,12 +554,14 @@ code, kbd, samp { font-family: var(--font-data); }
 /* Real data, not decoration, in the room the marquee used to fill — how much
    of the archive this chapter actually is. */
 .chapter-count {
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   font-size: var(--t-footnote);
   letter-spacing: 0;
   margin: 0.9rem 0 0;
   font-weight: 500;
 }
+/* The number is the value; "photographs" is its label (mono only for values). */
+.chapter-count-n { font-family: var(--font-data); }
 /* The chapter's palette — its own photographs' dominant colours, in the
    order they follow. A preview of the wall below, drawn from real data. */
 /* Struck as one band, like the cover's spectrum, rather than a row of
@@ -1578,6 +1580,9 @@ body.modal-open { overflow: hidden; padding-right: var(--sbw, 0px); }
 /* --- Offline status pill -------------------------------------------------- */
 .offline-pill {
   position: fixed; left: 50%; bottom: 1.4rem; transform: translate(-50%, 8px);
+  /* At left: 50% a box only shrink-wraps into the right half of the screen, so
+     "Saving for offline · 64 / 216" broke onto two lines on a phone. */
+  width: max-content; max-width: calc(100% - 2rem);
   z-index: 9999; pointer-events: none;
   font-family: var(--font-ui); font-size: var(--t-footnote); font-weight: 500;
   color: var(--fg); background: var(--glass-bg-strong); box-shadow: var(--glass-shadow);
