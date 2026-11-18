@@ -5,7 +5,11 @@ import {
   DEFAULT_HORIZON_RADIUS_M,
   EARTH_CIRCUMFERENCE_M,
   TILE_SIZE,
+  ancestorTile,
   chooseZoom,
+  encodeTerrariumTile,
+  quadrantIn,
+  upsampleHeights,
   clampImplausibleElevation,
   despikeHeights,
   fitsZoom,
@@ -794,5 +798,191 @@ describe('maskToRGBA', () => {
       if (a > 0 && a < 255) intermediate++;
     }
     assert.ok(intermediate >= 2, `only ${intermediate} softened samples`);
+  });
+});
+
+/* ── Tiles cut from an ancestor ────────────────────────────────────────────── */
+
+describe('ancestorTile and quadrantIn', () => {
+  // A z5 tile with an odd column and an even row, so every level up lands in
+  // a different corner of its parent.
+  const TILE = { z: 5, x: 13, y: 22 };
+
+  it('finds the tile one, two and three zooms up', () => {
+    assert.deepEqual(ancestorTile(TILE, 0), TILE);
+    assert.deepEqual(ancestorTile(TILE, 1), { z: 4, x: 6, y: 11 });
+    assert.deepEqual(ancestorTile(TILE, 2), { z: 3, x: 3, y: 5 });
+    assert.deepEqual(ancestorTile(TILE, 3), { z: 2, x: 1, y: 2 });
+  });
+
+  it('has nothing above z0', () => {
+    assert.deepEqual(ancestorTile(TILE, 5), { z: 0, x: 0, y: 0 });
+    assert.equal(ancestorTile(TILE, 6), null);
+    assert.equal(ancestorTile(TILE, -1), null);
+  });
+
+  it('puts the tile in the right part of a 512 px ancestor', () => {
+    // 13 = 0b01101, 22 = 0b10110: the low bits are the position in the parent.
+    assert.deepEqual(quadrantIn(TILE, 1, 512), { x: 256, y: 0, size: 256 });
+    assert.deepEqual(quadrantIn(TILE, 2, 512), { x: 128, y: 256, size: 128 });
+    assert.deepEqual(quadrantIn(TILE, 3, 512), { x: 320, y: 384, size: 64 });
+  });
+
+  it('and of a 256 px one, the satellite size', () => {
+    assert.deepEqual(quadrantIn(TILE, 1, 256), { x: 128, y: 0, size: 128 });
+    assert.deepEqual(quadrantIn(TILE, 3, 256), { x: 160, y: 192, size: 32 });
+  });
+
+  it('agrees with the map: the square covers the same ground as the tile', () => {
+    for (const levels of [1, 2, 3]) {
+      const up = ancestorTile(TILE, levels)!;
+      const square = quadrantIn(TILE, levels, 512);
+      const west = tileXToLon(up.x + square.x / 512, up.z);
+      const east = tileXToLon(up.x + (square.x + square.size) / 512, up.z);
+      const north = tileYToLat(up.y + square.y / 512, up.z);
+      const south = tileYToLat(up.y + (square.y + square.size) / 512, up.z);
+      assert.ok(Math.abs(west - tileXToLon(TILE.x, TILE.z)) < 1e-9);
+      assert.ok(Math.abs(east - tileXToLon(TILE.x + 1, TILE.z)) < 1e-9);
+      assert.ok(Math.abs(north - tileYToLat(TILE.y, TILE.z)) < 1e-9);
+      assert.ok(Math.abs(south - tileYToLat(TILE.y + 1, TILE.z)) < 1e-9);
+    }
+  });
+});
+
+describe('upsampleHeights', () => {
+  const SIZE = 16;
+  /** Deterministic rough ground: no two neighbours the same. */
+  const rough = () => {
+    const heights = new Float32Array(SIZE * SIZE);
+    let seed = 7;
+    for (let i = 0; i < heights.length; i++) {
+      seed = (seed * 48271) % 2147483647;
+      heights[i] = 1000 + (seed % 2000) / 4;
+    }
+    return heights;
+  };
+
+  /**
+   * The ancestor's ground at a point, worked out from longitude and latitude
+   * rather than from `quadrantIn`, so the two are checked against each other:
+   * bilinear between the ancestor's samples, which stand at pixel centres.
+   */
+  const groundAt = (heights: Float32Array, up: { z: number; x: number; y: number }, lon: number, lat: number) => {
+    const col = Math.min(SIZE - 1, Math.max(0, (lonToTileX(lon, up.z) - up.x) * SIZE - 0.5));
+    const row = Math.min(SIZE - 1, Math.max(0, (latToTileY(lat, up.z) - up.y) * SIZE - 0.5));
+    const c0 = Math.floor(col);
+    const r0 = Math.floor(row);
+    const c1 = Math.min(SIZE - 1, c0 + 1);
+    const r1 = Math.min(SIZE - 1, r0 + 1);
+    const fx = col - c0;
+    const fy = row - r0;
+    const top = heights[r0 * SIZE + c0] * (1 - fx) + heights[r0 * SIZE + c1] * fx;
+    const bottom = heights[r1 * SIZE + c0] * (1 - fx) + heights[r1 * SIZE + c1] * fx;
+    return top * (1 - fy) + bottom * fy;
+  };
+
+  it("keeps the ancestor's heights at every point the new tile samples", () => {
+    const heights = rough();
+    for (const levels of [1, 2, 3]) {
+      const tile = { z: 10, x: 549, y: 358 };
+      const up = ancestorTile(tile, levels)!;
+      const cut = upsampleHeights(heights, SIZE, quadrantIn(tile, levels, SIZE));
+      let worst = 0;
+      for (let row = 0; row < SIZE; row++) {
+        for (let col = 0; col < SIZE; col++) {
+          // Where this new sample stands on the ground: its pixel centre.
+          const lon = tileXToLon(tile.x + (col + 0.5) / SIZE, tile.z);
+          const lat = tileYToLat(tile.y + (row + 0.5) / SIZE, tile.z);
+          worst = Math.max(worst, Math.abs(cut[row * SIZE + col] - groundAt(heights, up, lon, lat)));
+        }
+      }
+      // Through latitude and back costs a little float precision, nothing more.
+      assert.ok(worst < 0.01, `${levels} up: off by ${worst} m`);
+    }
+  });
+
+  it('gives back the ancestor exactly when nothing is scaled', () => {
+    const heights = rough();
+    assert.deepEqual(upsampleHeights(heights, SIZE, { x: 0, y: 0, size: SIZE }), heights);
+  });
+
+  it('carries a slope through unchanged', () => {
+    // A plane, in the ancestor's pixel coordinates.
+    const plane = (col: number, row: number) => 400 + 3 * col - 2 * row;
+    const heights = new Float32Array(SIZE * SIZE);
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) heights[row * SIZE + col] = plane(col, row);
+    }
+    // An inner quadrant two levels up, clear of the edge where values clamp.
+    const square = { x: 4, y: 4, size: 4 };
+    const cut = upsampleHeights(heights, SIZE, square);
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) {
+        const atCol = square.x + ((col + 0.5) * square.size) / SIZE - 0.5;
+        const atRow = square.y + ((row + 0.5) * square.size) / SIZE - 0.5;
+        assert.ok(Math.abs(cut[row * SIZE + col] - plane(atCol, atRow)) < 1e-3);
+      }
+    }
+  });
+
+  it('never invents a height outside the ones it blends', () => {
+    const heights = rough();
+    const cut = upsampleHeights(heights, SIZE, { x: 8, y: 0, size: 2 });
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let row = 0; row < 2; row++) {
+      for (let col = 7; col < 11; col++) {
+        lo = Math.min(lo, heights[row * SIZE + col]);
+        hi = Math.max(hi, heights[row * SIZE + col]);
+      }
+    }
+    for (const h of cut) assert.ok(h >= lo - 1e-3 && h <= hi + 1e-3);
+  });
+
+  it('re-encodes as terrarium and decodes back within 0.1 m', () => {
+    const heights = rough();
+    const cut = upsampleHeights(heights, SIZE, quadrantIn({ z: 9, x: 3, y: 5 }, 2, SIZE));
+    const back = decodeTerrariumTile(encodeTerrariumTile(cut), SIZE);
+    let worst = 0;
+    for (let i = 0; i < cut.length; i++) worst = Math.max(worst, Math.abs(back[i] - cut[i]));
+    assert.ok(worst <= 0.1, `off by ${worst} m`);
+    // Terrarium carries 1/256 m, so a rounding is at most half of that.
+    assert.ok(worst <= 1 / 512 + 1e-6, `off by ${worst} m`);
+  });
+
+  it('encodes every pixel opaque', () => {
+    const rgba = encodeTerrariumTile(new Float32Array([0, 100, -100]));
+    assert.deepEqual([...rgba], [128, 0, 0, 255, 128, 100, 0, 255, 127, 156, 0, 255]);
+  });
+});
+
+describe('loadHeightField with 512 px tiles', () => {
+  it('lays them out at their own size, and refuses a tile of another', async () => {
+    const BIG = 512;
+    const twoByTwo: Bounds = { west: 0.01, south: -0.2, east: 0.5, north: 0.2 };
+    const zoom = ZOOM;
+    const minX = Math.floor(lonToTileX(twoByTwo.west, zoom));
+    const minY = Math.floor(latToTileY(twoByTwo.north, zoom));
+    const field = await loadHeightField(
+      twoByTwo,
+      async ({ x, y }) => {
+        // One tile comes back the old size: it is counted missing, not smeared.
+        if (x === minX + 1 && y === minY + 1) return new Float32Array(TILE_SIZE * TILE_SIZE).fill(9);
+        const tile = new Float32Array(BIG * BIG);
+        tile.fill((x - minX) * 10 + (y - minY));
+        return tile;
+      },
+      { zoom, tileSize: BIG },
+    );
+    assert.equal(field.width, BIG * 2);
+    assert.equal(field.height, BIG * 2);
+    assert.equal(field.tilesRequested, 4);
+    assert.equal(field.tilesLoaded, 3);
+    assert.equal(field.heights[(BIG + 5) * field.width + 5], 1);
+    assert.equal(field.heights[5 * field.width + BIG + 5], 10);
+    assert.equal(field.heights[(BIG + 5) * field.width + BIG + 5], 0);
+    // Each sample is a 512th of a tile, half the ground a 256 px tile's was.
+    const lat = tileYToLat(minY + 0.5 / BIG, zoom);
+    assert.ok(Math.abs(field.scaleM[0] - metresPerSample(lat, zoom, BIG)) < 1e-6);
   });
 });

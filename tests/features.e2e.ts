@@ -12,21 +12,29 @@
  * scout.smoke.ts gives: tsx wraps functions in a `__name` helper that does
  * not exist inside the page.
  */
-import { test, before, after } from 'node:test';
+import { test, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 
 const ORIGIN = process.env.E2E_ORIGIN ?? 'https://localhost:4321';
 let browser: Browser;
+/** Hardware WebGL, for Scout's eye view: SwiftShader draws it at seconds a frame. */
+let gpuBrowser: Browser | undefined;
 
 before(async () => {
   browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 });
-after(async () => { await browser?.close(); });
+after(async () => { await browser?.close(); await gpuBrowser?.close(); });
+// A test that fails before `done` leaves its page open, still drawing: under
+// SwiftShader two such pages starved every Scout test after them (3 min each).
+afterEach(async () => {
+  for (const b of [browser, gpuBrowser]) for (const c of b?.contexts() ?? []) await c.close().catch(() => {});
+});
 
 /** A page that fails the test on an uncaught error, an app console error, or a 5xx. */
-async function open(path: string, opts: { width?: number; height?: number; clipboard?: boolean } = {}): Promise<{ page: Page; ctx: BrowserContext; problems: string[] }> {
-  const ctx = await browser.newContext({
+async function open(path: string, opts: { width?: number; height?: number; clipboard?: boolean; gpu?: boolean } = {}): Promise<{ page: Page; ctx: BrowserContext; problems: string[] }> {
+  if (opts.gpu) gpuBrowser ??= await chromium.launch({ args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
+  const ctx = await (opts.gpu ? gpuBrowser! : browser).newContext({
     viewport: { width: opts.width ?? 1440, height: opts.height ?? 900 },
     ignoreHTTPSErrors: true,
     permissions: opts.clipboard ? ['clipboard-read', 'clipboard-write'] : [],
@@ -44,7 +52,8 @@ async function open(path: string, opts: { width?: number; height?: number; clipb
   page.on('response', (r) => { if (r.status() >= 500 && r.url().startsWith(ORIGIN)) problems.push(`${r.status()} ${r.url()}`); });
   await page.goto(ORIGIN + path, { waitUntil: 'load' });
   await page.waitForTimeout(1200);
-  await page.addStyleTag({ content: '*{transition:none!important;animation:none!important} astro-dev-toolbar{display:none!important}' });
+  // Pseudo-elements too: the cover's scroll hint loops on an ::after forever.
+  await page.addStyleTag({ content: '*,*::before,*::after{transition:none!important;animation:none!important} astro-dev-toolbar{display:none!important}' });
   return { page, ctx, problems };
 }
 const done = async (o: { ctx: BrowserContext; problems: string[] }) => {
@@ -61,7 +70,12 @@ test('F01-H1 a picked red filters the archive to photos that contain it', async 
   const all = await visibleFrames(page);
   await page.getByRole('button', { name: 'Search by colour' }).first().click();
   await page.getByRole('textbox', { name: 'Hex colour' }).fill('#d11f27');
-  await page.waitForTimeout(500);
+  // The filter lands inside a view transition, after its first snapshot: over
+  // 500 ms in a fresh software-rendered browser. Wait for the count to show.
+  await page.waitForFunction(`(() => {
+    const n = Number(document.querySelector('.cf-count')?.textContent);
+    return n > 0 && [...document.querySelectorAll('.archive .frame')].filter((f) => f.offsetParent).length === n;
+  })()`, null, { timeout: 5000 }).catch(() => {});
   const shown = await visibleFrames(page);
   const count = Number(await page.locator('.cf-count').first().textContent());
   assert.ok(shown > 0 && shown < all, `${shown} of ${all}`);
@@ -311,20 +325,34 @@ test('F05-H1 the meteor fold names a shower and the best hour', async () => {
 });
 
 test('F05-H2 eye level stands at the pin facing the sun, and comes back', async () => {
-  const o = await open(SCOUT);
+  const o = await open(SCOUT, { gpu: true });
   await o.page.waitForTimeout(4000);
-  const cam = () => o.page.evaluate(`(() => { const m = window.scout.map(); return { pitch: m.getPitch(), bearing: (m.getBearing() + 360) % 360, zoom: m.getZoom() }; })()`) as Promise<{ pitch: number; bearing: number; zoom: number }>;
+  // Where the camera is, worked out by hand: getCameraAltitude() is NaN on the globe.
+  const cam = () => o.page.evaluate(`(() => {
+    const m = window.scout.map(), tr = m.transform, c = tr.getCameraLngLat(), pin = window.scout.state().centre;
+    const R = 6371008.8, rad = Math.PI / 180;
+    const ppm = tr.worldSize / (2 * Math.PI * R * Math.cos(tr.center.lat * rad));
+    const alt = tr.elevation + Math.cos(m.getPitch() * rad) * tr.cameraToCenterDistance / ppm;
+    return {
+      pitch: m.getPitch(), bearing: (m.getBearing() + 360) % 360, zoom: m.getZoom(),
+      offPinM: Math.hypot((c.lat - pin.lat) * rad * R, (c.lng - pin.lon) * rad * R * Math.cos(pin.lat * rad)),
+      aboveGroundM: alt - (m.queryTerrainElevation([pin.lon, pin.lat]) ?? 0),
+    };
+  })()`) as Promise<{ pitch: number; bearing: number; zoom: number; offPinM: number; aboveGroundM: number }>;
   // The camera as it rests, not mid-flight: on a busy machine the opening fit
   // can still be moving at 4 s.
   const resting = () => o.page.waitForFunction(`(() => !window.scout.map().isMoving())()`, null, { timeout: 15_000, polling: 250 }).then(cam);
   const before = await resting();
   await o.page.getByRole('button', { name: 'Eye level' }).click();
-  await o.page.waitForTimeout(8000);
+  // Standing waits for the ground under the pin before it places the eye.
+  await o.page.waitForFunction(`(() => { const m = window.scout.map(); return m.getPitch() > 89 && m.areTilesLoaded(); })()`, null, { timeout: 30_000, polling: 250 });
+  await o.page.waitForTimeout(1500);
   const eye = await cam();
-  assert.ok(eye.pitch > 80, `pitch ${eye.pitch}`);
+  assert.ok(Math.abs(eye.pitch - 90) < 1, `level, pitch ${eye.pitch}`);
   // Solar noon in Edinburgh: the sun is due south.
   assert.ok(Math.abs(eye.bearing - 180) < 5, `bearing ${eye.bearing}`);
-  assert.ok(eye.zoom > 19, `zoom ${eye.zoom}`);
+  assert.ok(eye.offPinM < 1, `${eye.offPinM} m from the pin`);
+  assert.ok(Math.abs(eye.aboveGroundM - 1.7) < 0.3, `eye ${eye.aboveGroundM} m above the ground`);
   await o.page.getByRole('button', { name: 'Eye level' }).click();
   await o.page.waitForTimeout(1500);
   const back = await resting();

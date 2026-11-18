@@ -71,19 +71,20 @@ const SPOT =
  */
 const TAP_AT = { x: 187, y: 100 } as const;
 
-const DEM_HOST = 's3.amazonaws.com/elevation-tiles-prod';
+const DEM_HOST = 'tiles.mapterhorn.com';
 
 /**
  * The zoom at and above which a DEM tile can only be the height field's.
  *
  * Both the hillshade and `terrain-shadows.ts` pull from the same terrarium
  * tiles, so the host alone does not say who asked. The zoom does: at the world
- * view the basemap's own hillshade covers the globe from z2, while `chooseZoom`
- * never returns below its z7 floor — which is exactly how the storm happened,
- * z7 enumerated across a whole planet.
+ * view the basemap's own hillshade covers the globe from z1 (512 px tiles),
+ * while `chooseZoom` never returns below its z7 floor, which the field asks
+ * for a zoom up, at z6 — and z7 enumerated across a whole planet is exactly
+ * how the storm happened.
  */
-const FIELD_ZOOM = 7;
-const zoomOf = (url: string) => Number(url.match(/terrarium\/(\d+)\//)?.[1] ?? -1);
+const FIELD_ZOOM = 6;
+const zoomOf = (url: string) => Number(url.match(/mapterhorn\.com\/(\d+)\//)?.[1] ?? -1);
 
 /** Long enough for a cold dev server and a real map; short enough to fail a CI run. */
 const READY_MS = 90_000;

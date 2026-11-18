@@ -923,6 +923,18 @@ body.modal-open .tabbar { opacity: 0; pointer-events: none; transform: translate
 @media (prefers-reduced-motion: reduce) {
   .tabbar, .tabbar-tabs, .tab, .tabbar-add { transition: none; }
 }
+/* The Archive on a phone or tablet: scrolling down takes the tab bar off the
+   foot of the screen and the top bar off the top (index.astro); scrolling up
+   brings both back. Away from the eye and the pointer, not screen readers. */
+.tabbar.away { transform: translate(-50%, calc(100% + var(--tabbar-bottom) + 2px)); opacity: 0; pointer-events: none; }
+@media (max-width: 1024px), (pointer: coarse) {
+  .topbar, body:has(#topbar) .tabbar { transition: transform var(--dur-med) var(--ease), opacity var(--dur-med) var(--ease); }
+  @media (prefers-reduced-motion: reduce) {
+    .topbar, body:has(#topbar) .tabbar { transition: opacity var(--dur-med) linear; }
+    .topbar.hidden { transform: none; }
+    .tabbar.away { transform: translateX(-50%); }
+  }
+}
 @media (prefers-reduced-transparency: reduce) {
   .tabbar-tabs, .tabbar-add { background: var(--surface-2); }
 }
@@ -1700,6 +1712,11 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
     left: var(--edge); right: var(--edge);
     bottom: calc(var(--tabbar-space) - 0.35rem); padding-bottom: 0;
     background: none;
+    transition: bottom var(--dur-med) var(--ease);
+  }
+  /* When scrolling takes the tab bar away, the strip settles to the foot. */
+  body.has-tabbar:has(.tabbar.away) .spectrum {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
   }
   .spectrum:hover { width: auto; }
   /* Full-height tap target, hairline appearance: the mask shows only the bottom

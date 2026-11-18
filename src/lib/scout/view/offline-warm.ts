@@ -103,7 +103,9 @@ export function createOfflineWarm(ports: OfflineWarmPorts): void {
       note('That radius is too wide to save in one go — try a smaller one.');
       return;
     }
-    const urls = tilesFor(bounds, choice.zoom).map(terrariumTileUrl);
+    // A zoom up, for the 512 px tiles: the same ground at the same detail as
+    // the 256 px tiles `fitsZoom` counts in — see `terrain-shadows.ts`.
+    const urls = tilesFor(bounds, Math.max(0, choice.zoom - 1)).map(terrariumTileUrl);
 
     running = true;
     button.disabled = true;
