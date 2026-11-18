@@ -1327,10 +1327,8 @@ export async function startScout(): Promise<void> {
           scoutAt: (at) => {
             if (!centre) placeFirstSpotAt(at);
             else {
-              undoSpot = { centre, label: { ...label }, timeZone };
               setCentreCoordinates(at);
               pin.setLngLat([at.lon, at.lat]);
-              offerUndo('Scouting where you took it');
             }
             map?.flyTo({ center: [at.lon, at.lat], zoom: Math.max(map.getZoom(), 15) });
           },
@@ -2126,10 +2124,8 @@ export async function startScout(): Promise<void> {
     // Markers and controls sit in their own DOM above the canvas and never
     // reach this, so dragging the monolith is unaffected.
     const next = { lat: event.lngLat.lat, lon: event.lngLat.lng };
-    undoSpot = { centre, label: { ...label }, timeZone };
     setCentreCoordinates(next);
     pin.setLngLat([next.lon, next.lat]);
-    offerUndo('Pin moved');
   });
   // `sourcedata` fires for every tile that finishes, so at a city zoom this
   // arrives in bursts of dozens — and `collectBuildings` walks every loaded
@@ -6076,67 +6072,20 @@ export async function startScout(): Promise<void> {
     nameSpot(next, ++reverseToken);
   }
 
-  /* ── Tapping the map ───────────────────────────────────────────────────
-     The pin was draggable and nothing else, which on a touchscreen means
-     catching a marker a few millimetres across with a fingertip. Tapping the
-     map is the obvious gesture and MapLibre already distinguishes it from a
-     pan, which is a drag — so this cannot fire while you are moving the map.
+  /* ── Notes ─────────────────────────────────────────────────────────────
+     A short line over the map for things that did not happen: a save the
+     browser refused, a tap from too far out. A tap that moves the pin says
+     nothing; the pin and the sheet's new name show it. */
 
-     What it *can* do is move a spot you chose carefully, by accident. So it is
-     paired with an undo that restores the position, the name and the zone
-     exactly, and the undo is what makes the speed safe rather than reckless. */
-
-  let undoSpot: { centre: LatLon; label: typeof label; timeZone: string } | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function offerUndo(text: string) {
-    $('toast-text').textContent = text;
-    $<HTMLElement>('toast-undo').hidden = false;
-    $<HTMLElement>('toast').hidden = false;
-    clearTimeout(toastTimer);
-    // Long enough to notice and reach, short enough not to sit over the map.
-    toastTimer = setTimeout(() => ($<HTMLElement>('toast').hidden = true), 6000);
-  }
-
-  /**
-   * The same strip, with nothing to undo.
-   *
-   * For the things that simply did not happen — a save the browser refused.
-   * Offering "Undo" against those would be inviting you to reverse something
-   * that never took place.
-   */
   function notify(text: string) {
-    undoSpot = null;
     $('toast-text').textContent = text;
-    $<HTMLElement>('toast-undo').hidden = true;
     $<HTMLElement>('toast').hidden = false;
     clearTimeout(toastTimer);
+    // Long enough to read, short enough not to sit over the map.
     toastTimer = setTimeout(() => ($<HTMLElement>('toast').hidden = true), 6000);
   }
-
-  on('toast-undo', 'click', () => {
-    const previous = undoSpot;
-    $<HTMLElement>('toast').hidden = true;
-    clearTimeout(toastTimer);
-    if (!previous) return;
-    undoSpot = null;
-    // Restored wholesale rather than re-derived: a reverse lookup could name
-    // the same coordinate differently a minute later, and "undo" has to mean
-    // exactly what was there before.
-    reverseToken++; // abandon any naming still in flight for the tapped spot
-    centre = previous.centre;
-    label = previous.label;
-    timeZone = previous.timeZone;
-    nearby = [];
-    searchBox.setQuery(label.name);
-    pin.setLngLat([centre.lon, centre.lat]);
-    renderPanel();
-    rebuildDay({ keepMinute: true });
-    redrawEverything();
-    void loadWeather();
-    void loadPhotos();
-    save();
-  });
 
   /* ── Photo hotspots ────────────────────────────────────────────────────
      What Scout could never say before: whether anyone has ever found this

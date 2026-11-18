@@ -108,10 +108,9 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
         <button class="toast-do nv-offer-close" id="replan-ask-close" type="button" aria-label="Not now">×</button>
       </div>
 
-      <!-- Undo for a tap that moved the pin somewhere you did not mean. -->
+      <!-- A short note: a refused save, a tap from too far out. -->
       <div class="toast" id="toast" hidden>
         <span id="toast-text"></span>
-        <button class="toast-do" id="toast-undo" type="button">Undo</button>
       </div>
 
       <!-- Everything that changes under the slider, for a screen reader. It is
@@ -3945,9 +3944,8 @@ const tip = (id: string) => glossaryEntry(id)?.text ?? '';
   #star[hidden] { display: none; }
   #share-button[hidden] { display: none; }
 
-  /* ── Undo ─────────────────────────────────────────────────────────────────
-     A tap that moves the pin is fast, and fast is only safe if it is also
-     reversible. */
+  /* ── Notes ────────────────────────────────────────────────────────────────
+     The pill shared by the short note and the night-vision and photo asks. */
 
   .toast {
     position: absolute;

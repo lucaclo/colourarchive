@@ -278,7 +278,8 @@ test('R14 phone Scout: a map tap that moves the pin leaves the sheet where it is
     const at = await bareMapPoint(page);
     assert.ok(at, 'found a bare stretch of map to tap');
     await page.touchscreen.tap(at.x, at.y);
-    await page.waitForFunction(() => document.getElementById('toast-text')?.textContent === 'Pin moved', null, { timeout: 5000 });
+    await page.waitForFunction(() => document.getElementById('sheet-name')?.textContent === 'Test spot', null, { timeout: 5000 });
+    assert.equal(await page.locator('#toast').isVisible(), false, 'no note for a moved pin');
     assert.equal((await sheet(page)).detent, 'peek', 'the tap moved the pin and did nothing to the sheet');
     assert.deepEqual(o.problems, []);
   } finally {

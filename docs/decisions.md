@@ -58,6 +58,8 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-18 · Scout: moving the pin (a map tap, or "Scout here" from your photos) shows
+  no note and no Undo. The pin and the sheet's new name say it moved.
 - 2026-11-18 · Phone and tablet Archive: the top bar and tab bar slide away on scroll
   down and come back on scroll up (fade in place with Reduce Motion). Desk keeps them.
 - 2026-11-18 · Scout's phone sheet has a "min" detent: a small centred tab with the

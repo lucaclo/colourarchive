@@ -75,8 +75,6 @@ async function bareMapPoint(page: Page) {
 
 const atParam = (page: Page) => new URL(page.url()).searchParams.get('at');
 const activeId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? '');
-const toastSays = (page: Page) =>
-  page.evaluate(() => (document.getElementById('toast')?.hidden ? '' : (document.getElementById('toast-text')?.textContent ?? '')));
 
 test('R13-32 desk: a map click that closes Layers leaves the pin where it was', async () => {
   const o = await open(browser, 'desk', LONDON, { wait: 6500 });
@@ -95,12 +93,13 @@ test('R13-32 desk: a map click that closes Layers leaves the pin where it was', 
   assert.equal(await page.locator('#layers').isVisible(), false, 'Layers closed');
   assert.equal(await page.locator('#layers-button').getAttribute('aria-expanded'), 'false');
   assert.equal(atParam(page), before, 'the address still points at the loaded spot');
-  assert.notEqual(await toastSays(page), 'Pin moved');
+  assert.notEqual(await page.locator('#sheet-name').textContent(), 'Test spot');
   await shot(page, 'scout-layers-closed-after-map-click');
 
-  // With nothing open, the same click still puts the pin there.
+  // With nothing open, the same click still puts the pin there, and says nothing.
   await page.mouse.click(at.x, at.y);
-  await page.waitForFunction(() => document.getElementById('toast-text')?.textContent === 'Pin moved', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('sheet-name')?.textContent === 'Test spot', null, { timeout: 5000 });
+  assert.equal(await page.locator('#toast').isVisible(), false, 'no note for a moved pin');
   assert.deepEqual(o.problems, []);
   await o.ctx.close();
 });
