@@ -303,18 +303,25 @@ test('the beacon: once per load from a page the Mac serves, never from the Mac a
   assert.equal(posted(app, '/api/devices').length, 0);
 });
 
-// ── The Archive's top bar ───────────────────────────────────────────────────
+// ── Where the button is ─────────────────────────────────────────────────────
 
-test('the top bar: Updates where Get the app was in the app window; Get the app stays in a tab', async () => {
+test('the Archive top bar has no Updates button: Get the app goes in the app window and stays in a tab', async () => {
   const actions = `[...document.querySelectorAll('#tb-actions > .tb-button')].map((b) => b.getAttribute('aria-label'))`;
   const app = await open('/', { context: { userAgent: MAC_APP_UA } });
-  assert.deepEqual(await app.page.evaluate(actions), ['Overview', 'Updates', 'Insights']);
-  assert.equal(await app.page.locator('#get-app').count(), 0);
-  await app.page.locator('#tb-actions [data-updates-open]').click();
-  await app.page.waitForFunction(`document.getElementById('updates').open`);
+  assert.deepEqual(await app.page.evaluate(actions), ['Overview', 'Insights']);
+  assert.equal(await app.page.locator('#tb-actions [data-updates-open]').count(), 0);
 
   const tab = await open('/');
   assert.deepEqual(await tab.page.evaluate(actions), ['Overview', 'Get the app', 'Insights']);
   assert.deepEqual(app.problems, []);
   assert.deepEqual(tab.problems, []);
+});
+
+test('the Book head: Updates beside Share and Magazine opens the panel', async () => {
+  const book = await open('/book', { context: { userAgent: MAC_APP_UA } });
+  const labels = await book.page.evaluate(`[...document.querySelectorAll('.book-links .btn-label')].map((s) => s.textContent)`);
+  assert.deepEqual(labels, ['Share', 'Magazine', 'Updates']);
+  await book.page.locator('.book-links [data-updates-open]').click();
+  await book.page.waitForFunction(`document.getElementById('updates').open`);
+  assert.deepEqual(book.problems, []);
 });
