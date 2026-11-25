@@ -24,7 +24,7 @@ const REPO = import.meta.env.PUBLIC_FEEDBACK_REPO || FEEDBACK_REPO;
 ---
 
 <button type="button" class="fb-cmdk" hidden disabled={STATIC} data-feedback-open data-cmdk="Feedback" data-cmdk-always data-cmdk-keywords="report, bug, idea, screenshot, note">Feedback</button>
-<dialog class="fb" id="feedback" aria-labelledby="fb-title" data-modal hidden tabindex="-1" data-repo={REPO}>
+<dialog class="fb" id="feedback" aria-labelledby="fb-title" data-modal data-backdrop-close hidden tabindex="-1" data-repo={REPO}>
   <div class="fb-in">
     <header class="fb-head">
       <h2 class="fb-title" id="fb-title">Feedback</h2>
@@ -322,10 +322,7 @@ const REPO = import.meta.env.PUBLIC_FEEDBACK_REPO || FEEDBACK_REPO;
     dlg.hidden = true;
     dlg.classList.remove('fb-drop');
   });
-  // The dialog has no padding of its own, so a click on it is the backdrop.
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
-  });
+  // A press on the backdrop closes it: data-backdrop-close (lib/ui/backdrop.ts).
   $('fb-close').addEventListener('click', () => dlg.close());
   document.addEventListener('click', (e) => {
     if ((e.target as Element | null)?.closest?.('[data-feedback-open]')) void open();

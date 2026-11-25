@@ -8,7 +8,10 @@
   network-dependent); worth a look.
 
 ## Next
-- Feedback (branch `feedback`, not committed): to use it from the phone, make a
+- Sheet fixes (branch `fix/feedback-cursor`, not committed): when merged, close
+  feedback `2026-11-25-1213-6049` with `npm run feedback -- done …`, and release the
+  Mac app.
+- Feedback (merged #184, Mac app 0.2.15): to use it from the phone, make a
   fine-grained token (the sheet's "New token" fills in the form; pick only the
   `colourarchive-feedback` repo), paste it once in the phone's app (bubble, or
   `#feedback` in a Safari tab), then `npm run deploy:site`. The Mac app gets the bubble,
@@ -26,6 +29,13 @@
 
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
+
+- 2026-11-25 · fix/feedback-cursor · First in-app feedback: in the Feedback and Updates
+  sheets the pointer vanished (ring under the top layer, then drawn ~400 px off inside
+  the sheet) and a text selection let go past the edge closed the sheet. Now the system
+  pointer shows while a sheet is open, and Feedback, Updates and the Book's survey close
+  only on a press that starts and ends on the backdrop. Unit, check, lint, feedback and
+  updates e2e pass on a throwaway archive. Open: commit, PR, release.
 
 - 2026-11-25 · feedback · Feedback from the app: a bubble beside the tab bar (also ⌘K,
   Help › Send Feedback…, `#feedback`) opens a sheet for up to four pictures (Add, paste,

@@ -95,6 +95,11 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-25 · While a modal sheet is open, the ring cursor goes and the system pointer
+  comes back, on the sheet and the dimmed page (`global.css`, `:has(dialog:modal)`). The
+  ring can't be drawn above the top layer. A sheet closes on a backdrop press only when
+  the press starts and ends outside it: `<dialog data-backdrop-close>`
+  (`lib/ui/backdrop.ts`), not `e.target === dialog`.
 - 2026-11-25 · Feedback is a round glass bubble after Add & remove in the tab bar (an
   action, so a button). On the published site it shows to a device with a token, while a
   draft waits, and in an installed copy (the home-screen app has no address bar for
