@@ -22,6 +22,9 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-25 · fix/updates-to-book · The Updates button moves from the Archive's top bar
+  (in the way) to the Book's page head, beside Share and Magazine. The published site has
+  no Book page, so a phone on Netlify opens the panel only through `#updates`.
 - 2026-11-25 · updates-panel (stacked on mac-signing: #167/#168 committed locally as
   3c4fb27 at Luca's say-so) · Updates panel on every page: app menu "Check for Updates…",
   ⌘K "Updates", the Archive top bar in the app window. The Mac app shows version, status,
@@ -30,8 +33,9 @@ One line per session, newest first: date · branch · what changed · what's ope
   their own build and Reload (drops the saved copy). The Mac lists the published build
   and devices that opened pages from it. Builds bake version + builtAt. Checked: 2341
   unit, panel e2e 12/12 three runs, a11y, shots at desk and iPhone, the scratch round
-  trip with a new Update Now step. Not pushed; no PR yet. Found: `~/Desktop/Colour
-  Archive.app` is a Chrome shortcut to the dev server (localhost:4321), not the Mac app.
+  trip with a new Update Now step. Merged as #182, released as v0.2.12 and installed on
+  the Mac (08:15). Found: `~/Desktop/Colour Archive.app` was a Chrome shortcut to the dev
+  server (localhost:4321), not the Mac app; Luca deleted it.
 
 - 2026-11-18 · phone-refresh · Luca's phone still looked old after the deploys. Service
   worker v2 (every device drops its saved copy once; `/publish.json` never cached) and the

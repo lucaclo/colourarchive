@@ -6,7 +6,8 @@ from this session; if you do, say which line and why. Add new ones with the date
 ## Product
 - 2026-11-25 · Updates panel, on every page (`src/components/Updates.astro`): opened from
   the app menu's "Check for Updates…" (it no longer opens a dialog), ⌘K "Updates", and
-  the Archive top bar in the app window, where "Get the app" was. Each device answers for
+  an Updates button in the Book's page head beside Share and Magazine (moved off the
+  Archive's top bar the same day: it was in the way). Each device answers for
   itself. The Mac app: version, status, where it's installed (Show in Finder), when it
   last updated, and "Update now", which swaps and relaunches at once onto the same page
   with the panel open; asked from another device, the Mac comes back in the background.
