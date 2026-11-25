@@ -1,28 +1,42 @@
 // Keeps the installed app on the newest GitHub release.
 //
 // Not electron-updater: its Mac half is Squirrel.Mac, which refuses any app
-// without a Developer ID signature, and this one is signed ad hoc
-// ("identity": "-" in package.json). So the same job with what macOS ships:
-// read the feed electron-builder writes (latest-mac.yml), download the .zip it
-// lists and check its sha512, unpack it with ditto, check the unpacked app's
-// version and signature, and swap it in once the app has quit. The swap is a
-// small shell script because a running bundle can't replace itself. No
+// without a Developer ID signature, and this one is self-signed with one
+// certificate, "Colour Archive Release" (desktop/after-sign.cjs). So the same
+// job with what macOS ships: read the feed electron-builder writes
+// (latest-mac.yml), download the .zip it lists and check its sha512, unpack it
+// with ditto, check the unpacked app's version and signature, check it is
+// signed like the running app, and swap it in once the app has quit. The swap
+// is a small shell script because a running bundle can't replace itself. No
 // dependencies: the packaged app ships production ones only.
+//
+// The app opens at login and rarely quits, so a staged version also goes in at
+// the first quiet moment (#168): no window in front for ten minutes, nothing in
+// flight on the server, and no other device for ten minutes. It relaunches in
+// the background onto the same page, or hidden when no window was open. A
+// version staged before the Mac shut down goes in at the next launch, before
+// the server starts.
 //
 // .github/workflows/app-release.yml publishes a release for every merge to main.
 
 const { execFile, spawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
+const http = require('node:http');
+const https = require('node:https');
 const path = require('node:path');
-const { Readable, Transform } = require('node:stream');
+const { Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 
 const FEED = 'https://github.com/lucaclo/colourarchive/releases/latest/download/latest-mac.yml';
 const FIRST_CHECK_MS = 30_000;
 const EVERY_MS = 4 * 60 * 60_000;
+// How long a connection may sit silent before it counts as gone. A slow
+// download that keeps arriving is fine, however long it takes.
 const FEED_TIMEOUT_MS = 30_000;
-const DOWNLOAD_TIMEOUT_MS = 60 * 60_000;
+const DOWNLOAD_TIMEOUT_MS = 2 * 60_000;
+const QUIET_MS = 10 * 60_000;
+const QUIET_CHECK_MS = 60_000;
 
 // --- The feed -------------------------------------------------------------
 
@@ -102,7 +116,8 @@ function installProblem(bundle) {
 // --- The swap, after the app has quit ------------------------------------
 
 // Arguments: the app's pid, the app to replace, the unpacked new app, 1 to
-// open it afterwards, then NAME=VALUE pairs to open it with (a test profile).
+// open it afterwards (g: in the background, taking no focus), then NAME=VALUE
+// pairs to open it with (a test profile, the page to reopen).
 const INSTALL_SCRIPT = `#!/bin/sh
 # Written by Colour Archive (desktop/updater.cjs): swaps the new app in once
 # the running one has quit, and puts the old one back if that fails.
@@ -143,17 +158,97 @@ else
   status=1
 fi
 xattr -dr com.apple.quarantine "$target" 2>/dev/null
-if [ "$relaunch" = 1 ]; then
+if [ "$relaunch" = 1 ] || [ "$relaunch" = g ]; then
   n=$#
   while [ "$n" -gt 0 ]; do
     set -- "$@" --env "$1"
     shift
     n=$((n - 1))
   done
+  if [ "$relaunch" = g ]; then set -- -g "$@"; fi
   open -n "$@" "$target"
 fi
 exit $status
 `;
+
+// --- A quiet moment (#168) ------------------------------------------------
+
+/**
+ * How long until the app is quiet enough to swap itself, in ms (0: now).
+ * `s`: { now, frontNow, lastFrontAt, inflight, busy, lastDeviceAt }. A window
+ * in front, a request in flight or a background job running means not yet,
+ * however long ago the rest was; times are ms, null for never.
+ */
+function quietIn(s, quietMs = QUIET_MS) {
+  if (s.frontNow || s.inflight > 0 || s.busy > 0) return quietMs;
+  const last = Math.max(s.lastFrontAt ?? -Infinity, s.lastDeviceAt ?? -Infinity);
+  return Number.isFinite(last) ? Math.max(0, last + quietMs - s.now) : 0;
+}
+
+/**
+ * One minute's look, once a version is ready: 'install' now, or 'wait'. Never
+ * a second install, and never one for a version whose swap didn't take.
+ */
+function quietDecision({ ready, installing, tried, signals, now, quietMs = QUIET_MS }) {
+  if (!ready || installing || tried) return 'wait';
+  return quietIn({ now, ...signals }, quietMs) === 0 ? 'install' : 'wait';
+}
+
+/** The newest version staged in `updatesDir` that is newer than `current`, or null. */
+function newestStaged(updatesDir, current) {
+  let names;
+  try {
+    names = fs.readdirSync(updatesDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const versions = names
+    .filter((d) => d.isDirectory() && /^\d+(\.\d+)*$/.test(d.name) && compareVersions(d.name, current) > 0)
+    .map((d) => d.name)
+    .sort(compareVersions);
+  return versions.at(-1) ?? null;
+}
+
+/**
+ * A swap that didn't take must not be tried again by itself: before an
+ * unasked install the updater leaves `<version>.attempt`, and while that is
+ * there for a version this copy hasn't become, only quitting or Restart to
+ * Update installs it.
+ */
+const attemptFile = (updatesDir, version) => path.join(updatesDir, `${version}.attempt`);
+const triedBefore = (updatesDir, version) => fs.existsSync(attemptFile(updatesDir, version));
+function markAttempt(updatesDir, version) {
+  try {
+    fs.writeFileSync(attemptFile(updatesDir, version), `${new Date().toISOString()}\n`);
+  } catch {}
+}
+
+const updateLog = (home) => path.join(home, 'Library', 'Logs', 'Colour Archive', 'update.log');
+
+/** One line in update.log, the install script's log. */
+function logUpdate(line, home = process.env.HOME) {
+  try {
+    fs.mkdirSync(path.dirname(updateLog(home)), { recursive: true });
+    fs.appendFileSync(updateLog(home), `${new Date().toISOString().replace(/\.\d+Z$/, 'Z')} ${line}\n`);
+  } catch {}
+}
+
+/**
+ * When the app at `bundle` last had an update swapped in: the time on the last
+ * `Installed <staged> as <bundle>.` line of update.log, or null. Swaps into
+ * other copies (a test's scratch app) and the app's own Reopened and
+ * Relaunched lines don't count.
+ */
+function lastInstalledAt(logText, bundle) {
+  if (!bundle) return null;
+  const tail = ` as ${bundle}.`;
+  let at = null;
+  for (const line of String(logText ?? '').split('\n')) {
+    const m = line.match(/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ) Installed (.+)$/);
+    if (m && m[2].endsWith(tail)) at = m[1];
+  }
+  return at;
+}
 
 // --- The menu --------------------------------------------------------------
 
@@ -193,16 +288,45 @@ function run(file, args, timeout = 120_000) {
   });
 }
 
-async function get(url, timeout) {
+/**
+ * GET `url`, following redirects (GitHub's release assets redirect to their
+ * storage), and resolve with the response stream. Node's own client, not
+ * fetch: Electron's fetch (undici) failed an internal assertion and threw out
+ * of the main process when a 200 MB body was paused for the disk as its socket
+ * ended (`assert(!this.paused)`, seen in the round trip).
+ */
+function get(url, timeout, redirects = 5) {
   const host = new URL(url).host;
-  let res;
-  try {
-    res = await fetch(url, { signal: AbortSignal.timeout(timeout) });
-  } catch (err) {
-    throw new Error(err?.name === 'TimeoutError' ? `${host} didn’t answer.` : `Couldn’t reach ${host}.`, { cause: err });
-  }
-  if (!res.ok || !res.body) throw new Error(`${host} answered ${res.status}.`);
-  return res;
+  return new Promise((resolve, reject) => {
+    const client = new URL(url).protocol === 'https:' ? https : http;
+    let timedOut = false;
+    const req = client.get(url, (res) => {
+      const code = res.statusCode ?? 0;
+      if (code >= 300 && code < 400 && res.headers.location) {
+        res.resume();
+        if (redirects <= 0) reject(new Error(`${host} redirected too often.`));
+        else resolve(get(new URL(res.headers.location, url).href, timeout, redirects - 1));
+        return;
+      }
+      if (code < 200 || code >= 300) {
+        res.resume();
+        reject(new Error(`${host} answered ${code}.`));
+        return;
+      }
+      resolve(res);
+    });
+    req.setTimeout(timeout, () => {
+      timedOut = true;
+      req.destroy(new Error(`${host} didn’t answer.`));
+    });
+    req.on('error', (err) => reject(timedOut ? err : new Error(`Couldn’t reach ${host}.`, { cause: err })));
+  });
+}
+
+async function readText(res) {
+  const chunks = [];
+  for await (const chunk of res) chunks.push(chunk);
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** Stream `url` to `file`, checking its size and sha512 (base64) on the way. */
@@ -217,20 +341,46 @@ async function download(url, file, sha512, size) {
       done(null, chunk);
     },
   });
-  await pipeline(Readable.fromWeb(res.body), tap, fs.createWriteStream(file));
+  await pipeline(res, tap, fs.createWriteStream(file));
   if (size != null && bytes !== size) throw new Error(`The download was ${bytes} bytes, not ${size}.`);
   if (hash.digest('base64') !== sha512) throw new Error('The download didn’t match its checksum.');
 }
 
-/** The unpacked app in `dir`, once it reports `version` and its signature holds. */
-async function verifiedApp(dir, version) {
+const NOT_OURS = 'The download isn’t signed by Colour Archive.';
+
+/** The designated requirement of the app at `appPath`, as `codesign -d -r-` prints it. */
+async function designatedRequirement(appPath, cmd = run) {
+  const out = await cmd('/usr/bin/codesign', ['-d', '-r-', appPath]);
+  const m = out.match(/designated => (.+)/);
+  if (!m) throw new Error(`codesign: no designated requirement for ${appPath}`);
+  return m[1].trim();
+}
+
+/**
+ * The unpacked app in `dir`, once it reports `version`, its signature holds,
+ * and it satisfies the designated requirement of the app at `running`: the
+ * release certificate and the app's identifier, the same for every release.
+ * An app signed ad hoc has only its own hash as a requirement (`cdhash`),
+ * which no other build matches, so it skips that check: that is how the
+ * first release signed with the certificate installs over it.
+ */
+async function verifiedApp(dir, version, running, cmd = run) {
   const name = fs.readdirSync(dir).find((n) => n.endsWith('.app'));
   if (!name) throw new Error('The download has no app in it.');
   const appPath = path.join(dir, name);
   const plist = path.join(appPath, 'Contents', 'Info.plist');
-  const found = await run('/usr/bin/plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist]);
+  const found = await cmd('/usr/bin/plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist]);
   if (found !== version) throw new Error(`The download is version ${found}, not ${version}.`);
-  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], 300_000);
+  await cmd('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], 300_000);
+  const requirement = await designatedRequirement(running, cmd);
+  if (!/\bcdhash\b/.test(requirement)) {
+    try {
+      // `-R` and `=…` as two arguments: joined, codesign reads the second = as requirement text.
+      await cmd('/usr/bin/codesign', ['--verify', '--deep', '--strict', '-R', `=${requirement}`, appPath], 300_000);
+    } catch {
+      throw new Error(NOT_OURS);
+    }
+  }
   return appPath;
 }
 
@@ -243,7 +393,7 @@ function tidy(dir, keep) {
     return;
   }
   for (const name of names) {
-    if (name === 'install.sh' || name.replace(/\.zip(\.part)?$/, '') === keep) continue;
+    if (name === 'install.sh' || name.replace(/\.(zip(\.part)?|attempt)$/, '') === keep) continue;
     try {
       fs.rmSync(path.join(dir, name), { recursive: true, force: true });
     } catch {}
@@ -252,30 +402,91 @@ function tidy(dir, keep) {
 
 /**
  * `app` is Electron's; `onChange(status)` runs on every state change.
- * status: { state, current, latest, error }, where state is one of idle,
- * checking, up-to-date, downloading, ready, error, cannot-install, source.
+ * status: { state, current, latest, error, installedIn, updatedAt, pending },
+ * where state is one of idle, checking, up-to-date, downloading, ready, error,
+ * cannot-install, source; installedIn is the .app (null from source),
+ * updatedAt when an update last went into it (update.log), and pending that
+ * Update Now is waiting for a check or a download.
+ * `signals()` says how busy the app is, for quietIn; `reopen()` the page to
+ * come back to after a quiet swap, or 'hidden' when no window is open.
+ * `home`, `execPath`, `spawn` and `cmd` (plutil, codesign, ditto) are for tests.
  */
-function createUpdater({ app, onChange = () => {}, env = process.env }) {
+function createUpdater({
+  app,
+  onChange = () => {},
+  env = process.env,
+  signals = null,
+  reopen = () => 'hidden',
+  home = env.HOME || process.env.HOME,
+  execPath = process.execPath,
+  spawn: spawnApp = spawn,
+  cmd = run,
+}) {
   const feedUrl = env.COLOUR_ARCHIVE_UPDATE_FEED || FEED;
   const firstDelay = Number(env.COLOUR_ARCHIVE_UPDATE_DELAY_MS) || FIRST_CHECK_MS;
-  let status = { state: 'idle', current: app.getVersion(), latest: null, error: null };
+  const quietMs = Number(env.COLOUR_ARCHIVE_QUIET_MS) || QUIET_MS;
+  const quietEvery = Number(env.COLOUR_ARCHIVE_QUIET_CHECK_MS) || QUIET_CHECK_MS;
+  let quietTimer = null;
+  let status = { state: 'idle', current: app.getVersion(), latest: null, error: null, installedIn: null, updatedAt: null, pending: false };
   let bundle = null;
   let updatesDir = null;
   let staged = null;
   let busy = false;
   let installing = false;
+  // Update Now, waiting for a check or a download: { page, front }.
+  let asked = null;
 
   const set = (next) => {
     status = { ...status, ...next };
+    // Update Now waits through a check and a download and goes in once the
+    // version is ready; anything else (up to date, a failed check or
+    // download) ends the wait.
+    let go = null;
+    if (asked && status.state !== 'checking' && status.state !== 'downloading') {
+      if (status.state === 'ready' && staged) go = asked;
+      asked = null;
+      status = { ...status, pending: false };
+    }
     onChange(status);
+    if (status.state === 'ready') watchForQuiet();
+    if (go) installAsked(go);
   };
+
+  /** Update Now's swap: relaunch at once, onto `page`, in front when asked. */
+  function installAsked({ page, front }) {
+    if (installing) return;
+    const extra = { COLOUR_ARCHIVE_REOPEN: page ?? reopen() };
+    if (front) extra.COLOUR_ARCHIVE_REOPEN_FRONT = '1';
+    logUpdate(`Update Now: installing ${status.latest} over ${bundle}.`, home);
+    // Asked from another device: come back the way a quiet swap does, without
+    // pulling the app in front of whatever is open on the Mac.
+    install(front ? '1' : 'g', extra);
+    if (installing) app.quit();
+  }
+
+  /** Once a version is ready: look for a quiet moment every minute. */
+  function watchForQuiet() {
+    if (quietTimer || !signals) return;
+    quietTimer = setInterval(() => {
+      const ready = status.state === 'ready' && Boolean(staged);
+      const tried = ready && triedBefore(updatesDir, status.latest);
+      if (quietDecision({ ready, installing, tried, signals: signals(), now: Date.now(), quietMs }) !== 'install') return;
+      clearInterval(quietTimer);
+      quietTimer = null;
+      markAttempt(updatesDir, status.latest);
+      logUpdate(`Quiet moment: installing ${status.latest} over ${bundle}.`, home);
+      install('g', { COLOUR_ARCHIVE_REOPEN: reopen() });
+      if (installing) app.quit();
+    }, quietEvery);
+    quietTimer.unref?.();
+  }
   const checkable = () => app.isPackaged && status.state !== 'cannot-install' && status.state !== 'source';
 
   async function alreadyStaged(version) {
     const dir = path.join(updatesDir, version);
     if (!fs.existsSync(dir)) return null;
     try {
-      return await verifiedApp(dir, version);
+      return await verifiedApp(dir, version, bundle, cmd);
     } catch {
       fs.rmSync(dir, { recursive: true, force: true });
       return null;
@@ -291,11 +502,11 @@ function createUpdater({ app, onChange = () => {}, env = process.env }) {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
     try {
-      await run('/usr/bin/ditto', ['-x', '-k', zip, dir], 600_000);
+      await cmd('/usr/bin/ditto', ['-x', '-k', zip, dir], 600_000);
     } finally {
       fs.rmSync(zip, { force: true });
     }
-    return verifiedApp(dir, feed.version);
+    return verifiedApp(dir, feed.version, bundle, cmd);
   }
 
   /**
@@ -316,7 +527,7 @@ function createUpdater({ app, onChange = () => {}, env = process.env }) {
     try {
       fs.mkdirSync(updatesDir, { recursive: true });
       const res = await get(feedUrl, FEED_TIMEOUT_MS);
-      const feed = parseFeed(await res.text(), feedUrl);
+      const feed = parseFeed(await readText(res), feedUrl);
       if (compareVersions(feed.version, status.current) <= 0) {
         tidy(updatesDir, null);
         busy = false;
@@ -350,17 +561,18 @@ function createUpdater({ app, onChange = () => {}, env = process.env }) {
     }
   }
 
-  function install(relaunch) {
+  /** `relaunch`: '0', '1', or 'g' (in the background); `extra`: env for the relaunched app. */
+  function install(relaunch, extra = {}) {
     installing = true;
     try {
       const script = path.join(updatesDir, 'install.sh');
       fs.writeFileSync(script, INSTALL_SCRIPT, { mode: 0o755 });
       // Carries a test profile (COLOUR_ARCHIVE_PROFILE and friends) over to the
       // relaunched app; a copy opened from Finder has none.
-      const pass = Object.entries(env)
-        .filter(([k, v]) => k.startsWith('COLOUR_ARCHIVE_') && v != null)
+      const pass = Object.entries({ ...env, ...extra })
+        .filter(([k, v]) => k.startsWith('COLOUR_ARCHIVE_') && v != null && v !== '')
         .map(([k, v]) => `${k}=${v}`);
-      const child = spawn('/bin/sh', [script, String(process.pid), bundle, staged, relaunch ? '1' : '0', ...pass], {
+      const child = spawnApp('/bin/sh', [script, String(process.pid), bundle, staged, String(relaunch), ...pass], {
         detached: true,
         stdio: 'ignore',
       });
@@ -377,27 +589,83 @@ function createUpdater({ app, onChange = () => {}, env = process.env }) {
     /** Decide what this copy can do, then check after a short wait and every 4 h. */
     start() {
       if (!app.isPackaged) return set({ state: 'source' });
-      bundle = bundleOf(process.execPath);
+      bundle = bundleOf(execPath);
       updatesDir = path.join(app.getPath('userData'), 'updates');
-      if (installProblem(bundle)) return set({ state: 'cannot-install' });
-      set({ state: 'idle' });
+      let log = '';
+      try {
+        log = fs.readFileSync(updateLog(home), 'utf8');
+      } catch {}
+      const where = { installedIn: bundle, updatedAt: lastInstalledAt(log, bundle) };
+      if (installProblem(bundle)) return set({ state: 'cannot-install', ...where });
+      set({ state: 'idle', ...where });
       setTimeout(() => {
         check().catch(() => {});
-        setInterval(() => check().catch(() => {}), EVERY_MS);
-      }, firstDelay);
+        setInterval(() => check().catch(() => {}), EVERY_MS).unref?.();
+      }, firstDelay).unref?.();
     },
 
     check,
 
+    /**
+     * "Update now" (the Updates panel): swap in the newest version and relaunch
+     * at once, onto `page` (or the page open now), in front when `front`. A
+     * version still downloading goes in as soon as it is ready (`pending`);
+     * with nothing staged it checks first. Resolves like `check`. Doesn't
+     * leave the quiet swap's one-try mark: like Restart to Update, it was asked.
+     */
+    async installNow({ page = null, front = false } = {}) {
+      const now = () => ({ kind: status.state, version: status.latest });
+      if (installing || !checkable()) return now();
+      asked = { page, front };
+      if (status.state === 'ready' && staged) {
+        installAsked(asked);
+        asked = null;
+        return now();
+      }
+      if (status.state === 'checking' || status.state === 'downloading') {
+        set({ pending: true });
+        return now();
+      }
+      status = { ...status, pending: true };
+      const res = await check({ manual: true });
+      // A check that didn't run (nothing changed): nothing to wait for.
+      if (asked && status.state !== 'checking' && status.state !== 'downloading') {
+        asked = null;
+        set({ pending: false });
+      }
+      return res;
+    },
+
+    /**
+     * At launch, before the server starts: a version staged before the Mac shut
+     * down goes in now. True when it is going in (the caller quits); the app
+     * comes back hidden when this launch was a quiet one (at login).
+     */
+    async installStagedAtLaunch({ hidden = false } = {}) {
+      if (!app.isPackaged) return false;
+      bundle = bundleOf(execPath);
+      updatesDir = path.join(app.getPath('userData'), 'updates');
+      if (installProblem(bundle)) return false;
+      const version = newestStaged(updatesDir, status.current);
+      if (!version || triedBefore(updatesDir, version)) return false;
+      const ready = await alreadyStaged(version);
+      if (!ready) return false;
+      staged = ready;
+      status = { ...status, state: 'ready', latest: version };
+      markAttempt(updatesDir, version);
+      install(hidden ? 'g' : '1', { COLOUR_ARCHIVE_REOPEN: hidden ? 'hidden' : '' });
+      return installing;
+    },
+
     /** On will-quit: swap a staged version in once this process has gone. */
     installOnQuit() {
-      if (status.state === 'ready' && staged && !installing) install(false);
+      if (status.state === 'ready' && staged && !installing) install('0');
     },
 
     /** "Restart to Update". */
     restart() {
       if (status.state !== 'ready' || !staged) return;
-      if (!installing) install(true);
+      if (!installing) install('1');
       app.quit();
     },
   };
@@ -406,11 +674,21 @@ function createUpdater({ app, onChange = () => {}, env = process.env }) {
 module.exports = {
   FEED,
   INSTALL_SCRIPT,
+  NOT_OURS,
   bundleOf,
   compareVersions,
   createUpdater,
+  designatedRequirement,
+  download,
   installProblem,
+  lastInstalledAt,
+  logUpdate,
   menuItems,
+  newestStaged,
   parseFeed,
+  quietDecision,
+  quietIn,
   statusLabel,
+  triedBefore,
+  verifiedApp,
 };

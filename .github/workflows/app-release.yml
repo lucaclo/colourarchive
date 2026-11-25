@@ -51,13 +51,45 @@ jobs:
           npm version "$V" --no-git-tag-version
           echo "v=$V" >> "$GITHUB_OUTPUT"
 
-      # Signed ad hoc ("identity": "-"), so no certificate lookup. --publish
-      # never: on CI electron-builder would otherwise upload its own draft
-      # release; the step below publishes instead.
+      # The one certificate releases are signed with, "Colour Archive Release"
+      # (self-signed, #167), from two repository secrets into a keychain that
+      # lasts for this job only. A fork's pull request gets no secrets, and its
+      # build stays signed ad hoc.
+      - name: Signing certificate
+        env:
+          P12_BASE64: ${{ secrets.MAC_RELEASE_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MAC_RELEASE_CERT_PASSWORD }}
+        run: |
+          if [ -z "$P12_BASE64" ]; then
+            echo "No signing certificate in this run's secrets: the app stays signed ad hoc."
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/release.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          security import "$RUNNER_TEMP/release.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/release.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          # codesign finds an identity only in a keychain on the search list.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "COLOUR_ARCHIVE_SIGN_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+
+      # electron-builder signs ad hoc ("identity": "-", so no certificate
+      # lookup), then desktop/after-sign.cjs signs again with the certificate
+      # above when there is one. CSC_FOR_PULL_REQUEST: on a pull request
+      # electron-builder would skip signing, hook and all, and a pull request
+      # should sign the way a release does. --publish never: on CI
+      # electron-builder would otherwise upload its own draft release; the
+      # step below publishes instead.
       - name: Build
         run: npm run app:dist -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_FOR_PULL_REQUEST: 'true'
 
       - name: Release
         if: github.event_name != 'pull_request'
@@ -73,3 +105,7 @@ jobs:
             --title "Colour Archive $V for Mac" \
             --notes "Built from ${GITHUB_SHA::7}." \
             --latest
+
+      - name: Forget the certificate
+        if: always() && env.COLOUR_ARCHIVE_SIGN_KEYCHAIN != ''
+        run: security delete-keychain "$COLOUR_ARCHIVE_SIGN_KEYCHAIN"

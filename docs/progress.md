@@ -22,6 +22,17 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-25 · updates-panel (stacked on mac-signing: #167/#168 committed locally as
+  3c4fb27 at Luca's say-so) · Updates panel on every page: app menu "Check for Updates…",
+  ⌘K "Updates", the Archive top bar in the app window. The Mac app shows version, status,
+  where it's installed (Show in Finder), when it last updated, and Update now (swap and
+  relaunch at once onto the same page with the panel open); phones and browsers show
+  their own build and Reload (drops the saved copy). The Mac lists the published build
+  and devices that opened pages from it. Builds bake version + builtAt. Checked: 2341
+  unit, panel e2e 12/12 three runs, a11y, shots at desk and iPhone, the scratch round
+  trip with a new Update Now step. Not pushed; no PR yet. Found: `~/Desktop/Colour
+  Archive.app` is a Chrome shortcut to the dev server (localhost:4321), not the Mac app.
+
 - 2026-11-18 · phone-refresh · Luca's phone still looked old after the deploys. Service
   worker v2 (every device drops its saved copy once; `/publish.json` never cached) and the
   published pages reload themselves on return to the screen when a newer build is live.

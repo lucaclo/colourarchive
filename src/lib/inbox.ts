@@ -4,6 +4,7 @@ import path from 'node:path';
 import { INBOX_LOG_PATH } from './paths';
 import { RAW_EXT, RAW_MESSAGE, ingestBatch } from './ingest-batch';
 import { readStore } from './manifest';
+import { whileBusy } from './busy';
 
 // Issue #137: an inbox folder in iCloud Drive that Lightroom on the iPad
 // exports straight into, so adding a photo no longer needs the Mac's server
@@ -140,9 +141,10 @@ export function startInbox(): void {
   if (s.timer) return;
   // Through the state, so a hot-reloaded copy of this module takes over the
   // loop the first time it is loaded, instead of the old code running on.
-  s.timer = setInterval(() => void state().scan?.(), SCAN_MS);
+  // Counted as busy, so the Mac app doesn't swap itself mid-scan (#168).
+  s.timer = setInterval(() => void whileBusy(async () => { await state().scan?.(); }), SCAN_MS);
   s.timer.unref?.();
-  void scanInbox();
+  void whileBusy(scanInbox);
 }
 
 /** One pass over the inbox. Never throws; what went wrong goes in the log. */

@@ -255,8 +255,11 @@ export function describeDrift(drift: Drift, nameOf: (id: string) => string): str
  * neither blocks a publish: refusing to publish 79 correct photographs over a
  * file nobody can reach would make the honest manual route harder to run, which
  * is the failure this whole pair of changes exists to stop.
+ *
+ * `builtAt` is the moment astro.config.mjs baked into the pages (build-info.ts),
+ * so the stamp and the pages name the same build.
  */
-export function publishStamp() {
+export function publishStamp({ builtAt }: { builtAt?: string } = {}) {
   return {
     name: 'colour-archive:publish-stamp',
     hooks: {
@@ -277,7 +280,7 @@ export function publishStamp() {
         }
         const { audit, manifest } = await auditRendered(files);
 
-        const stamp = stampFor(manifest, new Date());
+        const stamp = stampFor(manifest, builtAt ? new Date(builtAt) : new Date());
         await fs.writeFile(path.join(out, STAMP_FILE), `${JSON.stringify(stamp, null, 2)}\n`);
         logger.info(`stamped ${stamp.count} photographs · ${stamp.chapters} chapters`);
 

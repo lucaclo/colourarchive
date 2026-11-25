@@ -112,6 +112,7 @@
       "!node_modules/onnxruntime-node/bin/napi-v3/{linux,win32}${/*}",
       "!node_modules/onnxruntime-node/bin/napi-v3/darwin/x64${/*}"
     ],
+    "afterSign": "./desktop/after-sign.cjs",
     "mac": {
       "target": [
         {

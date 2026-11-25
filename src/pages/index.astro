@@ -304,6 +304,14 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
         <span class="tb-label">Get the app</span>
       </a>
+      {/* In an app window "Get the app" gives way to this (the script at the
+          end); a phone's home-screen app reaches it from More. */}
+      <template id="updates-tb">
+        <button type="button" class="tb-button" data-updates-open aria-haspopup="dialog" aria-label="Updates" title="Updates">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M17.3 3.6v3.75h-3.75"/></svg>
+          <span class="tb-label">Updates</span>
+        </button>
+      </template>
       {hasPhotos && (
         <button type="button" class="tb-button" id="insights-btn" data-cmdk="Insights" data-cmdk-keywords="stats, gaps" aria-haspopup="dialog" aria-label="Insights" title="Insights">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
@@ -2938,12 +2946,14 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
 <script>
   // Once the app is installed there is nothing left to get, so the top bar's
   // "Get the app" goes: in the app window, and in a browser tab that knows
-  // the app is installed.
+  // the app is installed. In the app window Updates takes its place.
   import { inAppWindow, installedElsewhere, rememberInstall } from '../lib/install';
   const getApp = document.getElementById('get-app') as HTMLAnchorElement | null;
   if (inAppWindow()) {
     rememberInstall();
-    getApp?.remove();
+    const updates = document.getElementById('updates-tb') as HTMLTemplateElement | null;
+    if (getApp && updates) getApp.replaceWith(updates.content.cloneNode(true));
+    else getApp?.remove();
   } else if (getApp) {
     installedElsewhere().then((yes) => {
       if (yes) getApp.remove();

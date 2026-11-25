@@ -4,6 +4,32 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-25 · Updates panel, on every page (`src/components/Updates.astro`): opened from
+  the app menu's "Check for Updates…" (it no longer opens a dialog), ⌘K "Updates", and
+  the Archive top bar in the app window, where "Get the app" was. Each device answers for
+  itself. The Mac app: version, status, where it's installed (Show in Finder), when it
+  last updated, and "Update now", which swaps and relaunches at once onto the same page
+  with the panel open; asked from another device, the Mac comes back in the background.
+  Phones and browsers: their own build and "Reload", which drops the saved offline copy.
+  The Mac also lists the published build (Up to date or Behind its archive) and the
+  devices that opened pages from it (`<data>/.archive/devices.json`: name, home-screen or
+  not, last seen, build; never the user agent or address). The Mac can't see phones that
+  load from Netlify. Pages served by the Mac reload themselves on return when its build
+  changed. Every build bakes `version` and `builtAt` (`src/lib/build-info.ts`), and
+  `publish.json` carries the same `builtAt`.
+- 2026-11-24 · The Mac app also installs a downloaded update by itself at a quiet moment
+  (#168; re-opens the 2026-11-17 line, which swapped only on quit or Restart to Update):
+  10 minutes with no window in front, no request in flight (an upload, a book PDF), no
+  scan or other busy job, and nothing from the phone. It reopens the page that was open,
+  without taking focus, or comes back hidden. An update already downloaded goes in at
+  launch, before the server starts. One try per version; every swap is logged in
+  `~/Library/Logs/Colour Archive/update.log`.
+- 2026-11-23 · Mac app releases are self-signed with one stable certificate, "Colour
+  Archive Release" (20 years; kept as two repository secrets, never in the repo), so
+  every build has the same designated requirement and macOS keeps its permissions
+  across updates. The updater refuses a download that doesn't satisfy the running
+  app's own requirement; a running ad hoc app skips that check, so the first signed
+  release installs. Still no Developer ID (#167).
 - 2026-11-18 · The published site keeps itself current on a phone: when a page comes back
   to the screen and `/publish.json` names a newer build, it reloads. The service worker
   never caches `/publish.json`; bump its `VERSION` to make every device drop its saved

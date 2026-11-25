@@ -11,7 +11,7 @@
 
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell, utilityProcess } = require('electron');
 const { ensureCerts, localHostName } = require('./certs.cjs');
-const { createUpdater, menuItems: updateMenuItems } = require('./updater.cjs');
+const { createUpdater, logUpdate, menuItems: updateMenuItems } = require('./updater.cjs');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -22,6 +22,15 @@ app.setName('Colour Archive');
 // For tests and trying things out: a separate settings folder and a different
 // suggested archive, so a run never touches the real ones.
 if (process.env.COLOUR_ARCHIVE_PROFILE) app.setPath('userData', process.env.COLOUR_ARCHIVE_PROFILE);
+
+// Set by the updater's install script after a quiet swap (#168): the page the
+// window was on, or 'hidden' when none was open. Read once and dropped, so the
+// server and a later swap don't inherit it. After Update Now from this Mac's
+// window, the page (with #updates) comes back in front (REOPEN_FRONT).
+const REOPEN = process.env.COLOUR_ARCHIVE_REOPEN || '';
+const REOPEN_FRONT = process.env.COLOUR_ARCHIVE_REOPEN_FRONT === '1';
+delete process.env.COLOUR_ARCHIVE_REOPEN;
+delete process.env.COLOUR_ARCHIVE_REOPEN_FRONT;
 
 // A fixed port, not a free one picked each launch: the port is part of the
 // page's origin, and the origin owns the archive's browser storage (zine
@@ -55,14 +64,69 @@ let quitting = false;
 // Opened by macOS at login: serve the archive (inbox, iPad) without putting a
 // window in front of whatever else is opening. The Dock icon brings it up.
 let quiet = false;
+// The page a quiet update came back to has been opened (once per launch).
+let reopened = false;
 // What the home-network side last said: null (off), 'ok', or why it failed.
 let lanState = null;
 // The same for the from-anywhere side.
 let remoteState = null;
 let passwordWindow = null;
+// How busy the app is, for a quiet update (#168): when a window was last in
+// front, and what the server last said (requests in flight, background jobs,
+// the last request from another device). The clock starts at launch: a window
+// that opened behind another app was never in front, but someone just opened it.
+let lastFrontAt = Date.now();
+let activity = { inflight: 0, busy: 0, lastDeviceAt: null };
+app.on('browser-window-focus', () => { lastFrontAt = Date.now(); });
+app.on('browser-window-blur', () => { lastFrontAt = Date.now(); });
+
+/** The page the archive window is on, or 'hidden' when there is none. */
+function reopenState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return 'hidden';
+  try {
+    const u = new URL(mainWindow.webContents.getURL());
+    return u.origin === origin ? `${u.pathname}${u.search}${u.hash}` || '/' : '/';
+  } catch {
+    return '/';
+  }
+}
+
 // Keeps the packaged app on the newest GitHub release (updater.cjs); its
-// state is a line in the app menu.
-const updater = createUpdater({ app, onChange: () => buildMenu() });
+// state is a line in the app menu, and the server's /api/updates.
+const updater = createUpdater({
+  app,
+  onChange: () => {
+    buildMenu();
+    tellServer();
+  },
+  signals: () => ({ frontNow: BrowserWindow.getFocusedWindow() !== null, lastFrontAt, ...activity }),
+  reopen: reopenState,
+});
+
+/** The updater's status, for the server's /api/updates (server.mjs keeps it). */
+function tellServer() {
+  try {
+    server?.postMessage({ type: 'app-update', status: updater.status() });
+  } catch {}
+}
+
+/**
+ * What the Updates panel asks for, through /api/updates. `loopback`: asked
+ * from this Mac (its window or a browser on it), not a phone or the iPad, so
+ * the page comes back in front with the panel open, and Finder may open.
+ */
+function appAction({ action, page, loopback }) {
+  const here = loopback === true;
+  if (action === 'check') {
+    updater.check({ manual: true }).catch(() => {});
+  } else if (action === 'install') {
+    const back = here && typeof page === 'string' && page.startsWith('/') ? `${page.split('#')[0]}#updates` : null;
+    updater.installNow({ page: back, front: back !== null }).catch(() => {});
+  } else if (action === 'reveal' && here) {
+    const bundle = updater.status().installedIn;
+    if (bundle) shell.showItemInFolder(bundle);
+  }
+}
 
 // --- Settings -----------------------------------------------------------
 
@@ -248,8 +312,17 @@ async function openArchive(dataDir) {
       settled = true;
       clearTimeout(timer);
       origin = `http://127.0.0.1:${msg.port}`;
+      tellServer();
       if (quiet) quiet = false; // served; the window waits for the Dock icon
-      else openMainWindow();
+      else if (REOPEN.startsWith('/') && !reopened) {
+        // Back from a quiet update: the same page, without taking focus. Back
+        // from Update Now on this Mac: in front.
+        reopened = true;
+        openMainWindow(REOPEN, { inactive: !REOPEN_FRONT });
+        logUpdate(`Reopened ${process.execPath.replace(/\/Contents\/MacOS\/.*$/, '')} at ${REOPEN}${REOPEN_FRONT ? ', in front' : ''}.`);
+      } else openMainWindow();
+    } else if (msg?.type === 'app-action') {
+      appAction(msg);
     } else if (msg?.type === 'error') {
       fail(msg.message);
     } else if (msg?.type === 'lan') {
@@ -258,6 +331,8 @@ async function openArchive(dataDir) {
     } else if (msg?.type === 'remote') {
       remoteState = msg.ok ? 'ok' : msg.message;
       buildMenu();
+    } else if (msg?.type === 'activity') {
+      activity = { inflight: msg.inflight ?? 0, busy: msg.busy ?? 0, lastDeviceAt: msg.lastDeviceAt ?? null };
     }
   });
   child.on('exit', (code) => {
@@ -291,9 +366,9 @@ function isOurs(url) {
   }
 }
 
-function openMainWindow() {
+function openMainWindow(page = '/', { inactive = false } = {}) {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.loadURL(`${origin}/`);
+    mainWindow.loadURL(`${origin}${page}`);
     return;
   }
   const saved = readSettings().bounds;
@@ -323,7 +398,11 @@ function openMainWindow() {
     if (/^(https?|mailto):/.test(url)) shell.openExternal(url);
   });
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (inactive) mainWindow.showInactive();
+    else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
     if (startWindow && !startWindow.isDestroyed()) startWindow.destroy();
   });
   mainWindow.on('close', () => {
@@ -333,7 +412,7 @@ function openMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-  mainWindow.loadURL(`${origin}/`);
+  mainWindow.loadURL(`${origin}${page}`);
 }
 
 // --- Choosing where the archive lives ----------------------------------
@@ -562,17 +641,19 @@ async function signOutPhones() {
   dialog.showMessageBox(mainWindow ?? undefined, { type: 'info', message: 'Every phone is signed out', detail: 'They need the password again to open the archive.' });
 }
 
-// Background checks stay in the menu; only one asked for ends in a dialog.
-async function checkForUpdates() {
-  const res = await updater.check({ manual: true });
-  const then = 'It installs when you quit, or choose Restart to Update.';
-  const box = {
-    'up-to-date': { type: 'info', message: 'Colour Archive is up to date', detail: `Version ${res.version} is the newest.` },
-    downloading: { type: 'info', message: `Version ${res.version} is downloading`, detail: then },
-    ready: { type: 'info', message: `Version ${res.version} is ready`, detail: then },
-    error: { type: 'warning', message: 'Couldn’t check for updates', detail: res.error },
-  }[res.kind];
-  if (box) dialog.showMessageBox(mainWindow ?? startWindow ?? undefined, box);
+// "Check for Updates…": the Updates panel, in the archive window (#updates
+// opens it; the panel checks). Before the archive has opened there is no
+// panel to show, so it checks, and the menu's status line says the result.
+function showUpdates() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.executeJavaScript("location.hash = 'updates'").catch(() => {});
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+  } else if (server && origin) {
+    openMainWindow('/#updates');
+  } else {
+    updater.check({ manual: true }).catch(() => {});
+  }
 }
 
 function buildMenu() {
@@ -584,7 +665,7 @@ function buildMenu() {
       label: app.name,
       submenu: [
         { role: 'about' },
-        ...updateMenuItems(update, { check: () => checkForUpdates(), restart: () => updater.restart() }),
+        ...updateMenuItems(update, { check: () => showUpdates(), restart: () => updater.restart() }),
         { type: 'separator' },
         { label: 'Open at Login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
         { label: 'Let My iPad In', type: 'checkbox', checked: lanOn, click: (item) => setLan(item.checked) },
@@ -669,9 +750,16 @@ if (!app.requestSingleInstanceLock()) {
   // Lets the archive's pages know they are inside the app (src/lib/install.ts).
   app.userAgentFallback = `${app.userAgentFallback} ColourArchiveMac/${app.getVersion()}`;
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // Only quiet when there's an archive to serve; a first run still asks.
-    quiet = Boolean(app.getLoginItemSettings().wasOpenedAtLogin && readSettings().dataDir);
+    // Back hidden from a quiet update counts as quiet too.
+    quiet = Boolean((app.getLoginItemSettings().wasOpenedAtLogin || REOPEN === 'hidden') && readSettings().dataDir);
+    if (REOPEN === 'hidden' && quiet) logUpdate(`Relaunched ${process.execPath.replace(/\/Contents\/MacOS\/.*$/, '')} hidden.`);
+    // A version staged before the Mac shut down goes in before the server starts.
+    if (await updater.installStagedAtLaunch({ hidden: quiet }).catch(() => false)) {
+      app.quit();
+      return;
+    }
     buildMenu();
     updater.start();
     start();
