@@ -8,6 +8,12 @@
   network-dependent); worth a look.
 
 ## Next
+- Notes in words (branch `camera-words-try`, uncommitted): built and checked, not yet
+  committed or in a release. To use it: a PR to `main`, the new app release, then
+  "Notes in Words…" in the app menu and paste the Gemini key. Not run live: the Electron
+  menu, key window and Keychain hand-off (would touch the real profile). #179 adds its
+  measured boxes with `noteBoxLayer(...).draw()` in `index.astro`. #180 on GitHub
+  still describes the Claude, camera-first plan.
 - Luca: publishing is now by hand (`npm run deploy:site`). Want the app to publish on
   its own after a photo change? It needs a one-time Desktop permission, asked again
   after each update, or the repo moved off the Desktop.
@@ -21,6 +27,18 @@
 
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
+
+- 2026-11-25 · camera-words-try · Notes in words ahead of the camera import (Luca's
+  call): Notes in the Archive's large photo view, an intent, one note from Gemini (free
+  tier) as numbered boxes on the photo and words in a panel, Useful/Not useful marks,
+  kept in `.archive/notes-words.json`; "Notes in Words…" key window in the Mac app
+  (safeStorage, handed to the server by message). On the phone the photo lifts above the
+  sheet. Checked: `npm test` 2316/2316, check, lint, CI-style build; e2e 3 runs in a row;
+  one live note on a made-up image (boxes exact, cached repeat 18 ms, cross-origin 403,
+  key in no file, log or build); static build has no Notes. Reviewer pass: the key had
+  sat in the server's env (inherited by sips/dcraw_emu), moved to a global slot; plus
+  intent kept while writing, failed marks and emptied notes get the quiet note, Details
+  and Notes one at a time, the desk panel moves right off a box. e2e 10/10 ×3.
 
 - 2026-11-18 · phone-refresh · Luca's phone still looked old after the deploys. Service
   worker v2 (every device drops its saved copy once; `/publish.json` never cached) and the

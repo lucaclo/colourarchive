@@ -121,6 +121,16 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   of its listed risky substrings, even in docs or comments. Read its `substrings` lists
   before writing about them. Build DOM with `createElement`; spawn with `execFile`.
 
+- Astro inlines a `.env` secret into the build when a file names that variable and also
+  holds `import.meta.env` without a `.` straight after it (`import.meta.env?.DEV`, or
+  even in a comment). `src/lib/notes/key.ts` reads only `import.meta.env.DEV`, inside a
+  try (plain Node has no `import.meta.env`). Check a build with the key in `.env`:
+  `grep -rlF "$KEY" dist` must find nothing.
+- The dev server reads `GEMINI_API_KEY` from `.env` once. After adding it, restart.
+- Don't put a secret in the server's `process.env`: Match's `sips` and `dcraw_emu` run by
+  `execFile` with no `env`, so they inherit it and `ps eww` shows it. The Mac app's notes
+  key sits in a `Symbol.for('colour-archive.notes-key')` slot (`desktop/server.mjs`).
+
 ## MapLibre / WebGL
 - Add sources and layers on `style.load`, not `load`.
 - `setPaintProperty` on a missing layer fires `error` instead of throwing: check
@@ -194,6 +204,9 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   through the install script (`open -n --env`), or the relaunch opens the real profile.
 - Each build is signed ad hoc, so macOS may ask again for Location, Microphone or a
   protected folder (Desktop, Documents) after an update.
+- Ad hoc signing may make macOS ask about the Keychain at launch after an update: the app
+  decrypts the notes key when its server starts. Denied, `ready` is false and the Notes
+  button stays hidden, though "Remove Key" still shows (the file exists).
 - GitHub refuses retired runner images (`macos-14` failed the first release). The
   release job runs on `macos-latest`.
 

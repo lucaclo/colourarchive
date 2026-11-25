@@ -42,6 +42,18 @@ const TYPES = {
 
 const tell = (msg) => process.parentPort?.postMessage(msg);
 
+// Notes in words' Gemini key, from main.cjs (notes-key.cjs) after this process
+// starts and whenever it's saved or removed. Held in this process's memory for
+// src/lib/notes/key.ts to read; never logged, never written anywhere. Not in
+// process.env: sips and dcraw_emu (Match's decode) inherit the environment,
+// and `ps eww` would show it on them.
+const NOTES_KEY_SLOT = Symbol.for('colour-archive.notes-key');
+process.parentPort?.on('message', (e) => {
+  const msg = e?.data;
+  if (msg?.type !== 'notes-key') return;
+  globalThis[NOTES_KEY_SLOT] = typeof msg.key === 'string' ? msg.key : '';
+});
+
 const LAN_PORT = Number(process.env.LAN_PORT) || 0;
 const LAN_SETUP_PORT = Number(process.env.LAN_SETUP_PORT) || 0;
 const LAN_HOST = process.env.LAN_HOST || '';

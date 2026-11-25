@@ -10,6 +10,8 @@ book.json.bak
 /zine.json
 /zine.json.bak
 /zine/
+# Notes in words and their marks (src/lib/paths.ts NOTES_WORDS_PATH) — local only
+/notes-words.json
 # A save's temp file (write, then rename), left only if it crashed between
 *.json.*.tmp
 # What the iCloud inbox imported — local only

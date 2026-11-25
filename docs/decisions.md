@@ -4,6 +4,16 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-25 · Notes in words come before the camera import (Luca's call; changes #180's
+  order). A "Notes" button in the Archive's large photo view writes one note on the
+  finished JPEG for a typed intent. It runs on Gemini's free tier with Luca's own key
+  (`gemini-3.5-flash`), not Claude as #180 planned; on the free tier Google may use what
+  is sent. What leaves the Mac per note: the photo as a stripped ≤1568 px JPEG and the
+  intent. This amends local-first (2026-10-09, 2026-11-11) by one opt-in network path;
+  notes and Useful/Not useful marks stay on the Mac (`.archive/notes-words.json`). The key
+  lives in the Keychain (app menu "Notes in Words…"), or `.env` in development, and
+  reaches the server only by message. No monthly cap while it's free. Style Match keeps
+  no LLM (2026-07-29). #179's measured boxes join the same Notes overlay when built.
 - 2026-11-18 · The published site keeps itself current on a phone: when a page comes back
   to the screen and `/publish.json` names a newer build, it reloads. The service worker
   never caches `/publish.json`; bump its `VERSION` to make every device drop its saved

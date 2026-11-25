@@ -92,6 +92,9 @@ export const BOOK_PRINT_DIR = kept('.book-print');
 // and its photos aren't in the archive.
 export const ZINE_PATH = kept('zine.json');
 export const ZINE_PHOTOS_DIR = kept('zine');
+// Notes in words (#180): each note a model wrote on a photo, by cache key, and
+// the Useful / Not useful marks given to them. Kept on this Mac, git-ignored.
+export const NOTES_WORDS_PATH = kept('notes-words.json');
 export const NOTES_PATH = kept('src', 'data', 'notes.json');
 // Scout's curated list of named photographers to look for near a spot — see
 // `scout/sources/notable.ts`'s header. Hand-edited, like NOTES_PATH, so it is
