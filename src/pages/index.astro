@@ -3481,7 +3481,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
 <script>
   // Once the app is installed there is nothing left to get, so the top bar's
   // "Get the app" goes: in the app window, and in a browser tab that knows
-  // the app is installed.
+  // the app is installed. (Updates lives in the Book's head, not here.)
   import { inAppWindow, installedElsewhere, rememberInstall } from '../lib/install';
   const getApp = document.getElementById('get-app') as HTMLAnchorElement | null;
   if (inAppWindow()) {

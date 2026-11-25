@@ -14,6 +14,39 @@ from this session; if you do, say which line and why. Add new ones with the date
   lives in the Keychain (app menu "Notes in Words…"), or `.env` in development, and
   reaches the server only by message. No monthly cap while it's free. Style Match keeps
   no LLM (2026-07-29). #179's measured boxes join the same Notes overlay when built.
+- 2026-11-25 · Feedback from the app (`components/Feedback.astro`, `lib/feedback.ts`):
+  pictures and a note, never sent to the public repo (screenshots show photos and places).
+  A page the Mac serves keeps it on the Mac (`<data>/.archive/feedback/<id>/note.md`
+  beside `1.jpg`…); the published site, which has no server, files an issue in the
+  private `lucaclo/colourarchive-feedback` with a fine-grained token kept on that device
+  (Contents and Issues, write, that repo only). `npm run feedback` is the one inbox.
+- 2026-11-25 · Updates panel, on every page (`src/components/Updates.astro`): opened from
+  the app menu's "Check for Updates…" (it no longer opens a dialog), ⌘K "Updates", and
+  an Updates button in the Book's page head beside Share and Magazine (moved off the
+  Archive's top bar the same day: it was in the way). Each device answers for
+  itself. The Mac app: version, status, where it's installed (Show in Finder), when it
+  last updated, and "Update now", which swaps and relaunches at once onto the same page
+  with the panel open; asked from another device, the Mac comes back in the background.
+  Phones and browsers: their own build and "Reload", which drops the saved offline copy.
+  The Mac also lists the published build (Up to date or Behind its archive) and the
+  devices that opened pages from it (`<data>/.archive/devices.json`: name, home-screen or
+  not, last seen, build; never the user agent or address). The Mac can't see phones that
+  load from Netlify. Pages served by the Mac reload themselves on return when its build
+  changed. Every build bakes `version` and `builtAt` (`src/lib/build-info.ts`), and
+  `publish.json` carries the same `builtAt`.
+- 2026-11-24 · The Mac app also installs a downloaded update by itself at a quiet moment
+  (#168; re-opens the 2026-11-17 line, which swapped only on quit or Restart to Update):
+  10 minutes with no window in front, no request in flight (an upload, a book PDF), no
+  scan or other busy job, and nothing from the phone. It reopens the page that was open,
+  without taking focus, or comes back hidden. An update already downloaded goes in at
+  launch, before the server starts. One try per version; every swap is logged in
+  `~/Library/Logs/Colour Archive/update.log`.
+- 2026-11-23 · Mac app releases are self-signed with one stable certificate, "Colour
+  Archive Release" (20 years; kept as two repository secrets, never in the repo), so
+  every build has the same designated requirement and macOS keeps its permissions
+  across updates. The updater refuses a download that doesn't satisfy the running
+  app's own requirement; a running ad hoc app skips that check, so the first signed
+  release installs. Still no Developer ID (#167).
 - 2026-11-18 · The published site keeps itself current on a phone: when a page comes back
   to the screen and `/publish.json` names a newer build, it reloads. The service worker
   never caches `/publish.json`; bump its `VERSION` to make every device drop its saved
@@ -72,6 +105,17 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-25 · While a modal sheet is open, the ring cursor goes and the system pointer
+  comes back, on the sheet and the dimmed page (`global.css`, `:has(dialog:modal)`). The
+  ring can't be drawn above the top layer. A sheet closes on a backdrop press only when
+  the press starts and ends outside it: `<dialog data-backdrop-close>`
+  (`lib/ui/backdrop.ts`), not `e.target === dialog`.
+- 2026-11-25 · Feedback is a round glass bubble after Add & remove in the tab bar (an
+  action, so a button). On the published site it shows to a device with a token, while a
+  draft waits, and in an installed copy (the home-screen app has no address bar for
+  `#feedback`, and its own storage); a visitor in a browser never sees it. Up to 4 pictures; errors are the sheet's own
+  quiet line ("Couldn’t send", reason on a tap) and the draft stays; sent is the "Sent"
+  pill. At 400 px and under, tabs lose a little padding so the bar fits 375 px.
 - 2026-11-18 · Big-title pages (Inspiration, Add & remove, the Book) share one column and
   one head: `--page-max` (68rem) and `--page-pad` (20 px on a phone, 48 px at the desk),
   `.page-head` with the count beside the title and icon-and-word actions that drop to the

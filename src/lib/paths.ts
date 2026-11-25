@@ -74,6 +74,9 @@ export const INBOX_LOG_PATH = kept('inbox.json');
 // Kept-spot notifications (push.ts): this Mac's VAPID keys and each device's
 // subscription and kept spots. Private: the keys sign, the spots are places.
 export const PUSH_PATH = kept('push.json');
+// The phones, iPads and browsers that opened pages from this Mac, and which
+// build each last had (devices.ts). No user agents or addresses; local only.
+export const DEVICES_PATH = kept('devices.json');
 // The book's own curation — issue #82. Deliberately separate from
 // OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
 // medium, genre) for the whole archive, while this changes only whether and
@@ -95,6 +98,10 @@ export const ZINE_PHOTOS_DIR = kept('zine');
 // Notes in words (#180): each note a model wrote on a photo, by cache key, and
 // the Useful / Not useful marks given to them. Kept on this Mac, git-ignored.
 export const NOTES_WORDS_PATH = kept('notes-words.json');
+// Feedback sent from the app (lib/feedback.ts): one folder per note, with its
+// pictures. `npm run feedback` lists them. Git-ignored: the pictures show the
+// archive and places.
+export const FEEDBACK_DIR = kept('feedback');
 export const NOTES_PATH = kept('src', 'data', 'notes.json');
 // Scout's curated list of named photographers to look for near a spot — see
 // `scout/sources/notable.ts`'s header. Hand-edited, like NOTES_PATH, so it is

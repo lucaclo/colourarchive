@@ -1,0 +1,488 @@
+---
+/**
+ * The feedback sheet, on every page (Layout.astro): up to four pictures and a
+ * note, sent with the page, device, window size and build (lib/feedback.ts).
+ *
+ * Opens from the tab bar's bubble button, ⌘K ("Feedback"), the Mac app's
+ * Help › Send Feedback…, and the hash #feedback, which it then removes.
+ * Pictures come from Add (the photo library on a phone), a paste, or a drop;
+ * in the Mac app the sheet starts with a picture of the window as it was.
+ *
+ * Where it goes: a page the Mac serves posts to /api/feedback (kept on the
+ * Mac). The published site has no server, so it files an issue in the private
+ * feedback repo with this device's GitHub token; until the device has one,
+ * the sheet asks for it. On the published site the bubble shows only on a
+ * device with a token, or in an installed app (visitors never see it).
+ *
+ * `hidden` while closed, like the Updates panel: lib/ui/modal.ts treats any
+ * `[data-modal]` without `hidden` as open.
+ */
+import { FEEDBACK_REPO, newTokenUrl } from '../lib/feedback';
+
+const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
+const REPO = import.meta.env.PUBLIC_FEEDBACK_REPO || FEEDBACK_REPO;
+---
+
+<button type="button" class="fb-cmdk" hidden disabled={STATIC} data-feedback-open data-cmdk="Feedback" data-cmdk-always data-cmdk-keywords="report, bug, idea, screenshot, note">Feedback</button>
+<dialog class="fb" id="feedback" aria-labelledby="fb-title" data-modal data-backdrop-close hidden tabindex="-1" data-repo={REPO}>
+  <div class="fb-in">
+    <header class="fb-head">
+      <h2 class="fb-title" id="fb-title">Feedback</h2>
+      <button type="button" class="fb-close" id="fb-close" aria-label="Close">×</button>
+    </header>
+
+    <form class="fb-setup" id="fb-setup" hidden>
+      <label class="fb-label" for="fb-token">GitHub token</label>
+      <input class="field fb-token" id="fb-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…" required />
+      <div class="fb-foot">
+        <a class="btn btn-ghost" href={newTokenUrl(REPO)} target="_blank" rel="noopener">New token</a>
+        <span class="fb-gap"></span>
+        <button type="submit" class="btn btn-primary" id="fb-save">Save</button>
+      </div>
+    </form>
+
+    <form class="fb-compose" id="fb-compose">
+      <ul class="fb-pics" id="fb-pics" aria-label="Pictures">
+        <li class="fb-add-li" id="fb-add-li">
+          <button type="button" class="fb-add" id="fb-add" aria-label="Add picture">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+          </button>
+        </li>
+      </ul>
+      <input type="file" id="fb-file" accept="image/*" multiple hidden />
+      <label class="visually-hidden" for="fb-note">Note</label>
+      <textarea class="field fb-note" id="fb-note" rows="4" placeholder="What should change?"></textarea>
+      <div class="fb-foot">
+        <span class="fb-where" id="fb-where"></span>
+        <span class="fb-gap"></span>
+        <button type="submit" class="btn btn-primary" id="fb-send" disabled>Send</button>
+      </div>
+    </form>
+
+    <div class="fb-err" id="fb-err" role="status" hidden>
+      <button type="button" class="fb-err-title" id="fb-err-title" aria-expanded="false" aria-controls="fb-err-why"></button>
+      <span class="fb-err-why" id="fb-err-why" hidden></span>
+    </div>
+  </div>
+</dialog>
+
+<style is:global>
+  /* Like the Updates panel (Updates.astro). Pictures are drawn at runtime, so
+     everything is global, under .fb. */
+  .fb {
+    width: min(92vw, 30rem); max-width: none; max-height: 92svh; padding: 0;
+    border: 1px solid var(--glass-edge); border-radius: var(--r-lg);
+    background: var(--bg); color: var(--fg);
+  }
+  .fb::backdrop { background: rgb(0 0 0 / 0.72); }
+  .fb:focus { outline: none; }
+  .fb.fb-drop { border-color: color-mix(in oklab, var(--accent-mix) 70%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-mix) 22%, transparent); }
+  .fb-head { display: flex; align-items: center; gap: 1rem; padding: 1rem 1rem 0 1.4rem; }
+  .fb-title { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 1.4rem; }
+  .fb-close {
+    margin-left: auto; appearance: none; cursor: pointer; border: 0; border-radius: 50%;
+    width: var(--hit); height: var(--hit); background: var(--fill); color: var(--fg); font-size: 1.2rem;
+  }
+  .fb-close:focus-visible, .fb-add:focus-visible, .fb-pic-x:focus-visible, .fb-err-title:focus-visible { outline: 2px solid var(--accent-mix); outline-offset: 2px; }
+  .fb-setup, .fb-compose { padding: 0.75rem 1.4rem 1.25rem; }
+  .fb-setup[hidden], .fb-compose[hidden], .fb-err[hidden], .fb-err-why[hidden], .fb-add-li[hidden] { display: none; }
+  .fb-label { display: block; margin: 0 0 0.4rem; font-family: var(--font-ui); font-size: var(--t-caption-2); color: var(--muted); }
+  .fb-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.85rem; }
+  .fb-gap { flex: 1; }
+  .fb-where { font-family: var(--font-ui); font-size: var(--t-caption); color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .fb-pics { list-style: none; margin: 0 0 0.75rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .fb-pic, .fb-add-li { position: relative; width: 4.5rem; height: 4.5rem; }
+  .fb-pic img {
+    display: block; width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sm);
+    background: var(--fill); box-shadow: inset 0 0 0 1px var(--separator);
+  }
+  .fb-pic-x {
+    position: absolute; top: -6px; right: -6px; appearance: none; cursor: pointer;
+    width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--glass-edge);
+    background: var(--glass-bg-strong); color: var(--fg); font-size: 0.9rem; line-height: 1; padding: 0;
+    display: grid; place-items: center;
+  }
+  /* The drawn dot is 22 px; its target reaches --hit. */
+  .fb-pic-x::after { content: ''; position: absolute; inset: calc((22px - var(--hit)) / 2); }
+  .fb-add {
+    appearance: none; cursor: pointer; width: 100%; height: 100%; padding: 0;
+    display: grid; place-items: center; border-radius: var(--r-sm);
+    border: 1px dashed color-mix(in oklab, var(--fg) 26%, transparent); background: transparent; color: var(--secondary);
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .fb-add:hover { background: var(--fill); color: var(--fg); }
+  .fb-add:disabled, .fb-pic-x:disabled { opacity: 0.45; cursor: default; }
+  .fb-add:disabled:hover { background: transparent; color: var(--secondary); }
+  .fb-add svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+
+  .fb-note { display: block; min-height: 7rem; padding: 0.65rem 0.9rem; resize: vertical; line-height: 1.45; }
+
+  /* Something went wrong: the title, the reason one tap away (quiet errors). */
+  .fb-err { padding: 0 1.4rem 1.1rem; margin-top: -0.4rem; font-family: var(--font-ui); font-size: var(--t-caption); }
+  .fb-err-title {
+    position: relative; appearance: none; cursor: pointer; border: 0; padding: 0; background: none;
+    font: inherit; font-weight: 600; color: var(--fg);
+    text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px;
+  }
+  .fb-err-title::after { content: ''; position: absolute; left: -8px; right: -8px; top: 50%; height: var(--hit); translate: 0 -50%; }
+  .fb-err-why { display: block; margin-top: 0.3rem; color: var(--secondary); }
+
+  @media (max-width: 600px) {
+    .fb { width: calc(100vw - 32px); }
+    .fb-head { padding-left: 1.1rem; }
+    .fb-setup, .fb-compose { padding: 0.75rem 1.1rem 1.1rem; }
+    .fb-err { padding: 0 1.1rem 1rem; }
+    .fb-pic, .fb-add-li { width: 4rem; height: 4rem; }
+  }
+</style>
+
+<script>
+  import { BUILD } from '../lib/build-info';
+  import { inAppWindow, inMacApp } from '../lib/install';
+  import { deviceName } from '../lib/updates';
+  import {
+    cleanNote,
+    FEEDBACK_HASH,
+    IMAGE_TYPES,
+    MAX_IMAGES,
+    newFeedbackId,
+    pageLabel,
+    TOKEN_KEY,
+    viewportLabel,
+  } from '../lib/feedback';
+  import { checkToken, fileIssue, GitHubError } from '../lib/feedback-github';
+  import { PictureError, preparePicture, type Picture } from '../lib/feedback-image';
+
+  /** A reason this sheet wrote, fit to show; anything else the browser throws stays in the console. */
+  class SendError extends Error {}
+
+  const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
+  const dlg = document.getElementById('feedback') as HTMLDialogElement;
+  const REPO = dlg.dataset.repo as string;
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const setup = $<HTMLFormElement>('fb-setup');
+  const compose = $<HTMLFormElement>('fb-compose');
+  const tokenEl = $<HTMLInputElement>('fb-token');
+  const saveBtn = $<HTMLButtonElement>('fb-save');
+  const pics = $<HTMLUListElement>('fb-pics');
+  const addLi = $<HTMLLIElement>('fb-add-li');
+  const fileEl = $<HTMLInputElement>('fb-file');
+  const noteEl = $<HTMLTextAreaElement>('fb-note');
+  const where = $<HTMLSpanElement>('fb-where');
+  const sendBtn = $<HTMLButtonElement>('fb-send');
+  const err = $<HTMLDivElement>('fb-err');
+  const errTitle = $<HTMLButtonElement>('fb-err-title');
+  const errWhy = $<HTMLSpanElement>('fb-err-why');
+
+  let pictures: Picture[] = [];
+  let sending = false;
+  let opening = false;
+
+  // --- This device's token (published site only) -------------------------------
+  const readToken = (): string | null => {
+    try {
+      return localStorage.getItem(TOKEN_KEY) || null;
+    } catch {
+      return null;
+    }
+  };
+  const writeToken = (t: string | null) => {
+    try {
+      if (t) localStorage.setItem(TOKEN_KEY, t);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* storage blocked: it lasts this visit only */
+    }
+    memoToken = t;
+  };
+  let memoToken = readToken();
+  const needsToken = () => STATIC && !memoToken;
+  const hasDraft = () => pictures.length > 0 || Boolean(cleanNote(noteEl.value));
+
+  /**
+   * The bubble and ⌘K row: always on the Mac's pages; on the published site
+   * with a token, in an installed app, or while a draft waits (a refused token
+   * mustn't strand it behind #feedback).
+   */
+  function showEntries() {
+    const on = !STATIC || Boolean(memoToken) || inAppWindow() || hasDraft();
+    for (const b of document.querySelectorAll<HTMLButtonElement>('[data-feedback-open]')) {
+      if (b.classList.contains('fb-cmdk')) b.disabled = !on;
+      else b.hidden = !on;
+    }
+  }
+  showEntries();
+
+  // --- Drawing -------------------------------------------------------------------
+  function showError(title: string | null, why = '') {
+    err.hidden = !title;
+    errTitle.textContent = title ?? '';
+    errWhy.textContent = why;
+    errWhy.hidden = true;
+    errTitle.setAttribute('aria-expanded', 'false');
+    errTitle.disabled = !why;
+  }
+  errTitle.addEventListener('click', () => {
+    const open = errWhy.hidden;
+    errWhy.hidden = !open;
+    errTitle.setAttribute('aria-expanded', String(open));
+  });
+
+  function drawPictures() {
+    for (const li of [...pics.querySelectorAll('.fb-pic')]) li.remove();
+    pictures.forEach((p, i) => {
+      const li = document.createElement('li');
+      li.className = 'fb-pic';
+      const img = document.createElement('img');
+      img.src = p.url;
+      img.alt = `Picture ${i + 1}`;
+      img.decoding = 'async';
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'fb-pic-x';
+      x.textContent = '×';
+      x.setAttribute('aria-label', `Remove picture ${i + 1}`);
+      x.disabled = sending;
+      x.addEventListener('click', () => {
+        URL.revokeObjectURL(p.url);
+        pictures = pictures.filter((q) => q !== p);
+        render();
+        (pics.querySelector<HTMLElement>('.fb-pic-x') ?? $<HTMLButtonElement>('fb-add')).focus();
+      });
+      li.append(img, x);
+      pics.insertBefore(li, addLi);
+    });
+  }
+
+  function render() {
+    const asking = needsToken();
+    setup.hidden = !asking;
+    compose.hidden = asking;
+    drawPictures();
+    addLi.hidden = pictures.length >= MAX_IMAGES;
+    // While sending, nothing changes underneath: what's on screen is what went.
+    $<HTMLButtonElement>('fb-add').disabled = sending;
+    noteEl.readOnly = sending;
+    where.textContent = pageLabel(location.pathname + location.search);
+    const empty = !cleanNote(noteEl.value) && !pictures.length;
+    sendBtn.disabled = sending || empty;
+    sendBtn.textContent = sending ? 'Sending' : 'Send';
+    sendBtn.setAttribute('aria-busy', String(sending));
+    saveBtn.disabled = sending;
+    saveBtn.textContent = sending ? 'Checking' : 'Save';
+  }
+
+  async function addFiles(files: Iterable<Blob>) {
+    const list = [...files].filter((f) => !f.type || f.type.startsWith('image/'));
+    if (!list.length || sending) return;
+    showError(null);
+    for (const f of list) {
+      if (pictures.length >= MAX_IMAGES) break;
+      try {
+        pictures.push(await preparePicture(f));
+      } catch (e) {
+        showError('Couldn’t add the picture', e instanceof PictureError ? e.message : 'Not a picture this browser can open');
+        console.warn('[feedback] picture', e);
+      }
+      render();
+    }
+  }
+
+  // --- Opening and closing -----------------------------------------------------------
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  /** In the Mac app: a picture of the window as it is, before the sheet covers it. */
+  async function captureWindow() {
+    try {
+      await nextFrame();
+      const res = await fetch('/api/feedback/capture', { method: 'POST', signal: AbortSignal.timeout(3500) });
+      if (res.status !== 200) return;
+      await addFiles([await res.blob()]);
+    } catch (e) {
+      console.warn('[feedback] capture', e);
+    }
+  }
+
+  async function open() {
+    if (dlg.open || opening) return;
+    opening = true;
+    if (!STATIC && inMacApp() && !pictures.length) await captureWindow();
+    opening = false;
+    render();
+    dlg.hidden = false;
+    dlg.showModal();
+    // A keyboard and pointer: straight into the note (or the token). On touch,
+    // the dialog itself, so the keyboard doesn't cover the pictures.
+    if (matchMedia('(pointer: fine)').matches) (needsToken() ? tokenEl : noteEl).focus();
+    else dlg.focus();
+  }
+
+  dlg.addEventListener('close', () => {
+    dlg.hidden = true;
+    dlg.classList.remove('fb-drop');
+  });
+  // A press on the backdrop closes it: data-backdrop-close (lib/ui/backdrop.ts).
+  $('fb-close').addEventListener('click', () => dlg.close());
+  document.addEventListener('click', (e) => {
+    if ((e.target as Element | null)?.closest?.('[data-feedback-open]')) void open();
+  });
+
+  /** #feedback opens the sheet and goes, like #updates. */
+  function fromHash() {
+    if (location.hash !== FEEDBACK_HASH) return;
+    history.replaceState(history.state, '', location.pathname + location.search);
+    void open();
+  }
+  fromHash();
+  addEventListener('hashchange', fromHash);
+
+  // --- Pictures in ---------------------------------------------------------------------
+  $('fb-add').addEventListener('click', () => fileEl.click());
+  fileEl.addEventListener('change', () => {
+    const files = [...(fileEl.files ?? [])];
+    fileEl.value = '';
+    void addFiles(files);
+  });
+  document.addEventListener('paste', (e) => {
+    if (!dlg.open || needsToken()) return;
+    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    void addFiles(files);
+  });
+  dlg.addEventListener('dragover', (e) => {
+    if (needsToken() || !e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    dlg.classList.add('fb-drop');
+  });
+  dlg.addEventListener('dragleave', (e) => {
+    if (!dlg.contains(e.relatedTarget as Node | null)) dlg.classList.remove('fb-drop');
+  });
+  dlg.addEventListener('drop', (e) => {
+    dlg.classList.remove('fb-drop');
+    if (needsToken() || !e.dataTransfer?.files.length) return;
+    e.preventDefault();
+    void addFiles(e.dataTransfer.files);
+  });
+
+  noteEl.addEventListener('input', () => render());
+  noteEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      compose.requestSubmit();
+    }
+  });
+
+  // --- Sending -------------------------------------------------------------------------
+  function sentPill() {
+    const pill = document.createElement('div');
+    pill.className = 'offline-pill';
+    pill.setAttribute('role', 'status');
+    pill.textContent = 'Sent';
+    document.body.appendChild(pill);
+    void pill.offsetWidth;
+    pill.classList.add('show');
+    setTimeout(() => {
+      pill.classList.remove('show');
+      setTimeout(() => pill.remove(), 600);
+    }, 2200);
+  }
+
+  function context() {
+    const standalone = inAppWindow();
+    const device = inMacApp() ? 'Mac app' : `${deviceName(navigator.userAgent, navigator.maxTouchPoints)}${standalone ? ' app' : ''}`;
+    return {
+      page: location.pathname + location.search + location.hash,
+      device,
+      viewport: viewportLabel(innerWidth, innerHeight, devicePixelRatio || 1),
+      build: `${BUILD.version} ${BUILD.builtAt}`,
+    };
+  }
+
+  async function sendToMac(note: string) {
+    const form = new FormData();
+    form.set('note', note);
+    for (const [k, v] of Object.entries(context())) form.set(k, v);
+    pictures.forEach((p, i) => form.append('image', p.blob, `${i + 1}.${IMAGE_TYPES[p.type]}`));
+    let res: Response;
+    try {
+      res = await fetch('/api/feedback', { method: 'POST', body: form });
+    } catch {
+      throw new SendError('No connection to the Mac');
+    }
+    if (!res.ok) {
+      const reply = await res.json().catch(() => null);
+      throw new SendError(typeof reply?.error === 'string' ? reply.error : `The Mac answered ${res.status}`);
+    }
+  }
+
+  async function sendToGitHub(note: string) {
+    const token = memoToken;
+    if (!token) throw new GitHubError('No token', true);
+    const images = await Promise.all(
+      pictures.map(async (p) => ({ ext: IMAGE_TYPES[p.type], bytes: new Uint8Array(await p.blob.arrayBuffer()) })),
+    );
+    const now = new Date();
+    await fileIssue({ token, repo: REPO }, {
+      id: newFeedbackId(now, crypto.getRandomValues(new Uint8Array(2))),
+      note,
+      created: now.toISOString(),
+      context: context(),
+      images,
+    });
+  }
+
+  compose.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const note = cleanNote(noteEl.value);
+    if (sending || (!note && !pictures.length)) return;
+    sending = true;
+    showError(null);
+    render();
+    const sent = [...pictures];
+    const sentText = noteEl.value;
+    try {
+      await (STATIC ? sendToGitHub(note) : sendToMac(note));
+      // Only what went: anything that changed meanwhile stays as a draft.
+      for (const p of sent) URL.revokeObjectURL(p.url);
+      pictures = pictures.filter((p) => !sent.includes(p));
+      if (noteEl.value === sentText) noteEl.value = '';
+      dlg.close();
+      sentPill();
+    } catch (e2) {
+      console.warn('[feedback] send', e2);
+      if (e2 instanceof GitHubError && e2.badToken) {
+        // Ask for a new one; the note and pictures stay.
+        writeToken(null);
+        showEntries();
+      }
+      showError('Couldn’t send', e2 instanceof GitHubError || e2 instanceof SendError ? e2.message : 'Try again');
+    } finally {
+      sending = false;
+      render();
+    }
+  });
+
+  setup.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const token = tokenEl.value.trim();
+    if (!token || sending) return;
+    sending = true;
+    showError(null);
+    render();
+    try {
+      await checkToken({ token, repo: REPO });
+      writeToken(token);
+      tokenEl.value = '';
+      showEntries();
+    } catch (e2) {
+      console.warn('[feedback] token', e2);
+      showError('Token didn’t work', e2 instanceof GitHubError ? e2.message : 'Try again');
+    } finally {
+      sending = false;
+      render();
+      if (!needsToken() && dlg.open) noteEl.focus();
+    }
+  });
+</script>

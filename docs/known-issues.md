@@ -43,7 +43,12 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - The Book size select writes `src/data/book.json`; never change it against the dev
   server. `tests/features.e2e.ts` mocks saves.
 - After `npm install`, restart the dev server: stale Vite deps give 504s and scripts that
-  silently never run.
+  silently never run. The same after editing `Layout.astro` or `global.css` mid-session:
+  the hot reload left Scout no longer writing its state into the address, and
+  `feedback.e2e.ts` failed on `%2C` until a restart (passes on a fresh server).
+- A `position: fixed` child of an open `<dialog>` is placed against the dialog, not the
+  window: `popIn` runs with `fill: both`, so `scale`/`translate` stay applied. The
+  dialog's `overflow: auto` also clips it. Don't put floating things inside a sheet.
 - macOS has no `timeout` command; a check wrapped in it silently never runs.
 - `/api/scout/places` 500s in dev without Full Disk Access (can't copy Photos.sqlite).
   Not caused by UI changes.
@@ -99,6 +104,22 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   findings to a file as they go. Start the reviewer before a second builder, or review
   a small diff in the main session.
 
+- `npm run check`'s script typecheck (`scripts/check-astro-scripts.ts`) reads only
+  `src/pages`: `<script>` blocks in `src/components` (Feedback, Updates, TabBar) go
+  unchecked. Check one by writing its block to `src/components/__tc__X.ts`, running
+  `npx tsc --noEmit`, and deleting it (CommandPalette's JSON `<script … />` trips the regex).
+- A worktree dev server needs its own Vite cache: an untracked `astro.config.fb.mjs`
+  that spreads `./astro.config.mjs` and sets `vite.cacheDir` from an env var, then
+  `npx astro dev --config astro.config.fb.mjs --port 44xx`. Lint then sees the cache
+  folders: pass `--ignore-pattern '.vite-fb*'` or delete them after.
+- Published-only UI (no server: the feedback token setup) can be tested on
+  `PUBLIC_STATIC=true astro dev`; it renders the static variants.
+- In Playwright, a route added later wins: a test's own route for one path skips the
+  shared recorder, so record in that route too.
+- A build from a worktree with `COLOUR_ARCHIVE_DATA` set compiles, then the publish
+  stamp refuses ("would publish 282 broken images"): the worktree has no `public/img`.
+  Not a code fault; CI's build runs on the repo fixture.
+
 ## Type and alignment
 - `[data-seg]` prepends a `.seg-thumb` span (`lib/ui/segments.ts`), so `:first-child`
   on its items never matches. Use `:first-of-type`. Scout's Sun tile sat 10 px in.
@@ -117,6 +138,12 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   half the screen and wraps its text. Give it `width: max-content; max-width: calc(100% - 2rem)`.
 
 ## Astro
+- Astro's own origin check (`security.checkOrigin`, on in production builds, off in dev)
+  answers 403 "Cross-site POST form submissions are forbidden" to any write whose
+  Origin isn't the server's own and whose content type is a form (multipart,
+  urlencoded, text/plain) or missing. So "no Origin is allowed" (R13-02,
+  `api-guard.ts`) holds only for JSON bodies: a Shortcut or curl uploading
+  multipart to `/api/upload` with no Origin is refused before our middleware runs.
 - Scoped `<style>` doesn't reach elements built at runtime. Wrap those selectors in
   `:global(...)`. Symptom: UA-default styling, zero-width lazy images that never load.
 - Astro trusts Host only for `allowedDomains`; behind a tunnel or in prod, POSTs get a 403
@@ -126,6 +153,18 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   browser's real Origin as another site. Check any build with a POST carrying its own
   Origin: 400 from the route means it got through, 403 means it didn't.
 - `public/sw.js` must keep only `/_astro/` and `/img/` cache-first, or dev CSS goes stale.
+- A closed native `<dialog data-modal>` still counts as an open overlay: `lib/ui/modal.ts`
+  and the Archive's `overlayOpen()` look for `[data-modal]:not([hidden])`. Tab gets trapped
+  in it and the phone bars stop hiding on scroll. Keep `hidden` on a closed dialog and
+  remove it just before `showModal()` (the Updates panel does).
+- `Astro.clientAddress` reads `X-Forwarded-For` first, and the remote gate listens on
+  127.0.0.1 and forwards the phone in that header. "From this Mac" (`/api/updates`
+  reveal, Update now in front) needs a loopback address and no `X-Forwarded-For`.
+- `astro dev --config` resolves against the project root: an absolute path fails with
+  ConfigNotFound. From a worktree, pass `../../../../../../../private/tmp/…/x.mjs`.
+- A `PUBLIC_STATIC=true` build of a throwaway archive needs `<data>/.archive/public/img`
+  to exist, and with no image files `CI=1` to make the missing-image audit a warning. It
+  rewrites `node_modules/.cache/public-static`, which a worktree shares through its symlink.
 - `.claude/hooks/security_reminder_hook.py` blocks any Write/Edit whose text contains one
   of its listed risky substrings, even in docs or comments. Read its `substrings` lists
   before writing about them. Build DOM with `createElement`; spawn with `execFile`.
@@ -214,13 +253,48 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   --deep -s -`. `node_modules/.cache/updater/e2e.mts` does the whole round trip in scratch.
 - An app relaunched by `open` gets no environment: test copies pass `COLOUR_ARCHIVE_*`
   through the install script (`open -n --env`), or the relaunch opens the real profile.
-- Each build is signed ad hoc, so macOS may ask again for Location, Microphone or a
-  protected folder (Desktop, Documents) after an update.
-- Ad hoc signing may make macOS ask about the Keychain at launch after an update: the app
-  decrypts the notes key when its server starts. Denied, `ready` is false and the Notes
-  button stays hidden, though "Remove Key" still shows (the file exists).
+- Releases are signed with one self-signed certificate, "Colour Archive Release"
+  (`desktop/after-sign.cjs`, from two repository secrets), so macOS keeps its grants
+  across updates. A build without it is ad hoc, and every signed copy refuses it as an
+  update ("The download isn’t signed by Colour Archive."). Check: `codesign -d -r-` on
+  the app prints `certificate leaf`, never `cdhash`.
+- codesign finds an identity only when its keychain is on the user search list, even
+  with `--keychain`. A self-signed one shows `CSSMERR_TP_NOT_TRUSTED` and still signs.
+  `-R` takes the requirement as a separate `=…` argument; joined (`-R==…`) is a syntax error.
+- While a release goes out without the release certificate (ad hoc), macOS may ask
+  about the Keychain at launch after an update: the app decrypts the notes key when its
+  server starts. Denied, `ready` is false and the Notes button stays hidden, though
+  "Remove Key" still shows (the file exists).
 - GitHub refuses retired runner images (`macos-14` failed the first release). The
   release job runs on `macos-latest`.
+- The round trip's scratch copies show in the Dock (hidden or not), and a Dock Quit
+  ends a run as "never saw … Ready" with `before-quit` but no `app.quit` in `app-N.log`.
+  To tell it from a bug: `/usr/bin/log show --start … --end …` (zsh's `log` is a
+  builtin) shows `com.apple.dock:CopyMenu` then "Handling Quit AppleEvent". Run it
+  when nobody is using the Mac.
+- The updater downloads with `node:http(s)`, not `fetch`: Electron's fetch (undici)
+  failed `assert(!this.paused)` and threw out of the main process when the 200 MB
+  body was paused for the disk as its socket ended. It came and went between runs of
+  the round trip (`node_modules/.cache/updater/e2e.mts`), which logs main-process
+  exceptions to `app-N.log` in scratch.
+- A quiet-moment swap waits while any request is open, so a long-lived request (an
+  `EventSource`, a long poll) to the app's server would hold every update back until quit.
+  There are none today; a new one should go through a listener outside `tracked()` in
+  `desktop/server.mjs`, or the update needs a quit. A server job that should hold it too
+  wraps itself in `whileBusy()` (`src/lib/busy.ts`).
+- Quiet times are 10 min and checked each minute; tests shorten them with
+  `COLOUR_ARCHIVE_QUIET_MS`, `COLOUR_ARCHIVE_QUIET_CHECK_MS` and `COLOUR_ARCHIVE_ACTIVITY_MS`.
+  A version that failed to install leaves `<version>.attempt` beside it in `updates/` and
+  isn’t tried again by itself (quit or Restart to Update still install it).
+- The Updates panel reaches the updater through the server, not a preload: `main.cjs`
+  posts `{ type: 'app-update', status }` to the server process, which keeps it on
+  `globalThis[Symbol.for('colour-archive.app')]` for `/api/updates`; actions go back as
+  `{ type: 'app-action' }`. Outside the app (dev, the published site) `app` is null and a
+  POST answers 409. The first `/api/updates` on a cold server waits up to 3 s for the
+  published stamp, and the panel stays empty until it answers.
+- The round trip's step 8 (launch 6) is Update Now; it leaves a 5-minute timer, so the
+  script lingers ~5 min after `E2E PASS` and still exits 0. Its screen capture of the
+  reopened window lands in scratch as `launch6-front.png`.
 
 ## Open
 - Tailscale isn't installed on the Mac yet, so phone-from-anywhere isn't live.

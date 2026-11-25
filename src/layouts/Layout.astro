@@ -2,6 +2,8 @@
 import '../styles/global.css';
 import TabBar, { type Tab } from '../components/TabBar.astro';
 import CommandPalette from '../components/CommandPalette.astro';
+import Updates from '../components/Updates.astro';
+import Feedback from '../components/Feedback.astro';
 
 interface Props {
   title?: string;
@@ -121,6 +123,8 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     <slot />
     {tab && <TabBar current={tab} />}
     {tab && <CommandPalette />}
+    <Updates />
+    <Feedback />
     {cursor && <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>}
     <script>
       // Press springs, segmented-control gliders, collapsing page titles.
@@ -136,17 +140,9 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
         const ring = document.getElementById('cursor-ring');
         if (!ring) return;
         let raf = 0, mx = -100, my = -100;
-        // A modal <dialog> sits in the browser's top layer, above any
-        // z-index, and the system pointer is hidden, so with the ring left in
-        // <body> the cursor vanishes inside every modal. The ring lives in
-        // the open modal instead (the last one, if they stack), and goes
-        // back to <body> once it closes.
-        const home = () => {
-          const modals = [...document.querySelectorAll('dialog')].filter((d) => d.matches(':modal'));
-          const host = modals[modals.length - 1] || document.body;
-          if (ring.parentElement !== host) host.append(ring);
-        };
-        const move = () => { home(); ring.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`; raf = 0; };
+        // While a modal <dialog> is open, global.css hides the ring and gives
+        // the system pointer back (the ring can't be drawn above the top layer).
+        const move = () => { ring.style.transform = `translate(${mx}px, ${my}px) translate(-50%, -50%)`; raf = 0; };
         addEventListener('mousemove', (e) => {
           mx = e.clientX; my = e.clientY;
           ring.classList.add('show');

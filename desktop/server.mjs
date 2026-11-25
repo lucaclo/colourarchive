@@ -42,6 +42,63 @@ const TYPES = {
 
 const tell = (msg) => process.parentPort?.postMessage(msg);
 
+// How busy the archive is, for the app's quiet updates (#168): requests in
+// flight on every listener, background jobs (the inbox scan, counted by
+// src/lib/busy.ts in this same process), and when another device last asked
+// for anything (the home network or the remote gate). main.cjs is told
+// whenever that changes, checked every few seconds.
+const activity = { inflight: 0, lastDeviceAt: null };
+const busyNow = () => globalThis[Symbol.for('colour-archive.busy')]?.n ?? 0;
+function tracked(app, { device = false } = {}) {
+  return (req, res) => {
+    activity.inflight++;
+    if (device) activity.lastDeviceAt = Date.now();
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      activity.inflight--;
+    };
+    res.once('close', end);
+    res.once('finish', end);
+    return app(req, res);
+  };
+}
+let told = '';
+setInterval(() => {
+  const now = { inflight: activity.inflight, busy: busyNow(), lastDeviceAt: activity.lastDeviceAt };
+  const key = `${now.inflight > 0}|${now.busy > 0}|${now.lastDeviceAt}`;
+  if (key === told) return;
+  told = key;
+  tell({ type: 'activity', ...now });
+}, Number(process.env.COLOUR_ARCHIVE_ACTIVITY_MS) || 5000).unref();
+
+// The app's updater, for /api/updates (src/lib/updates-server.ts reads this
+// off globalThis): main.cjs sends its status on every change, and act() asks
+// main.cjs to check, install now, or show the app in Finder.
+// capture() asks main.cjs for a picture of the archive window, for the
+// feedback sheet (src/pages/api/feedback/capture.ts); null after 3 s.
+const captures = new Map();
+let captureSeq = 0;
+const macApp = {
+  status: null,
+  act: (action, page, loopback) => tell({ type: 'app-action', action, page, loopback }),
+  capture: () =>
+    new Promise((resolve) => {
+      const id = ++captureSeq;
+      const timer = setTimeout(() => {
+        captures.delete(id);
+        resolve(null);
+      }, 3000);
+      captures.set(id, (data) => {
+        clearTimeout(timer);
+        captures.delete(id);
+        resolve(typeof data === 'string' && data ? Buffer.from(data, 'base64') : null);
+      });
+      tell({ type: 'capture', id });
+    }),
+};
+globalThis[Symbol.for('colour-archive.app')] = macApp;
 // Notes in words' Gemini key, from main.cjs (notes-key.cjs) after this process
 // starts and whenever it's saved or removed. Held in this process's memory for
 // src/lib/notes/key.ts to read; never logged, never written anywhere. Not in
@@ -49,9 +106,9 @@ const tell = (msg) => process.parentPort?.postMessage(msg);
 // and `ps eww` would show it on them.
 const NOTES_KEY_SLOT = Symbol.for('colour-archive.notes-key');
 process.parentPort?.on('message', (e) => {
-  const msg = e?.data;
-  if (msg?.type !== 'notes-key') return;
-  globalThis[NOTES_KEY_SLOT] = typeof msg.key === 'string' ? msg.key : '';
+  if (e?.data?.type === 'app-update') macApp.status = e.data.status ?? null;
+  else if (e?.data?.type === 'capture-result') captures.get(e.data.id)?.(e.data.data);
+  else if (e?.data?.type === 'notes-key') globalThis[NOTES_KEY_SLOT] = typeof e.data.key === 'string' ? e.data.key : '';
 });
 
 const LAN_PORT = Number(process.env.LAN_PORT) || 0;
@@ -118,7 +175,7 @@ function listenLan(app) {
     tell({ type: 'lan', ok: false, message: err.code === 'EADDRINUSE' ? `Port ${err.port ?? ''} is in use.` : String(err.message ?? err) });
   };
   try {
-    const secure = https.createServer({ key: fs.readFileSync(TLS_KEY), cert: fs.readFileSync(TLS_CERT) }, app);
+    const secure = https.createServer({ key: fs.readFileSync(TLS_KEY), cert: fs.readFileSync(TLS_CERT) }, tracked(app, { device: true }));
     secure.requestTimeout = 0;
     secure.on('error', fail('archive'));
     secure.listen(LAN_PORT, '0.0.0.0', () => {
@@ -145,12 +202,12 @@ function listenRemote(app) {
     // The Mac window's own origin, which astro.config's allowedDomains trusts.
     forward: { host: `127.0.0.1:${PORT}`, origin: `http://127.0.0.1:${PORT}` },
   });
-  const remote = http.createServer((req, res) => {
+  const remote = http.createServer(tracked((req, res) => {
     gated(req, res).catch((err) => {
       console.warn('[remote]', err.message);
       if (!res.headersSent) res.writeHead(500).end();
     });
-  });
+  }, { device: true }));
   remote.requestTimeout = 0;
   remote.on('error', (err) => {
     console.warn('[remote]', err.message);
@@ -201,7 +258,7 @@ try {
   process.env.ASTRO_NODE_AUTOSTART = 'disabled';
   const { handler } = await import(pathToFileURL(path.join(here, 'build', 'server', 'entry.mjs')).href);
   const app = (req, res) => serveImage(req, res, () => handler(req, res));
-  const server = http.createServer(app);
+  const server = http.createServer(tracked(app));
   // Uploads of large originals take a while; never cut them off mid-request.
   server.requestTimeout = 0;
   server.on('error', (err) => {

@@ -13,6 +13,14 @@
   Electron menu, key window and Keychain hand-off (would touch the real profile). #179
   adds its measured boxes with `noteBoxLayer(...).draw()` in `index.astro`. #180 has a
   status line and a comment with what's still open.
+- Sheet fixes (branch `fix/feedback-cursor`, not committed): when merged, close
+  feedback `2026-11-25-1213-6049` with `npm run feedback -- done …`, and release the
+  Mac app.
+- Feedback (merged #184, Mac app 0.2.15): to use it from the phone, make a
+  fine-grained token (the sheet's "New token" fills in the form; pick only the
+  `colourarchive-feedback` repo), paste it once in the phone's app (bubble, or
+  `#feedback` in a Safari tab), then `npm run deploy:site`. The Mac app gets the bubble,
+  Help › Send Feedback… and the window picture with the next release after merge.
 - Luca: publishing is now by hand (`npm run deploy:site`). Want the app to publish on
   its own after a photo change? It needs a one-time Desktop permission, asked again
   after each update, or the repo moved off the Desktop.
@@ -38,6 +46,39 @@ One line per session, newest first: date · branch · what changed · what's ope
   sat in the server's env (inherited by sips/dcraw_emu), moved to a global slot; plus
   intent kept while writing, failed marks and emptied notes get the quiet note, Details
   and Notes one at a time, the desk panel moves right off a box. e2e 10/10 ×3.
+- 2026-11-25 · fix/feedback-cursor · First in-app feedback: in the Feedback and Updates
+  sheets the pointer vanished (ring under the top layer, then drawn ~400 px off inside
+  the sheet) and a text selection let go past the edge closed the sheet. Now the system
+  pointer shows while a sheet is open, and Feedback, Updates and the Book's survey close
+  only on a press that starts and ends on the backdrop. Unit, check, lint, feedback and
+  updates e2e pass on a throwaway archive. Open: commit, PR, release.
+
+- 2026-11-25 · feedback · Feedback from the app: a bubble beside the tab bar (also ⌘K,
+  Help › Send Feedback…, `#feedback`) opens a sheet for up to four pictures (Add, paste,
+  drop; the Mac app starts with a picture of its window) and a note, sent with page,
+  device, window and build. Pages the Mac serves keep it in `.archive/feedback/`; the
+  published site files an issue in the new private repo `lucaclo/colourarchive-feedback`
+  with the device's token. `npm run feedback` pulls issues in and lists what's open with
+  picture paths; `done <id>` closes. Checked: 2364 unit, feedback e2e 10/10 three runs
+  (Mac and published servers), a11y clean incl. the open sheet, shots desk/phone/375 px,
+  one real issue filed, pulled and closed (then deleted); reviewer pass, 8 small fixes
+  (freeze while sending, rate-limit 403 keeps the token, 413 cap). Not run: the capture
+  inside a packaged app.
+
+- 2026-11-25 · fix/updates-to-book · The Updates button moves from the Archive's top bar
+  (in the way) to the Book's page head, beside Share and Magazine. The published site has
+  no Book page, so a phone on Netlify opens the panel only through `#updates`.
+- 2026-11-25 · updates-panel (stacked on mac-signing: #167/#168 committed locally as
+  3c4fb27 at Luca's say-so) · Updates panel on every page: app menu "Check for Updates…",
+  ⌘K "Updates", the Archive top bar in the app window. The Mac app shows version, status,
+  where it's installed (Show in Finder), when it last updated, and Update now (swap and
+  relaunch at once onto the same page with the panel open); phones and browsers show
+  their own build and Reload (drops the saved copy). The Mac lists the published build
+  and devices that opened pages from it. Builds bake version + builtAt. Checked: 2341
+  unit, panel e2e 12/12 three runs, a11y, shots at desk and iPhone, the scratch round
+  trip with a new Update Now step. Merged as #182, released as v0.2.12 and installed on
+  the Mac (08:15). Found: `~/Desktop/Colour Archive.app` was a Chrome shortcut to the dev
+  server (localhost:4321), not the Mac app; Luca deleted it.
 
 - 2026-11-18 · phone-refresh · Luca's phone still looked old after the deploys. Service
   worker v2 (every device drops its saved copy once; `/publish.json` never cached) and the
