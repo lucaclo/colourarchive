@@ -4,6 +4,12 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-25 · Feedback from the app (`components/Feedback.astro`, `lib/feedback.ts`):
+  pictures and a note, never sent to the public repo (screenshots show photos and places).
+  A page the Mac serves keeps it on the Mac (`<data>/.archive/feedback/<id>/note.md`
+  beside `1.jpg`…); the published site, which has no server, files an issue in the
+  private `lucaclo/colourarchive-feedback` with a fine-grained token kept on that device
+  (Contents and Issues, write, that repo only). `npm run feedback` is the one inbox.
 - 2026-11-25 · Updates panel, on every page (`src/components/Updates.astro`): opened from
   the app menu's "Check for Updates…" (it no longer opens a dialog), ⌘K "Updates", and
   an Updates button in the Book's page head beside Share and Magazine (moved off the
@@ -89,6 +95,12 @@ from this session; if you do, say which line and why. Add new ones with the date
   sharpening, NR.
 
 ## Design
+- 2026-11-25 · Feedback is a round glass bubble after Add & remove in the tab bar (an
+  action, so a button). On the published site it shows to a device with a token, while a
+  draft waits, and in an installed copy (the home-screen app has no address bar for
+  `#feedback`, and its own storage); a visitor in a browser never sees it. Up to 4 pictures; errors are the sheet's own
+  quiet line ("Couldn’t send", reason on a tap) and the draft stays; sent is the "Sent"
+  pill. At 400 px and under, tabs lose a little padding so the bar fits 375 px.
 - 2026-11-18 · Big-title pages (Inspiration, Add & remove, the Book) share one column and
   one head: `--page-max` (68rem) and `--page-pad` (20 px on a phone, 48 px at the desk),
   `.page-head` with the count beside the title and icon-and-word actions that drop to the

@@ -10,6 +10,8 @@ book.json.bak
 /zine.json
 /zine.json.bak
 /zine/
+# Feedback sent from the app (src/lib/paths.ts FEEDBACK_DIR) — local only
+/feedback/
 # A save's temp file (write, then rename), left only if it crashed between
 *.json.*.tmp
 # What the iCloud inbox imported — local only

@@ -21,6 +21,7 @@
     "drift": "tsx scripts/deploy-site.ts --check",
     "check:photos": "tsx scripts/check-photos.ts",
     "doctor": "tsx scripts/doctor.ts",
+    "feedback": "tsx scripts/feedback.ts",
     "mobile": "tsx scripts/mobile.ts",
     "remote": "tsx scripts/remote.ts",
     "a11y": "tsx scripts/a11y.ts",

@@ -8,6 +8,11 @@
   network-dependent); worth a look.
 
 ## Next
+- Feedback (branch `feedback`, not committed): to use it from the phone, make a
+  fine-grained token (the sheet's "New token" fills in the form; pick only the
+  `colourarchive-feedback` repo), paste it once in the phone's app (bubble, or
+  `#feedback` in a Safari tab), then `npm run deploy:site`. The Mac app gets the bubble,
+  Help › Send Feedback… and the window picture with the next release after merge.
 - Luca: publishing is now by hand (`npm run deploy:site`). Want the app to publish on
   its own after a photo change? It needs a one-time Desktop permission, asked again
   after each update, or the repo moved off the Desktop.
@@ -21,6 +26,18 @@
 
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
+
+- 2026-11-25 · feedback · Feedback from the app: a bubble beside the tab bar (also ⌘K,
+  Help › Send Feedback…, `#feedback`) opens a sheet for up to four pictures (Add, paste,
+  drop; the Mac app starts with a picture of its window) and a note, sent with page,
+  device, window and build. Pages the Mac serves keep it in `.archive/feedback/`; the
+  published site files an issue in the new private repo `lucaclo/colourarchive-feedback`
+  with the device's token. `npm run feedback` pulls issues in and lists what's open with
+  picture paths; `done <id>` closes. Checked: 2364 unit, feedback e2e 10/10 three runs
+  (Mac and published servers), a11y clean incl. the open sheet, shots desk/phone/375 px,
+  one real issue filed, pulled and closed (then deleted); reviewer pass, 8 small fixes
+  (freeze while sending, rate-limit 403 keeps the token, 413 cap). Not run: the capture
+  inside a packaged app.
 
 - 2026-11-25 · fix/updates-to-book · The Updates button moves from the Archive's top bar
   (in the way) to the Book's page head, beside Share and Magazine. The published site has

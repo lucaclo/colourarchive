@@ -25,6 +25,8 @@ export type AppAction = 'check' | 'install' | 'reveal';
 interface MacAppBridge {
   status: AppStatus | null;
   act(action: AppAction, page: string | null, loopback: boolean): void;
+  /** A JPEG of the archive window as it is now (api/feedback/capture), or null. */
+  capture?(): Promise<Uint8Array | null>;
 }
 const KEY = Symbol.for('colour-archive.app');
 

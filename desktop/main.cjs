@@ -323,6 +323,8 @@ async function openArchive(dataDir) {
       } else openMainWindow();
     } else if (msg?.type === 'app-action') {
       appAction(msg);
+    } else if (msg?.type === 'capture') {
+      captureWindow(msg.id);
     } else if (msg?.type === 'error') {
       fail(msg.message);
     } else if (msg?.type === 'lan') {
@@ -656,6 +658,33 @@ function showUpdates() {
   }
 }
 
+// "Send Feedback…": the feedback sheet in the archive window (#feedback opens
+// it, after a picture of the window as it is). Shown first, so the picture is
+// of the page and not of whatever was in front.
+function showFeedback() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.webContents.executeJavaScript("location.hash = 'feedback'").catch(() => {});
+  } else if (server && origin) {
+    openMainWindow('/#feedback');
+  }
+}
+
+/** The archive window as a JPEG, for the feedback sheet (server.mjs asks; null when there is none). */
+async function captureWindow(id) {
+  let data = null;
+  try {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+      const img = await mainWindow.webContents.capturePage();
+      if (!img.isEmpty()) data = img.toJPEG(90).toString('base64');
+    }
+  } catch {}
+  try {
+    server?.postMessage({ type: 'capture-result', id, data });
+  } catch {}
+}
+
 function buildMenu() {
   const lanOn = Boolean(readSettings().lan);
   const remoteOn = Boolean(readSettings().remote);
@@ -725,6 +754,8 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
+        { label: 'Send Feedback…', click: () => showFeedback() },
+        { type: 'separator' },
         { label: 'Show Server Log', click: () => shell.openPath(LOG_PATH) },
         { label: 'Developer Tools', accelerator: 'Alt+Command+I', click: (_i, win) => win?.webContents.toggleDevTools() },
       ],

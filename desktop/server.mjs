@@ -76,13 +76,32 @@ setInterval(() => {
 // The app's updater, for /api/updates (src/lib/updates-server.ts reads this
 // off globalThis): main.cjs sends its status on every change, and act() asks
 // main.cjs to check, install now, or show the app in Finder.
+// capture() asks main.cjs for a picture of the archive window, for the
+// feedback sheet (src/pages/api/feedback/capture.ts); null after 3 s.
+const captures = new Map();
+let captureSeq = 0;
 const macApp = {
   status: null,
   act: (action, page, loopback) => tell({ type: 'app-action', action, page, loopback }),
+  capture: () =>
+    new Promise((resolve) => {
+      const id = ++captureSeq;
+      const timer = setTimeout(() => {
+        captures.delete(id);
+        resolve(null);
+      }, 3000);
+      captures.set(id, (data) => {
+        clearTimeout(timer);
+        captures.delete(id);
+        resolve(typeof data === 'string' && data ? Buffer.from(data, 'base64') : null);
+      });
+      tell({ type: 'capture', id });
+    }),
 };
 globalThis[Symbol.for('colour-archive.app')] = macApp;
 process.parentPort?.on('message', (e) => {
   if (e?.data?.type === 'app-update') macApp.status = e.data.status ?? null;
+  else if (e?.data?.type === 'capture-result') captures.get(e.data.id)?.(e.data.data);
 });
 
 const LAN_PORT = Number(process.env.LAN_PORT) || 0;
