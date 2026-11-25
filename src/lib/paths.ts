@@ -95,6 +95,9 @@ export const BOOK_PRINT_DIR = kept('.book-print');
 // and its photos aren't in the archive.
 export const ZINE_PATH = kept('zine.json');
 export const ZINE_PHOTOS_DIR = kept('zine');
+// Notes in words (#180): each note a model wrote on a photo, by cache key, and
+// the Useful / Not useful marks given to them. Kept on this Mac, git-ignored.
+export const NOTES_WORDS_PATH = kept('notes-words.json');
 // Feedback sent from the app (lib/feedback.ts): one folder per note, with its
 // pictures. `npm run feedback` lists them. Git-ignored: the pictures show the
 // archive and places.

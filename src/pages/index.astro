@@ -531,6 +531,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           <a class="lb-tool lb-text lb-extra" id="lb-plan" href="/scout" data-cmdk="Plan this shot again" data-cmdk-keywords="scout, lens, same light, again" title="Plan this shot again in Scout: its lens, its place, the next time the light stands there" hidden>Plan again</a>
           <button class="lb-tool lb-text lb-extra" id="lb-roll" data-cmdk="Same roll" data-cmdk-keywords="film" aria-label="The rest of this roll" title="The rest of this roll" aria-expanded="false" hidden>Same roll</button>
           {!STATIC && <button class="lb-tool lb-text" id="lb-match" data-cmdk="Match this look" data-cmdk-keywords="lightroom, preset" aria-label="Match this look in Lightroom" title="Match this look in Lightroom">Match</button>}
+          {/* Notes in words: shown once the Mac says it can write one, or this photo has one. */}
+          {!STATIC && <button class="lb-tool lb-text lb-extra" id="lb-notes-btn" type="button" data-cmdk="Notes" data-cmdk-keywords="intent, words, critique" aria-pressed="false" aria-controls="lb-notes" hidden>Notes</button>}
           {/* Share to Scout's hotspots: the place goes out with the next publish. */}
           {!STATIC && <button class="lb-tool lb-text lb-extra" id="lb-share" data-cmdk="Share to Scout" data-cmdk-keywords="hotspot, publish, place, map" aria-pressed="false" title="Show this photo on the published Scout’s photo hotspots, at its place, credited to Colour Archive">Share</button>}
           {!STATIC && (
@@ -556,9 +558,33 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
           </div>
         )}
         {!STATIC && (
+          <section class="lb-notes" id="lb-notes" role="region" aria-label="Notes" hidden>
+            <div class="lbn-scroll">
+              <form class="lbn-ask" id="lbn-ask">
+                <label class="lbn-label" for="lbn-intent">Intent</label>
+                <div class="lbn-row">
+                  <input class="field" id="lbn-intent" type="text" maxlength="300" autocomplete="off" enterkeyhint="send" />
+                  <button class="btn" id="lbn-write" type="submit" disabled>Write</button>
+                </div>
+              </form>
+              <ol class="lbn-points" id="lbn-points" hidden></ol>
+              <div class="lbn-marks" id="lbn-marks" hidden>
+                <button type="button" class="btn btn-sm btn-outline lbn-mark" data-mark="useful" aria-pressed="false">Useful</button>
+                <button type="button" class="btn btn-sm btn-outline lbn-mark" data-mark="not-useful" aria-pressed="false">Not useful</button>
+              </div>
+            </div>
+          </section>
+        )}
+        {!STATIC && (
           <p class="lb-note" id="lb-note" role="status" aria-live="polite" hidden>
             <span id="lb-note-text"></span>
+            {/* A failure's title, with the reason one tap away (decision 2026-10-13). */}
+            <button type="button" class="lb-note-title" id="lb-note-title" aria-expanded="false" aria-controls="lb-note-why" hidden>
+              <span class="lb-note-dot" aria-hidden="true"></span><span id="lb-note-title-text"></span>
+            </button>
             <a class="lb-note-do" id="lb-note-do" hidden></a>
+            <button type="button" class="lb-note-close" id="lb-note-close" aria-label="Dismiss" hidden>×</button>
+            <span class="lb-note-why" id="lb-note-why" hidden></span>
           </p>
         )}
         <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous" title="Previous"><svg class="lb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg></button>
@@ -852,6 +878,160 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     appearance: none; border: 0; background: none; padding: 0; color: var(--fg); cursor: pointer;
     font: inherit; text-decoration: underline; text-underline-offset: 3px;
   }
+
+  /* The lightbox's quiet note, as a failure: title only, the reason one tap
+     away, a close (Scout's map note, in the lightbox's own pill). */
+  .lb-note.has-why {
+    flex-wrap: wrap; gap: 0 0.25rem; padding: 0.2rem 0.2rem 0.2rem 0.85rem; border-radius: var(--r-md);
+    background: color-mix(in oklab, #000 78%, transparent);   /* the reason is small text: the Notes panel's scrim */
+  }
+  .lb-note-title {
+    appearance: none; border: 0; background: none; cursor: pointer; padding: 0;
+    display: inline-flex; align-items: center; gap: 0.45rem; min-height: 32px;
+    font: inherit; color: var(--fg); text-align: left;
+  }
+  .lb-note-title:disabled { cursor: default; }
+  .lb-note-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #d9873f; }
+  .lb-note-close {
+    appearance: none; border: 0; background: none; cursor: pointer; position: relative;
+    width: 32px; height: 32px; border-radius: 50%; margin-left: auto;
+    font: 400 1rem/1 var(--font-ui); color: var(--secondary);
+  }
+  .lb-note-close:hover, .lb-note-title:not(:disabled):hover { color: var(--fg); }
+  .lb-note-title:focus-visible, .lb-note-close:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; border-radius: var(--r-xs); }
+  .lb-note-why { flex-basis: 100%; margin: 0 0.6rem 0.45rem 0; font-size: var(--t-caption); font-weight: 400; line-height: 1.5; color: var(--secondary); }
+  .lb-note-title[hidden], .lb-note-close[hidden], .lb-note-why[hidden], #lb-note-text[hidden] { display: none; }
+  @media (pointer: coarse) {
+    .lb-note-title { min-height: var(--hit); }
+    .lb-note-close::after { content: ''; position: absolute; inset: calc((32px - var(--hit)) / 2); }
+  }
+
+  /* Notes: the panel. The Chapter menu's clear-glass scrim, darker, since
+     it holds sentences to read over any photograph. Desk and iPad: bottom
+     left over the photo, clear of the Previous arrow. */
+  .lb-notes {
+    position: fixed; z-index: 80;
+    left: calc(var(--edge) + var(--hit) + 0.75rem); bottom: var(--edge);
+    width: min(26rem, calc(100vw - 2 * var(--edge) - var(--hit) - 0.75rem));
+    max-height: calc(100svh - 2 * var(--edge) - var(--hit) - 1rem);
+    display: flex; flex-direction: column;
+    border-radius: var(--r-lg);
+    background: color-mix(in oklab, #000 78%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+    border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow);
+    font-family: var(--font-ui); color: var(--fg);
+  }
+  .lb-notes[hidden] { display: none; }
+  .lb-notes.right { left: auto; right: calc(var(--edge) + var(--hit) + 0.75rem); }
+  .lbn-scroll {
+    min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+    padding: 0.85rem 1rem 1rem;
+  }
+  .lbn-ask { margin: 0; }
+  .lbn-label { display: block; margin: 0 0 0.35rem; font-size: var(--t-caption-2); color: var(--secondary); }
+  .lbn-row { display: flex; gap: 0.5rem; }
+  .lbn-row .field { flex: 1 1 auto; min-width: 0; }
+  .lbn-row .btn { flex: none; }
+  .lbn-points {
+    list-style: none; margin: 0.9rem 0 0; padding: 0.85rem 0 0; border-top: 1px solid var(--rule);
+    display: grid; gap: 0.85rem;
+  }
+  .lbn-points[hidden] { display: none; }
+  :global(.lbn-point) {
+    display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 0.6rem; align-items: start;
+    border-radius: var(--r-xs); outline-offset: 4px;
+  }
+  :global(.lbn-point:focus-visible) { outline: 2px solid var(--mark); }
+  :global(.lbn-n) {
+    display: grid; place-items: center; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%;
+    font: 600 var(--t-caption-2)/1 var(--font-ui); font-variant-numeric: tabular-nums;
+    color: #141311; background: color-mix(in oklab, #fff 80%, transparent);
+    transition: background var(--dur-fast) var(--ease);
+  }
+  :global(.lbn-point.on .lbn-n) { background: #fff; box-shadow: 0 0 0 3px color-mix(in oklab, #fff 22%, transparent); }
+  :global(.lbn-what) {
+    margin: 0; font-family: var(--font-note); font-style: italic; font-weight: 500;
+    font-size: var(--t-note); line-height: 1.35; color: var(--fg);
+  }
+  :global(.lbn-why) { margin: 0.3rem 0 0; font-size: var(--t-footnote); line-height: 1.45; color: var(--secondary); }
+  :global(.lbn-line) { margin: 0.3rem 0 0; font-size: var(--t-footnote); line-height: 1.45; color: var(--fg); }
+  /* Small labels in the UI face, upright even inside an italic note. */
+  :global(.lbn-k) {
+    margin-right: 0.2rem; font-family: var(--font-ui); font-style: normal; font-weight: 500;
+    font-size: var(--t-caption-2); color: var(--secondary);
+  }
+  :global(.lbn-none) { padding-left: calc(18px + 0.6rem); }
+  .lbn-marks { display: flex; gap: 0.4rem; margin-top: 1rem; }
+  .lbn-marks[hidden] { display: none; }
+  .lbn-mark { position: relative; color: var(--secondary); }
+  .lbn-mark[aria-pressed='true'] { background: var(--fill-active); border-color: transparent; color: var(--fg); }
+  @media (pointer: coarse) {
+    .lbn-mark::after { content: ''; position: absolute; inset: calc((2rem - var(--hit)) / 2) -0.2rem; }
+  }
+  /* Phone: a sheet the width of the screen, at most the lower half. The
+     tool bar floats over its foot, so the sheet's words end above it: the
+     bar's 0.75rem inset, its 4px padding top and bottom, 2.4rem rows, and
+     with More open a second row after two 0.5rem gaps (the break is a line
+     of its own), then 0.5rem of air. */
+  @media (max-width: 640px) {
+    .lb-notes {
+      left: 0; right: 0; bottom: 0; width: auto;
+      max-height: 50svh;
+    }
+    .lb-notes.right { left: 0; right: 0; }
+    .lb-notes {
+      border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom: 0;
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem + 8px + 2.4rem + 0.5rem);
+    }
+    .lightbox:has(.lb-tools.more-open) .lb-notes {
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem + 8px + 4.8rem + 1rem + 0.5rem);
+    }
+    .lbn-scroll { padding: 0.8rem var(--edge) 0.6rem; }
+    /* The photo moves up into the half the sheet leaves, under the count
+       and Close, so the whole frame and every box stay in view. */
+    .lightbox:has(.lb-notes:not([hidden])) {
+      align-items: flex-start;
+      padding-top: calc(var(--edge) + var(--hit) + 0.5rem);
+    }
+    .lightbox:has(.lb-notes:not([hidden])) .lb-stage,
+    .lightbox:has(.lb-notes:not([hidden])) .lb-stage img {
+      max-height: calc(50svh - var(--edge) - var(--hit) - 1rem);
+    }
+  }
+
+  /* Notes: the boxes, over the photo as drawn (noteBoxLayer). A light
+     hairline with a soft dark shadow, so it reads on snow and on shadow
+     alike; the priority a little heavier. Only while the panel is open, and
+     never over a zoomed photo. */
+  :global(.lb-boxes) {
+    position: absolute; z-index: 79; pointer-events: none; transform-origin: center center;
+    opacity: 0; visibility: hidden;
+    transition: opacity 160ms var(--ease), visibility 0s linear 160ms, transform 120ms ease;
+  }
+  :global(.lb-boxes.shown) {
+    opacity: 1; visibility: visible;
+    transition: opacity 160ms var(--ease), visibility 0s, transform 120ms ease;
+  }
+  :global(.lb-boxes.unplaced), :global(.lightbox:has(#lb-img.zoomed) .lb-boxes) { opacity: 0; visibility: hidden; transition: none; }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.lb-boxes), :global(.lb-boxes.shown), :global(.lb-box) { transition: none; }
+  }
+  :global(.lb-box) {
+    position: absolute; border: 1px solid rgb(255 255 255 / 0.9); border-radius: 2px;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.28), 0 1px 7px rgb(0 0 0 / 0.45);
+    transition: opacity var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  :global(.lb-box[data-kind='priority']) { border-width: 2px; }
+  :global(.lb-boxes.has-on .lb-box:not(.on)) { opacity: 0.3; }
+  :global(.lb-box.on) { border-color: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4), 0 2px 12px rgb(0 0 0 / 0.55); }
+  :global(.lb-box-n) {
+    position: absolute; left: -1px; top: -1px;
+    min-width: 16px; height: 16px; padding: 0 4px; border-radius: 2px 0 5px 0;
+    display: grid; place-items: center;
+    font: 600 var(--t-caption-2)/1 var(--font-ui); font-variant-numeric: tabular-nums;
+    color: #141311; background: rgb(255 255 255 / 0.9);
+  }
+  :global(.lb-box[data-kind='priority'] .lb-box-n) { left: -2px; top: -2px; }
 </style>
 
 <script is:inline>
@@ -1639,6 +1819,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     lbCap.innerHTML = captionHtml(f);
     lbImg.alt = `${f.dataset.chapter || ''} — ${f.dataset.file || 'photograph'}`;
     syncRoll(f);
+    notesShow(f);
     if (shareBtn) { syncShare(f); void loadShareState().then(() => frames[lbIndex] === f && syncShare(f)); }
     if (note) note.hidden = true;
     if (planBtn) {
@@ -1676,8 +1857,15 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     } catch { /* the button stays as it is */ }
     return shareState;
   }
+  const noteTitle = document.getElementById('lb-note-title');
+  const noteTitleText = document.getElementById('lb-note-title-text');
+  const noteWhy = document.getElementById('lb-note-why');
+  const noteClose = document.getElementById('lb-note-close');
   function showNote(text, action) {
     if (!note) return;
+    note.classList.remove('has-why');
+    noteText.hidden = false;
+    noteTitle.hidden = true; noteWhy.hidden = true; noteClose.hidden = true;
     noteText.textContent = text;
     noteDo.hidden = !action;
     if (action) { noteDo.textContent = action.label; noteDo.href = action.href; }
@@ -1685,6 +1873,32 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => { note.hidden = true; }, action ? 9000 : 5000);
   }
+  // A failure, quietly: the title alone, the reason behind a tap, and a close.
+  // It folds away after a while unless someone is reading it, as Scout's does.
+  function showReasonNote(title, reason) {
+    if (!note) return;
+    note.classList.add('has-why');
+    noteText.hidden = true; noteDo.hidden = true;
+    noteTitleText.textContent = title;
+    noteWhy.textContent = reason || '';
+    noteWhy.hidden = true;
+    noteTitle.hidden = false;
+    noteTitle.disabled = !reason;
+    noteTitle.setAttribute('aria-expanded', 'false');
+    noteClose.hidden = false;
+    note.hidden = false;
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+      if (noteWhy.hidden && !note.matches(':hover, :focus-within')) note.hidden = true;
+    }, 9000);
+  }
+  noteTitle?.addEventListener('click', () => {
+    const open = noteWhy.hidden;
+    noteWhy.hidden = !open;
+    noteTitle.setAttribute('aria-expanded', String(open));
+    if (open) clearTimeout(noteTimer);
+  });
+  noteClose?.addEventListener('click', () => { note.hidden = true; clearTimeout(noteTimer); });
   function syncShare(f) {
     if (!shareBtn) return;
     const on = !!shareState?.shared.has(f.dataset.id);
@@ -1838,6 +2052,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
     lbPushed = false;
     stopSlideshow();
     closeChapters();
+    setNotesOpen(false);
     setLbMore(false);
     unlockScroll();
     // After the unlock, so the thumbnail is measured where it will really be.
@@ -1891,6 +2106,8 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   // Wheel (mouse) and trackpad pinch (ctrl+wheel) both zoom the image.
   lb.addEventListener('wheel', (e) => {
     if (lb.hidden) return;
+    // The Notes panel scrolls its own words (a pinch there zooms nothing).
+    if (e.target.closest?.('#lb-notes')) { if (e.ctrlKey) e.preventDefault(); return; }
     e.preventDefault(); e.stopPropagation();
     zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.18 : 1 / 1.18);
   }, { passive: false });
@@ -1948,7 +2165,7 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   let swiping = false, swSX = 0, swSY = 0, swDX = 0, swDY = 0;
   lb.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'touch' || zScale > 1 || active.size > 1) return;
-    if (e.target.closest('button')) return;               // let the controls be tapped
+    if (e.target.closest('button, #lb-notes')) return;    // let the controls be tapped, the Notes sheet scroll
     swiping = true; swSX = e.clientX; swSY = e.clientY; swDX = 0; swDY = 0;
     lbImg.style.transition = 'none';
   });
@@ -2033,11 +2250,14 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   const toggleDetails = () => {
     const on = lb.classList.toggle('details');
     infoBtn?.setAttribute('aria-pressed', String(on));
+    // Details and Notes both sit at the foot of the photo: one at a time.
+    if (on && typeof setNotesOpen === 'function') setNotesOpen(false);
   };
   infoBtn?.addEventListener('click', toggleDetails);
 
   /** Close the innermost open part of the lightbox. True when there was one. */
   function closeLightboxPart() {
+    if (notesOpen()) { setNotesOpen(false); notesBtn?.focus({ preventScroll: true }); return true; }
     if (lbTools?.classList.contains('more-open')) { setLbMore(false); lbMoreBtn?.focus(); return true; }
     if (note && !note.hidden) { note.hidden = true; return true; }
     if (rollStrip && !rollStrip.hidden) { rollStrip.hidden = true; rollBtn?.setAttribute('aria-expanded', 'false'); rollBtn?.focus(); return true; }
@@ -2210,6 +2430,329 @@ function planAgainQuery(p: (typeof manifest.chapters)[number]['photos'][number])
   lb?.addEventListener('click', (e) => {
     if (chaptersOpen() && !e.target.closest('#lb-chapters, #lb-chapter')) closeChapters();
   }, true);
+
+  // ======================================================================
+  //  Notes: one note in words on the open photo (Mac only). An intent goes
+  //  in, Write asks the Mac, and the note comes back as numbered boxes on the
+  //  photo with the words in a panel. The box layer is shared: #179's
+  //  measured boxes draw through the same noteBoxLayer().
+  // ======================================================================
+
+  /**
+   * Numbered boxes exactly over the photo as drawn. The image is letterboxed
+   * (object-fit: contain), so the drawn rect comes from its natural size
+   * inside its box, and is measured again on resize and on every load.
+   * draw() takes [{ n, box: [x, y, w, h] as fractions of the photo, kind }].
+   */
+  function noteBoxLayer(img, host) {
+    const layer = document.createElement('div');
+    layer.className = 'lb-boxes';
+    layer.setAttribute('aria-hidden', 'true');
+    img.parentElement.after(layer);
+    const place = () => {
+      const nw = img.naturalWidth, nh = img.naturalHeight, w = img.offsetWidth, h = img.offsetHeight;
+      layer.classList.toggle('unplaced', !(nw && nh && w && h));
+      if (!(nw && nh && w && h)) return;
+      // The untransformed box: zoom and swipe move the photo with a
+      // transform, which the layer copies below.
+      let x = 0, y = 0;
+      for (let el = img; el && el !== host; el = el.offsetParent) { x += el.offsetLeft; y += el.offsetTop; }
+      const k = Math.min(w / nw, h / nh), dw = nw * k, dh = nh * k;
+      Object.assign(layer.style, { left: `${x + (w - dw) / 2}px`, top: `${y + (h - dh) / 2}px`, width: `${dw}px`, height: `${dh}px` });
+    };
+    const clamp01 = (v) => Math.min(1, Math.max(0, v));
+    const usable = (b) => Array.isArray(b) && b.length === 4 && b.every((v) => typeof v === 'number' && Number.isFinite(v)) && b[2] > 0 && b[3] > 0;
+    function draw(list) {
+      const items = (Array.isArray(list) ? list : []).filter((it) => it && usable(it.box));
+      layer.replaceChildren(...items.map((it) => {
+        const x = clamp01(it.box[0]), y = clamp01(it.box[1]);
+        const w = Math.min(it.box[2], 1 - x), h = Math.min(it.box[3], 1 - y);
+        const el = document.createElement('div');
+        el.className = 'lb-box';
+        el.dataset.n = String(it.n);
+        el.dataset.kind = String(it.kind || '');
+        Object.assign(el.style, { left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` });
+        const badge = document.createElement('span');
+        badge.className = 'lb-box-n';
+        badge.textContent = String(it.n);
+        el.append(badge);
+        return el;
+      }));
+      place();
+    }
+    function highlight(n) {
+      for (const el of layer.children) el.classList.toggle('on', n != null && Number(el.dataset.n) === n);
+      layer.classList.toggle('has-on', n != null);
+    }
+    /** The number of the smallest box under a point on screen, or null. */
+    function hit(cx, cy) {
+      if (getComputedStyle(layer).visibility !== 'visible') return null;
+      let best = null, area = Infinity;
+      for (const el of layer.children) {
+        const r = el.getBoundingClientRect();
+        if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom && r.width * r.height < area) {
+          best = Number(el.dataset.n); area = r.width * r.height;
+        }
+      }
+      return best;
+    }
+    new ResizeObserver(place).observe(img);
+    img.addEventListener('load', place);
+    addEventListener('resize', place);
+    // Follow the photo through a swipe; a zoom hides the boxes (CSS).
+    new MutationObserver(() => {
+      layer.style.transform = img.style.transform;
+      layer.style.transition = img.style.transition === 'none' ? 'none' : '';
+    }).observe(img, { attributes: true, attributeFilter: ['style'] });
+    return { draw, highlight, hit, place, show: (on) => layer.classList.toggle('shown', Boolean(on)) };
+  }
+
+  const notesBtn = document.getElementById('lb-notes-btn');
+  const notesPanel = document.getElementById('lb-notes');
+  const notesAsk = document.getElementById('lbn-ask');
+  const notesIntent = document.getElementById('lbn-intent');
+  const notesWrite = document.getElementById('lbn-write');
+  const notesPoints = document.getElementById('lbn-points');
+  const notesMarks = document.getElementById('lbn-marks');
+  const noteBoxes = notesBtn && notesPanel ? noteBoxLayer(lbImg, lb) : null;
+  let notesReady = null;            // from the Mac's first answer: can it write a note at all
+  let notesOff = false;             // this server has no notes route: stop asking
+  const notesStored = new Map();    // photo id → its stored note, or null
+  const notesWriting = new Set();   // photo ids with a Write in flight
+  let notesLit = null;
+  // The intent field belongs to one photo; what Luca types there isn't
+  // replaced by an answer that arrives for that same photo.
+  let notesIntentFor = null;
+  let notesIntentTyped = false;
+  function notesSetIntent(id, value) {
+    if (notesIntentFor === id && notesIntentTyped) return;
+    notesIntentFor = id;
+    notesIntentTyped = false;
+    notesIntent.value = value;
+  }
+  /** The reason in an error body: the notes routes' { error: { message } } or
+   *  the middleware's { error: "…" }. */
+  const notesReason = (d) => {
+    const m = typeof d?.error === 'string' ? d.error : d?.error?.message;
+    return typeof m === 'string' ? m : '';
+  };
+  const openPhotoId = () => frames[lbIndex]?.dataset.id || '';
+  function notesOpen() { return Boolean(notesPanel && !notesPanel.hidden); }
+
+  async function notesFetch(id) {
+    if (notesStored.has(id)) return notesStored.get(id);
+    const res = await fetch(`/api/notes/words?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+    if (!(res.headers.get('content-type') || '').includes('json')) { notesOff = true; throw new Error(`no notes route (${res.status})`); }
+    const d = await res.json();
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(d)}`);
+    if (typeof d.ready === 'boolean') notesReady = d.ready;
+    const stored = d.note && d.note.note ? d.note : null;
+    notesStored.set(id, stored);
+    return stored;
+  }
+  // Called for every photo shown. The first answer says whether Notes can
+  // write; after that the Mac is asked again only for a photo whose button
+  // depends on a stored note, or when the panel is open.
+  function notesShow(f) {
+    if (!notesBtn || !notesPanel) return;
+    const id = f.dataset.id;
+    notesLight(null);
+    notesSyncWrite();
+    if (notesStored.has(id)) { notesApply(id); return; }
+    if (notesOpen()) { notesSetIntent(id, ''); notesRender(null); notesSyncWrite(); }
+    if (notesOff || (notesReady && !notesOpen())) return;
+    notesFetch(id).then(() => notesApply(id), (err) => console.warn('[notes]', err));
+  }
+  function notesApply(id) {
+    if (openPhotoId() !== id) return;
+    const stored = notesStored.get(id) || null;
+    notesBtn.hidden = !(notesReady || stored || notesOpen());
+    if (!notesOpen()) return;
+    notesSetIntent(id, stored?.intent || '');
+    notesRender(stored);
+    notesSyncWrite();
+  }
+  function notesSyncWrite() {
+    if (!notesWrite) return;
+    const busy = notesWriting.has(openPhotoId());
+    notesWrite.textContent = busy ? 'Writing…' : 'Write';
+    notesWrite.disabled = busy || !notesIntent.value.trim();
+  }
+  function notesSyncMarks(stored) {
+    for (const b of notesMarks.querySelectorAll('.lbn-mark')) {
+      b.setAttribute('aria-pressed', String(Boolean(stored) && stored.mark === b.dataset.mark));
+    }
+  }
+  /** Every point dropped by the checks and no "nothing stands out": no note. */
+  const notesEmpty = (n) => !n || (!n.priority?.what && !n.nothing_stands_out && !n.works?.what && !(Array.isArray(n.others) && n.others.some((o) => o?.what)));
+  // The note's words. Model text is untrusted: it only ever goes in as text.
+  function notesRender(stored) {
+    const make = (tag, cls, text) => {
+      const e = document.createElement(tag);
+      e.className = cls;
+      if (text != null) e.textContent = String(text);
+      return e;
+    };
+    const labelled = (cls, label, text) => {
+      const p = make('p', cls);
+      p.append(make('span', 'lbn-k', label), document.createTextNode(` ${text}`));
+      return p;
+    };
+    const rows = [], boxes = [];
+    let k = 0;
+    const point = (kind, p, label) => {
+      k += 1;
+      boxes.push({ n: k, box: p.box, kind });
+      const li = make('li', 'lbn-point');
+      li.dataset.n = String(k);
+      li.dataset.kind = kind;
+      li.tabIndex = 0;
+      const body = make('div', 'lbn-body');
+      body.append(label ? labelled('lbn-what', label, p.what) : make('p', 'lbn-what', p.what));
+      li.append(make('span', 'lbn-n', k), body);
+      rows.push(li);
+      return body;
+    };
+    const n = stored?.note;
+    if (n) {
+      if (n.priority?.what) {
+        const body = point('priority', n.priority);
+        if (n.priority.why) body.append(make('p', 'lbn-why', n.priority.why));
+        if (n.priority.edit) body.append(labelled('lbn-line', 'Edit', n.priority.edit));
+        if (n.priority.next_time) body.append(labelled('lbn-line', 'Next time', n.priority.next_time));
+      } else if (n.nothing_stands_out) {
+        const li = make('li', 'lbn-none');
+        li.append(make('p', 'lbn-what', 'Nothing stands out'));
+        rows.push(li);
+      }
+      if (n.works?.what) point('works', n.works, 'Works');
+      for (const o of (Array.isArray(n.others) ? n.others : []).slice(0, 2)) if (o?.what) point('other', o);
+    }
+    notesLit = null;
+    notesPoints.replaceChildren(...rows);
+    notesPoints.hidden = rows.length === 0;
+    notesMarks.hidden = !stored || rows.length === 0;
+    notesSyncMarks(stored);
+    noteBoxes.draw(boxes);
+    requestAnimationFrame(notesSide);
+  }
+  // Desk and iPad: the panel sits bottom left, or bottom right when the boxes
+  // under it there cover less (the priority counts three times).
+  function notesSide() {
+    if (!notesOpen()) return;
+    notesPanel.classList.remove('right');
+    if (matchMedia('(max-width: 640px)').matches) return;
+    const r = notesPanel.getBoundingClientRect();
+    const mirror = { left: innerWidth - r.right, right: innerWidth - r.left, top: r.top, bottom: r.bottom };
+    const cover = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    let here = 0, there = 0;
+    for (const el of lb.querySelectorAll('.lb-boxes .lb-box')) {
+      const b = el.getBoundingClientRect();
+      const w = el.dataset.kind === 'priority' ? 3 : 1;
+      here += w * cover(r, b);
+      there += w * cover(mirror, b);
+    }
+    if (there < here) notesPanel.classList.add('right');
+  }
+  addEventListener('resize', () => requestAnimationFrame(notesSide));
+  function setNotesOpen(open) {
+    if (!notesPanel || open === notesOpen()) return;
+    notesPanel.hidden = !open;
+    notesBtn.setAttribute('aria-pressed', String(open));
+    noteBoxes.show(open);
+    if (!open) { notesLight(null); return; }
+    stopSlideshow();
+    if (lb.classList.contains('details')) toggleDetails();
+    const id = openPhotoId();
+    if (!id) return;
+    if (notesStored.has(id)) notesApply(id);
+    else {
+      notesSetIntent(id, ''); notesRender(null); notesSyncWrite();
+      notesFetch(id).then(() => notesApply(id), (err) => console.warn('[notes]', err));
+    }
+    // With a keyboard and pointer the intent is ready to type; on touch the
+    // keyboard waits for a tap, so a stored note can be read first.
+    if (matchMedia('(pointer: fine)').matches) notesIntent.focus({ preventScroll: true });
+  }
+  function notesLight(n) {
+    if (n === notesLit) return;
+    notesLit = n;
+    noteBoxes?.highlight(n);
+    for (const li of notesPoints?.querySelectorAll('.lbn-point') || []) li.classList.toggle('on', n != null && Number(li.dataset.n) === n);
+  }
+  const pointNumber = (t) => {
+    const li = t?.closest?.('.lbn-point');
+    return li ? Number(li.dataset.n) : null;
+  };
+  notesBtn?.addEventListener('click', () => setNotesOpen(!notesOpen()));
+  notesIntent?.addEventListener('input', () => { notesIntentFor = openPhotoId(); notesIntentTyped = true; notesSyncWrite(); });
+  // The page's own keys skip text fields, so Escape is caught here.
+  notesIntent?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation();
+    setNotesOpen(false);
+    notesBtn.focus({ preventScroll: true });
+  });
+  notesAsk?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = openPhotoId();
+    const intent = notesIntent.value.trim();
+    if (!id || !intent || notesWriting.has(id)) return;
+    notesWriting.add(id);
+    notesSyncWrite();
+    try {
+      const res = await fetch('/api/notes/words', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, intent }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.note?.note) {
+        console.error('[notes] not written', res.status, d);
+        showReasonNote('Notes not written', notesReason(d));
+        return;
+      }
+      notesStored.set(id, d.note);
+      notesApply(id);
+      if (notesEmpty(d.note.note)) showReasonNote('Notes not written', 'Nothing held up to the checks');
+    } catch (err) {
+      console.error('[notes] not written', err);
+      showReasonNote('Notes not written', 'No connection');
+    } finally {
+      notesWriting.delete(id);
+      notesSyncWrite();
+    }
+  });
+  // Useful / Not useful: a tap on the pressed one takes the mark back.
+  notesMarks?.addEventListener('click', async (e) => {
+    const b = e.target.closest('.lbn-mark');
+    const id = openPhotoId();
+    const stored = id ? notesStored.get(id) : null;
+    if (!b || !stored) return;
+    const before = stored.mark ?? null;
+    const mark = before === b.dataset.mark ? null : b.dataset.mark;
+    stored.mark = mark;
+    notesSyncMarks(stored);
+    try {
+      const res = await fetch('/api/notes/mark', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, key: stored.key, mark }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.ok) throw Object.assign(new Error(`HTTP ${res.status}: ${JSON.stringify(d)}`), { reason: notesReason(d) });
+    } catch (err) {
+      console.error('[notes] mark not kept', err);
+      stored.mark = before;
+      if (openPhotoId() === id) notesSyncMarks(stored);
+      showReasonNote('Mark not saved', err?.reason || 'No connection');
+    }
+  });
+  // A line and its box light together, from either side.
+  notesPoints?.addEventListener('pointerover', (e) => notesLight(pointNumber(e.target)));
+  notesPoints?.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') notesLight(pointNumber(document.activeElement)); });
+  notesPoints?.addEventListener('focusin', (e) => notesLight(pointNumber(e.target)));
+  notesPoints?.addEventListener('focusout', (e) => { if (!notesPoints.contains(e.relatedTarget)) notesLight(null); });
+  lb.addEventListener('pointermove', (e) => {
+    if (!noteBoxes || !notesOpen() || e.pointerType !== 'mouse' || e.target.closest?.('#lb-notes')) return;
+    notesLight(noteBoxes.hit(e.clientX, e.clientY));
+  });
 
   // --- Deep-linkable URL: #photo=<id> when the viewer is open --------------
   let lbPushed = false;

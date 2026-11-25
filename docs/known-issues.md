@@ -3,6 +3,8 @@
 Most of these fail silently: a wrong picture, no error. Each says how to check.
 
 ## Seeing the page
+- The app is dark only (`color-scheme: dark`). One theme per shot; "light and dark" in
+  an issue has nothing to check.
 - The dev server on :4321 is HTTPS only. `http://localhost:4321` returns nothing and a
   headless shot comes out white. Nothing auto-starts it: check `lsof -iTCP:4321` first.
 - Verify UI with headless Playwright (`ignoreHTTPSErrors: true`, wait ~1.2s, scroll with
@@ -78,6 +80,11 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   with `npx astro dev --force` after.
   `npx tsc --noEmit` and `npx tsx scripts/check-astro-scripts.ts` are safe with the
   server up; only `astro sync` breaks it.
+- A worktree's `node_modules` is the main checkout's, so its dev server rewrites the
+  shared `.vite/deps` too. Give it its own:
+  `ASTRO_CACHE_DIR=node_modules/.cache/vite-<name> npx astro dev --port <n>`.
+- In a worktree, build as CI does: `CI=true npm run build`. The broken-images guard
+  expects `public/img`, which a worktree doesn't have.
 - Run long Playwright suites under `caffeinate -i`. The Mac sleeps while a turn waits,
   a test stalls ~16 min and then fails mid fly-in (the dev log shows a 17-minute request).
 - Editing a source file while an e2e runs on the shared :4400 server hot-reloads the
@@ -92,8 +99,10 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - Code passed to `page.evaluate` from a tsx-run test can't define named inner
   functions (tsx adds a `__name` helper the page lacks). Pass a string instead.
 - Six parallel workers on the main model ran out the 5-hour usage limit twice, with
-  nothing saved. For a sweep, run scripted probes from the main session, or at most two
-  workers that each write findings to a file as they go.
+  nothing saved; two builders and a reviewer reached it on 2026-11-25. For a sweep, run
+  scripted probes from the main session, or at most two workers that each write
+  findings to a file as they go. Start the reviewer before a second builder, or review
+  a small diff in the main session.
 
 - `npm run check`'s script typecheck (`scripts/check-astro-scripts.ts`) reads only
   `src/pages`: `<script>` blocks in `src/components` (Feedback, Updates, TabBar) go
@@ -160,6 +169,16 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   of its listed risky substrings, even in docs or comments. Read its `substrings` lists
   before writing about them. Build DOM with `createElement`; spawn with `execFile`.
 
+- Astro inlines a `.env` secret into the build when a file names that variable and also
+  holds `import.meta.env` without a `.` straight after it (`import.meta.env?.DEV`, or
+  even in a comment). `src/lib/notes/key.ts` reads only `import.meta.env.DEV`, inside a
+  try (plain Node has no `import.meta.env`). Check a build with the key in `.env`:
+  `grep -rlF "$KEY" dist` must find nothing.
+- The dev server reads `GEMINI_API_KEY` from `.env` once. After adding it, restart.
+- Don't put a secret in the server's `process.env`: Match's `sips` and `dcraw_emu` run by
+  `execFile` with no `env`, so they inherit it and `ps eww` shows it. The Mac app's notes
+  key sits in a `Symbol.for('colour-archive.notes-key')` slot (`desktop/server.mjs`).
+
 ## MapLibre / WebGL
 - Add sources and layers on `style.load`, not `load`.
 - `setPaintProperty` on a missing layer fires `error` instead of throwing: check
@@ -213,6 +232,9 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   `stopImmediatePropagation`.
 
 ## Publishing
+- A public build still writes `dist/server`; only `dist/client` is published. Check
+  Mac-only markup there with `grep -o 'id="x"' dist/client/index.html | wc -l`: the page
+  is one line, so counting lines finds script references too.
 - Netlify's upload refused the two Scout functions from Aug 2026, so there are none now:
   the published Scout reaches Nominatim through `public/_redirects` (`/nominatim/*`,
   200 proxy) and parses in the page. Don't add a functions directory; every
@@ -239,6 +261,10 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - codesign finds an identity only when its keychain is on the user search list, even
   with `--keychain`. A self-signed one shows `CSSMERR_TP_NOT_TRUSTED` and still signs.
   `-R` takes the requirement as a separate `=…` argument; joined (`-R==…`) is a syntax error.
+- While a release goes out without the release certificate (ad hoc), macOS may ask
+  about the Keychain at launch after an update: the app decrypts the notes key when its
+  server starts. Denied, `ready` is false and the Notes button stays hidden, though
+  "Remove Key" still shows (the file exists).
 - GitHub refuses retired runner images (`macos-14` failed the first release). The
   release job runs on `macos-latest`.
 - The round trip's scratch copies show in the Dock (hidden or not), and a Dock Quit

@@ -99,9 +99,16 @@ const macApp = {
     }),
 };
 globalThis[Symbol.for('colour-archive.app')] = macApp;
+// Notes in words' Gemini key, from main.cjs (notes-key.cjs) after this process
+// starts and whenever it's saved or removed. Held in this process's memory for
+// src/lib/notes/key.ts to read; never logged, never written anywhere. Not in
+// process.env: sips and dcraw_emu (Match's decode) inherit the environment,
+// and `ps eww` would show it on them.
+const NOTES_KEY_SLOT = Symbol.for('colour-archive.notes-key');
 process.parentPort?.on('message', (e) => {
   if (e?.data?.type === 'app-update') macApp.status = e.data.status ?? null;
   else if (e?.data?.type === 'capture-result') captures.get(e.data.id)?.(e.data.data);
+  else if (e?.data?.type === 'notes-key') globalThis[NOTES_KEY_SLOT] = typeof e.data.key === 'string' ? e.data.key : '';
 });
 
 const LAN_PORT = Number(process.env.LAN_PORT) || 0;

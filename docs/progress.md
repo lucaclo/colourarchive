@@ -8,6 +8,11 @@
   network-dependent); worth a look.
 
 ## Next
+- Notes in words: PR #186 (`camera-words-try`). To use it: merge, the new app release,
+  then "Notes in Words…" in the app menu and paste the Gemini key. Not run live: the
+  Electron menu, key window and Keychain hand-off (would touch the real profile). #179
+  adds its measured boxes with `noteBoxLayer(...).draw()` in `index.astro`. #180 has a
+  status line and a comment with what's still open.
 - Sheet fixes (branch `fix/feedback-cursor`, not committed): when merged, close
   feedback `2026-11-25-1213-6049` with `npm run feedback -- done …`, and release the
   Mac app.
@@ -30,6 +35,17 @@
 ## Log
 One line per session, newest first: date · branch · what changed · what's open.
 
+- 2026-11-25 · camera-words-try · Notes in words ahead of the camera import (Luca's
+  call): Notes in the Archive's large photo view, an intent, one note from Gemini (free
+  tier) as numbered boxes on the photo and words in a panel, Useful/Not useful marks,
+  kept in `.archive/notes-words.json`; "Notes in Words…" key window in the Mac app
+  (safeStorage, handed to the server by message). On the phone the photo lifts above the
+  sheet. Checked: `npm test` 2316/2316, check, lint, CI-style build; e2e 3 runs in a row;
+  one live note on a made-up image (boxes exact, cached repeat 18 ms, cross-origin 403,
+  key in no file, log or build); static build has no Notes. Reviewer pass: the key had
+  sat in the server's env (inherited by sips/dcraw_emu), moved to a global slot; plus
+  intent kept while writing, failed marks and emptied notes get the quiet note, Details
+  and Notes one at a time, the desk panel moves right off a box. e2e 10/10 ×3.
 - 2026-11-25 · fix/feedback-cursor · First in-app feedback: in the Feedback and Updates
   sheets the pointer vanished (ring under the top layer, then drawn ~400 px off inside
   the sheet) and a text selection let go past the edge closed the sheet. Now the system

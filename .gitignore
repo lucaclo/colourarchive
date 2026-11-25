@@ -10,6 +10,8 @@ book.json.bak
 /zine.json
 /zine.json.bak
 /zine/
+# Notes in words and their marks (src/lib/paths.ts NOTES_WORDS_PATH) — local only
+/notes-words.json
 # Feedback sent from the app (src/lib/paths.ts FEEDBACK_DIR) — local only
 /feedback/
 # A save's temp file (write, then rename), left only if it crashed between

@@ -9,8 +9,9 @@
 // Run it from the repository with `npm run app` (after `npm run app:build`);
 // `npm run app:dist` packages it into a .dmg, and the .zip updater.cjs installs.
 
-const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, safeStorage, shell, utilityProcess } = require('electron');
 const { ensureCerts, localHostName } = require('./certs.cjs');
+const { createNotesKey } = require('./notes-key.cjs');
 const { createUpdater, logUpdate, menuItems: updateMenuItems } = require('./updater.cjs');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
@@ -55,6 +56,9 @@ const LOG_PATH = path.join(LOG_DIR, 'server.log');
 const DEFAULT_DATA = process.env.COLOUR_ARCHIVE_SUGGEST || path.join(app.getPath('pictures'), 'Colour Archive');
 const CERT_DIR = path.join(app.getPath('userData'), 'certs');
 const REMOTE_FILE = path.join(app.getPath('userData'), 'remote.json');
+// Notes in words' Gemini key, encrypted (notes-key.cjs).
+const notesKey = createNotesKey({ file: path.join(app.getPath('userData'), 'notes-key.bin'), safeStorage, fs });
+const GET_KEY_PAGE = 'https://aistudio.google.com/apikey';
 
 let startWindow = null;
 let mainWindow = null;
@@ -71,6 +75,7 @@ let lanState = null;
 // The same for the from-anywhere side.
 let remoteState = null;
 let passwordWindow = null;
+let notesKeyWindow = null;
 // How busy the app is, for a quiet update (#168): when a window was last in
 // front, and what the server last said (requests in flight, background jobs,
 // the last request from another device). The clock starts at launch: a window
@@ -294,6 +299,8 @@ async function openArchive(dataDir) {
   server = child;
   child.stdout?.pipe(log);
   child.stderr?.pipe(log);
+  // Queued until server.mjs listens for it.
+  tellNotesKey();
 
   let settled = false;
   const fail = (detail) => {
@@ -643,6 +650,73 @@ async function signOutPhones() {
   dialog.showMessageBox(mainWindow ?? undefined, { type: 'info', message: 'Every phone is signed out', detail: 'They need the password again to open the archive.' });
 }
 
+// --- Notes in words: the Gemini key ------------------------------------
+//
+// Kept encrypted by notes-key.cjs and given to the running server by message
+// (server.mjs puts it in that process's memory), so a saved key works without a
+// restart and is never in the server's environment, a file or the log.
+
+function tellNotesKey() {
+  server?.postMessage({ type: 'notes-key', key: notesKey.read() });
+}
+
+function closeNotesKey() {
+  if (notesKeyWindow && !notesKeyWindow.isDestroyed()) notesKeyWindow.destroy();
+  notesKeyWindow = null;
+}
+
+const fromNotesKey = (e) => Boolean(notesKeyWindow && !notesKeyWindow.isDestroyed() && e.sender === notesKeyWindow.webContents);
+
+ipcMain.handle('notes-key-has', (e) => fromNotesKey(e) && notesKey.has());
+ipcMain.handle('notes-key-save', (e, key) => {
+  if (!fromNotesKey(e)) return null;
+  let problem;
+  try {
+    problem = notesKey.save(key);
+  } catch (err) {
+    console.error('[notes-key] not saved', err?.code ?? err?.message);
+    problem = 'Key not saved';
+  }
+  if (problem) return problem;
+  tellNotesKey();
+  closeNotesKey();
+  return null;
+});
+ipcMain.handle('notes-key-remove', (e) => {
+  if (!fromNotesKey(e)) return;
+  notesKey.remove();
+  tellNotesKey();
+  closeNotesKey();
+});
+ipcMain.handle('notes-key-cancel', (e) => {
+  if (fromNotesKey(e)) closeNotesKey();
+});
+ipcMain.handle('notes-key-page', (e) => {
+  if (fromNotesKey(e)) shell.openExternal(GET_KEY_PAGE);
+});
+
+function openNotesKey() {
+  if (notesKeyWindow && !notesKeyWindow.isDestroyed()) {
+    notesKeyWindow.focus();
+    return;
+  }
+  notesKeyWindow = new BrowserWindow({
+    width: 460, height: 320, resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    title: 'Notes in words', backgroundColor: '#100f0e', show: false,
+    parent: mainWindow ?? undefined, modal: Boolean(mainWindow),
+    webPreferences: { preload: path.join(__dirname, 'notes-key-preload.cjs'), contextIsolation: true, sandbox: true },
+  });
+  const wc = notesKeyWindow.webContents;
+  // Its one link opens in the browser through notes-key-page; nothing loads in here.
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  wc.on('will-navigate', (event) => event.preventDefault());
+  notesKeyWindow.loadFile(path.join(__dirname, 'notes-key.html'));
+  notesKeyWindow.once('ready-to-show', () => notesKeyWindow?.show());
+  notesKeyWindow.on('closed', () => {
+    notesKeyWindow = null;
+  });
+}
+
 // "Check for Updates…": the Updates panel, in the archive window (#updates
 // opens it; the panel checks). Before the archive has opened there is no
 // panel to show, so it checks, and the menu's status line says the result.
@@ -712,6 +786,8 @@ function buildMenu() {
         },
         { label: 'Change Phone Password…', enabled: remoteOn, click: () => changeRemotePassword() },
         { label: 'Sign Out All Phones', enabled: remoteOn, click: () => signOutPhones() },
+        { type: 'separator' },
+        { label: 'Notes in Words…', click: () => openNotesKey() },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },

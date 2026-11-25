@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>Notes in words</title>
+<style>
+  @font-face {
+    font-family: 'Fraunces';
+    src: url('../public/fonts/fraunces-normal-500-latin.woff2') format('woff2');
+    font-weight: 500;
+  }
+  :root {
+    --bg: #100f0e; --fg: #ece9e3; --secondary: #a8a49d; --line: #2a2826;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-ui); padding: 32px 40px; }
+  h1 { font: 500 24px/1.15 'Fraunces', Georgia, serif; margin: 0 0 8px; }
+  label { display: block; font-size: 13px; color: var(--secondary); margin: 12px 0 5px; }
+  input { width: 100%; font: 15px var(--font-ui); color: var(--fg); background: #1a1917; border: 1px solid var(--line);
+          border-radius: 8px; padding: 9px 12px; }
+  input:focus-visible { outline: 2px solid #e0603a; outline-offset: 1px; }
+  a { color: var(--secondary); font-size: 13px; }
+  a:focus-visible { outline: 2px solid #e0603a; outline-offset: 2px; border-radius: 2px; }
+  .get { margin: 8px 0 0; }
+  .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  .actions .remove { margin-right: auto; }
+  button { font: 500 14px/1 var(--font-ui); border-radius: 8px; padding: 11px 16px; cursor: pointer; border: 1px solid var(--line);
+           background: transparent; color: var(--fg); }
+  button[type='submit'] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  button:focus-visible { outline: 2px solid #e0603a; outline-offset: 2px; }
+  .note { min-height: 1.4em; margin: 12px 0 0; color: #e8a07a; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Notes in words</h1>
+<form id="form">
+  <label for="key">Key</label>
+  <input id="key" type="password" autocomplete="off" spellcheck="false" required autofocus>
+  <p class="get"><a id="get" href="https://aistudio.google.com/apikey">Get a key</a></p>
+  <p class="note" id="note" role="status"></p>
+  <div class="actions" id="actions">
+    <button type="button" id="cancel">Cancel</button>
+    <button type="submit">Save</button>
+  </div>
+</form>
+<script>
+  const api = window.notesKey;
+  const note = document.getElementById('note');
+  document.getElementById('get').addEventListener('click', (e) => {
+    e.preventDefault();
+    api.getKeyPage();
+  });
+  document.getElementById('cancel').addEventListener('click', () => api.cancel());
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const problem = await api.save(document.getElementById('key').value).catch(() => 'Key not saved');
+    if (problem) note.textContent = problem;
+  });
+  api.hasKey().then((saved) => {
+    if (!saved) return;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove';
+    remove.textContent = 'Remove Key';
+    remove.addEventListener('click', () => api.remove());
+    const actions = document.getElementById('actions');
+    actions.insertBefore(remove, actions.firstChild);
+  });
+</script>
+</body>
+</html>
