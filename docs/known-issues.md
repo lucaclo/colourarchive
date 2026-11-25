@@ -41,7 +41,12 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
 - The Book size select writes `src/data/book.json`; never change it against the dev
   server. `tests/features.e2e.ts` mocks saves.
 - After `npm install`, restart the dev server: stale Vite deps give 504s and scripts that
-  silently never run.
+  silently never run. The same after editing `Layout.astro` or `global.css` mid-session:
+  the hot reload left Scout no longer writing its state into the address, and
+  `feedback.e2e.ts` failed on `%2C` until a restart (passes on a fresh server).
+- A `position: fixed` child of an open `<dialog>` is placed against the dialog, not the
+  window: `popIn` runs with `fill: both`, so `scale`/`translate` stay applied. The
+  dialog's `overflow: auto` also clips it. Don't put floating things inside a sheet.
 - macOS has no `timeout` command; a check wrapped in it silently never runs.
 - `/api/scout/places` 500s in dev without Full Disk Access (can't copy Photos.sqlite).
   Not caused by UI changes.

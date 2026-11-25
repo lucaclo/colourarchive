@@ -292,7 +292,7 @@ const accent = manifest.chapters[0]
   <!-- Survey: a burst side by side before keeping one (Narrative's Survey
        Mode, Lightroom's Survey view). Hold a photo to look closer: every
        photo zooms to the same spot together. -->
-  <dialog class="survey" id="book-survey" aria-labelledby="survey-title">
+  <dialog class="survey" id="book-survey" aria-labelledby="survey-title" data-backdrop-close>
     <header class="survey-head">
       <h2 id="survey-title" class="survey-title">Similar shots</h2>
       <span class="survey-hint">Hold to look closer</span>
@@ -708,7 +708,7 @@ const accent = manifest.chapters[0]
   const survey = document.getElementById('book-survey');
   const surveyRow = document.getElementById('survey-row');
   document.getElementById('survey-close')?.addEventListener('click', () => survey.close());
-  survey?.addEventListener('click', (e) => { if (e.target === survey) survey.close(); });
+  // A press on the backdrop closes it: data-backdrop-close (lib/ui/backdrop.ts).
 
   function openSurvey(groupKey, focusId) {
     const cells = [...document.querySelectorAll(`.book-cell[data-dup-group="${CSS.escape(groupKey)}"]`)];

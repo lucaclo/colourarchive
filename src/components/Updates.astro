@@ -21,7 +21,7 @@
 ---
 
 <button type="button" class="updates-cmdk" hidden data-updates-open data-cmdk="Updates" data-cmdk-always data-cmdk-keywords="update, version, reload">Updates</button>
-<dialog class="updates" id="updates" aria-labelledby="updates-title" data-modal hidden tabindex="-1">
+<dialog class="updates" id="updates" aria-labelledby="updates-title" data-modal data-backdrop-close hidden tabindex="-1">
   <div class="updates-in">
     <header class="updates-head">
       <h2 class="updates-title" id="updates-title">Updates</h2>
@@ -281,10 +281,7 @@
     clearTimeout(timer);
     dlg.hidden = true;
   });
-  // The dialog has no padding of its own, so a click on it is the backdrop.
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
-  });
+  // A press on the backdrop closes it: data-backdrop-close (lib/ui/backdrop.ts).
   document.getElementById('updates-close')?.addEventListener('click', () => dlg.close());
   document.addEventListener('click', (e) => {
     if ((e.target as Element | null)?.closest?.('[data-updates-open]')) void open();

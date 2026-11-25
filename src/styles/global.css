@@ -729,13 +729,18 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 /* On the pages that opt in (see `ringPointer` in Layout.astro) the ring *is*
    the pointer: the system arrow, hand and zoom glass go, on mouse and
    trackpad only. Text fields keep their I-beam — a caret you cannot see is
-   a field you cannot place the cursor in. */
+   a field you cannot place the cursor in.
+   While a modal sheet is open the system pointer comes back and the ring
+   goes. The ring can't follow into the sheet: the sheet sits in the top layer,
+   above any z-index, and its popIn (fill: both) makes it the frame for fixed
+   children, so a ring inside it drew ~400 px off and was cut at its edges. */
 @media (hover: hover) and (pointer: fine) {
-  body.ring-pointer,
-  body.ring-pointer *:not(input[type='text'], input[type='search'], input[type='url'], input[type='email'], input[type='number'], input:not([type]), textarea, [contenteditable='true']) {
+  body.ring-pointer:not(:has(dialog:modal)),
+  body.ring-pointer:not(:has(dialog:modal)) *:not(input[type='text'], input[type='search'], input[type='url'], input[type='email'], input[type='number'], input:not([type]), textarea, [contenteditable='true']) {
     cursor: none !important;
   }
 }
+body:has(dialog:modal) .cursor-ring { display: none; }
 @media (prefers-reduced-motion: reduce) { .cursor-ring { transition: opacity 150ms linear; } }
 
 /* The bar itself is clear — only a soft scrim for the status area — and the
