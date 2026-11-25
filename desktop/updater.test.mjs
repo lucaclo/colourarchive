@@ -329,8 +329,9 @@ test('a quiet relaunch opens in the background and carries the page to reopen', 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'install-g-'));
   const bin = path.join(dir, 'bin');
   fs.mkdirSync(bin);
-  // A stand-in `open` that writes down how it was called.
-  fs.writeFileSync(path.join(bin, 'open'), `#!/bin/sh\necho "$@" > "${dir}/open-args"\n`, { mode: 0o755 });
+  // A stand-in `open` that writes down how it was called. printf, not echo:
+  // Linux's /bin/sh (dash) takes a leading -n as echo's own flag and drops it.
+  fs.writeFileSync(path.join(bin, 'open'), `#!/bin/sh\nprintf '%s\\n' "$*" > "${dir}/open-args"\n`, { mode: 0o755 });
   const apps = path.join(dir, 'apps');
   fs.mkdirSync(path.join(apps, 'Colour Archive.app'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'staged', 'Colour Archive.app'), { recursive: true });
