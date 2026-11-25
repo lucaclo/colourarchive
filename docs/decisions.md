@@ -4,6 +4,19 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-24 · The Mac app also installs a downloaded update by itself at a quiet moment
+  (#168; re-opens the 2026-11-17 line, which swapped only on quit or Restart to Update):
+  10 minutes with no window in front, no request in flight (an upload, a book PDF), no
+  scan or other busy job, and nothing from the phone. It reopens the page that was open,
+  without taking focus, or comes back hidden. An update already downloaded goes in at
+  launch, before the server starts. One try per version; every swap is logged in
+  `~/Library/Logs/Colour Archive/update.log`.
+- 2026-11-23 · Mac app releases are self-signed with one stable certificate, "Colour
+  Archive Release" (20 years; kept as two repository secrets, never in the repo), so
+  every build has the same designated requirement and macOS keeps its permissions
+  across updates. The updater refuses a download that doesn't satisfy the running
+  app's own requirement; a running ad hoc app skips that check, so the first signed
+  release installs. Still no Developer ID (#167).
 - 2026-11-18 · The published site keeps itself current on a phone: when a page comes back
   to the screen and `/publish.json` names a newer build, it reloads. The service worker
   never caches `/publish.json`; bump its `VERSION` to make every device drop its saved

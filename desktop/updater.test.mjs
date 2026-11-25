@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import updater from './updater.cjs';
 
-const { FEED, INSTALL_SCRIPT, compareVersions, installProblem, menuItems, parseFeed } = updater;
+const { FEED, INSTALL_SCRIPT, compareVersions, installProblem, menuItems, parseFeed, verifiedApp } = updater;
 
 // What electron-builder writes for a mac build with a zip and a dmg target.
 const LATEST_MAC = `version: 0.2.7
@@ -105,6 +107,83 @@ test('the menu shows one status line and at most one action', () => {
   assert.deepEqual(labels({ state: 'source', current: '0.2.0' }), ['Version 0.2.0 · From Source']);
 });
 
+// --- The signature pin, with plutil and codesign stood in for ----------------
+
+const RUNNING = '/Applications/Colour Archive.app';
+const REQ_OURS = 'identifier "com.lucaclo.colourarchive" and certificate leaf = H"cd771820c4db6212b12460d46e2cf41ce7a80ed7"';
+const REQ_OTHER = 'identifier "com.lucaclo.colourarchive" and certificate leaf = H"89cf361fd4b0d27f57899b6268da71e1653fbcee"';
+
+/**
+ * A staged 0.2.2 and stand-ins for the tools: `running` is what `codesign -d
+ * -r-` prints for the running app, `signedWith` the requirement the staged app
+ * satisfies, `intact` whether its signature holds at all.
+ */
+function staging({ running, signedWith, intact = true }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ca-upd-pin-'));
+  const app = path.join(dir, 'Colour Archive.app');
+  fs.mkdirSync(app);
+  const calls = [];
+  const cmd = async (file, args) => {
+    calls.push([path.basename(file), ...args]);
+    if (file === '/usr/bin/plutil') return '0.2.2';
+    if (args[0] === '-d') return running;
+    if (!intact) throw new Error('codesign: a sealed resource is missing or invalid');
+    const r = args.indexOf('-R');
+    if (r !== -1 && args[r + 1] !== `=${signedWith}`) {
+      throw new Error('codesign: test-requirement: code failed to satisfy specified code requirement(s)');
+    }
+    return '';
+  };
+  const codesign = () => calls.filter((c) => c[0] === 'codesign');
+  return { dir, app, cmd, codesign, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('a download signed like the running app passes, checked against the requirement codesign -d -r- reads', async () => {
+  const s = staging({ running: `designated => ${REQ_OURS}`, signedWith: REQ_OURS });
+  try {
+    assert.equal(await verifiedApp(s.dir, '0.2.2', RUNNING, s.cmd), s.app);
+    assert.deepEqual(s.codesign(), [
+      ['codesign', '--verify', '--deep', '--strict', s.app],
+      ['codesign', '-d', '-r-', RUNNING],
+      ['codesign', '--verify', '--deep', '--strict', '-R', `=${REQ_OURS}`, s.app],
+    ]);
+  } finally {
+    s.done();
+  }
+});
+
+test('a download signed by another identity is refused', async () => {
+  const s = staging({ running: `designated => ${REQ_OURS}`, signedWith: REQ_OTHER });
+  try {
+    await assert.rejects(verifiedApp(s.dir, '0.2.2', RUNNING, s.cmd), { message: 'The download isn’t signed by Colour Archive.' });
+  } finally {
+    s.done();
+  }
+});
+
+test('a running ad hoc app skips the pin, so the first signed release installs', async () => {
+  const s = staging({ running: '# designated => cdhash H"214edf773cd5b0cea9caf20f3697a69358a53495"', signedWith: REQ_OURS });
+  try {
+    assert.equal(await verifiedApp(s.dir, '0.2.2', RUNNING, s.cmd), s.app);
+    assert.deepEqual(s.codesign(), [
+      ['codesign', '--verify', '--deep', '--strict', s.app],
+      ['codesign', '-d', '-r-', RUNNING],
+    ]);
+  } finally {
+    s.done();
+  }
+});
+
+test('a broken signature fails as itself, before the pin', async () => {
+  const s = staging({ running: `designated => ${REQ_OURS}`, signedWith: REQ_OURS, intact: false });
+  try {
+    await assert.rejects(verifiedApp(s.dir, '0.2.2', RUNNING, s.cmd), /sealed resource/);
+    assert.equal(s.codesign().length, 1);
+  } finally {
+    s.done();
+  }
+});
+
 // --- The install script, run for real in a temp folder ---------------------
 
 function fakeApp(file, marker) {
@@ -182,6 +261,120 @@ test('the install script keeps the old app when the new one is missing', async (
     assert.deepEqual(leftovers(apps), []);
     assert.match(log(dir), /kept the old app/);
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- Quiet updates (#168) ------------------------------------------------------
+
+const { quietDecision, quietIn, newestStaged, triedBefore } = updater;
+const MIN = 60_000;
+const idle = { frontNow: false, lastFrontAt: null, inflight: 0, busy: 0, lastDeviceAt: null };
+
+/**
+ * Minute by minute from t = 0, with `signalsAt(minute)`, the way the updater's
+ * timer looks: the minutes it would install at (it stops looking after one).
+ */
+function installsOver(minutes, signalsAt) {
+  const at = [];
+  let installing = false;
+  for (let m = 0; m <= minutes; m++) {
+    const d = quietDecision({ ready: true, installing, tried: false, signals: signalsAt(m), now: m * MIN });
+    if (d === 'install') { at.push(m); installing = true; }
+  }
+  return at;
+}
+
+test('ready, ten minutes with no window in front, nothing in flight, no device: installs once', () => {
+  assert.deepEqual(installsOver(30, () => ({ ...idle, lastFrontAt: -20 * MIN })), [0]);
+  assert.equal(quietIn({ now: 0, ...idle }), 0, 'never in front at all (opened at login) is quiet');
+});
+
+test('a window in front five minutes ago waits until ten have passed', () => {
+  assert.deepEqual(installsOver(30, () => ({ ...idle, lastFrontAt: -5 * MIN })), [5]);
+  assert.deepEqual(installsOver(30, (m) => ({ ...idle, frontNow: m < 12, lastFrontAt: m < 12 ? m * MIN : 12 * MIN })), [22], 'in front until minute 12');
+});
+
+test('an upload in flight, or the inbox scanning, waits until it ends', () => {
+  assert.deepEqual(installsOver(30, (m) => ({ ...idle, lastFrontAt: -60 * MIN, inflight: m < 7 ? 1 : 0 })), [7]);
+  assert.deepEqual(installsOver(30, (m) => ({ ...idle, busy: m < 3 ? 1 : 0 })), [3]);
+});
+
+test('a phone request three minutes ago waits until ten have passed', () => {
+  assert.deepEqual(installsOver(30, () => ({ ...idle, lastDeviceAt: -3 * MIN })), [7]);
+  assert.deepEqual(installsOver(40, (m) => ({ ...idle, lastDeviceAt: (m < 15 ? m : 15) * MIN })), [25], 'the phone in use until minute 15');
+});
+
+test('nothing installs before a version is ready, twice, or after a swap that didn’t take', () => {
+  assert.equal(quietDecision({ ready: false, installing: false, tried: false, signals: idle, now: 0 }), 'wait');
+  assert.equal(quietDecision({ ready: true, installing: true, tried: false, signals: idle, now: 0 }), 'wait');
+  assert.equal(quietDecision({ ready: true, installing: false, tried: true, signals: idle, now: 0 }), 'wait');
+});
+
+test('at launch, the newest staged version newer than this one, unless its swap was tried', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'updates-'));
+  for (const v of ['0.2.3', '0.2.10', '0.2.9']) fs.mkdirSync(path.join(dir, v));
+  fs.writeFileSync(path.join(dir, '0.2.11.zip.part'), '');
+  fs.writeFileSync(path.join(dir, 'install.sh'), '');
+  assert.equal(newestStaged(dir, '0.2.4'), '0.2.10');
+  assert.equal(newestStaged(dir, '0.2.10'), null, 'nothing newer than the running copy');
+  assert.equal(newestStaged(path.join(dir, 'missing'), '0.2.4'), null);
+  assert.equal(triedBefore(dir, '0.2.10'), false);
+  fs.writeFileSync(path.join(dir, '0.2.10.attempt'), '');
+  assert.equal(triedBefore(dir, '0.2.10'), true);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a quiet relaunch opens in the background and carries the page to reopen', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'install-g-'));
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  // A stand-in `open` that writes down how it was called.
+  fs.writeFileSync(path.join(bin, 'open'), `#!/bin/sh\necho "$@" > "${dir}/open-args"\n`, { mode: 0o755 });
+  const apps = path.join(dir, 'apps');
+  fs.mkdirSync(path.join(apps, 'Colour Archive.app'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'staged', 'Colour Archive.app'), { recursive: true });
+  const script = path.join(dir, 'install.sh');
+  fs.writeFileSync(script, INSTALL_SCRIPT, { mode: 0o755 });
+  const child = spawn('/bin/sh', [script, '999999', path.join(apps, 'Colour Archive.app'), path.join(dir, 'staged', 'Colour Archive.app'), 'g', 'COLOUR_ARCHIVE_REOPEN=/book'], {
+    env: { ...process.env, HOME: dir, PATH: `${bin}:${process.env.PATH}` },
+  });
+  await new Promise((r) => child.on('exit', r));
+  const args = fs.readFileSync(path.join(dir, 'open-args'), 'utf8').trim();
+  assert.equal(args, `-n -g --env COLOUR_ARCHIVE_REOPEN=/book ${path.join(apps, 'Colour Archive.app')}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('download follows a redirect, checks size and checksum, and keeps going while the disk is slow', async () => {
+  // 24 MB in 64 kB writes, the far side ending as soon as it has sent it all:
+  // the shape that made fetch throw out of the main process.
+  const body = Buffer.alloc(24 * 1024 * 1024);
+  for (let i = 0; i < body.length; i += 4096) body[i] = i % 251;
+  const sha512 = createHash('sha512').update(body).digest('base64');
+  const server = http.createServer((req, res) => {
+    if (req.url === '/release.zip') { res.writeHead(302, { location: '/storage/release.zip' }); res.end(); return; }
+    if (req.url === '/storage/release.zip') {
+      res.writeHead(200, { 'content-length': body.length });
+      for (let i = 0; i < body.length; i += 65536) res.write(body.subarray(i, i + 65536));
+      res.end();
+      return;
+    }
+    if (req.url === '/silent') return; // never answers
+    res.writeHead(404); res.end();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'updater-dl-'));
+  try {
+    const file = path.join(dir, 'a.zip');
+    await updater.download(`${base}/release.zip`, file, sha512, body.length);
+    assert.equal(fs.statSync(file).size, body.length);
+    await assert.rejects(updater.download(`${base}/release.zip`, path.join(dir, 'b.zip'), 'wrong', body.length), /checksum/);
+    await assert.rejects(updater.download(`${base}/release.zip`, path.join(dir, 'c.zip'), sha512, body.length + 1), /bytes, not/);
+    await assert.rejects(updater.download(`${base}/gone.zip`, path.join(dir, 'd.zip'), sha512, 1), /answered 404/);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
