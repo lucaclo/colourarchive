@@ -73,6 +73,18 @@ setInterval(() => {
   tell({ type: 'activity', ...now });
 }, Number(process.env.COLOUR_ARCHIVE_ACTIVITY_MS) || 5000).unref();
 
+// The app's updater, for /api/updates (src/lib/updates-server.ts reads this
+// off globalThis): main.cjs sends its status on every change, and act() asks
+// main.cjs to check, install now, or show the app in Finder.
+const macApp = {
+  status: null,
+  act: (action, page, loopback) => tell({ type: 'app-action', action, page, loopback }),
+};
+globalThis[Symbol.for('colour-archive.app')] = macApp;
+process.parentPort?.on('message', (e) => {
+  if (e?.data?.type === 'app-update') macApp.status = e.data.status ?? null;
+});
+
 const LAN_PORT = Number(process.env.LAN_PORT) || 0;
 const LAN_SETUP_PORT = Number(process.env.LAN_SETUP_PORT) || 0;
 const LAN_HOST = process.env.LAN_HOST || '';

@@ -25,9 +25,12 @@ if (process.env.COLOUR_ARCHIVE_PROFILE) app.setPath('userData', process.env.COLO
 
 // Set by the updater's install script after a quiet swap (#168): the page the
 // window was on, or 'hidden' when none was open. Read once and dropped, so the
-// server and a later swap don't inherit it.
+// server and a later swap don't inherit it. After Update Now from this Mac's
+// window, the page (with #updates) comes back in front (REOPEN_FRONT).
 const REOPEN = process.env.COLOUR_ARCHIVE_REOPEN || '';
+const REOPEN_FRONT = process.env.COLOUR_ARCHIVE_REOPEN_FRONT === '1';
 delete process.env.COLOUR_ARCHIVE_REOPEN;
+delete process.env.COLOUR_ARCHIVE_REOPEN_FRONT;
 
 // A fixed port, not a free one picked each launch: the port is part of the
 // page's origin, and the origin owns the archive's browser storage (zine
@@ -89,13 +92,41 @@ function reopenState() {
 }
 
 // Keeps the packaged app on the newest GitHub release (updater.cjs); its
-// state is a line in the app menu.
+// state is a line in the app menu, and the server's /api/updates.
 const updater = createUpdater({
   app,
-  onChange: () => buildMenu(),
+  onChange: () => {
+    buildMenu();
+    tellServer();
+  },
   signals: () => ({ frontNow: BrowserWindow.getFocusedWindow() !== null, lastFrontAt, ...activity }),
   reopen: reopenState,
 });
+
+/** The updater's status, for the server's /api/updates (server.mjs keeps it). */
+function tellServer() {
+  try {
+    server?.postMessage({ type: 'app-update', status: updater.status() });
+  } catch {}
+}
+
+/**
+ * What the Updates panel asks for, through /api/updates. `loopback`: asked
+ * from this Mac (its window or a browser on it), not a phone or the iPad, so
+ * the page comes back in front with the panel open, and Finder may open.
+ */
+function appAction({ action, page, loopback }) {
+  const here = loopback === true;
+  if (action === 'check') {
+    updater.check({ manual: true }).catch(() => {});
+  } else if (action === 'install') {
+    const back = here && typeof page === 'string' && page.startsWith('/') ? `${page.split('#')[0]}#updates` : null;
+    updater.installNow({ page: back, front: back !== null }).catch(() => {});
+  } else if (action === 'reveal' && here) {
+    const bundle = updater.status().installedIn;
+    if (bundle) shell.showItemInFolder(bundle);
+  }
+}
 
 // --- Settings -----------------------------------------------------------
 
@@ -281,13 +312,17 @@ async function openArchive(dataDir) {
       settled = true;
       clearTimeout(timer);
       origin = `http://127.0.0.1:${msg.port}`;
+      tellServer();
       if (quiet) quiet = false; // served; the window waits for the Dock icon
       else if (REOPEN.startsWith('/') && !reopened) {
-        // Back from a quiet update: the same page, without taking focus.
+        // Back from a quiet update: the same page, without taking focus. Back
+        // from Update Now on this Mac: in front.
         reopened = true;
-        openMainWindow(REOPEN, { inactive: true });
-        logUpdate(`Reopened ${process.execPath.replace(/\/Contents\/MacOS\/.*$/, '')} at ${REOPEN}.`);
+        openMainWindow(REOPEN, { inactive: !REOPEN_FRONT });
+        logUpdate(`Reopened ${process.execPath.replace(/\/Contents\/MacOS\/.*$/, '')} at ${REOPEN}${REOPEN_FRONT ? ', in front' : ''}.`);
       } else openMainWindow();
+    } else if (msg?.type === 'app-action') {
+      appAction(msg);
     } else if (msg?.type === 'error') {
       fail(msg.message);
     } else if (msg?.type === 'lan') {
@@ -364,7 +399,10 @@ function openMainWindow(page = '/', { inactive = false } = {}) {
   });
   mainWindow.once('ready-to-show', () => {
     if (inactive) mainWindow.showInactive();
-    else mainWindow.show();
+    else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
     if (startWindow && !startWindow.isDestroyed()) startWindow.destroy();
   });
   mainWindow.on('close', () => {
@@ -603,17 +641,19 @@ async function signOutPhones() {
   dialog.showMessageBox(mainWindow ?? undefined, { type: 'info', message: 'Every phone is signed out', detail: 'They need the password again to open the archive.' });
 }
 
-// Background checks stay in the menu; only one asked for ends in a dialog.
-async function checkForUpdates() {
-  const res = await updater.check({ manual: true });
-  const then = 'It installs when the app isn’t in use, or choose Restart to Update.';
-  const box = {
-    'up-to-date': { type: 'info', message: 'Colour Archive is up to date', detail: `Version ${res.version} is the newest.` },
-    downloading: { type: 'info', message: `Version ${res.version} is downloading`, detail: then },
-    ready: { type: 'info', message: `Version ${res.version} is ready`, detail: then },
-    error: { type: 'warning', message: 'Couldn’t check for updates', detail: res.error },
-  }[res.kind];
-  if (box) dialog.showMessageBox(mainWindow ?? startWindow ?? undefined, box);
+// "Check for Updates…": the Updates panel, in the archive window (#updates
+// opens it; the panel checks). Before the archive has opened there is no
+// panel to show, so it checks, and the menu's status line says the result.
+function showUpdates() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.executeJavaScript("location.hash = 'updates'").catch(() => {});
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+  } else if (server && origin) {
+    openMainWindow('/#updates');
+  } else {
+    updater.check({ manual: true }).catch(() => {});
+  }
 }
 
 function buildMenu() {
@@ -625,7 +665,7 @@ function buildMenu() {
       label: app.name,
       submenu: [
         { role: 'about' },
-        ...updateMenuItems(update, { check: () => checkForUpdates(), restart: () => updater.restart() }),
+        ...updateMenuItems(update, { check: () => showUpdates(), restart: () => updater.restart() }),
         { type: 'separator' },
         { label: 'Open at Login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
         { label: 'Let My iPad In', type: 'checkbox', checked: lanOn, click: (item) => setLan(item.checked) },

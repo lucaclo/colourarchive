@@ -4,6 +4,19 @@ Settled calls, newest first within each section. Don't re-open one without a rea
 from this session; if you do, say which line and why. Add new ones with the date.
 
 ## Product
+- 2026-11-25 · Updates panel, on every page (`src/components/Updates.astro`): opened from
+  the app menu's "Check for Updates…" (it no longer opens a dialog), ⌘K "Updates", and
+  the Archive top bar in the app window, where "Get the app" was. Each device answers for
+  itself. The Mac app: version, status, where it's installed (Show in Finder), when it
+  last updated, and "Update now", which swaps and relaunches at once onto the same page
+  with the panel open; asked from another device, the Mac comes back in the background.
+  Phones and browsers: their own build and "Reload", which drops the saved offline copy.
+  The Mac also lists the published build (Up to date or Behind its archive) and the
+  devices that opened pages from it (`<data>/.archive/devices.json`: name, home-screen or
+  not, last seen, build; never the user agent or address). The Mac can't see phones that
+  load from Netlify. Pages served by the Mac reload themselves on return when its build
+  changed. Every build bakes `version` and `builtAt` (`src/lib/build-info.ts`), and
+  `publish.json` carries the same `builtAt`.
 - 2026-11-24 · The Mac app also installs a downloaded update by itself at a quiet moment
   (#168; re-opens the 2026-11-17 line, which swapped only on quit or Restart to Update):
   10 minutes with no window in front, no request in flight (an upload, a book PDF), no

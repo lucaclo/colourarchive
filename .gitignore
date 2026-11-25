@@ -16,6 +16,8 @@ book.json.bak
 inbox.json
 # Push keys and subscriptions — private
 push.json
+# Devices that opened pages from the Mac (src/lib/devices.ts) — local only
+/devices.json
 # Where photos were taken (Scout) — private, never published
 photos.locations.json
 photos.gps.json

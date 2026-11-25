@@ -123,6 +123,18 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   browser's real Origin as another site. Check any build with a POST carrying its own
   Origin: 400 from the route means it got through, 403 means it didn't.
 - `public/sw.js` must keep only `/_astro/` and `/img/` cache-first, or dev CSS goes stale.
+- A closed native `<dialog data-modal>` still counts as an open overlay: `lib/ui/modal.ts`
+  and the Archive's `overlayOpen()` look for `[data-modal]:not([hidden])`. Tab gets trapped
+  in it and the phone bars stop hiding on scroll. Keep `hidden` on a closed dialog and
+  remove it just before `showModal()` (the Updates panel does).
+- `Astro.clientAddress` reads `X-Forwarded-For` first, and the remote gate listens on
+  127.0.0.1 and forwards the phone in that header. "From this Mac" (`/api/updates`
+  reveal, Update now in front) needs a loopback address and no `X-Forwarded-For`.
+- `astro dev --config` resolves against the project root: an absolute path fails with
+  ConfigNotFound. From a worktree, pass `../../../../../../../private/tmp/…/x.mjs`.
+- A `PUBLIC_STATIC=true` build of a throwaway archive needs `<data>/.archive/public/img`
+  to exist, and with no image files `CI=1` to make the missing-image audit a warning. It
+  rewrites `node_modules/.cache/public-static`, which a worktree shares through its symlink.
 - `.claude/hooks/security_reminder_hook.py` blocks any Write/Edit whose text contains one
   of its listed risky substrings, even in docs or comments. Read its `substrings` lists
   before writing about them. Build DOM with `createElement`; spawn with `execFile`.
@@ -227,6 +239,15 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   `COLOUR_ARCHIVE_QUIET_MS`, `COLOUR_ARCHIVE_QUIET_CHECK_MS` and `COLOUR_ARCHIVE_ACTIVITY_MS`.
   A version that failed to install leaves `<version>.attempt` beside it in `updates/` and
   isn’t tried again by itself (quit or Restart to Update still install it).
+- The Updates panel reaches the updater through the server, not a preload: `main.cjs`
+  posts `{ type: 'app-update', status }` to the server process, which keeps it on
+  `globalThis[Symbol.for('colour-archive.app')]` for `/api/updates`; actions go back as
+  `{ type: 'app-action' }`. Outside the app (dev, the published site) `app` is null and a
+  POST answers 409. The first `/api/updates` on a cold server waits up to 3 s for the
+  published stamp, and the panel stays empty until it answers.
+- The round trip's step 8 (launch 6) is Update Now; it leaves a 5-minute timer, so the
+  script lingers ~5 min after `E2E PASS` and still exits 0. Its screen capture of the
+  reopened window lands in scratch as `launch6-front.png`.
 
 ## Open
 - Tailscale isn't installed on the Mac yet, so phone-from-anywhere isn't live.

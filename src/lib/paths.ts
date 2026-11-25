@@ -74,6 +74,9 @@ export const INBOX_LOG_PATH = kept('inbox.json');
 // Kept-spot notifications (push.ts): this Mac's VAPID keys and each device's
 // subscription and kept spots. Private: the keys sign, the spots are places.
 export const PUSH_PATH = kept('push.json');
+// The phones, iPads and browsers that opened pages from this Mac, and which
+// build each last had (devices.ts). No user agents or addresses; local only.
+export const DEVICES_PATH = kept('devices.json');
 // The book's own curation — issue #82. Deliberately separate from
 // OVERRIDES_PATH: an override changes what a photo *is* (its chapter,
 // medium, genre) for the whole archive, while this changes only whether and

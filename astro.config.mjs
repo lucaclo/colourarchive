@@ -31,6 +31,13 @@ function publicWithImagesFrom(imgDir) {
   return out;
 }
 
+// Which build this is (src/lib/build-info.ts): package.json's version and the
+// moment this build started, once. publishStamp() writes the same moment into
+// publish.json, so a published page can tell whether it is the live build.
+const builtAtEnv = Date.parse(process.env.COLOUR_ARCHIVE_BUILT_AT ?? '');
+const BUILT_AT = new Date(Number.isFinite(builtAtEnv) ? builtAtEnv : Date.now()).toISOString();
+const VERSION = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+
 // The public copy links its Mac-only tabs to the Mac's from-anywhere address
 // (TabBar.astro). Written by the Mac app's "Let My Phone In From Anywhere" and
 // by `npm run remote`; an explicit PUBLIC_REMOTE_URL wins, and with neither
@@ -129,13 +136,14 @@ export default defineConfig({
   adapter: node({ mode: 'standalone' }),
   // Stamps the build with what it contains, and refuses to finish if a
   // photograph it lists has no file behind it. See src/lib/publish.ts.
-  integrations: [publishStamp(), background(), ...(DESKTOP ? [renderOnRequest()] : [])],
+  integrations: [publishStamp({ builtAt: BUILT_AT }), background(), ...(DESKTOP ? [renderOnRequest()] : [])],
   // host: true binds all interfaces so a phone on the same Wi-Fi can reach it
   // at https://<your-mac-ip>:4321 (home network only).
   server: { port: 4321, host: true },
   // Large originals: allow big request bodies for uploads.
   vite: {
     build: { assetsInlineLimit: 0 },
+    define: { __BUILD_VERSION__: JSON.stringify(VERSION), __BUILT_AT__: JSON.stringify(BUILT_AT) },
     // Let devices reach the app by the Mac's stable Bonjour name
     // (e.g. https://Lucass-MacBook-Air.local:4321) as well as its IP —
     // the .local name survives DHCP address changes, so a Home Screen
