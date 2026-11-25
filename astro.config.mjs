@@ -136,6 +136,9 @@ export default defineConfig({
   // Large originals: allow big request bodies for uploads.
   vite: {
     build: { assetsInlineLimit: 0 },
+    // A worktree's dev server gets its own optimised-deps folder, so it doesn't
+    // rewrite the shared node_modules/.vite/deps under other servers.
+    ...(process.env.ASTRO_CACHE_DIR ? { cacheDir: process.env.ASTRO_CACHE_DIR } : {}),
     // Let devices reach the app by the Mac's stable Bonjour name
     // (e.g. https://Lucass-MacBook-Air.local:4321) as well as its IP —
     // the .local name survives DHCP address changes, so a Home Screen

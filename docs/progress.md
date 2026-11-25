@@ -8,12 +8,11 @@
   network-dependent); worth a look.
 
 ## Next
-- Notes in words (branch `camera-words-try`, uncommitted): built and checked, not yet
-  committed or in a release. To use it: a PR to `main`, the new app release, then
-  "Notes in Words…" in the app menu and paste the Gemini key. Not run live: the Electron
-  menu, key window and Keychain hand-off (would touch the real profile). #179 adds its
-  measured boxes with `noteBoxLayer(...).draw()` in `index.astro`. #180 on GitHub
-  still describes the Claude, camera-first plan.
+- Notes in words: PR #186 (`camera-words-try`). To use it: merge, the new app release,
+  then "Notes in Words…" in the app menu and paste the Gemini key. Not run live: the
+  Electron menu, key window and Keychain hand-off (would touch the real profile). #179
+  adds its measured boxes with `noteBoxLayer(...).draw()` in `index.astro`. #180 has a
+  status line and a comment with what's still open.
 - Luca: publishing is now by hand (`npm run deploy:site`). Want the app to publish on
   its own after a photo change? It needs a one-time Desktop permission, asked again
   after each update, or the repo moved off the Desktop.
