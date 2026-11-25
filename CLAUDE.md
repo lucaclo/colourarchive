@@ -10,6 +10,8 @@ The repo is public. Photos, locations and photographer lists stay out of git.
 - `docs/progress.md` — where we are, what's next, a dated line per session
 - `docs/decisions.md` — settled product and design calls; don't re-open them
 - `docs/known-issues.md` — traps that fail silently, and how to check for them
+- `npm run feedback` — notes and pictures Luca sent from the app, with picture paths to
+  open. When one is fixed: `npm run feedback -- done <id> "Fixed in #…"`
 
 ## How we work: orchestrator and workers
 - The main session plans, writes briefs and checks results. Hand bulk, well-specified

@@ -885,6 +885,9 @@ body.has-tabbar .meta { bottom: calc(var(--tabbar-space) + 0.5rem); }
 .tabbar-add:hover { background: var(--glass-bg-strong); }
 .tabbar-add[aria-current='page'] { background: color-mix(in oklab, var(--accent-mix) 22%, var(--glass-bg-strong)); }
 .tab:focus-visible, .tabbar-add:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+/* Feedback (TabBar.astro): the same round glass button, an action not a place. */
+.tabbar-feedback { appearance: none; cursor: pointer; padding: 0; font: inherit; }
+.tabbar-feedback[hidden] { display: none; }
 
 /* --- Moving between sections -----------------------------------------------
    Each tab is its own page, so a tap used to be a hard cut: white-flash-free,
@@ -1855,6 +1858,12 @@ body.has-tabbar .offline-pill { bottom: calc(var(--tabbar-space) + 0.25rem); }
   .tb-search .search-box input:not([type='range']):not([type='checkbox']) { min-height: 0; }
 
   .spectrum { height: 26px; }
+}
+/* The narrowest phones (375 px): four tabs, Add & remove and Feedback only
+   fit with a little less padding round each tab. */
+@media (max-width: 400px) {
+  .tab { min-width: 3.4rem; padding: 0 0.3rem; }
+  .tabbar { gap: 0.375rem; }
 }
 
 /* On touch, segments and tabs answer a tap anywhere out to their capsule's

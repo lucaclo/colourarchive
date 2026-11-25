@@ -71,7 +71,29 @@ const shown = tabs
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
     </a>
   )}
+  {/* Feedback (components/Feedback.astro): an action, so a button, beside the
+      tabs like Add & remove. On the published site it starts hidden and the
+      script below shows it only to a device that can send (Luca's). */}
+  <button type="button" class="tabbar-add tabbar-feedback" data-feedback-open aria-label="Feedback" title="Feedback" hidden={STATIC}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5h13A2.5 2.5 0 0 1 21 7.5v7a2.5 2.5 0 0 1-2.5 2.5H12l-4.5 3.5V17h-2A2.5 2.5 0 0 1 3 14.5v-7A2.5 2.5 0 0 1 5.5 5Z" /><path d="M8 10.25h8M8 13h5" /></svg>
+  </button>
 </nav>
+
+{STATIC && (
+  <script is:inline>
+    // Before first paint, so the bar doesn't shift: a device with a feedback
+    // token (lib/feedback.ts TOKEN_KEY), or the site opened as an installed
+    // app, gets the bubble. Feedback.astro keeps it in step after that.
+    (function () {
+      try {
+        const b = document.querySelector('#tabbar [data-feedback-open]');
+        // The same modes as lib/install.ts inAppWindow().
+        const app = ['standalone', 'minimal-ui', 'window-controls-overlay'].some((m) => matchMedia('(display-mode: ' + m + ')').matches) || navigator.standalone === true;
+        if (b && (localStorage.getItem('ca-feedback-token') || app)) b.hidden = false;
+      } catch (e) {}
+    })();
+  </script>
+)}
 
 <script is:inline define:vars={{ REMOTE }}>
   // On the public copy, the tabs that live on the Mac: ask it whether it is

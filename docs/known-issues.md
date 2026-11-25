@@ -90,6 +90,22 @@ Most of these fail silently: a wrong picture, no error. Each says how to check.
   nothing saved. For a sweep, run scripted probes from the main session, or at most two
   workers that each write findings to a file as they go.
 
+- `npm run check`'s script typecheck (`scripts/check-astro-scripts.ts`) reads only
+  `src/pages`: `<script>` blocks in `src/components` (Feedback, Updates, TabBar) go
+  unchecked. Check one by writing its block to `src/components/__tc__X.ts`, running
+  `npx tsc --noEmit`, and deleting it (CommandPalette's JSON `<script … />` trips the regex).
+- A worktree dev server needs its own Vite cache: an untracked `astro.config.fb.mjs`
+  that spreads `./astro.config.mjs` and sets `vite.cacheDir` from an env var, then
+  `npx astro dev --config astro.config.fb.mjs --port 44xx`. Lint then sees the cache
+  folders: pass `--ignore-pattern '.vite-fb*'` or delete them after.
+- Published-only UI (no server: the feedback token setup) can be tested on
+  `PUBLIC_STATIC=true astro dev`; it renders the static variants.
+- In Playwright, a route added later wins: a test's own route for one path skips the
+  shared recorder, so record in that route too.
+- A build from a worktree with `COLOUR_ARCHIVE_DATA` set compiles, then the publish
+  stamp refuses ("would publish 282 broken images"): the worktree has no `public/img`.
+  Not a code fault; CI's build runs on the repo fixture.
+
 ## Type and alignment
 - `[data-seg]` prepends a `.seg-thumb` span (`lib/ui/segments.ts`), so `:first-child`
   on its items never matches. Use `:first-of-type`. Scout's Sun tile sat 10 px in.

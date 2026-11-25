@@ -3,6 +3,7 @@ import '../styles/global.css';
 import TabBar, { type Tab } from '../components/TabBar.astro';
 import CommandPalette from '../components/CommandPalette.astro';
 import Updates from '../components/Updates.astro';
+import Feedback from '../components/Feedback.astro';
 
 interface Props {
   title?: string;
@@ -123,6 +124,7 @@ const STATIC = import.meta.env.PUBLIC_STATIC === 'true';
     {tab && <TabBar current={tab} />}
     {tab && <CommandPalette />}
     <Updates />
+    <Feedback />
     {cursor && <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>}
     <script>
       // Press springs, segmented-control gliders, collapsing page titles.
